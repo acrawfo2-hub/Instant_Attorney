@@ -4,9 +4,11 @@ import { createServerClient } from "@supabase/ssr";
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
 // Routes that require an authenticated session
-const AUTH_REQUIRED = ["/dashboard", "/chat", "/onboarding"];
+const AUTH_REQUIRED = ["/dashboard", "/chat", "/onboarding", "/wizard", "/attorney"];
 // Routes that require a completed subscription (agreement + consent + payment)
-const SUBSCRIPTION_REQUIRED = ["/dashboard", "/chat"];
+const SUBSCRIPTION_REQUIRED = ["/dashboard", "/chat", "/wizard"];
+// Routes that require is_attorney = true
+const ATTORNEY_REQUIRED = ["/attorney"];
 // Redirect logged-in users away from these
 const GUEST_ONLY = ["/login", "/register"];
 
@@ -23,6 +25,7 @@ export async function middleware(request: NextRequest) {
   // Only run auth logic on routes that care about it
   const needsAuth = AUTH_REQUIRED.some((r) => pathname.startsWith(r));
   const needsSub = SUBSCRIPTION_REQUIRED.some((r) => pathname.startsWith(r));
+  const needsAttorney = ATTORNEY_REQUIRED.some((r) => pathname.startsWith(r));
   const isGuestOnly = GUEST_ONLY.some((r) => pathname.startsWith(r));
 
   if (!needsAuth && !isGuestOnly) {
@@ -71,6 +74,21 @@ export async function middleware(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);
+  }
+
+  // For attorney-only routes, check is_attorney flag
+  if (needsAttorney && user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("is_attorney")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile?.is_attorney) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/dashboard";
+      return NextResponse.redirect(url);
+    }
   }
 
   // For subscription-required routes, check onboarding completion

@@ -5,11 +5,29 @@ export type CaseStatus = "open" | "closed" | "referred";
 export type FactStatus = "confirmed" | "gap";
 export type MessageRole = "user" | "assistant";
 
+// All supported wizard types — add new ones here as wizards are built
+export type WizardType =
+  | "intake_summary"
+  | "demand_letter"
+  | "complaint_letter"
+  | "draft_contract"
+  | "draft_waiver"
+  | "wills_trusts"
+  | "doc_review";
+
+export type DocumentStatus =
+  | "draft"
+  | "pending_review"
+  | "approved"
+  | "changes_requested"
+  | "delivered";
+
 export interface Profile {
   id: string;
   email: string;
   full_name: string | null;
   phone: string | null;
+  is_attorney: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -25,6 +43,14 @@ export interface Subscription {
   created_at: string;
 }
 
+export interface LegalStrategy {
+  summary: string;
+  instruments: string[];       // suggested document types / legal instruments
+  strengths: string[];
+  risks: string[];
+  recommended_wizards: WizardType[];
+}
+
 export interface CaseFile {
   id: string;
   user_id: string;
@@ -32,6 +58,8 @@ export interface CaseFile {
   matter_subtype: string | null;
   status: CaseStatus;
   goals: string[];
+  summary: string | null;
+  legal_strategy: LegalStrategy | null;
   attorney_assessment: string | null;
   next_action: string | null;
   opened_at: string;
@@ -55,6 +83,33 @@ export interface IntakeMessage {
   content: string;
   created_at: string;
 }
+
+export interface Document {
+  id: string;
+  case_file_id: string;
+  user_id: string;
+  doc_type: WizardType;
+  title: string;
+  status: DocumentStatus;
+  content_json: Record<string, unknown>;
+  file_path: string | null;
+  attorney_notes: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Human-readable labels for wizard types
+export const WIZARD_LABELS: Record<WizardType, string> = {
+  intake_summary: "Intake Summary",
+  demand_letter: "Demand Letter",
+  complaint_letter: "Complaint Letter",
+  draft_contract: "Draft Contract",
+  draft_waiver: "Draft Waiver",
+  wills_trusts: "Wills & Trusts",
+  doc_review: "Document Review",
+};
 
 // The bypass user used in dev when BYPASS_AUTH=true
 export const BYPASS_USER_ID = "00000000-0000-0000-0000-000000000001";

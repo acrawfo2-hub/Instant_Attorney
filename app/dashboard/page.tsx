@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { CaseFile, FactItem, BYPASS_USER_ID } from "@/lib/types";
+import { CaseFile, FactItem, BYPASS_USER_ID, WIZARD_LABELS } from "@/lib/types";
+import type { Document, WizardType } from "@/lib/types";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
@@ -21,7 +22,7 @@ async function getData() {
     userId = user.id;
   }
 
-  const [{ data: caseFile }, { data: facts }] = await Promise.all([
+  const [{ data: caseFile }, { data: facts }, { data: documents }] = await Promise.all([
     db.from("case_files")
       .select("*")
       .eq("user_id", userId)
@@ -33,11 +34,16 @@ async function getData() {
       .select("*")
       .eq("user_id", userId)
       .order("created_at", { ascending: true }),
+    db.from("documents")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false }),
   ]);
 
   return {
     caseFile: caseFile as CaseFile | null,
     facts: (facts ?? []) as FactItem[],
+    documents: (documents ?? []) as Document[],
     userId,
   };
 }
@@ -48,16 +54,33 @@ function MatterBadge({ type }: { type: string | null }) {
   return <span className="lf-badge">{label}</span>;
 }
 
+const DOC_STATUS_LABELS: Record<string, string> = {
+  draft: "Draft",
+  pending_review: "Under Review (48h)",
+  approved: "Approved",
+  changes_requested: "Revisions Requested",
+  delivered: "Delivered",
+};
+
+const DOC_STATUS_CLASSES: Record<string, string> = {
+  draft: "lf-doc-status-draft",
+  pending_review: "lf-doc-status-review",
+  approved: "lf-doc-status-approved",
+  changes_requested: "lf-doc-status-changes",
+  delivered: "lf-doc-status-delivered",
+};
+
 export default async function DashboardPage() {
   const hdrs = await headers();
   const isBypass = hdrs.get("x-bypass-auth") === "true" || BYPASS_AUTH;
 
-  const { caseFile, facts } = await getData();
+  const { caseFile, facts, documents } = await getData();
 
   const confirmed = facts.filter((f) => f.status === "confirmed");
   const gaps = facts.filter((f) => f.status === "gap");
-
   const isEmpty = !caseFile;
+  const strategy = caseFile?.legal_strategy ?? null;
+  const recommendedWizards = strategy?.recommended_wizards ?? [];
 
   return (
     <div className="lf-shell">
@@ -78,9 +101,7 @@ export default async function DashboardPage() {
         </div>
 
         <div className="lf-header-right">
-          {isBypass && (
-            <span className="ob-bypass-badge">Test Mode</span>
-          )}
+          {isBypass && <span className="ob-bypass-badge">Test Mode</span>}
           <Link href="/chat" className="lf-begin-btn">
             {isEmpty ? "Begin Intake" : "Continue Intake"}
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -92,7 +113,6 @@ export default async function DashboardPage() {
 
       <main className="lf-main">
         {isEmpty ? (
-          /* Empty state */
           <div className="lf-empty">
             <div className="lf-empty-icon">
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -102,17 +122,16 @@ export default async function DashboardPage() {
             </div>
             <h2 className="lf-empty-title">Your file is ready.</h2>
             <p className="lf-empty-sub">
-              Begin your ACP-protected intake interview. As we talk, your goals, facts, and next actions will appear here in your Living File.
+              Begin your ACP-protected intake interview. As we talk, your goals, facts, and strategy will appear here in your Living File.
             </p>
             <Link href="/chat" className="lf-begin-btn lf-begin-btn-lg">
               Begin Intake &rarr;
             </Link>
           </div>
         ) : (
-          /* Living File */
           <div className="lf-grid">
 
-            {/* Row 1: Matter info + Next action */}
+            {/* Matter + Next Action */}
             <div className="lf-card lf-card-sm">
               <div className="lf-card-label">Matter</div>
               <div className="lf-card-value">
@@ -132,6 +151,14 @@ export default async function DashboardPage() {
               </div>
             </div>
 
+            {/* Case Summary */}
+            {caseFile.summary && (
+              <div className="lf-card lf-card-full">
+                <div className="lf-card-label">Case Summary</div>
+                <p className="lf-summary">{caseFile.summary}</p>
+              </div>
+            )}
+
             {/* Goals */}
             <div className="lf-card lf-card-full">
               <div className="lf-card-label">Your Goals</div>
@@ -142,11 +169,47 @@ export default async function DashboardPage() {
                   ))}
                 </ul>
               ) : (
-                <p className="lf-empty-field">Goals will appear as they are identified in your intake chat.</p>
+                <p className="lf-empty-field">Goals will appear as identified in your intake chat.</p>
               )}
             </div>
 
-            {/* Confirmed facts + Gaps side by side */}
+            {/* Legal Strategy */}
+            {strategy && (
+              <div className="lf-card lf-card-full lf-card-strategy">
+                <div className="lf-card-label">Legal Strategy</div>
+                {strategy.summary && <p className="lf-strategy-summary">{strategy.summary}</p>}
+
+                <div className="lf-strategy-grid">
+                  {strategy.strengths?.length > 0 && (
+                    <div>
+                      <div className="lf-strategy-sub">Strengths</div>
+                      <ul className="lf-list lf-list-confirmed">
+                        {strategy.strengths.map((s, i) => <li key={i}>{s}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                  {strategy.risks?.length > 0 && (
+                    <div>
+                      <div className="lf-strategy-sub">Risks</div>
+                      <ul className="lf-list lf-list-gap">
+                        {strategy.risks.map((r, i) => <li key={i}>{r}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+
+                {strategy.instruments?.length > 0 && (
+                  <div className="lf-instruments">
+                    <div className="lf-strategy-sub">Suggested Instruments</div>
+                    <ul className="lf-list">
+                      {strategy.instruments.map((inst, i) => <li key={i}>{inst}</li>)}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Confirmed Facts + Gaps */}
             <div className="lf-card lf-card-half">
               <div className="lf-card-label">
                 Confirmed Facts
@@ -171,11 +234,57 @@ export default async function DashboardPage() {
                   {gaps.map((f) => <li key={f.id}>{f.description}</li>)}
                 </ul>
               ) : (
-                <p className="lf-empty-field">Missing facts to track down will appear here.</p>
+                <p className="lf-empty-field">Missing facts to track will appear here.</p>
               )}
             </div>
 
-            {/* Attorney assessment */}
+            {/* Document Wizards */}
+            <div className="lf-card lf-card-full">
+              <div className="lf-card-label">Document Wizards</div>
+              {recommendedWizards.length > 0 ? (
+                <>
+                  <p className="lf-wizard-hint">Your attorney has suggested the following documents based on your matter. Launch a wizard to begin drafting.</p>
+                  <div className="lf-wizard-grid">
+                    {recommendedWizards.map((wType) => (
+                      <WizardCard key={wType} wizardType={wType} caseFileId={caseFile.id} />
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p className="lf-empty-field">
+                  Document wizards will appear here once your intake establishes a legal strategy. Continue your intake chat to unlock them.
+                </p>
+              )}
+            </div>
+
+            {/* Documents */}
+            <div className="lf-card lf-card-full">
+              <div className="lf-card-label">Your Documents</div>
+              {documents.length > 0 ? (
+                <div className="lf-doc-list">
+                  {documents.map((doc) => (
+                    <div key={doc.id} className="lf-doc-item">
+                      <div className="lf-doc-info">
+                        <span className="lf-doc-title">{doc.title}</span>
+                        <span className="lf-doc-type">{WIZARD_LABELS[doc.doc_type as WizardType] ?? doc.doc_type}</span>
+                      </div>
+                      <div className="lf-doc-right">
+                        <span className={`lf-doc-status ${DOC_STATUS_CLASSES[doc.status] ?? ""}`}>
+                          {DOC_STATUS_LABELS[doc.status] ?? doc.status}
+                        </span>
+                        <span className="lf-doc-date">{new Date(doc.created_at).toLocaleDateString()}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="lf-empty-field">
+                  Documents generated through wizards will appear here once attorney-reviewed.
+                </p>
+              )}
+            </div>
+
+            {/* Attorney Assessment */}
             <div className="lf-card lf-card-full">
               <div className="lf-card-label">Attorney Assessment</div>
               {caseFile.attorney_assessment ? (
@@ -185,17 +294,32 @@ export default async function DashboardPage() {
               )}
             </div>
 
-            {/* Documents */}
-            <div className="lf-card lf-card-full">
-              <div className="lf-card-label">Documents</div>
-              <p className="lf-empty-field">
-                Documents generated during intake will appear here as downloadable files once attorney-reviewed.
-              </p>
-            </div>
-
           </div>
         )}
       </main>
     </div>
+  );
+}
+
+function WizardCard({ wizardType, caseFileId }: { wizardType: WizardType; caseFileId: string }) {
+  const label = WIZARD_LABELS[wizardType] ?? wizardType;
+  const href = `/wizard/${wizardType}?caseFileId=${caseFileId}`;
+
+  const icons: Record<WizardType, string> = {
+    intake_summary: "📋",
+    demand_letter: "✉️",
+    complaint_letter: "📣",
+    draft_contract: "📝",
+    draft_waiver: "🤝",
+    wills_trusts: "⚖️",
+    doc_review: "🔍",
+  };
+
+  return (
+    <Link href={href} className="lf-wizard-card">
+      <span className="lf-wizard-icon">{icons[wizardType] ?? "📄"}</span>
+      <span className="lf-wizard-label">{label}</span>
+      <span className="lf-wizard-arrow">→</span>
+    </Link>
   );
 }
