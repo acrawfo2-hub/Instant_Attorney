@@ -15,17 +15,12 @@ paths = [ "/" ]
 localPort = 21203
 
 [services.development]
-run = "pnpm --filter @workspace/instant-attorney run dev"
+run = "npm run dev"
 
-[services.production]
-build = [ "pnpm", "--filter", "@workspace/instant-attorney", "run", "build" ]
-publicDir = "artifacts/instant-attorney/dist/public"
-serve = "static"
-
-[[services.production.rewrites]]
-from = "/*"
-to = "/index.html"
+[services.development.cwd]
+path = "artifacts/instant-attorney"
 
 [services.env]
 PORT = "21203"
-BASE_PATH = "/"
+BYPASS_AUTH = "true"
+NEXT_PUBLIC_BYPASS_AUTH = "true"

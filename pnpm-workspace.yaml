@@ -33,9 +33,12 @@ minimumReleaseAgeExclude:
   # this setting guards against does not apply to our own packages.
   - '@replit/*'
   - stripe-replit-sync
+  # Next.js (Vercel) — trusted org; remove once next@15.3.2 is >1 day old
+  - next
+  - eslint-config-next
 
 packages:
-  - artifacts/*
+  - 'artifacts/!(instant-attorney)'
   - lib/*
   - lib/integrations/*
   - scripts
