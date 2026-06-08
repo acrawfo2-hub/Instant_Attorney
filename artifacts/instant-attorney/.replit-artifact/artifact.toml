@@ -11,7 +11,17 @@ version = "1.0.0"
 
 [[services]]
 name = "web"
-paths = [ "/" ]
+paths = [
+  "/",
+  "/api/chat",
+  "/api/chat-acp",
+  "/api/wizard",
+  "/api/attachments",
+  "/api/documents",
+  "/api/auth",
+  "/api/subscriptions",
+  "/api/agreements",
+]
 localPort = 21203
 
 [services.development]

@@ -23,6 +23,12 @@ export const metadata: Metadata = {
     "Free AI-powered legal guidance to a real attorney strategy session with Crawford Law PLLC. Phase I is free. Phase II is $9.99/mo. Phase III is a $49.99 live consult.",
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+};
+
 export default function RootLayout({
   children,
 }: {
