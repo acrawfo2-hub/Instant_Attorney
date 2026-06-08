@@ -22,3 +22,6 @@ dist/
 *.pem
 .vscode/
 tsconfig.tsbuildinfo
+
+# MCP config (may contain auth tokens)
+.mcp.json
