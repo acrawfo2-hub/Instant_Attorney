@@ -4,7 +4,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { DRAFTER_SYSTEM_PROMPT, buildFileContext } from "@/lib/prompts";
 import { parseAndUpdateFile, extractDraftText, isDraftReadyForReview } from "@/lib/file-parser";
 import { BYPASS_USER_ID, WIZARD_LABELS } from "@/lib/types";
-import type { WizardType, CaseFile, FactItem } from "@/lib/types";
+import type { WizardType, CaseFile, FactItem, Attachment, RequestedAttachment } from "@/lib/types";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
@@ -50,14 +50,19 @@ export async function POST(req: NextRequest) {
   }
 
   // Load current file state — refreshed on every call so answers update the context
-  const [{ data: caseFileRow }, { data: factRows }] = await Promise.all([
-    db.from("case_files").select("*").eq("id", caseFileId).single(),
-    db.from("fact_items").select("*").eq("case_file_id", caseFileId),
-  ]);
+  const [{ data: caseFileRow }, { data: factRows }, { data: attachmentRows }, { data: requestedRows }] =
+    await Promise.all([
+      db.from("case_files").select("*").eq("id", caseFileId).single(),
+      db.from("fact_items").select("*").eq("case_file_id", caseFileId),
+      db.from("attachments").select("*").eq("case_file_id", caseFileId).eq("status", "ready"),
+      db.from("requested_attachments").select("*").eq("case_file_id", caseFileId),
+    ]);
 
   const caseFile = caseFileRow as CaseFile | null;
   const facts = (factRows ?? []) as FactItem[];
-  const fileContext = caseFile ? buildFileContext(caseFile, facts) : "";
+  const attachments = (attachmentRows ?? []) as Attachment[];
+  const requestedAttachments = (requestedRows ?? []) as RequestedAttachment[];
+  const fileContext = caseFile ? buildFileContext(caseFile, facts, attachments, requestedAttachments) : "";
   const systemPrompt = `${fileContext}\n\n${DRAFTER_SYSTEM_PROMPT}`;
 
   const stream = anthropic.messages.stream({

@@ -1,4 +1,4 @@
-import type { CaseFile, FactItem, WizardType } from "./types";
+import type { CaseFile, FactItem, WizardType, Attachment, RequestedAttachment } from "./types";
 
 // ── Free chat (Phase I) ──────────────────────────────────────────────────────
 
@@ -51,7 +51,9 @@ Opening message: Start with a brief, warm welcome that introduces the service an
 
 export function buildFileContext(
   caseFile: CaseFile,
-  facts: FactItem[]
+  facts: FactItem[],
+  attachments: Attachment[] = [],
+  requestedAttachments: RequestedAttachment[] = []
 ): string {
   const confirmed = facts.filter((f) => f.status === "confirmed");
   const gaps = facts.filter((f) => f.status === "gap");
@@ -100,6 +102,33 @@ export function buildFileContext(
 
   if (caseFile.next_action) {
     lines.push("", `NEXT ACTION: ${caseFile.next_action}`);
+  }
+
+  // Attach analyzed file summaries so all agents have document context
+  const readyAttachments = attachments.filter((a) => a.status === "ready");
+  if (readyAttachments.length) {
+    lines.push("", "ATTACHED DOCUMENTS:");
+    readyAttachments.forEach((a) => {
+      lines.push(`• [${a.attachment_type.toUpperCase()}] ${a.file_name}`);
+      if (a.ai_summary) lines.push(`  Summary: ${a.ai_summary}`);
+      if (a.case_relevance) lines.push(`  Relevance: ${a.case_relevance}`);
+      if (a.urgent_findings && a.urgent_findings !== "None identified") {
+        lines.push(`  [URGENT] ${a.urgent_findings}`);
+      }
+    });
+  }
+
+  // Show requested attachment checklist
+  const pendingRequested = requestedAttachments.filter((r) => r.status === "requested");
+  const uploadedRequested = requestedAttachments.filter((r) => r.status === "uploaded");
+  if (requestedAttachments.length) {
+    lines.push("", "REQUESTED ATTACHMENTS CHECKLIST:");
+    pendingRequested.forEach((r) => {
+      lines.push(`• [ ] ${r.description}${r.reason ? ` — ${r.reason}` : ""}`);
+    });
+    uploadedRequested.forEach((r) => {
+      lines.push(`• [x] ${r.description} (uploaded)`);
+    });
   }
 
   lines.push("", "=== END LIVING FILE ===", "");
@@ -172,6 +201,19 @@ Wizard recommendation rules:
 - draft_waiver: recommend when a liability release or consent waiver is needed.
 - wills_trusts: recommend for estate planning matters.
 - doc_review: recommend whenever the client has documents that need professional review.
+
+Whenever you identify documents the client should gather or provide (contracts, pay stubs, correspondence, reports, photographs, HR records, medical records, etc.), produce this block AFTER your ---LIVING FILE--- or ---LEGAL STRATEGY--- block:
+
+---REQUESTED ATTACHMENTS---
+• [Document description] — [Why it matters to this matter]
+• [Document description] — [Why it matters to this matter]
+---END REQUESTED---
+
+Attachment request rules:
+- Only request documents that are genuinely useful for THIS specific matter.
+- Be specific: "Employment termination letter" not just "HR documents."
+- Do not re-request documents already shown as uploaded in the ATTACHED DOCUMENTS section of the Living File.
+- If no new documents are needed this turn, omit this block entirely.
 
 Output rules:
 - Never produce walls of text. Be precise and direct.

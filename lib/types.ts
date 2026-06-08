@@ -4,6 +4,9 @@ export type MatterType = "reactive" | "preventive";
 export type CaseStatus = "open" | "closed" | "referred";
 export type FactStatus = "confirmed" | "gap";
 export type MessageRole = "user" | "assistant";
+export type AttachmentType = "document" | "screenshot" | "other";
+export type AttachmentStatus = "processing" | "ready" | "failed";
+export type RequestedAttachmentStatus = "requested" | "uploaded" | "waived";
 
 // All supported wizard types — add new ones here as wizards are built
 export type WizardType =
@@ -113,6 +116,36 @@ export const WIZARD_LABELS: Record<WizardType, string> = {
   wills_trusts: "Wills & Trusts",
   doc_review: "Document Review",
 };
+
+export interface Attachment {
+  id: string;
+  case_file_id: string;
+  user_id: string;
+  file_name: string;
+  file_type: string;
+  file_size: number;
+  storage_path: string;
+  attachment_type: AttachmentType;
+  status: AttachmentStatus;
+  ai_summary: string | null;
+  case_relevance: string | null;
+  key_sections: string[];
+  urgent_findings: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RequestedAttachment {
+  id: string;
+  case_file_id: string;
+  user_id: string;
+  description: string;
+  reason: string | null;
+  status: RequestedAttachmentStatus;
+  fulfilled_by: string | null;
+  source: "ai" | "attorney";
+  created_at: string;
+}
 
 // The bypass user used in dev when BYPASS_AUTH=true
 export const BYPASS_USER_ID = "00000000-0000-0000-0000-000000000001";

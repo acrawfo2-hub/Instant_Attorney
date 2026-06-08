@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { DRAFTER_SYSTEM_PROMPT, buildFileContext } from "./prompts";
 import { extractDraftText } from "./file-parser";
 import { WIZARD_LABELS } from "./types";
-import type { CaseFile, FactItem, WizardType } from "./types";
+import type { CaseFile, FactItem, WizardType, Attachment, RequestedAttachment } from "./types";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -27,16 +27,21 @@ export async function triggerPreWarm(
   if (existing) return; // Already pre-warmed
 
   // Load file state
-  const [{ data: caseFileRow }, { data: factRows }] = await Promise.all([
-    db.from("case_files").select("*").eq("id", caseFileId).single(),
-    db.from("fact_items").select("*").eq("case_file_id", caseFileId),
-  ]);
+  const [{ data: caseFileRow }, { data: factRows }, { data: attachmentRows }, { data: requestedRows }] =
+    await Promise.all([
+      db.from("case_files").select("*").eq("id", caseFileId).single(),
+      db.from("fact_items").select("*").eq("case_file_id", caseFileId),
+      db.from("attachments").select("*").eq("case_file_id", caseFileId).eq("status", "ready"),
+      db.from("requested_attachments").select("*").eq("case_file_id", caseFileId),
+    ]);
 
   if (!caseFileRow) return;
 
   const caseFile = caseFileRow as CaseFile;
   const facts = (factRows ?? []) as FactItem[];
-  const fileContext = buildFileContext(caseFile, facts);
+  const attachments = (attachmentRows ?? []) as Attachment[];
+  const requestedAttachments = (requestedRows ?? []) as RequestedAttachment[];
+  const fileContext = buildFileContext(caseFile, facts, attachments, requestedAttachments);
   const systemPrompt = `${fileContext}\n\n${DRAFTER_SYSTEM_PROMPT}`;
 
   const initMessage = `Please draft a ${label} based on my Living File. Document type: ${wizardType}`;

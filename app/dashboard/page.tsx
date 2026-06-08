@@ -4,6 +4,7 @@ import Link from "next/link";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { CaseFile, FactItem, BYPASS_USER_ID, WIZARD_LABELS } from "@/lib/types";
 import type { Document, WizardType } from "@/lib/types";
+import AttachmentPanel from "@/components/AttachmentPanel";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
@@ -297,6 +298,12 @@ export default async function DashboardPage() {
                   Documents generated through wizards will appear here once attorney-reviewed.
                 </p>
               )}
+            </div>
+
+            {/* Attachments */}
+            <div className="lf-card lf-card-full">
+              <div className="lf-card-label">Documents &amp; Attachments</div>
+              <AttachmentPanel caseFileId={caseFile.id} />
             </div>
 
             {/* Attorney Assessment */}

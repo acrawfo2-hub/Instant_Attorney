@@ -25,7 +25,53 @@ export async function parseAndUpdateFile(
   await Promise.all([
     parseLivingFile(db, caseFileId, userId, text),
     parseLegalStrategy(db, caseFileId, text),
+    parseRequestedAttachments(db, caseFileId, userId, text),
   ]);
+}
+
+// Parses ---REQUESTED ATTACHMENTS--- blocks from intake chat output.
+export async function parseRequestedAttachments(
+  db: SupabaseClient,
+  caseFileId: string,
+  userId: string,
+  text: string
+): Promise<void> {
+  const match = text.match(/---REQUESTED ATTACHMENTS---([\s\S]*?)---END REQUESTED---/);
+  if (!match) return;
+
+  const lines = match[1]
+    .split("\n")
+    .map((l) => l.replace(/^[•\-*]\s*/, "").trim())
+    .filter(Boolean);
+
+  if (!lines.length) return;
+
+  // Avoid inserting duplicates
+  const { data: existing } = await db
+    .from("requested_attachments")
+    .select("description")
+    .eq("case_file_id", caseFileId);
+
+  const existingSet = new Set(
+    existing?.map((r: { description: string }) => r.description.toLowerCase()) ?? []
+  );
+
+  const toInsert = lines
+    .filter((line) => !existingSet.has(line.split(" — ")[0]?.trim().toLowerCase() ?? line.toLowerCase()))
+    .map((line) => {
+      const parts = line.split(" — ");
+      return {
+        case_file_id: caseFileId,
+        user_id: userId,
+        description: parts[0]?.trim() ?? line,
+        reason: parts[1]?.trim() ?? null,
+        source: "ai" as const,
+      };
+    });
+
+  if (toInsert.length) {
+    await db.from("requested_attachments").insert(toInsert);
+  }
 }
 
 // ── ---LIVING FILE--- block ──────────────────────────────────────────────────

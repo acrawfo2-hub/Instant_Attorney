@@ -1,16 +1,25 @@
 "use client";
 
-import { useState, useRef, useEffect, FormEvent } from "react";
+import { useState, useRef, useEffect, useCallback, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { IntakeMessage } from "@/lib/types";
 
 type Msg = Pick<IntakeMessage, "role" | "content">;
+
+interface PendingAttachment {
+  data: string;    // base64
+  mimeType: string;
+  fileName: string;
+  previewUrl: string;
+}
 
 const INITIAL_MESSAGE: Msg = {
   role: "assistant",
   content:
     "Welcome — this is your privileged Phase II intake channel, protected by the Crawford Law representation agreement you've signed.\n\nEverything you share here is confidential and covered by attorney-client privilege. I'll be building your Living File as we talk, so please share as much or as little as you're comfortable with right now.\n\nWhat's going on? Tell me about your situation.",
 };
+
+const MAX_INLINE_BYTES = 4 * 1024 * 1024; // 4 MB for inline screenshots
 
 function renderContent(text: string) {
   const lines = text.split("\n");
@@ -21,7 +30,6 @@ function renderContent(text: string) {
     const line = lines[i];
 
     if (line === "---LIVING FILE---") {
-      // Render Living File summary block
       const blockLines: string[] = [];
       i++;
       while (i < lines.length && lines[i] !== "---END FILE---") {
@@ -39,12 +47,8 @@ function renderContent(text: string) {
           </div>
           <div className="chat-lf-body">
             {blockLines.map((l, j) => {
-              if (l.match(/^[A-Z ]+:$/)) {
-                return <p key={j} className="chat-lf-section">{l}</p>;
-              }
-              if (l.startsWith("•")) {
-                return <p key={j} className="chat-lf-item">· {l.slice(1).trim()}</p>;
-              }
+              if (l.match(/^[A-Z ]+:$/)) return <p key={j} className="chat-lf-section">{l}</p>;
+              if (l.startsWith("•")) return <p key={j} className="chat-lf-item">· {l.slice(1).trim()}</p>;
               return <p key={j} className="chat-lf-line">{l}</p>;
             })}
           </div>
@@ -87,10 +91,22 @@ function renderContent(text: string) {
 function inlineBold(text: string): React.ReactNode {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
   return parts.map((part, i) => {
-    if (part.startsWith("**") && part.endsWith("**")) {
-      return <strong key={i}>{part.slice(2, -2)}</strong>;
-    }
+    if (part.startsWith("**") && part.endsWith("**")) return <strong key={i}>{part.slice(2, -2)}</strong>;
     return part;
+  });
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      // Strip data URL prefix — send raw base64
+      const base64 = result.split(",")[1] ?? result;
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
   });
 }
 
@@ -101,8 +117,11 @@ export default function AcpChatPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [streamingText, setStreamingText] = useState("");
+  const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
+  const [dragOver, setDragOver] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const inputAreaRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -115,27 +134,82 @@ export default function AcpChatPage() {
     el.style.height = Math.min(el.scrollHeight, 160) + "px";
   }
 
+  const attachFile = useCallback(async (file: File) => {
+    if (!file.type.startsWith("image/")) return; // Only inline images in chat
+    if (file.size > MAX_INLINE_BYTES) {
+      alert("Screenshots must be under 4 MB. For larger files, use the Upload Documents section on your dashboard.");
+      return;
+    }
+    const data = await fileToBase64(file);
+    const previewUrl = URL.createObjectURL(file);
+    setPendingAttachment({ data, mimeType: file.type, fileName: file.name || "screenshot.png", previewUrl });
+  }, []);
+
+  function handlePaste(e: React.ClipboardEvent) {
+    const items = Array.from(e.clipboardData.items);
+    const imageItem = items.find((item) => item.type.startsWith("image/"));
+    if (!imageItem) return;
+    e.preventDefault();
+    const file = imageItem.getAsFile();
+    if (file) attachFile(file);
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(true);
+  }
+
+  function handleDragLeave() {
+    setDragOver(false);
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) attachFile(file);
+  }
+
+  function clearAttachment() {
+    if (pendingAttachment) URL.revokeObjectURL(pendingAttachment.previewUrl);
+    setPendingAttachment(null);
+  }
+
   async function sendMessage(e: FormEvent) {
     e.preventDefault();
     const text = input.trim();
-    if (!text || loading) return;
+    if ((!text && !pendingAttachment) || loading) return;
 
-    const userMsg: Msg = { role: "user", content: text };
+    const displayContent = pendingAttachment
+      ? text ? `[${pendingAttachment.fileName}] ${text}` : `[${pendingAttachment.fileName}]`
+      : text;
+
+    const userMsg: Msg = { role: "user", content: displayContent };
     const nextMessages = [...messages, userMsg];
     setMessages(nextMessages);
     setInput("");
     setLoading(true);
     setStreamingText("");
 
+    const attachment = pendingAttachment;
+    clearAttachment();
+
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
     try {
+      // For API, use plain text content (not the display content with filename prefix)
+      const apiMessages = nextMessages.map((m, idx) => ({
+        role: m.role,
+        content: idx === nextMessages.length - 1 ? text : m.content,
+      }));
+
       const res = await fetch("/api/chat-acp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: nextMessages.map((m) => ({ role: m.role, content: m.content })),
+          messages: apiMessages,
           caseFileId,
+          ...(attachment ? { pendingAttachment: { data: attachment.data, mimeType: attachment.mimeType, fileName: attachment.fileName } } : {}),
         }),
       });
 
@@ -151,7 +225,6 @@ export default function AcpChatPage() {
         if (done) break;
         const chunk = decoder.decode(value, { stream: true });
 
-        // First chunk contains the case file ID prefix: \x00<id>\x00
         if (firstChunk && chunk.startsWith("\x00")) {
           const end = chunk.indexOf("\x00", 1);
           if (end !== -1) {
@@ -175,10 +248,7 @@ export default function AcpChatPage() {
     } catch {
       setMessages((prev) => [
         ...prev,
-        {
-          role: "assistant",
-          content: "I'm sorry — something went wrong. Please try again.",
-        },
+        { role: "assistant", content: "I'm sorry — something went wrong. Please try again." },
       ]);
       setStreamingText("");
     } finally {
@@ -285,25 +355,42 @@ export default function AcpChatPage() {
       </main>
 
       {/* INPUT */}
-      <div className="fc-input-area">
+      <div
+        ref={inputAreaRef}
+        className={`fc-input-area${dragOver ? " fc-input-area-dragover" : ""}`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        {/* Screenshot preview */}
+        {pendingAttachment && (
+          <div className="fc-attachment-preview">
+            <img src={pendingAttachment.previewUrl} alt="attachment preview" className="fc-attachment-thumb" />
+            <span className="fc-attachment-name">{pendingAttachment.fileName}</span>
+            <button className="fc-attachment-clear" onClick={clearAttachment} aria-label="Remove attachment">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+        )}
+
         <form className="fc-input-form" onSubmit={sendMessage}>
           <textarea
             ref={textareaRef}
             className="fc-textarea"
-            placeholder="Share the details of your situation…"
+            placeholder={dragOver ? "Drop screenshot here…" : "Share the details of your situation… or paste a screenshot"}
             value={input}
-            onChange={(e) => {
-              setInput(e.target.value);
-              autoResize();
-            }}
+            onChange={(e) => { setInput(e.target.value); autoResize(); }}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             rows={1}
             disabled={loading}
           />
           <button
             type="submit"
             className="fc-send-btn"
-            disabled={loading || !input.trim()}
+            disabled={loading || (!input.trim() && !pendingAttachment)}
             aria-label="Send"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -315,10 +402,9 @@ export default function AcpChatPage() {
         <p className="fc-input-hint">
           Enter to send · Shift+Enter for new line
           <span className="fc-input-hint-sep">·</span>
-          <button
-            className="fc-input-upgrade-link"
-            onClick={() => router.push("/dashboard")}
-          >
+          Paste or drag a screenshot to attach
+          <span className="fc-input-hint-sep">·</span>
+          <button className="fc-input-upgrade-link" onClick={() => router.push("/dashboard")}>
             View Living File
           </button>
         </p>

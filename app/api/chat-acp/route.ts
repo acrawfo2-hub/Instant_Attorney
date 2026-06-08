@@ -1,24 +1,30 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { ACP_CHAT_SYSTEM_PROMPT, buildFileContext } from "@/lib/prompts";
 import { parseAndUpdateFile } from "@/lib/file-parser";
 import { triggerPreWarm } from "@/lib/pre-warm";
+import { toAnthropicBlock, processAttachment } from "@/lib/attachment-processor";
 import { BYPASS_USER_ID } from "@/lib/types";
-import type { CaseFile, FactItem, LegalStrategy } from "@/lib/types";
+import type { CaseFile, FactItem, LegalStrategy, Attachment, RequestedAttachment } from "@/lib/types";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
 export async function POST(req: NextRequest) {
-  const { messages, caseFileId } = await req.json();
+  const { messages, caseFileId, pendingAttachment } = await req.json() as {
+    messages: Array<{ role: string; content: string }>;
+    caseFileId?: string;
+    pendingAttachment?: { data: string; mimeType: string; fileName: string };
+  };
 
   if (!Array.isArray(messages) || messages.length === 0) {
     return NextResponse.json({ error: "Invalid messages" }, { status: 400 });
   }
 
   let userId: string;
-  let resolvedCaseFileId: string = caseFileId;
+  let resolvedCaseFileId: string = caseFileId ?? "";
 
   const db = BYPASS_AUTH ? createServiceClient() : await createClient();
 
@@ -70,28 +76,72 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Load current file state to inject as context
-  const [{ data: caseFileRow }, { data: factRows }] = await Promise.all([
-    db.from("case_files").select("*").eq("id", resolvedCaseFileId).single(),
-    db.from("fact_items").select("*").eq("case_file_id", resolvedCaseFileId),
-  ]);
+  // Load current file state + attachments for context injection
+  const [{ data: caseFileRow }, { data: factRows }, { data: attachmentRows }, { data: requestedRows }] =
+    await Promise.all([
+      db.from("case_files").select("*").eq("id", resolvedCaseFileId).single(),
+      db.from("fact_items").select("*").eq("case_file_id", resolvedCaseFileId),
+      db.from("attachments").select("*").eq("case_file_id", resolvedCaseFileId).eq("status", "ready"),
+      db.from("requested_attachments").select("*").eq("case_file_id", resolvedCaseFileId),
+    ]);
 
   const caseFile = caseFileRow as CaseFile | null;
   const facts = (factRows ?? []) as FactItem[];
-  const fileContext = caseFile ? buildFileContext(caseFile, facts) : "";
+  const attachments = (attachmentRows ?? []) as Attachment[];
+  const requestedAttachments = (requestedRows ?? []) as RequestedAttachment[];
+
+  const fileContext = caseFile
+    ? buildFileContext(caseFile, facts, attachments, requestedAttachments)
+    : "";
 
   const systemPrompt = fileContext
     ? `${fileContext}\n\n${ACP_CHAT_SYSTEM_PROMPT}`
     : ACP_CHAT_SYSTEM_PROMPT;
 
-  // Save the last user message
-  const lastUserMsg = [...messages].reverse().find((m: { role: string }) => m.role === "user");
+  // Build Anthropic messages — replace last user message with multimodal if attachment present
+  type AnthropicMessage = { role: "user" | "assistant"; content: Anthropic.MessageParam["content"] };
+  const anthropicMessages: AnthropicMessage[] = messages.map((m) => ({
+    role: m.role as "user" | "assistant",
+    content: m.content,
+  }));
+
+  if (pendingAttachment) {
+    const lastUserIdx = [...anthropicMessages].map((m, i) => ({ m, i }))
+      .reverse()
+      .find(({ m }) => m.role === "user")?.i ?? -1;
+
+    if (lastUserIdx >= 0) {
+      try {
+        const buffer = Buffer.from(pendingAttachment.data, "base64");
+        const block = await toAnthropicBlock(buffer, pendingAttachment.mimeType, pendingAttachment.fileName);
+        const textContent = typeof anthropicMessages[lastUserIdx].content === "string"
+          ? anthropicMessages[lastUserIdx].content as string
+          : "";
+
+        anthropicMessages[lastUserIdx] = {
+          role: "user",
+          content: [
+            block as Anthropic.ImageBlockParam | Anthropic.DocumentBlockParam | Anthropic.TextBlockParam,
+            ...(textContent ? [{ type: "text" as const, text: textContent }] : []),
+          ],
+        };
+      } catch (err) {
+        console.error("[chat-acp] failed to build attachment block:", err);
+      }
+    }
+  }
+
+  // Save the last user message text (save text content only)
+  const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
   if (lastUserMsg) {
+    const textToSave = pendingAttachment
+      ? `[${pendingAttachment.fileName}]\n${lastUserMsg.content}`
+      : lastUserMsg.content;
     await db.from("intake_messages").insert({
       case_file_id: resolvedCaseFileId,
       user_id: userId,
       role: "user",
-      content: lastUserMsg.content,
+      content: textToSave,
     });
   }
 
@@ -100,7 +150,7 @@ export async function POST(req: NextRequest) {
     model: "claude-sonnet-4-6",
     max_tokens: 1500,
     system: systemPrompt,
-    messages,
+    messages: anthropicMessages,
   });
 
   const encoder = new TextEncoder();
@@ -134,8 +184,9 @@ export async function POST(req: NextRequest) {
           // Parse and update file if response contains structured blocks
           const hasLivingFile = fullResponse.includes("---LIVING FILE---");
           const hasStrategy = fullResponse.includes("---LEGAL STRATEGY---");
+          const hasRequestedAttachments = fullResponse.includes("---REQUESTED ATTACHMENTS---");
 
-          if (hasLivingFile || hasStrategy) {
+          if (hasLivingFile || hasStrategy || hasRequestedAttachments) {
             try {
               await parseAndUpdateFile(db, resolvedCaseFileId, userId, fullResponse);
             } catch (parseErr) {
@@ -161,6 +212,50 @@ export async function POST(req: NextRequest) {
               }
             } catch (err) {
               console.error("[chat-acp] pre-warm trigger error:", err);
+            }
+          }
+
+          // Upload inline screenshot to storage + queue background analysis
+          if (pendingAttachment) {
+            try {
+              const buffer = Buffer.from(pendingAttachment.data, "base64");
+              const fileId = randomUUID();
+              const storagePath = `${userId}/${resolvedCaseFileId}/${fileId}-${pendingAttachment.fileName}`;
+
+              const serviceDb = createServiceClient();
+              const { error: uploadErr } = await serviceDb.storage
+                .from("case-attachments")
+                .upload(storagePath, buffer, {
+                  contentType: pendingAttachment.mimeType,
+                  upsert: false,
+                });
+
+              if (!uploadErr) {
+                const { data: att } = await db
+                  .from("attachments")
+                  .insert({
+                    case_file_id: resolvedCaseFileId,
+                    user_id: userId,
+                    file_name: pendingAttachment.fileName,
+                    file_type: pendingAttachment.mimeType,
+                    file_size: buffer.length,
+                    storage_path: storagePath,
+                    attachment_type: "screenshot",
+                    status: "processing",
+                  })
+                  .select()
+                  .single();
+
+                if (att) {
+                  processAttachment(
+                    serviceDb, att.id, buffer,
+                    pendingAttachment.mimeType, pendingAttachment.fileName,
+                    resolvedCaseFileId
+                  ).catch((err) => console.error("[chat-acp] screenshot processing error:", err));
+                }
+              }
+            } catch (err) {
+              console.error("[chat-acp] screenshot storage error:", err);
             }
           }
         }

@@ -2,6 +2,7 @@
 
 import { use, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import type { Attachment } from "@/lib/types";
 
 interface DocumentDetail {
   id: string;
@@ -36,6 +37,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
 
   useEffect(() => {
     async function load() {
@@ -44,6 +46,15 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
         const data = await res.json();
         setDoc(data);
         setNotes(data.attorney_notes ?? "");
+        // Load attachments for this case file
+        const caseFileId = data.case_files?.id;
+        if (caseFileId) {
+          const attRes = await fetch(`/api/attachments?caseFileId=${caseFileId}`);
+          if (attRes.ok) {
+            const attData = await attRes.json();
+            setAttachments(attData.attachments ?? []);
+          }
+        }
       } else {
         setError("Document not found or access denied");
       }
@@ -132,6 +143,31 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
             <h3>Submitted</h3>
             <p>{new Date(doc.created_at).toLocaleString()}</p>
           </div>
+
+          {attachments.length > 0 && (
+            <div className="atty-review-section">
+              <h3>Attached Documents</h3>
+              {attachments.map((att) => (
+                <div key={att.id} className="atty-att-item">
+                  <span className="atty-att-name">{att.file_name}</span>
+                  {att.ai_summary && <span className="atty-att-summary">{att.ai_summary}</span>}
+                  {att.urgent_findings && att.urgent_findings !== "None identified" && (
+                    <span className="atty-att-urgent">{att.urgent_findings}</span>
+                  )}
+                  {att.status === "ready" && (
+                    <a
+                      href={`/api/attachments/${att.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="atty-att-link"
+                    >
+                      View / Download
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Document Content */}
