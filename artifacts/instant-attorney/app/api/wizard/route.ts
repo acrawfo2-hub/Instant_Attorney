@@ -6,7 +6,7 @@ import { parseAndUpdateFile } from "@/lib/file-parser";
 import { BYPASS_USER_ID } from "@/lib/types";
 import type { WizardType, CaseFile, FactItem } from "@/lib/types";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
 export async function POST(req: NextRequest) {

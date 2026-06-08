@@ -1326,6 +1326,7 @@ body {
   border-top: 0.5px solid rgba(255, 255, 255, 0.08);
   background: var(--brand-navy);
   padding: 0.9rem 1rem 0.75rem;
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
   flex-shrink: 0;
 }
 @media (min-width: 768px) {
@@ -1337,6 +1338,8 @@ body {
   gap: 0.6rem;
   max-width: 740px;
   margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
 }
 .fc-textarea {
   flex: 1;
@@ -1402,6 +1405,8 @@ body {
 @media (max-width: 480px) {
   .fc-topbar-center { display: none; }
   .fc-upgrade-btn span { display: none; }
+  .fc-input-hint { display: none; }
+  .fc-input-area { padding: 0.75rem 0.85rem max(0.85rem, env(safe-area-inset-bottom)); }
 }
 
 /* ── ACP chat extras ── */
