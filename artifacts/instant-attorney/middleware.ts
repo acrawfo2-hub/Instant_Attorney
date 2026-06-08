@@ -18,6 +18,13 @@ export async function middleware(request: NextRequest) {
     return res;
   }
 
+  // If Supabase isn't configured yet, pass through rather than crash
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+  if (!supabaseUrl.startsWith("http") || !supabaseAnonKey) {
+    return NextResponse.next();
+  }
+
   const needsAuth = AUTH_REQUIRED.some((r) => pathname.startsWith(r));
   const isGuestOnly = GUEST_ONLY.some((r) => pathname.startsWith(r));
 
