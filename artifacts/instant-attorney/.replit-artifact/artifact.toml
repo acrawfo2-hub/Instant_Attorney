@@ -32,5 +32,3 @@ path = "artifacts/instant-attorney"
 
 [services.env]
 PORT = "21203"
-BYPASS_AUTH = "true"
-NEXT_PUBLIC_BYPASS_AUTH = "true"
