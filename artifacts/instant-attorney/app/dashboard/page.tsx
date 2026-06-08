@@ -4,6 +4,7 @@ import Link from "next/link";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { CaseFile, FactItem, BYPASS_USER_ID, WIZARD_LABELS } from "@/lib/types";
 import type { Document, WizardType } from "@/lib/types";
+import AttachmentPanel from "@/components/AttachmentPanel";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
@@ -40,10 +41,20 @@ async function getData() {
       .order("created_at", { ascending: false }),
   ]);
 
+  // Find pre-warmed docs indexed by wizard type for instant-launch
+  const allDocs = (documents ?? []) as Document[];
+  const preWarmedByType: Record<string, string> = {};
+  for (const doc of allDocs) {
+    if (doc.status === "pre_warmed" && !preWarmedByType[doc.doc_type]) {
+      preWarmedByType[doc.doc_type] = doc.id;
+    }
+  }
+
   return {
     caseFile: caseFile as CaseFile | null,
     facts: (facts ?? []) as FactItem[],
-    documents: (documents ?? []) as Document[],
+    documents: allDocs.filter((d) => d.status !== "pre_warmed"),
+    preWarmedByType,
     userId,
   };
 }
@@ -74,7 +85,7 @@ export default async function DashboardPage() {
   const hdrs = await headers();
   const isBypass = hdrs.get("x-bypass-auth") === "true" || BYPASS_AUTH;
 
-  const { caseFile, facts, documents } = await getData();
+  const { caseFile, facts, documents, preWarmedByType } = await getData();
 
   const confirmed = facts.filter((f) => f.status === "confirmed");
   const gaps = facts.filter((f) => f.status === "gap");
@@ -246,7 +257,12 @@ export default async function DashboardPage() {
                   <p className="lf-wizard-hint">Your attorney has suggested the following documents based on your matter. Launch a wizard to begin drafting.</p>
                   <div className="lf-wizard-grid">
                     {recommendedWizards.map((wType) => (
-                      <WizardCard key={wType} wizardType={wType} caseFileId={caseFile.id} />
+                      <WizardCard
+                        key={wType}
+                        wizardType={wType}
+                        caseFileId={caseFile.id}
+                        preWarmedDocId={preWarmedByType[wType]}
+                      />
                     ))}
                   </div>
                 </>
@@ -284,6 +300,12 @@ export default async function DashboardPage() {
               )}
             </div>
 
+            {/* Attachments */}
+            <div className="lf-card lf-card-full">
+              <div className="lf-card-label">Documents &amp; Attachments</div>
+              <AttachmentPanel caseFileId={caseFile.id} />
+            </div>
+
             {/* Attorney Assessment */}
             <div className="lf-card lf-card-full">
               <div className="lf-card-label">Attorney Assessment</div>
@@ -301,9 +323,19 @@ export default async function DashboardPage() {
   );
 }
 
-function WizardCard({ wizardType, caseFileId }: { wizardType: WizardType; caseFileId: string }) {
+function WizardCard({
+  wizardType,
+  caseFileId,
+  preWarmedDocId,
+}: {
+  wizardType: WizardType;
+  caseFileId: string;
+  preWarmedDocId?: string;
+}) {
   const label = WIZARD_LABELS[wizardType] ?? wizardType;
-  const href = `/wizard/${wizardType}?caseFileId=${caseFileId}`;
+  const href = preWarmedDocId
+    ? `/wizard/${wizardType}?caseFileId=${caseFileId}&docId=${preWarmedDocId}`
+    : `/wizard/${wizardType}?caseFileId=${caseFileId}`;
 
   const icons: Record<WizardType, string> = {
     intake_summary: "📋",
@@ -316,9 +348,14 @@ function WizardCard({ wizardType, caseFileId }: { wizardType: WizardType; caseFi
   };
 
   return (
-    <Link href={href} className="lf-wizard-card">
+    <Link href={href} className={`lf-wizard-card ${preWarmedDocId ? "lf-wizard-card-ready" : ""}`}>
       <span className="lf-wizard-icon">{icons[wizardType] ?? "📄"}</span>
-      <span className="lf-wizard-label">{label}</span>
+      <div className="lf-wizard-card-body">
+        <span className="lf-wizard-label">{label}</span>
+        {preWarmedDocId && (
+          <span className="lf-wizard-ready-badge">Draft ready</span>
+        )}
+      </div>
       <span className="lf-wizard-arrow">→</span>
     </Link>
   );

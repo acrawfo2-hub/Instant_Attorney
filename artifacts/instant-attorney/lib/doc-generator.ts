@@ -528,3 +528,100 @@ async function generateDocReview({ wizardData }: DocGenInput): Promise<Buffer> {
 
   return pack(doc);
 }
+
+// ── Generate .docx from AI-formatted draft text ──────────────────────────────
+// Used by the Drafter agent — wraps near-final AI text in a proper .docx shell
+// with firm header, DRAFT watermark, and clean paragraph formatting.
+
+export async function generateDocxFromText(
+  title: string,
+  draftText: string,
+  caseFile: { matter_subtype?: string | null; jurisdiction?: string | null }
+): Promise<Buffer> {
+  const lines = draftText.split("\n");
+
+  const children: Paragraph[] = [
+    ...firmHeader(),
+    new Paragraph({
+      children: [new TextRun({ text: title, bold: true, size: 26 })],
+      alignment: AlignmentType.CENTER,
+      heading: HeadingLevel.HEADING_1,
+    }),
+    new Paragraph({ text: "" }),
+  ];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      children.push(new Paragraph({ text: "" }));
+      continue;
+    }
+
+    // Section headings: lines that are ALL CAPS or match "N. Heading" pattern
+    const isNumberedHeading = /^\d+\.\s+[A-Z]/.test(trimmed) && trimmed.length < 80;
+    const isAllCapsHeading = trimmed === trimmed.toUpperCase() && trimmed.length < 80 && /[A-Z]{3,}/.test(trimmed);
+
+    if (isNumberedHeading || isAllCapsHeading) {
+      children.push(new Paragraph({
+        children: [new TextRun({ text: trimmed, bold: true })],
+        heading: HeadingLevel.HEADING_2,
+        spacing: { before: 200, after: 80 },
+      }));
+      continue;
+    }
+
+    // Placeholders: [[TEXT — descriptor]] highlighted in the doc
+    const hasPlaceholder = trimmed.includes("[[");
+    if (hasPlaceholder) {
+      const parts = trimmed.split(/(\[\[.*?\]\])/);
+      const runs = parts.map((part) => {
+        if (part.startsWith("[[") && part.endsWith("]]")) {
+          return new TextRun({
+            text: part,
+            bold: true,
+            color: "CC0000",    // red for placeholders
+            highlight: "yellow",
+          });
+        }
+        return new TextRun({ text: part });
+      });
+      children.push(new Paragraph({ children: runs }));
+      continue;
+    }
+
+    // Bullet/list items
+    if (/^[•\-*]\s/.test(trimmed)) {
+      children.push(new Paragraph({
+        children: [new TextRun({ text: trimmed.replace(/^[•\-*]\s+/, "") })],
+        bullet: { level: 0 },
+      }));
+      continue;
+    }
+
+    // Default: body paragraph
+    children.push(new Paragraph({ children: [new TextRun({ text: trimmed })] }));
+  }
+
+  // Footer
+  children.push(
+    new Paragraph({ text: "" }),
+    new Paragraph({
+      border: { top: { style: BorderStyle.SINGLE, size: 1 } },
+      text: "",
+    }),
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: `DRAFT — FOR ATTORNEY REVIEW ONLY · Crawford Law PLLC · ${new Date().toLocaleDateString()} · ${caseFile.jurisdiction ?? "TX"} · Not for distribution`,
+          italics: true,
+          size: 16,
+          color: "888888",
+        }),
+      ],
+      alignment: AlignmentType.CENTER,
+    })
+  );
+
+  const doc = new Document({ sections: [{ children }] });
+  return pack(doc);
+}
