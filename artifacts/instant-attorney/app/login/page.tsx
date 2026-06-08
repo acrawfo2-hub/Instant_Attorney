@@ -19,21 +19,21 @@ function LoginForm() {
     setError("");
     setLoading(true);
 
-    let authError: { message: string } | null = null;
     try {
-      const supabase = createClient();
-      const result = await supabase.auth.signInWithPassword({ email, password });
-      authError = result.error;
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Sign in failed");
+        setLoading(false);
+        return;
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.error("signInWithPassword threw:", msg);
       setError("Network error: " + msg);
-      setLoading(false);
-      return;
-    }
-
-    if (authError) {
-      setError(authError.message);
       setLoading(false);
       return;
     }
