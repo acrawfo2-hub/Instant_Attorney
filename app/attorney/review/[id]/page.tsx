@@ -9,6 +9,7 @@ interface DocumentDetail {
   doc_type: string;
   status: string;
   content_json: Record<string, unknown>;
+  draft_text: string | null;
   attorney_notes: string | null;
   created_at: string;
   case_files: {
@@ -135,15 +136,47 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
 
         {/* Document Content */}
         <div className="atty-review-content">
-          <h2>Document Data</h2>
-          <div className="atty-review-data">
-            {Object.entries(doc.content_json).map(([key, val]) => (
-              <div key={key} className="atty-review-field">
-                <dt>{key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</dt>
-                <dd>{Array.isArray(val) ? val.join(", ") : String(val ?? "—")}</dd>
+          {/* Draft text (primary view for attorney) */}
+          {doc.draft_text ? (
+            <>
+              <div className="atty-review-doc-header">
+                <h2>Document Draft</h2>
+                <a
+                  href={`/api/documents/${id}/download`}
+                  download
+                  className="atty-btn atty-btn-download"
+                >
+                  Download .docx
+                </a>
               </div>
-            ))}
-          </div>
+              <div className="atty-review-draft">
+                {doc.draft_text.split("\n\n").map((para, i) => (
+                  <p key={i}
+                    dangerouslySetInnerHTML={{
+                      __html: para
+                        .replace(/&/g, "&amp;")
+                        .replace(/</g, "&lt;")
+                        .replace(/>/g, "&gt;")
+                        .replace(/\[\[([^\]]+)\]\]/g, '<mark class="atty-placeholder">[[<em>$1</em>]]</mark>')
+                        .replace(/\n/g, "<br>"),
+                    }}
+                  />
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              <h2>Document Data</h2>
+              <div className="atty-review-data">
+                {Object.entries(doc.content_json).filter(([k]) => k !== "init_response").map(([key, val]) => (
+                  <div key={key} className="atty-review-field">
+                    <dt>{key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</dt>
+                    <dd>{Array.isArray(val) ? val.join(", ") : String(val ?? "—")}</dd>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
 
           {/* Attorney Notes */}
           <div className="atty-review-notes">

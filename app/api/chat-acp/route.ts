@@ -3,8 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { ACP_CHAT_SYSTEM_PROMPT, buildFileContext } from "@/lib/prompts";
 import { parseAndUpdateFile } from "@/lib/file-parser";
+import { triggerPreWarm } from "@/lib/pre-warm";
 import { BYPASS_USER_ID } from "@/lib/types";
-import type { CaseFile, FactItem } from "@/lib/types";
+import type { CaseFile, FactItem, LegalStrategy } from "@/lib/types";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
@@ -131,14 +132,35 @@ export async function POST(req: NextRequest) {
           });
 
           // Parse and update file if response contains structured blocks
-          if (
-            fullResponse.includes("---LIVING FILE---") ||
-            fullResponse.includes("---LEGAL STRATEGY---")
-          ) {
+          const hasLivingFile = fullResponse.includes("---LIVING FILE---");
+          const hasStrategy = fullResponse.includes("---LEGAL STRATEGY---");
+
+          if (hasLivingFile || hasStrategy) {
             try {
               await parseAndUpdateFile(db, resolvedCaseFileId, userId, fullResponse);
             } catch (parseErr) {
               console.error("[chat-acp] file parser error:", parseErr);
+            }
+          }
+
+          // Pre-warm the top recommended wizard when strategy is first established
+          if (hasStrategy) {
+            try {
+              const { data: freshFile } = await db
+                .from("case_files")
+                .select("legal_strategy")
+                .eq("id", resolvedCaseFileId)
+                .single();
+
+              const strategy = freshFile?.legal_strategy as LegalStrategy | null;
+              const topWizard = strategy?.recommended_wizards?.[0];
+              if (topWizard) {
+                triggerPreWarm(db, resolvedCaseFileId, userId, topWizard).catch(
+                  (err) => console.error("[chat-acp] pre-warm error:", err)
+                );
+              }
+            } catch (err) {
+              console.error("[chat-acp] pre-warm trigger error:", err);
             }
           }
         }

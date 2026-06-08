@@ -16,6 +16,7 @@ export type WizardType =
   | "doc_review";
 
 export type DocumentStatus =
+  | "pre_warmed"
   | "draft"
   | "pending_review"
   | "approved"
@@ -62,6 +63,7 @@ export interface CaseFile {
   legal_strategy: LegalStrategy | null;
   attorney_assessment: string | null;
   next_action: string | null;
+  jurisdiction: string | null;
   opened_at: string;
   updated_at: string;
 }
@@ -92,6 +94,7 @@ export interface Document {
   title: string;
   status: DocumentStatus;
   content_json: Record<string, unknown>;
+  draft_text: string | null;
   file_path: string | null;
   attorney_notes: string | null;
   reviewed_by: string | null;
