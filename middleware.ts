@@ -5,10 +5,6 @@ const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
 // Routes that require an authenticated session
 const AUTH_REQUIRED = ["/dashboard", "/chat", "/onboarding", "/wizard", "/attorney"];
-// Routes that require a completed subscription (agreement + consent + payment)
-const SUBSCRIPTION_REQUIRED = ["/dashboard", "/chat", "/wizard"];
-// Routes that require is_attorney = true
-const ATTORNEY_REQUIRED = ["/attorney"];
 // Redirect logged-in users away from these
 const GUEST_ONLY = ["/login", "/register"];
 
@@ -22,10 +18,7 @@ export async function middleware(request: NextRequest) {
     return res;
   }
 
-  // Only run auth logic on routes that care about it
   const needsAuth = AUTH_REQUIRED.some((r) => pathname.startsWith(r));
-  const needsSub = SUBSCRIPTION_REQUIRED.some((r) => pathname.startsWith(r));
-  const needsAttorney = ATTORNEY_REQUIRED.some((r) => pathname.startsWith(r));
   const isGuestOnly = GUEST_ONLY.some((r) => pathname.startsWith(r));
 
   if (!needsAuth && !isGuestOnly) {
@@ -36,6 +29,8 @@ export async function middleware(request: NextRequest) {
     request: { headers: request.headers },
   });
 
+  // createServerClient from @supabase/ssr is edge-compatible for auth only.
+  // Do NOT make DB queries here — use Node.js runtime in API routes/pages for that.
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -76,35 +71,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // For attorney-only routes, check is_attorney flag
-  if (needsAttorney && user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("is_attorney")
-      .eq("id", user.id)
-      .single();
-
-    if (!profile?.is_attorney) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/dashboard";
-      return NextResponse.redirect(url);
-    }
-  }
-
-  // For subscription-required routes, check onboarding completion
-  if (needsSub && user) {
-    const { data: sub } = await supabase
-      .from("subscriptions")
-      .select("status")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (!sub || (sub.status !== "active" && sub.status !== "trialing" && sub.status !== "bypass")) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/onboarding";
-      return NextResponse.redirect(url);
-    }
-  }
+  // Subscription and attorney checks are handled in each page/API route
+  // (they require DB queries which need the Node.js runtime, not Edge).
 
   return response;
 }
