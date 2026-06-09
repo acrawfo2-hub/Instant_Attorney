@@ -1,5 +1,4 @@
 import type { NextConfig } from "next";
-import path from "path";
 
 const SUPABASE_URL =
   process.env.NEXT_PUBLIC_SUPABASE_URL ||
@@ -14,10 +13,6 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_SUPABASE_URL: SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: SUPABASE_ANON_KEY,
   },
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  outputFileTracingRoot: path.join(__dirname),
 };
 
 export default nextConfig;

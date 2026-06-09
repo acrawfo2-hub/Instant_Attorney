@@ -3113,3 +3113,47 @@ mark.atty-placeholder {
 .atty-att-urgent { display: block; font-size: 11px; color: #c0392b; font-weight: 600; margin-top: 2px; }
 .atty-att-link { display: inline-block; font-size: 11px; color: var(--brand-gold); text-decoration: none; margin-top: 4px; }
 .atty-att-link:hover { text-decoration: underline; }
+
+/* Dashboard user info + logout */
+.lf-user-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 12px;
+  color: var(--brand-cream-text);
+  opacity: 0.85;
+}
+.lf-user-name {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+.lf-sub-badge {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 20px;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.lf-sub-badge-active   { background: rgba(52,199,89,0.18); color: #34c759; border: 0.5px solid rgba(52,199,89,0.3); }
+.lf-sub-badge-trialing { background: rgba(200,169,110,0.15); color: var(--brand-gold); border: 0.5px solid rgba(200,169,110,0.3); }
+.lf-sub-badge-bypass   { background: rgba(90,200,250,0.15); color: #5ac8fa; border: 0.5px solid rgba(90,200,250,0.3); }
+.lf-sub-badge-none     { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.5); border: 0.5px solid rgba(255,255,255,0.15); }
+.lf-logout-btn {
+  background: transparent;
+  border: 0.5px solid rgba(255,255,255,0.25);
+  color: rgba(255,255,255,0.7);
+  border-radius: 5px;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: var(--font-dm-sans, "DM Sans"), sans-serif;
+  transition: border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.lf-logout-btn:hover { border-color: rgba(255,255,255,0.5); color: #fff; }
+.lf-logout-btn:disabled { opacity: 0.5; cursor: not-allowed; }

@@ -1,12 +1,11 @@
-export const dynamic = "force-dynamic";
-
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { CaseFile, FactItem, BYPASS_USER_ID, WIZARD_LABELS } from "@/lib/types";
-import type { Document, WizardType } from "@/lib/types";
+import type { Document, WizardType, Profile, Subscription } from "@/lib/types";
 import AttachmentPanel from "@/components/AttachmentPanel";
+import LogoutButton from "@/components/LogoutButton";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
@@ -25,7 +24,13 @@ async function getData() {
     userId = user.id;
   }
 
-  const [{ data: caseFile }, { data: facts }, { data: documents }] = await Promise.all([
+  const [
+    { data: caseFile },
+    { data: facts },
+    { data: documents },
+    { data: profile },
+    { data: subscription },
+  ] = await Promise.all([
     db.from("case_files")
       .select("*")
       .eq("user_id", userId)
@@ -41,6 +46,16 @@ async function getData() {
       .select("*")
       .eq("user_id", userId)
       .order("created_at", { ascending: false }),
+    db.from("profiles")
+      .select("id, email, full_name")
+      .eq("id", userId)
+      .maybeSingle(),
+    db.from("subscriptions")
+      .select("status, plan")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
 
   // Find pre-warmed docs indexed by wizard type for instant-launch
@@ -58,6 +73,8 @@ async function getData() {
     documents: allDocs.filter((d) => d.status !== "pre_warmed"),
     preWarmedByType,
     userId,
+    profile: profile as Pick<Profile, "id" | "email" | "full_name"> | null,
+    subscription: subscription as Pick<Subscription, "status" | "plan"> | null,
   };
 }
 
@@ -83,11 +100,29 @@ const DOC_STATUS_CLASSES: Record<string, string> = {
   delivered: "lf-doc-status-delivered",
 };
 
+function SubBadge({ status, isBypass }: { status: string | null; isBypass: boolean }) {
+  if (isBypass) {
+    return <span className="lf-sub-badge lf-sub-badge-bypass">Test Mode</span>;
+  }
+  if (!status) return null;
+  const cls =
+    status === "active" ? "lf-sub-badge-active" :
+    status === "trialing" ? "lf-sub-badge-trialing" :
+    "lf-sub-badge-none";
+  const label =
+    status === "active" ? "Active" :
+    status === "trialing" ? "Trial" :
+    status === "past_due" ? "Past Due" :
+    status === "canceled" ? "Canceled" :
+    status;
+  return <span className={`lf-sub-badge ${cls}`}>{label}</span>;
+}
+
 export default async function DashboardPage() {
   const hdrs = await headers();
   const isBypass = hdrs.get("x-bypass-auth") === "true" || BYPASS_AUTH;
 
-  const { caseFile, facts, documents, preWarmedByType } = await getData();
+  const { caseFile, facts, documents, preWarmedByType, profile, subscription } = await getData();
 
   const confirmed = facts.filter((f) => f.status === "confirmed");
   const gaps = facts.filter((f) => f.status === "gap");
@@ -114,13 +149,21 @@ export default async function DashboardPage() {
         </div>
 
         <div className="lf-header-right">
-          {isBypass && <span className="ob-bypass-badge">Test Mode</span>}
+          <div className="lf-user-info">
+            {(profile?.full_name || profile?.email) && (
+              <span className="lf-user-name">
+                {profile.full_name ?? profile.email}
+              </span>
+            )}
+            <SubBadge status={subscription?.status ?? null} isBypass={isBypass} />
+          </div>
           <Link href="/chat" className="lf-begin-btn">
             {isEmpty ? "Begin Intake" : "Continue Intake"}
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="9 18 15 12 9 6" />
             </svg>
           </Link>
+          {!isBypass && <LogoutButton />}
         </div>
       </header>
 
