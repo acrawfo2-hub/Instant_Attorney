@@ -136,46 +136,82 @@ export default function AttachmentPanel({ caseFileId }: AttachmentPanelProps) {
       {uploadError && <p className="att-upload-error">{uploadError}</p>}
 
       {/* Attachment list */}
-      {attachments.length > 0 && (
-        <div className="att-list">
-          {attachments.map((att) => (
-            <div key={att.id} className={`att-item att-item-${att.status}`}>
-              <div className="att-item-icon">
-                {att.attachment_type === "screenshot" ? (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" />
-                    <polyline points="21 15 16 10 5 21" />
-                  </svg>
-                ) : (
+      {attachments.length > 0 && (() => {
+        const failed = attachments.filter((a) => a.status === "failed");
+        const nonFailed = attachments.filter((a) => a.status !== "failed");
+        return (
+          <div className="att-list">
+            {nonFailed.map((att) => (
+              <div key={att.id} className={`att-item att-item-${att.status}`}>
+                <div className="att-item-icon">
+                  {att.attachment_type === "screenshot" ? (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" />
+                      <polyline points="21 15 16 10 5 21" />
+                    </svg>
+                  ) : (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                    </svg>
+                  )}
+                </div>
+                <div className="att-item-body">
+                  <span className="att-item-name">{att.file_name}</span>
+                  {att.ai_summary && att.status === "ready" && (
+                    <span className="att-item-summary">{att.ai_summary}</span>
+                  )}
+                  {att.urgent_findings && att.urgent_findings !== "None identified" && (
+                    <span className="att-item-urgent">{att.urgent_findings}</span>
+                  )}
+                </div>
+                <div className="att-item-right">
+                  <span className={`att-status att-status-${att.status}`}>
+                    {STATUS_LABELS[att.status] ?? att.status}
+                  </span>
+                  {att.status === "ready" && (
+                    <a href={`/api/attachments/${att.id}`} className="att-view-link" target="_blank" rel="noopener noreferrer">
+                      View
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
+            {failed.length === 1 && (
+              <div className="att-item att-item-failed">
+                <div className="att-item-icon">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                     <polyline points="14 2 14 8 20 8" />
                   </svg>
-                )}
+                </div>
+                <div className="att-item-body">
+                  <span className="att-item-name">{failed[0].file_name}</span>
+                </div>
+                <div className="att-item-right">
+                  <span className="att-status att-status-failed">Failed</span>
+                </div>
               </div>
-              <div className="att-item-body">
-                <span className="att-item-name">{att.file_name}</span>
-                {att.ai_summary && att.status === "ready" && (
-                  <span className="att-item-summary">{att.ai_summary}</span>
-                )}
-                {att.urgent_findings && att.urgent_findings !== "None identified" && (
-                  <span className="att-item-urgent">{att.urgent_findings}</span>
-                )}
+            )}
+            {failed.length > 1 && (
+              <div className="att-item att-item-failed">
+                <div className="att-item-icon">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
+                </div>
+                <div className="att-item-body">
+                  <span className="att-item-name">{failed.length} files could not be processed</span>
+                  <span className="att-item-summary">{failed.map((f) => f.file_name).join(", ")}</span>
+                </div>
+                <div className="att-item-right">
+                  <span className="att-status att-status-failed">Failed</span>
+                </div>
               </div>
-              <div className="att-item-right">
-                <span className={`att-status att-status-${att.status}`}>
-                  {STATUS_LABELS[att.status] ?? att.status}
-                </span>
-                {att.status === "ready" && (
-                  <a href={`/api/attachments/${att.id}`} className="att-view-link" target="_blank" rel="noopener noreferrer">
-                    View
-                  </a>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+            )}
+          </div>
+        );
+      })()}
 
       {attachments.length === 0 && !uploading && (
         <p className="att-empty">No documents attached yet. Upload supporting files to enrich your Living File.</p>

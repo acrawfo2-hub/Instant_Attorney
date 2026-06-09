@@ -17,47 +17,85 @@ export type AttachmentContentBlock =
   | { type: "document"; source: { type: "base64"; media_type: "application/pdf"; data: string } }
   | { type: "text"; text: string };
 
-// Convert any supported file format to an Anthropic-compatible content block.
+// Convert any supported file format to Anthropic-compatible content blocks.
+// Returns an array — Word documents may include both text and embedded image blocks.
 export async function toAnthropicBlock(
   buffer: Buffer,
   mimeType: string,
   fileName: string
-): Promise<AttachmentContentBlock> {
+): Promise<AttachmentContentBlock[]> {
   if (SUPPORTED_IMAGE_TYPES.has(mimeType)) {
-    return {
+    return [{
       type: "image",
       source: { type: "base64", media_type: mimeType, data: buffer.toString("base64") },
-    };
+    }];
   }
 
   if (mimeType === "application/pdf") {
-    return {
+    return [{
       type: "document",
       source: { type: "base64", media_type: "application/pdf", data: buffer.toString("base64") },
-    };
+    }];
   }
 
-  // Word documents — extract text via mammoth
+  // Word documents — extract text AND embedded images via mammoth
   if (
     mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
     mimeType === "application/msword" ||
     fileName.endsWith(".docx") ||
     fileName.endsWith(".doc")
   ) {
-    const result = await mammoth.extractRawText({ buffer });
-    return { type: "text", text: result.value };
+    const [textResult, htmlResult] = await Promise.all([
+      mammoth.extractRawText({ buffer }),
+      mammoth.convertToHtml({ buffer }, {
+        convertImage: mammoth.images.imgElement(async (image) => {
+          if (!SUPPORTED_IMAGE_TYPES.has(image.contentType)) return { src: "" };
+          const imgBuffer = await image.read() as Buffer;
+          return { src: `data:${image.contentType};base64,${imgBuffer.toString("base64")}` };
+        }),
+      }),
+    ]);
+
+    const blocks: AttachmentContentBlock[] = [];
+
+    if (textResult.value.trim()) {
+      blocks.push({ type: "text", text: textResult.value });
+    }
+
+    // Extract embedded images from the HTML data URIs
+    const imgSrcRegex = /src="data:(image\/[^;]+);base64,([^"]+)"/g;
+    let imgMatch;
+    while ((imgMatch = imgSrcRegex.exec(htmlResult.value)) !== null) {
+      const mediaType = imgMatch[1];
+      if (SUPPORTED_IMAGE_TYPES.has(mediaType)) {
+        blocks.push({
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+            data: imgMatch[2],
+          },
+        });
+      }
+    }
+
+    if (blocks.length === 0) {
+      blocks.push({ type: "text", text: "(No readable text or images found in this document)" });
+    }
+
+    return blocks;
   }
 
   // Plain text variants
   if (SUPPORTED_TEXT_TYPES.has(mimeType) || mimeType.startsWith("text/")) {
-    return { type: "text", text: buffer.toString("utf-8") };
+    return [{ type: "text", text: buffer.toString("utf-8") }];
   }
 
   // Fallback: try UTF-8 text
   try {
     const text = buffer.toString("utf-8");
     if (text && !text.includes("�")) {
-      return { type: "text", text };
+      return [{ type: "text", text }];
     }
   } catch {
     // ignore
@@ -86,9 +124,9 @@ export async function processAttachment(
     const facts = (factRows ?? []) as FactItem[];
     const fileContext = caseFile ? buildFileContext(caseFile, facts) : "";
 
-    let contentBlock: AttachmentContentBlock;
+    let contentBlocks: AttachmentContentBlock[];
     try {
-      contentBlock = await toAnthropicBlock(buffer, mimeType, fileName);
+      contentBlocks = await toAnthropicBlock(buffer, mimeType, fileName);
     } catch (convErr) {
       console.error("[attachment-processor] conversion failed:", convErr);
       await db.from("attachments").update({ status: "failed", updated_at: new Date().toISOString() }).eq("id", attachmentId);
@@ -106,16 +144,23 @@ CASE RELEVANCE:
 [How this attachment relates to the current matter and should inform legal strategy — or "General background" if not directly relevant]
 KEY SECTIONS:
 • [Section name or key finding — keep each to one line]
+EXTRACTED FACTS:
+• [Specific identifiable facts from this document: legal names, EIN/tax ID numbers, addresses, key dates, dollar amounts, party roles, license numbers — one fact per bullet. Or "None identified"]
 URGENT FINDINGS:
 [Time-sensitive items, deadlines, rights, waiver risks, or critical facts — or "None identified"]
+CONTRADICTIONS WITH LIVING FILE:
+[Any facts in this document that directly conflict with confirmed facts or stated goals already in the Living File above. Be specific: quote the conflicting claim and the confirmed fact. Or "None identified"]
+CLARIFYING QUESTIONS:
+• [A focused question to resolve a specific contradiction — one concept per question, max 3 questions. Only include this section if CONTRADICTIONS identifies real conflicts.]
 REQUESTED ATTACHMENTS:
 • [Companion document description] — [Why it matters to the case]
 ---END ANALYSIS---
 
+Only include CLARIFYING QUESTIONS if CONTRADICTIONS WITH LIVING FILE contains actual conflicts.
 If no companion documents are needed, omit the REQUESTED ATTACHMENTS bullets entirely.`;
 
     const messageContent: Anthropic.MessageParam["content"] = [
-      contentBlock as Anthropic.ImageBlockParam | Anthropic.DocumentBlockParam | Anthropic.TextBlockParam,
+      ...contentBlocks as (Anthropic.ImageBlockParam | Anthropic.DocumentBlockParam | Anthropic.TextBlockParam)[],
       { type: "text", text: `File: ${fileName}\n\n${analysisPrompt}` },
     ];
 
@@ -142,14 +187,31 @@ If no companion documents are needed, omit the REQUESTED ATTACHMENTS bullets ent
     }
 
     const block = match[1];
-    const summaryMatch = block.match(/SUMMARY:\s*([\s\S]*?)(?=\nCASE RELEVANCE:|\nKEY SECTIONS:|\nURGENT|\nREQUESTED|$)/i);
-    const relevanceMatch = block.match(/CASE RELEVANCE:\s*([\s\S]*?)(?=\nKEY SECTIONS:|\nURGENT|\nREQUESTED|$)/i);
-    const urgentMatch = block.match(/URGENT FINDINGS:\s*([\s\S]*?)(?=\nREQUESTED|$)/i);
+    const summaryMatch = block.match(/SUMMARY:\s*([\s\S]*?)(?=\nCASE RELEVANCE:|\nKEY SECTIONS:|\nEXTRACTED|\nURGENT|\nCONTRADICTIONS|\nREQUESTED|$)/i);
+    const relevanceMatch = block.match(/CASE RELEVANCE:\s*([\s\S]*?)(?=\nKEY SECTIONS:|\nEXTRACTED|\nURGENT|\nCONTRADICTIONS|\nREQUESTED|$)/i);
+    const urgentMatch = block.match(/URGENT FINDINGS:\s*([\s\S]*?)(?=\nCONTRADICTIONS|\nCLARIFYING|\nREQUESTED|$)/i);
 
     // Key sections bullets
-    const keySectionsBlock = block.match(/KEY SECTIONS:\s*([\s\S]*?)(?=\nURGENT|\nREQUESTED|$)/i);
+    const keySectionsBlock = block.match(/KEY SECTIONS:\s*([\s\S]*?)(?=\nEXTRACTED|\nURGENT|\nCONTRADICTIONS|\nREQUESTED|$)/i);
     const keySections = keySectionsBlock
       ? keySectionsBlock[1].split("\n").map((l) => l.replace(/^[•\-*]\s*/, "").trim()).filter(Boolean)
+      : [];
+
+    // Extracted facts from the document (e.g. EIN numbers, legal names, addresses)
+    const extractedFactsBlock = block.match(/EXTRACTED FACTS:\s*([\s\S]*?)(?=\nURGENT|\nCONTRADICTIONS|\nCLARIFYING|\nREQUESTED|$)/i);
+    const extractedFacts = extractedFactsBlock
+      ? extractedFactsBlock[1].split("\n").map((l) => l.replace(/^[•\-*]\s*/, "").trim()).filter(Boolean).filter((l) => !l.toLowerCase().includes("none identified"))
+      : [];
+
+    // Contradictions with the living file
+    const contradictionsMatch = block.match(/CONTRADICTIONS WITH LIVING FILE:\s*([\s\S]*?)(?=\nCLARIFYING|\nREQUESTED|$)/i);
+    const contradictions = contradictionsMatch?.[1]?.trim() ?? null;
+    const hasContradictions = !!contradictions && !contradictions.toLowerCase().includes("none identified");
+
+    // Clarifying questions to resolve contradictions
+    const clarifyingBlock = block.match(/CLARIFYING QUESTIONS:\s*([\s\S]*?)(?=\nREQUESTED|$)/i);
+    const clarifyingQuestions = clarifyingBlock
+      ? clarifyingBlock[1].split("\n").map((l) => l.replace(/^[•\-*\d.]\s*/, "").trim()).filter(Boolean)
       : [];
 
     // Requested attachments bullets
@@ -158,15 +220,70 @@ If no companion documents are needed, omit the REQUESTED ATTACHMENTS bullets ent
       ? requestedBlock[1].split("\n").map((l) => l.replace(/^[•\-*]\s*/, "").trim()).filter(Boolean)
       : [];
 
+    // Build urgent_findings — append contradiction note if present
+    let urgentFindings = urgentMatch?.[1]?.trim() ?? null;
+    if (hasContradictions) {
+      const contradictionNote = `[DOCUMENT CONTRADICTION] ${contradictions}`;
+      urgentFindings = urgentFindings && urgentFindings !== "None identified"
+        ? `${urgentFindings}\n${contradictionNote}`
+        : contradictionNote;
+    }
+
     // Update attachment record
     await db.from("attachments").update({
       status: "ready",
       ai_summary: summaryMatch?.[1]?.trim() ?? null,
       case_relevance: relevanceMatch?.[1]?.trim() ?? null,
       key_sections: keySections,
-      urgent_findings: urgentMatch?.[1]?.trim() ?? null,
+      urgent_findings: urgentFindings,
       updated_at: new Date().toISOString(),
     }).eq("id", attachmentId);
+
+    // Write extracted facts as confirmed facts to the living file
+    if (extractedFacts.length && caseFile) {
+      const { data: existingFacts } = await db
+        .from("fact_items")
+        .select("description")
+        .eq("case_file_id", caseFileId)
+        .eq("status", "confirmed");
+
+      const existingFactSet = new Set(existingFacts?.map((f: { description: string }) => f.description.toLowerCase()) ?? []);
+      const newFacts = extractedFacts
+        .filter((d) => !existingFactSet.has(d.toLowerCase()))
+        .map((description) => ({
+          case_file_id: caseFileId,
+          user_id: caseFile.user_id,
+          description,
+          status: "confirmed" as const,
+        }));
+
+      if (newFacts.length) {
+        await db.from("fact_items").insert(newFacts);
+      }
+    }
+
+    // Write clarifying questions as fact gaps so the AI asks them next chat turn
+    if (clarifyingQuestions.length && hasContradictions && caseFile) {
+      const { data: existingGaps } = await db
+        .from("fact_items")
+        .select("description")
+        .eq("case_file_id", caseFileId)
+        .eq("status", "gap");
+
+      const existingGapSet = new Set(existingGaps?.map((f: { description: string }) => f.description.toLowerCase()) ?? []);
+      const newGaps = clarifyingQuestions
+        .filter((d) => !existingGapSet.has(d.toLowerCase()))
+        .map((description) => ({
+          case_file_id: caseFileId,
+          user_id: caseFile.user_id,
+          description: `[Clarification needed] ${description}`,
+          status: "gap" as const,
+        }));
+
+      if (newGaps.length) {
+        await db.from("fact_items").insert(newGaps);
+      }
+    }
 
     // Insert any newly requested attachments (avoid duplicates)
     if (requestedLines.length && caseFile) {

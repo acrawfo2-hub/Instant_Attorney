@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
     if (lastUserIdx >= 0) {
       try {
         const buffer = Buffer.from(pendingAttachment.data, "base64");
-        const block = await toAnthropicBlock(buffer, pendingAttachment.mimeType, pendingAttachment.fileName);
+        const blocks = await toAnthropicBlock(buffer, pendingAttachment.mimeType, pendingAttachment.fileName);
         const textContent = typeof anthropicMessages[lastUserIdx].content === "string"
           ? anthropicMessages[lastUserIdx].content as string
           : "";
@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
         anthropicMessages[lastUserIdx] = {
           role: "user",
           content: [
-            block as Anthropic.ImageBlockParam | Anthropic.DocumentBlockParam | Anthropic.TextBlockParam,
+            ...blocks as (Anthropic.ImageBlockParam | Anthropic.DocumentBlockParam | Anthropic.TextBlockParam)[],
             ...(textContent ? [{ type: "text" as const, text: textContent }] : []),
           ],
         };
