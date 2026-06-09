@@ -3,7 +3,8 @@ import { NextRequest } from "next/server";
 import { FREE_CHAT_SYSTEM_PROMPT } from "@/lib/prompts";
 
 const client = new Anthropic({
-  apiKey: process.env.Claude_Instant_Attorney,
+  apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
+  baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
 });
 
 export async function POST(req: NextRequest) {
