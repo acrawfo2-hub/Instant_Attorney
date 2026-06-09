@@ -30,5 +30,20 @@ run = "npm run dev"
 [services.development.cwd]
 path = "artifacts/instant-attorney"
 
+[services.production]
+
+[services.production.build]
+args = ["sh", "-c", "cd artifacts/instant-attorney && npm run build"]
+
+[services.production.build.env]
+NODE_ENV = "production"
+
+[services.production.run]
+args = ["sh", "-c", "cd artifacts/instant-attorney && npm start"]
+
+[services.production.run.env]
+PORT = "21203"
+NODE_ENV = "production"
+
 [services.env]
 PORT = "21203"
