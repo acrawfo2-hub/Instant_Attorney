@@ -2970,3 +2970,142 @@ mark.atty-placeholder {
 .atty-att-urgent { display: block; font-size: 11px; color: #c0392b; font-weight: 600; margin-top: 2px; }
 .atty-att-link { display: inline-block; font-size: 11px; color: var(--brand-gold); text-decoration: none; margin-top: 4px; }
 .atty-att-link:hover { text-decoration: underline; }
+
+/* ── Document submission status (lf-doc-*) ─────────────────────────────── */
+
+/* Inner wrapper so link and div variants look identical */
+.lf-doc-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+/* Clickable doc item (draft → wizard, attorney → review) */
+.lf-doc-item-link {
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.lf-doc-item-link:hover { background: #f4f2ec; border-color: #c9b97a; }
+
+/* Draft items get a subtle left accent so they stand out as actionable */
+.lf-doc-item-draft {
+  border-left: 3px solid #d4a72c;
+}
+.lf-doc-item-draft:hover { background: #fdf8ec; }
+
+/* Status + submitted date stacked */
+.lf-doc-status-group { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+
+/* "Not submitted" indicator — amber, small */
+.lf-doc-not-submitted {
+  font-size: 10px;
+  font-weight: 600;
+  color: #c8960a;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* "Submitted [date]" — muted green */
+.lf-doc-submitted-date {
+  font-size: 10px;
+  color: #2d7a4f;
+  font-weight: 500;
+}
+
+/* ── Attorney client banner (lf-atty-*) ────────────────────────────────── */
+
+.lf-atty-banner {
+  background: var(--brand-white);
+  border: 1.5px solid var(--brand-border);
+  border-left: 4px solid var(--brand-gold);
+}
+.lf-atty-banner-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.lf-atty-banner-client {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--brand-text-dk);
+}
+.lf-atty-banner-email {
+  font-size: 12px;
+  color: var(--brand-text-lt);
+  margin-top: 2px;
+}
+.lf-atty-banner-actions { display: flex; gap: 10px; flex-shrink: 0; }
+.lf-atty-review-btn {
+  padding: 9px 18px;
+  border: 1.5px solid var(--brand-gold);
+  border-radius: var(--brand-r-md);
+  background: var(--brand-white);
+  color: var(--brand-gold);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-dm-sans), sans-serif;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.lf-atty-review-btn:hover:not(:disabled) {
+  background: var(--brand-gold);
+  color: var(--brand-white);
+}
+.lf-atty-review-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Attorney name in lf-header right */
+.lf-atty-viewing-as {
+  font-size: 12px;
+  color: var(--brand-text-xlt);
+}
+
+/* ── Attorney dashboard additions (atty-*) ──────────────────────────────── */
+
+/* Section subtitle / hint text */
+.atty-section-hint {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--brand-text-xlt);
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: 8px;
+}
+
+/* Right side of doc card header (clock + badge) */
+.atty-doc-header-right { display: flex; align-items: center; gap: 8px; }
+
+/* 48-hour SLA countdown chip */
+.atty-clock {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 20px;
+  letter-spacing: 0.03em;
+}
+.atty-clock-ok { background: #e8f5e9; color: #2d7a4f; }
+.atty-clock-urgent { background: #fff3e0; color: #e65100; }
+.atty-clock-overdue { background: #ffebee; color: #c0392b; }
+
+/* Clickable file card */
+.atty-file-card-link {
+  text-decoration: none;
+  cursor: pointer;
+  transition: box-shadow 0.12s, border-color 0.12s;
+}
+.atty-file-card-link:hover {
+  border-color: var(--brand-gold);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+}
+
+/* "View File →" affordance in card footer */
+.atty-file-view-link {
+  font-size: 11px;
+  color: var(--brand-gold);
+  font-weight: 600;
+}
