@@ -1,0 +1,414 @@
+"use client";
+
+import { useState, useRef, useEffect, useCallback, FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import { IntakeMessage } from "@/lib/types";
+
+type Msg = Pick<IntakeMessage, "role" | "content">;
+
+interface PendingAttachment {
+  data: string;    // base64
+  mimeType: string;
+  fileName: string;
+  previewUrl: string;
+}
+
+const INITIAL_MESSAGE: Msg = {
+  role: "assistant",
+  content:
+    "Welcome — this is your privileged Phase II intake channel, protected by the Crawford Law representation agreement you've signed.\n\nEverything you share here is confidential and covered by attorney-client privilege. I'll be building your Living File as we talk, so please share as much or as little as you're comfortable with right now.\n\nWhat's going on? Tell me about your situation.",
+};
+
+const MAX_INLINE_BYTES = 4 * 1024 * 1024; // 4 MB for inline screenshots
+
+function renderContent(text: string) {
+  const lines = text.split("\n");
+  const elements: React.ReactNode[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    if (line === "---LIVING FILE---") {
+      const blockLines: string[] = [];
+      i++;
+      while (i < lines.length && lines[i] !== "---END FILE---") {
+        blockLines.push(lines[i]);
+        i++;
+      }
+      elements.push(
+        <div key={`lf-${i}`} className="chat-lf-block">
+          <div className="chat-lf-header">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+            </svg>
+            Living File Updated
+          </div>
+          <div className="chat-lf-body">
+            {blockLines.map((l, j) => {
+              if (l.match(/^[A-Z ]+:$/)) return <p key={j} className="chat-lf-section">{l}</p>;
+              if (l.startsWith("•")) return <p key={j} className="chat-lf-item">· {l.slice(1).trim()}</p>;
+              return <p key={j} className="chat-lf-line">{l}</p>;
+            })}
+          </div>
+        </div>
+      );
+    } else if (line.startsWith("[URGENT:") || line.startsWith("[URGENT]")) {
+      elements.push(
+        <div key={i} className="chat-urgent">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+          <span>{line.replace(/^\[URGENT:?\]\s*/, "")}</span>
+        </div>
+      );
+    } else if (line.startsWith("- ")) {
+      const items: string[] = [];
+      while (i < lines.length && lines[i].startsWith("- ")) {
+        items.push(lines[i].slice(2));
+        i++;
+      }
+      elements.push(
+        <ul key={`ul-${i}`} className="fc-msg-list">
+          {items.map((item, j) => <li key={j}>{inlineBold(item)}</li>)}
+        </ul>
+      );
+      continue;
+    } else if (line.trim() === "") {
+      elements.push(<div key={i} className="fc-spacer" />);
+    } else {
+      elements.push(<p key={i}>{inlineBold(line)}</p>);
+    }
+    i++;
+  }
+
+  return elements;
+}
+
+function inlineBold(text: string): React.ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**")) return <strong key={i}>{part.slice(2, -2)}</strong>;
+    return part;
+  });
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      // Strip data URL prefix — send raw base64
+      const base64 = result.split(",")[1] ?? result;
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+export default function AcpChatPage() {
+  const router = useRouter();
+  const [messages, setMessages] = useState<Msg[]>([INITIAL_MESSAGE]);
+  const [caseFileId, setCaseFileId] = useState<string | null>(null);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [streamingText, setStreamingText] = useState("");
+  const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const inputAreaRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, streamingText]);
+
+  function autoResize() {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 160) + "px";
+  }
+
+  const attachFile = useCallback(async (file: File) => {
+    if (!file.type.startsWith("image/")) return; // Only inline images in chat
+    if (file.size > MAX_INLINE_BYTES) {
+      alert("Screenshots must be under 4 MB. For larger files, use the Upload Documents section on your dashboard.");
+      return;
+    }
+    const data = await fileToBase64(file);
+    const previewUrl = URL.createObjectURL(file);
+    setPendingAttachment({ data, mimeType: file.type, fileName: file.name || "screenshot.png", previewUrl });
+  }, []);
+
+  function handlePaste(e: React.ClipboardEvent) {
+    const items = Array.from(e.clipboardData.items);
+    const imageItem = items.find((item) => item.type.startsWith("image/"));
+    if (!imageItem) return;
+    e.preventDefault();
+    const file = imageItem.getAsFile();
+    if (file) attachFile(file);
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(true);
+  }
+
+  function handleDragLeave() {
+    setDragOver(false);
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) attachFile(file);
+  }
+
+  function clearAttachment() {
+    if (pendingAttachment) URL.revokeObjectURL(pendingAttachment.previewUrl);
+    setPendingAttachment(null);
+  }
+
+  async function sendMessage(e: FormEvent) {
+    e.preventDefault();
+    const text = input.trim();
+    if ((!text && !pendingAttachment) || loading) return;
+
+    const displayContent = pendingAttachment
+      ? text ? `[${pendingAttachment.fileName}] ${text}` : `[${pendingAttachment.fileName}]`
+      : text;
+
+    const userMsg: Msg = { role: "user", content: displayContent };
+    const nextMessages = [...messages, userMsg];
+    setMessages(nextMessages);
+    setInput("");
+    setLoading(true);
+    setStreamingText("");
+
+    const attachment = pendingAttachment;
+    clearAttachment();
+
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
+
+    try {
+      // For API, use plain text content (not the display content with filename prefix)
+      const apiMessages = nextMessages.map((m, idx) => ({
+        role: m.role,
+        content: idx === nextMessages.length - 1 ? text : m.content,
+      }));
+
+      const res = await fetch("/api/chat-acp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: apiMessages,
+          caseFileId,
+          ...(attachment ? { pendingAttachment: { data: attachment.data, mimeType: attachment.mimeType, fileName: attachment.fileName } } : {}),
+        }),
+      });
+
+      if (!res.ok || !res.body) throw new Error("Request failed");
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let full = "";
+      let firstChunk = true;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+
+        if (firstChunk && chunk.startsWith("\x00")) {
+          const end = chunk.indexOf("\x00", 1);
+          if (end !== -1) {
+            const id = chunk.slice(1, end);
+            if (id) setCaseFileId(id);
+            full += chunk.slice(end + 1);
+          } else {
+            full += chunk;
+          }
+          firstChunk = false;
+        } else {
+          full += chunk;
+          firstChunk = false;
+        }
+
+        setStreamingText(full);
+      }
+
+      setMessages((prev) => [...prev, { role: "assistant", content: full }]);
+      setStreamingText("");
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "I'm sorry — something went wrong. Please try again." },
+      ]);
+      setStreamingText("");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage(e as unknown as FormEvent);
+    }
+  }
+
+  return (
+    <div className="fc-shell">
+      {/* TOP BAR */}
+      <header className="fc-topbar">
+        <button className="fc-topbar-logo" onClick={() => router.push("/dashboard")}>
+          <div className="fc-logo-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            </svg>
+          </div>
+          <span>Instant-Attorney</span>
+        </button>
+
+        <div className="fc-topbar-center">
+          <span className="fc-phase-label">Phase II · Privileged Intake</span>
+        </div>
+
+        <div className="fc-topbar-right">
+          <button
+            className="fc-upgrade-btn"
+            style={{ background: "rgba(255,255,255,0.07)", color: "var(--brand-cream-text)" }}
+            onClick={() => router.push("/dashboard")}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+              <line x1="3" y1="9" x2="21" y2="9" />
+              <line x1="9" y1="21" x2="9" y2="9" />
+            </svg>
+            View File
+          </button>
+        </div>
+      </header>
+
+      {/* PRIVILEGE NOTICE */}
+      <div className="fc-disclaimer" style={{ color: "rgba(200,169,110,0.6)", borderColor: "rgba(200,169,110,0.12)" }}>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+        </svg>
+        This conversation is protected by attorney-client privilege pursuant to your signed Crawford Law representation agreement.
+      </div>
+
+      {/* MESSAGES */}
+      <main className="fc-messages">
+        {messages.map((msg, i) => (
+          <div
+            key={i}
+            className={msg.role === "user" ? "fc-msg-row fc-msg-row-user" : "fc-msg-row fc-msg-row-ai"}
+          >
+            {msg.role === "assistant" && (
+              <div className="fc-avatar">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                </svg>
+              </div>
+            )}
+            <div className={msg.role === "user" ? "fc-bubble fc-bubble-user" : "fc-bubble fc-bubble-ai"}>
+              {msg.role === "assistant" ? renderContent(msg.content) : <p>{msg.content}</p>}
+            </div>
+          </div>
+        ))}
+
+        {streamingText && (
+          <div className="fc-msg-row fc-msg-row-ai">
+            <div className="fc-avatar">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              </svg>
+            </div>
+            <div className="fc-bubble fc-bubble-ai fc-bubble-streaming">
+              {renderContent(streamingText)}
+              <span className="fc-cursor" />
+            </div>
+          </div>
+        )}
+
+        {loading && !streamingText && (
+          <div className="fc-msg-row fc-msg-row-ai">
+            <div className="fc-avatar">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              </svg>
+            </div>
+            <div className="fc-bubble fc-bubble-ai fc-thinking">
+              <span /><span /><span />
+            </div>
+          </div>
+        )}
+
+        <div ref={messagesEndRef} />
+      </main>
+
+      {/* INPUT */}
+      <div
+        ref={inputAreaRef}
+        className={`fc-input-area${dragOver ? " fc-input-area-dragover" : ""}`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        {/* Screenshot preview */}
+        {pendingAttachment && (
+          <div className="fc-attachment-preview">
+            <img src={pendingAttachment.previewUrl} alt="attachment preview" className="fc-attachment-thumb" />
+            <span className="fc-attachment-name">{pendingAttachment.fileName}</span>
+            <button className="fc-attachment-clear" onClick={clearAttachment} aria-label="Remove attachment">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+        )}
+
+        <form className="fc-input-form" onSubmit={sendMessage}>
+          <textarea
+            ref={textareaRef}
+            className="fc-textarea"
+            placeholder={dragOver ? "Drop screenshot here…" : "Share the details of your situation… or paste a screenshot"}
+            value={input}
+            onChange={(e) => { setInput(e.target.value); autoResize(); }}
+            onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
+            rows={1}
+            disabled={loading}
+          />
+          <button
+            type="submit"
+            className="fc-send-btn"
+            disabled={loading || (!input.trim() && !pendingAttachment)}
+            aria-label="Send"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13" />
+              <polygon points="22 2 15 22 11 13 2 9 22 2" />
+            </svg>
+          </button>
+        </form>
+        <p className="fc-input-hint">
+          Enter to send · Shift+Enter for new line
+          <span className="fc-input-hint-sep">·</span>
+          Paste or drag a screenshot to attach
+          <span className="fc-input-hint-sep">·</span>
+          <button className="fc-input-upgrade-link" onClick={() => router.push("/dashboard")}>
+            View Living File
+          </button>
+        </p>
+      </div>
+    </div>
+  );
+}

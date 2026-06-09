@@ -1,0 +1,14 @@
+# Next.js build output — never commit
+.next/
+out/
+
+# Local env — never commit (contains secrets)
+.env.local
+.env*.local
+
+# Dependencies
+node_modules/
+
+# Misc
+.DS_Store
+*.tsbuildinfo

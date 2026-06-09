@@ -1,0 +1,49 @@
+kind = "web"
+previewPath = "/"
+title = "Instant-Attorney"
+version = "1.0.0"
+id = "artifacts/instant-attorney"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [
+  "/",
+  "/api/chat",
+  "/api/chat-acp",
+  "/api/wizard",
+  "/api/attachments",
+  "/api/documents",
+  "/api/auth",
+  "/api/subscriptions",
+  "/api/agreements",
+]
+localPort = 21203
+
+[services.development]
+run = "npm run dev"
+
+[services.development.cwd]
+path = "artifacts/instant-attorney"
+
+[services.production]
+
+[services.production.build]
+args = ["sh", "-c", "cd artifacts/instant-attorney && npm run build"]
+
+[services.production.build.env]
+NODE_ENV = "production"
+
+[services.production.run]
+args = ["sh", "-c", "cd artifacts/instant-attorney && npm start"]
+
+[services.production.run.env]
+PORT = "21203"
+NODE_ENV = "production"
+
+[services.env]
+PORT = "21203"
