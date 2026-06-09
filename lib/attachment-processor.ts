@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import mammoth from "mammoth";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { CaseFile, FactItem, Attachment } from "./types";
+import type { CaseFile, FactItem } from "./types";
 import { buildFileContext } from "./prompts";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });

@@ -106,6 +106,7 @@ export interface Document {
   attorney_notes: string | null;
   reviewed_by: string | null;
   reviewed_at: string | null;
+  submitted_at: string | null;
   created_at: string;
   updated_at: string;
 }

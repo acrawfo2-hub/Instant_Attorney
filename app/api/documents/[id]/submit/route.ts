@@ -24,11 +24,13 @@ export async function POST(
     userId = user.id;
   }
 
+  const now = new Date().toISOString();
   const { data: doc, error: docErr } = await db
     .from("documents")
     .update({
       status: "pending_review",
-      updated_at: new Date().toISOString(),
+      submitted_at: now,
+      updated_at: now,
     })
     .eq("id", id)
     .eq("user_id", userId)
