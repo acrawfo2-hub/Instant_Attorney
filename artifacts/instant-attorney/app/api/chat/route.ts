@@ -2,10 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest } from "next/server";
 import { FREE_CHAT_SYSTEM_PROMPT } from "@/lib/prompts";
 
-const client = new Anthropic({
-  apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
-});
+const client = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
 
 export async function POST(req: NextRequest) {
   const { messages } = await req.json();

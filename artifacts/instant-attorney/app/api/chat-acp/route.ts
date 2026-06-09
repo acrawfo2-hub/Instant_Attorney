@@ -9,10 +9,7 @@ import { toAnthropicBlock, processAttachment } from "@/lib/attachment-processor"
 import { BYPASS_USER_ID } from "@/lib/types";
 import type { CaseFile, FactItem, LegalStrategy, Attachment, RequestedAttachment } from "@/lib/types";
 
-const anthropic = new Anthropic({
-  apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
-});
+const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
 export async function POST(req: NextRequest) {
