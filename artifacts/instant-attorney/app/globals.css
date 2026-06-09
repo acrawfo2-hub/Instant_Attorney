@@ -2571,6 +2571,144 @@ body {
   border-radius: var(--brand-r-md);
 }
 
+.atty-doc-sla { margin-top: 8px; }
+.atty-sla {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 20px;
+  letter-spacing: 0.04em;
+}
+.atty-sla-ok { background: #e8f5e9; color: #2d7a4f; }
+.atty-sla-warning { background: #fff8e1; color: #c8960a; }
+.atty-sla-urgent { background: #fee; color: #c00; }
+.atty-sla-overdue { background: #c00; color: #fff; }
+
+/* Client file link card */
+.atty-file-card-link {
+  display: flex;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.atty-file-card-link:hover { border-color: var(--brand-gold); box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+
+.atty-back-link {
+  font-size: 13px;
+  color: var(--brand-text-xlt);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.atty-back-link:hover { color: var(--brand-cream-text); }
+
+/* Attorney client view */
+.atty-client-card {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  background: var(--brand-white);
+  border: 1px solid var(--brand-border);
+  border-radius: var(--brand-r-lg);
+  padding: 24px;
+}
+.atty-client-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--brand-navy);
+  color: var(--brand-cream-text);
+  font-size: 22px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.atty-client-info { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.atty-client-name { font-size: 18px; font-weight: 700; color: var(--brand-text-dk); }
+.atty-client-email { font-size: 13px; color: var(--brand-text-lt); }
+.atty-client-phone { font-size: 13px; color: var(--brand-text-lt); }
+.atty-client-stats { display: flex; gap: 24px; }
+.atty-client-stat { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.atty-client-stat-val { font-size: 22px; font-weight: 700; color: var(--brand-navy); }
+.atty-client-stat-lbl { font-size: 11px; color: var(--brand-text-xlt); text-transform: uppercase; letter-spacing: 0.06em; }
+
+.atty-case-section {
+  background: var(--brand-white);
+  border: 1px solid var(--brand-border);
+  border-radius: var(--brand-r-lg);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.atty-case-header { display: flex; align-items: flex-start; justify-content: space-between; }
+.atty-case-title { font-size: 16px; font-weight: 700; color: var(--brand-text-dk); margin: 0 0 6px 0; }
+.atty-case-meta { font-size: 12px; color: var(--brand-text-xlt); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.atty-case-summary { font-size: 13px; color: var(--brand-text-md); line-height: 1.6; margin: 0; font-style: italic; }
+.atty-case-goals { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.atty-case-goals-label { font-size: 12px; font-weight: 600; color: var(--brand-text-xlt); }
+.atty-case-goal-tag {
+  font-size: 11px;
+  background: var(--brand-cream-dk);
+  color: var(--brand-text-md);
+  padding: 3px 9px;
+  border-radius: 20px;
+}
+.atty-case-subsection { display: flex; flex-direction: column; gap: 10px; }
+.atty-case-subtitle {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--brand-text-xlt);
+  margin: 0;
+}
+
+/* Attachment list rows */
+.atty-att-list { display: flex; flex-direction: column; gap: 8px; }
+.atty-att-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  background: var(--brand-cream);
+  border: 1px solid var(--brand-border);
+  border-radius: var(--brand-r-md);
+}
+.atty-att-icon { font-size: 18px; flex-shrink: 0; margin-top: 2px; }
+.atty-att-body { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.atty-att-name { font-size: 13px; font-weight: 600; color: var(--brand-text-dk); }
+.atty-att-summary { font-size: 12px; color: var(--brand-text-md); }
+.atty-att-urgent { font-size: 12px; color: #c00; font-weight: 600; }
+.atty-att-side { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex-shrink: 0; }
+.atty-att-dl {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--brand-navy);
+  text-decoration: none;
+}
+.atty-att-dl:hover { text-decoration: underline; }
+.atty-doc-notes {
+  font-size: 12px;
+  color: var(--brand-text-lt);
+  font-style: italic;
+  margin-top: 4px;
+  border-top: 1px solid var(--brand-border);
+  padding-top: 6px;
+}
+.atty-btn-download {
+  font-size: 13px;
+  background: var(--brand-cream-dk);
+  color: var(--brand-text-dk);
+  border: 1px solid var(--brand-border);
+  text-decoration: none;
+  display: inline-block;
+}
+.atty-btn-download:hover { background: #ddd; }
+
 .atty-review-actions { display: flex; gap: 12px; }
 .atty-btn {
   padding: 11px 20px;

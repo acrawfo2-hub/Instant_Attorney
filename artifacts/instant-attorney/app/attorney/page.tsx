@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { WIZARD_LABELS } from "@/lib/types";
 import type { Document, CaseFile, Profile } from "@/lib/types";
+import SlaCountdown from "./SlaCountdown";
 
 interface DocumentWithRelations extends Document {
   case_files: CaseFile;
@@ -97,6 +98,9 @@ export default async function AttorneyPage() {
                   <div className="atty-doc-matter">
                     {doc.case_files?.matter_type ?? "—"} · {doc.case_files?.matter_subtype ?? "Not classified"}
                   </div>
+                  <div className="atty-doc-sla">
+                    <SlaCountdown createdAt={doc.created_at} />
+                  </div>
                 </Link>
               ))}
             </div>
@@ -111,7 +115,11 @@ export default async function AttorneyPage() {
           ) : (
             <div className="atty-file-list">
               {(caseFiles as (CaseFile & { profiles: Profile })[]).map((cf) => (
-                <div key={cf.id} className="atty-file-card">
+                <Link
+                  key={cf.id}
+                  href={`/attorney/client/${cf.user_id}`}
+                  className="atty-file-card atty-file-card-link"
+                >
                   <div className="atty-file-client">{cf.profiles?.full_name ?? cf.profiles?.email ?? "Unknown"}</div>
                   <div className="atty-file-matter">
                     {cf.matter_type ?? "Unclassified"} {cf.matter_subtype ? `— ${cf.matter_subtype}` : ""}
@@ -126,7 +134,7 @@ export default async function AttorneyPage() {
                     <span>Updated {new Date(cf.updated_at).toLocaleDateString()}</span>
                     <span>{cf.goals?.length ?? 0} goal{cf.goals?.length !== 1 ? "s" : ""}</span>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           )}
