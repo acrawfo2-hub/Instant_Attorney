@@ -51,6 +51,16 @@ create policy "attorneys_read_all_attachments"
   on attachments for select
   using (exists (select 1 from profiles where id = auth.uid() and is_attorney = true));
 
+-- ── Multi-file support: title, file_type, archive_at ────────────────────────
+alter table case_files
+  add column if not exists title      text,
+  add column if not exists file_type  text not null default 'standard',
+  add column if not exists archive_at timestamptz;
+
+create index if not exists case_files_archive_at_idx
+  on case_files (archive_at)
+  where archive_at is not null;
+
 -- ── Requested attachments (AI-generated checklist, attorney-addable later) ──
 create table if not exists requested_attachments (
   id           uuid default gen_random_uuid() primary key,

@@ -1,7 +1,8 @@
 export type SubscriptionStatus = "active" | "canceled" | "past_due" | "trialing" | "bypass";
 export type SubscriptionPlan = "phase2" | "consult";
 export type MatterType = "reactive" | "preventive";
-export type CaseStatus = "open" | "closed" | "referred";
+export type CaseStatus = "open" | "closed" | "referred" | "archived";
+export type CaseFileType = "standard" | "quick_consult";
 export type FactStatus = "confirmed" | "gap";
 export type MessageRole = "user" | "assistant";
 export type AttachmentType = "document" | "screenshot" | "other";
@@ -61,6 +62,9 @@ export interface CaseFile {
   matter_type: MatterType | null;
   matter_subtype: string | null;
   status: CaseStatus;
+  file_type: CaseFileType;
+  title: string | null;
+  archive_at: string | null;
   goals: string[];
   summary: string | null;
   legal_strategy: LegalStrategy | null;
