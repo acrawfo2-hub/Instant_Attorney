@@ -18,9 +18,11 @@ export default function CaseFileCard({ file, mode }: CaseFileCardProps) {
     || (file.matter_subtype ? file.matter_subtype.replace(/_/g, " ") : null)
     || "Intake in progress";
 
-  const subtitle = file.next_action
-    || (file.summary ? file.summary.slice(0, 100) + (file.summary.length > 100 ? "…" : "") : null)
-    || null;
+  const summary = file.summary
+    ? file.summary.slice(0, 140) + (file.summary.length > 140 ? "…" : "")
+    : null;
+
+  const nextAction = file.next_action ?? null;
 
   const dateStr = new Date(file.opened_at).toLocaleDateString("en-US", {
     month: "short", day: "numeric", year: "numeric",
@@ -30,14 +32,13 @@ export default function CaseFileCard({ file, mode }: CaseFileCardProps) {
     ? Math.max(0, Math.ceil((new Date(file.archive_at).getTime() - Date.now()) / 86_400_000))
     : null;
 
-  async function callAction(path: string, body?: Record<string, unknown>) {
+  async function callAction(path: string) {
     setActing(true);
     setError("");
     try {
       const res = await fetch(path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: body ? JSON.stringify(body) : undefined,
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? "Something went wrong"); return; }
@@ -50,59 +51,85 @@ export default function CaseFileCard({ file, mode }: CaseFileCardProps) {
   }
 
   const isQuickConsult = file.file_type === "quick_consult";
+  const matterLabel = file.matter_type === "reactive" ? "Reactive" : file.matter_type === "preventive" ? "Preventive" : null;
+
+  const typeIcon = isQuickConsult
+    ? (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      </svg>
+    )
+    : (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+      </svg>
+    );
 
   return (
-    <div className={`lf-file-card${isQuickConsult ? " lf-file-card-qc" : ""}${mode === "archived" ? " lf-file-card-archived" : ""}`}>
-      <div className="lf-file-card-top">
-        <div className="lf-file-card-info">
-          <div className="lf-file-card-title">{title}</div>
-          <div className="lf-file-card-badges">
-            {isQuickConsult && <span className="lf-file-badge lf-file-badge-qc">Quick Consult</span>}
-            {file.matter_type && (
-              <span className="lf-file-badge">
-                {file.matter_type === "reactive" ? "Reactive" : "Preventive"}
-              </span>
-            )}
+    <div className={`card${mode === "archived" ? " card--archived" : ""}${isQuickConsult ? " card--qc" : ""}`}>
+      {/* Card header */}
+      <div className="card__header">
+        <div className="card__icon">{typeIcon}</div>
+        <div className="card__meta">
+          <h3 className="card__title">{title}</h3>
+          <div className="card__tags">
+            {isQuickConsult && <span className="card__tag card__tag--qc">Quick Consult</span>}
+            {matterLabel && <span className="card__tag">{matterLabel}</span>}
             {mode === "archived" && daysLeft !== null && (
-              <span className="lf-file-badge lf-file-badge-expiry">
-                Deletes in {daysLeft}d
-              </span>
+              <span className="card__tag card__tag--expiry">Expires in {daysLeft}d</span>
             )}
           </div>
-          {subtitle && <p className="lf-file-card-sub">{subtitle}</p>}
-          <p className="lf-file-card-date">Opened {dateStr}</p>
         </div>
+        <span className="card__date">{dateStr}</span>
+      </div>
 
-        <div className="lf-file-card-actions">
-          {mode === "active" && (
-            <>
-              <a href={`/chat?caseFileId=${file.id}`} className="lf-file-btn lf-file-btn-primary">
-                Continue
-              </a>
-              <a href={`/dashboard/${file.id}`} className="lf-file-btn">
-                View File
-              </a>
-              <button
-                className="lf-file-btn lf-file-btn-ghost"
-                onClick={() => callAction(`/api/case-files/${file.id}/archive`)}
-                disabled={acting}
-              >
-                {acting ? "…" : "Archive"}
-              </button>
-            </>
+      {/* Card body */}
+      {(summary || nextAction) && (
+        <div className="card__body">
+          {summary && <p className="card__summary">{summary}</p>}
+          {nextAction && (
+            <div className="card__next">
+              <span className="card__next-label">Next step</span>
+              <span className="card__next-text">{nextAction}</span>
+            </div>
           )}
-          {mode === "archived" && (
+        </div>
+      )}
+
+      {/* Card footer */}
+      <div className="card__footer">
+        {mode === "active" ? (
+          <>
+            <a href={`/chat?caseFileId=${file.id}`} className="card__btn card__btn--primary">
+              Continue
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </a>
+            <a href={`/dashboard/${file.id}`} className="card__btn card__btn--outline">
+              View File
+            </a>
             <button
-              className="lf-file-btn lf-file-btn-primary"
-              onClick={() => callAction(`/api/case-files/${file.id}/restore`)}
+              className="card__btn card__btn--ghost"
+              onClick={() => callAction(`/api/case-files/${file.id}/archive`)}
               disabled={acting}
             >
-              {acting ? "…" : "Restore"}
+              {acting ? "…" : "Archive"}
             </button>
-          )}
-        </div>
+          </>
+        ) : (
+          <button
+            className="card__btn card__btn--primary"
+            onClick={() => callAction(`/api/case-files/${file.id}/restore`)}
+            disabled={acting}
+          >
+            {acting ? "…" : "Restore File"}
+          </button>
+        )}
       </div>
-      {error && <p className="lf-file-card-error">{error}</p>}
+
+      {error && <p className="card__error">{error}</p>}
     </div>
   );
 }

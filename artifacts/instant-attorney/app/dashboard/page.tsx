@@ -9,6 +9,8 @@ import CaseFileCard from "@/components/CaseFileCard";
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 const MAX_ACTIVE_FILES = 10;
 
+export const dynamic = "force-dynamic";
+
 async function getData() {
   let userId: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -65,53 +67,59 @@ export default async function DashboardPage() {
       </header>
 
       <main className="lf-main">
-        {/* Intro row */}
-        <div className="lf-files-intro">
-          <p className="lf-files-intro-text">
-            Start a new file, continue where you left off, or ask a quick legal question — all under ACP protection.
-          </p>
-          <div className="lf-files-intro-actions">
+        {/* Action bar */}
+        <div className="dash-actions">
+          <div className="dash-actions-left">
+            <p className="dash-subtitle">
+              {activeFiles.length === 0
+                ? "Start your first case file to begin working with Crawford Law."
+                : `${activeFiles.length} active file${activeFiles.length !== 1 ? "s" : ""}`
+              }
+            </p>
+          </div>
+          <div className="dash-actions-right">
+            <Link href="/chat?type=quick_consult" className="dash-btn dash-btn-secondary">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+              Quick Consult
+            </Link>
             {atLimit ? (
-              <span className="lf-files-limit-note">
-                Archive a file to open a new one ({MAX_ACTIVE_FILES}/{MAX_ACTIVE_FILES})
+              <span className="dash-limit-note">
+                {MAX_ACTIVE_FILES}/{MAX_ACTIVE_FILES} files — archive one to open a new file
               </span>
             ) : (
-              <Link href="/chat" className="lf-begin-btn">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <Link href="/chat" className="dash-btn dash-btn-primary">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
                 </svg>
                 New File
               </Link>
             )}
-            <Link href="/chat?type=quick_consult" className="lf-qc-btn">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-              </svg>
-              Quick Consult
-              <span className="lf-qc-btn-sub">ACP-protected · any topic</span>
-            </Link>
           </div>
         </div>
 
         {/* Active files */}
         {activeFiles.length === 0 ? (
-          <div className="lf-empty">
-            <div className="lf-empty-icon">
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <div className="dash-empty">
+            <div className="dash-empty-icon">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                 <polyline points="14 2 14 8 20 8" />
+                <line x1="12" y1="12" x2="12" y2="18" />
+                <line x1="9" y1="15" x2="15" y2="15" />
               </svg>
             </div>
-            <h2 className="lf-empty-title">No active files yet.</h2>
-            <p className="lf-empty-sub">
-              Start a new intake file to begin building your Living File with Crawford Law, or use Quick Consult for a one-off privileged question.
+            <h2 className="dash-empty-title">No active files</h2>
+            <p className="dash-empty-sub">
+              Begin an intake to build your Living File with Crawford Law, or use Quick Consult for any privileged one-off question.
             </p>
-            <Link href="/chat" className="lf-begin-btn lf-begin-btn-lg">
-              Begin Intake →
+            <Link href="/chat" className="dash-btn dash-btn-primary dash-btn-lg">
+              Begin Intake
             </Link>
           </div>
         ) : (
-          <div className="lf-files-list">
+          <div className="dash-file-grid">
             {activeFiles.map((f) => (
               <CaseFileCard key={f.id} file={f} mode="active" />
             ))}
@@ -120,9 +128,13 @@ export default async function DashboardPage() {
 
         {/* Archived files */}
         {archivedFiles.length > 0 && (
-          <div className="lf-files-archive-section">
-            <div className="lf-files-section-label">Archive</div>
-            <div className="lf-files-list">
+          <div className="dash-archive-section">
+            <div className="dash-section-header">
+              <div className="dash-section-line" />
+              <span className="dash-section-label">Archive ({archivedFiles.length})</span>
+              <div className="dash-section-line" />
+            </div>
+            <div className="dash-file-grid">
               {archivedFiles.map((f) => (
                 <CaseFileCard key={f.id} file={f} mode="archived" />
               ))}
