@@ -26,25 +26,38 @@ async function getData() {
     userId = user.id;
   }
 
-  const { data: allFiles } = await db
-    .from("case_files")
-    .select("*")
-    .eq("user_id", userId)
-    .in("status", ["open", "archived"])
-    .order("opened_at", { ascending: false });
+  const [{ data: allFiles }, { data: pendingDocs }] = await Promise.all([
+    db
+      .from("case_files")
+      .select("*")
+      .eq("user_id", userId)
+      .in("status", ["open", "archived"])
+      .order("opened_at", { ascending: false }),
+    db
+      .from("documents")
+      .select("case_file_id")
+      .eq("user_id", userId)
+      .eq("status", "pending_review"),
+  ]);
 
   const files = (allFiles ?? []) as CaseFile[];
   const activeFiles = files.filter((f) => f.status === "open");
   const archivedFiles = files.filter((f) => f.status === "archived");
 
-  return { activeFiles, archivedFiles, userId };
+  // Build a map: case_file_id → count of pending_review docs
+  const pendingDocsByFile: Record<string, number> = {};
+  for (const doc of (pendingDocs ?? [])) {
+    pendingDocsByFile[doc.case_file_id] = (pendingDocsByFile[doc.case_file_id] ?? 0) + 1;
+  }
+
+  return { activeFiles, archivedFiles, pendingDocsByFile };
 }
 
 export default async function DashboardPage() {
   const hdrs = await headers();
   const isBypass = hdrs.get("x-bypass-auth") === "true" || BYPASS_AUTH;
 
-  const { activeFiles, archivedFiles } = await getData();
+  const { activeFiles, archivedFiles, pendingDocsByFile } = await getData();
   const atLimit = activeFiles.length >= MAX_ACTIVE_FILES;
 
   return (
@@ -73,16 +86,17 @@ export default async function DashboardPage() {
             <p className="dash-subtitle">
               {activeFiles.length === 0
                 ? "Start your first case file to begin working with Crawford Law."
-                : `${activeFiles.length} active file${activeFiles.length !== 1 ? "s" : ""}`
+                : `${activeFiles.length} of ${MAX_ACTIVE_FILES} active file${activeFiles.length !== 1 ? "s" : ""}`
               }
             </p>
           </div>
           <div className="dash-actions-right">
             <Link href="/chat?type=quick_consult" className="dash-btn dash-btn-secondary">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
               </svg>
               Quick Consult
+              <span className="dash-btn-hint">One-off privileged question</span>
             </Link>
             {atLimit ? (
               <span className="dash-limit-note">
@@ -93,7 +107,7 @@ export default async function DashboardPage() {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
                 </svg>
-                New File
+                Create New File
               </Link>
             )}
           </div>
@@ -121,7 +135,12 @@ export default async function DashboardPage() {
         ) : (
           <div className="dash-file-grid">
             {activeFiles.map((f) => (
-              <CaseFileCard key={f.id} file={f} mode="active" />
+              <CaseFileCard
+                key={f.id}
+                file={f}
+                mode="active"
+                pendingDocs={pendingDocsByFile[f.id] ?? 0}
+              />
             ))}
           </div>
         )}
@@ -136,7 +155,12 @@ export default async function DashboardPage() {
             </div>
             <div className="dash-file-grid">
               {archivedFiles.map((f) => (
-                <CaseFileCard key={f.id} file={f} mode="archived" />
+                <CaseFileCard
+                  key={f.id}
+                  file={f}
+                  mode="archived"
+                  pendingDocs={0}
+                />
               ))}
             </div>
           </div>
