@@ -33,6 +33,7 @@ export interface Profile {
   full_name: string | null;
   phone: string | null;
   is_attorney: boolean;
+  auto_document_review: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -71,6 +72,7 @@ export interface CaseFile {
   attorney_assessment: string | null;
   next_action: string | null;
   jurisdiction: string | null;
+  pre_consult_memo: string | null;
   opened_at: string;
   updated_at: string;
 }
@@ -93,6 +95,8 @@ export interface IntakeMessage {
   created_at: string;
 }
 
+export type ReviewStatus = "reviewing" | "review_ready" | "merging" | "merged";
+
 export interface Document {
   id: string;
   case_file_id: string;
@@ -107,6 +111,9 @@ export interface Document {
   reviewed_by: string | null;
   reviewed_at: string | null;
   submitted_at: string | null;
+  review_report: string | null;
+  improved_draft_text: string | null;
+  review_status: ReviewStatus | null;
   created_at: string;
   updated_at: string;
 }
