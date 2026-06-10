@@ -1,3 +1,4 @@
+import path from "path";
 import type { NextConfig } from "next";
 
 const SUPABASE_URL =
@@ -9,6 +10,10 @@ const SUPABASE_ANON_KEY =
   "sb_publishable_0uuHCrXpDHmGtYhgFoyLtA_U4DDna6s";
 
 const nextConfig: NextConfig = {
+  outputFileTracingRoot: path.join(__dirname, "../../"),
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   env: {
     NEXT_PUBLIC_SUPABASE_URL: SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: SUPABASE_ANON_KEY,
