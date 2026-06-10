@@ -1,7 +1,8 @@
 {
   "extends": "../../tsconfig.base.json",
   "include": [
-    "src/**/*",
+    "**/*.ts",
+    "**/*.tsx",
     ".next/types/**/*.ts"
   ],
   "exclude": [
@@ -24,12 +25,11 @@
     "allowImportingTsExtensions": true,
     "moduleResolution": "bundler",
     "types": [
-      "node",
-      "vite/client"
+      "node"
     ],
     "paths": {
       "@/*": [
-        "./src/*"
+        "./*"
       ]
     },
     "allowJs": true,
@@ -40,10 +40,5 @@
         "name": "next"
       }
     ]
-  },
-  "references": [
-    {
-      "path": "../../lib/api-client-react"
-    }
-  ]
+  }
 }
