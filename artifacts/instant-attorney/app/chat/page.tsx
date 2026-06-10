@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useRef, useEffect, useCallback, FormEvent, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { IntakeMessage } from "@/lib/types";
+import QuickConsultModal from "@/components/QuickConsultModal";
 
 type Msg = Pick<IntakeMessage, "role" | "content">;
 
@@ -110,18 +111,24 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-export default function AcpChatPage() {
+function AcpChatInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const urlCaseFileId = searchParams.get("caseFileId");
+  const isQuickConsult = searchParams.get("type") === "quick_consult";
+
   const [messages, setMessages] = useState<Msg[]>([INITIAL_MESSAGE]);
-  const [caseFileId, setCaseFileId] = useState<string | null>(null);
+  const [caseFileId, setCaseFileId] = useState<string | null>(urlCaseFileId);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [streamingText, setStreamingText] = useState("");
   const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [showQcModal, setShowQcModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputAreaRef = useRef<HTMLDivElement>(null);
+  const hasUserMessages = messages.some((m) => m.role === "user");
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -209,6 +216,7 @@ export default function AcpChatPage() {
         body: JSON.stringify({
           messages: apiMessages,
           caseFileId,
+          ...(isQuickConsult ? { fileType: "quick_consult" } : {}),
           ...(attachment ? { pendingAttachment: { data: attachment.data, mimeType: attachment.mimeType, fileName: attachment.fileName } } : {}),
         }),
       });
@@ -277,32 +285,64 @@ export default function AcpChatPage() {
         </button>
 
         <div className="fc-topbar-center">
-          <span className="fc-phase-label">Phase II · Privileged Intake</span>
+          <span className="fc-phase-label">
+            {isQuickConsult ? "Quick Consult · ACP Protected" : "Phase II · Privileged Intake"}
+          </span>
         </div>
 
         <div className="fc-topbar-right">
-          <button
-            className="fc-upgrade-btn"
-            style={{ background: "rgba(255,255,255,0.07)", color: "var(--brand-cream-text)" }}
-            onClick={() => router.push("/dashboard")}
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-              <line x1="3" y1="9" x2="21" y2="9" />
-              <line x1="9" y1="21" x2="9" y2="9" />
-            </svg>
-            View File
-          </button>
+          {isQuickConsult && hasUserMessages ? (
+            <button
+              className="fc-upgrade-btn"
+              style={{ background: "rgba(200,169,110,0.15)", color: "var(--brand-gold)" }}
+              onClick={() => setShowQcModal(true)}
+            >
+              Save or Close
+            </button>
+          ) : (
+            <button
+              className="fc-upgrade-btn"
+              style={{ background: "rgba(255,255,255,0.07)", color: "var(--brand-cream-text)" }}
+              onClick={() => isQuickConsult && hasUserMessages ? setShowQcModal(true) : router.push("/dashboard")}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                <line x1="3" y1="9" x2="21" y2="9" />
+                <line x1="9" y1="21" x2="9" y2="9" />
+              </svg>
+              {isQuickConsult ? "All Files" : "View File"}
+            </button>
+          )}
         </div>
       </header>
 
-      {/* PRIVILEGE NOTICE */}
-      <div className="fc-disclaimer" style={{ color: "rgba(200,169,110,0.6)", borderColor: "rgba(200,169,110,0.12)" }}>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-        </svg>
-        This conversation is protected by attorney-client privilege pursuant to your signed Crawford Law representation agreement.
-      </div>
+      {/* QUICK CONSULT BANNER */}
+      {isQuickConsult && (
+        <div className="fc-qc-banner">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+          Quick Consult — this conversation is ACP-protected but will be archived in 7 days unless you save it. Click <strong>Save or Close</strong> when done.
+        </div>
+      )}
+
+      {/* PRIVILEGE NOTICE (standard intake only) */}
+      {!isQuickConsult && (
+        <div className="fc-disclaimer" style={{ color: "rgba(200,169,110,0.6)", borderColor: "rgba(200,169,110,0.12)" }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          </svg>
+          This conversation is protected by attorney-client privilege pursuant to your signed Crawford Law representation agreement.
+        </div>
+      )}
+
+      {/* QUICK CONSULT SAVE MODAL */}
+      {showQcModal && caseFileId && (
+        <QuickConsultModal
+          caseFileId={caseFileId}
+          onClose={() => setShowQcModal(false)}
+        />
+      )}
 
       {/* MESSAGES */}
       <main className="fc-messages">
@@ -410,5 +450,13 @@ export default function AcpChatPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function AcpChatPage() {
+  return (
+    <Suspense>
+      <AcpChatInner />
+    </Suspense>
   );
 }

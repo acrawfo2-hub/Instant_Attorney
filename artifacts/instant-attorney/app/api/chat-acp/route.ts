@@ -5,17 +5,19 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { ACP_CHAT_SYSTEM_PROMPT, buildFileContext } from "@/lib/prompts";
 import { parseAndUpdateFile } from "@/lib/file-parser";
 import { triggerPreWarm } from "@/lib/pre-warm";
+import { generateCaseTitle } from "@/lib/title-generator";
 import { toAnthropicBlock, processAttachment } from "@/lib/attachment-processor";
 import { BYPASS_USER_ID } from "@/lib/types";
 import type { CaseFile, FactItem, LegalStrategy, Attachment, RequestedAttachment } from "@/lib/types";
 
-const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
 export async function POST(req: NextRequest) {
-  const { messages, caseFileId, pendingAttachment } = await req.json() as {
+  const { messages, caseFileId, pendingAttachment, fileType } = await req.json() as {
     messages: Array<{ role: string; content: string }>;
     caseFileId?: string;
+    fileType?: "standard" | "quick_consult";
     pendingAttachment?: { data: string; mimeType: string; fileName: string };
   };
 
@@ -64,9 +66,14 @@ export async function POST(req: NextRequest) {
     if (existing) {
       resolvedCaseFileId = existing.id;
     } else {
+      const newFileData: Record<string, unknown> = { user_id: userId };
+      if (fileType === "quick_consult") {
+        newFileData.file_type = "quick_consult";
+        newFileData.archive_at = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      }
       const { data: created, error } = await db
         .from("case_files")
-        .insert({ user_id: userId })
+        .insert(newFileData)
         .select("id")
         .single();
       if (error || !created) {
@@ -113,7 +120,7 @@ export async function POST(req: NextRequest) {
     if (lastUserIdx >= 0) {
       try {
         const buffer = Buffer.from(pendingAttachment.data, "base64");
-        const block = await toAnthropicBlock(buffer, pendingAttachment.mimeType, pendingAttachment.fileName);
+        const blocks = await toAnthropicBlock(buffer, pendingAttachment.mimeType, pendingAttachment.fileName);
         const textContent = typeof anthropicMessages[lastUserIdx].content === "string"
           ? anthropicMessages[lastUserIdx].content as string
           : "";
@@ -121,7 +128,7 @@ export async function POST(req: NextRequest) {
         anthropicMessages[lastUserIdx] = {
           role: "user",
           content: [
-            block as Anthropic.ImageBlockParam | Anthropic.DocumentBlockParam | Anthropic.TextBlockParam,
+            ...blocks as (Anthropic.ImageBlockParam | Anthropic.DocumentBlockParam | Anthropic.TextBlockParam)[],
             ...(textContent ? [{ type: "text" as const, text: textContent }] : []),
           ],
         };
@@ -189,6 +196,23 @@ export async function POST(req: NextRequest) {
           if (hasLivingFile || hasStrategy || hasRequestedAttachments) {
             try {
               await parseAndUpdateFile(db, resolvedCaseFileId, userId, fullResponse);
+
+              // Generate a title after the first living file update if one isn't set yet
+              if (hasLivingFile && caseFile && !caseFile.title) {
+                const { data: freshFile } = await db
+                  .from("case_files")
+                  .select("title, summary, matter_type, matter_subtype")
+                  .eq("id", resolvedCaseFileId)
+                  .single();
+                if (freshFile && !freshFile.title) {
+                  generateCaseTitle(
+                    db, resolvedCaseFileId,
+                    freshFile.summary ?? "",
+                    freshFile.matter_type,
+                    freshFile.matter_subtype
+                  ).catch((err) => console.error("[chat-acp] title gen error:", err));
+                }
+              }
             } catch (parseErr) {
               console.error("[chat-acp] file parser error:", parseErr);
             }

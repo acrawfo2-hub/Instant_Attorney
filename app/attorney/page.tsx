@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { WIZARD_LABELS } from "@/lib/types";
 import type { Document, CaseFile, Profile } from "@/lib/types";
+import AutoReviewToggle from "@/components/AutoReviewToggle";
 
 interface DocumentWithRelations extends Document {
   case_files: CaseFile;
@@ -88,7 +89,10 @@ export default async function AttorneyPage() {
             </svg>
             <span>Attorney Dashboard</span>
           </div>
-          <span className="atty-name">{profile.full_name ?? profile.email}</span>
+          <div className="atty-header-right">
+            <span className="atty-name">{profile.full_name ?? profile.email}</span>
+            <AutoReviewToggle initial={profile.auto_document_review ?? true} />
+          </div>
         </div>
       </header>
 

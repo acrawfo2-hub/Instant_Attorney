@@ -3,7 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { WIZARD_LABELS } from "@/lib/types";
 import type { Document, CaseFile, Profile } from "@/lib/types";
-import SlaCountdown from "./SlaCountdown";
+import AutoReviewToggle from "@/components/AutoReviewToggle";
 
 interface DocumentWithRelations extends Document {
   case_files: CaseFile;
@@ -26,6 +26,29 @@ const STATUS_COLORS: Record<string, string> = {
   delivered: "atty-badge-gray",
 };
 
+function ReviewClock({ submittedAt }: { submittedAt: string | null }) {
+  if (!submittedAt) return null;
+
+  const submitted = new Date(submittedAt);
+  const deadline = new Date(submitted.getTime() + 48 * 60 * 60 * 1000);
+  const now = new Date();
+  const msLeft = deadline.getTime() - now.getTime();
+
+  if (msLeft <= 0) {
+    return <span className="atty-clock atty-clock-overdue">Overdue</span>;
+  }
+
+  const hoursLeft = Math.floor(msLeft / (1000 * 60 * 60));
+  const minutesLeft = Math.floor((msLeft % (1000 * 60 * 60)) / (1000 * 60));
+  const isUrgent = hoursLeft < 8;
+
+  return (
+    <span className={`atty-clock ${isUrgent ? "atty-clock-urgent" : "atty-clock-ok"}`}>
+      {hoursLeft}h {minutesLeft}m left
+    </span>
+  );
+}
+
 export default async function AttorneyPage() {
   const db = await createClient();
   const { data: { user } } = await db.auth.getUser();
@@ -39,14 +62,12 @@ export default async function AttorneyPage() {
 
   if (!profile?.is_attorney) redirect("/dashboard");
 
-  // Load all documents pending review first, then others
   const { data: documents } = await db
     .from("documents")
     .select("*, case_files(*), profiles!documents_user_id_fkey(*)")
     .order("created_at", { ascending: false })
     .limit(100);
 
-  // Load all clients with open case files
   const { data: caseFiles } = await db
     .from("case_files")
     .select("*, profiles!case_files_user_id_fkey(*)")
@@ -68,16 +89,20 @@ export default async function AttorneyPage() {
             </svg>
             <span>Attorney Dashboard</span>
           </div>
-          <span className="atty-name">{profile.full_name ?? profile.email}</span>
+          <div className="atty-header-right">
+            <span className="atty-name">{profile.full_name ?? profile.email}</span>
+            <AutoReviewToggle initial={profile.auto_document_review ?? true} />
+          </div>
         </div>
       </header>
 
       <main className="atty-main">
-        {/* Pending Review */}
+        {/* Pending Review — 48-hour clock */}
         <section className="atty-section">
           <h2 className="atty-section-title">
-            Pending Review
+            Under Review
             {pending.length > 0 && <span className="atty-count">{pending.length}</span>}
+            <span className="atty-section-hint">48-hour SLA</span>
           </h2>
 
           {pending.length === 0 ? (
@@ -88,18 +113,22 @@ export default async function AttorneyPage() {
                 <Link key={doc.id} href={`/attorney/review/${doc.id}`} className="atty-doc-card atty-doc-card-urgent">
                   <div className="atty-doc-header">
                     <span className="atty-doc-type">{WIZARD_LABELS[doc.doc_type] ?? doc.doc_type}</span>
-                    <span className={`atty-badge ${STATUS_COLORS[doc.status]}`}>{STATUS_LABELS[doc.status]}</span>
+                    <div className="atty-doc-header-right">
+                      <ReviewClock submittedAt={doc.submitted_at ?? null} />
+                      <span className={`atty-badge ${STATUS_COLORS[doc.status]}`}>{STATUS_LABELS[doc.status]}</span>
+                    </div>
                   </div>
                   <div className="atty-doc-title">{doc.title}</div>
                   <div className="atty-doc-meta">
                     <span>{doc.profiles?.full_name ?? doc.profiles?.email ?? "Unknown client"}</span>
-                    <span>{new Date(doc.created_at).toLocaleDateString()}</span>
+                    <span>
+                      {doc.submitted_at
+                        ? `Submitted ${new Date(doc.submitted_at).toLocaleString()}`
+                        : `Created ${new Date(doc.created_at).toLocaleDateString()}`}
+                    </span>
                   </div>
                   <div className="atty-doc-matter">
                     {doc.case_files?.matter_type ?? "—"} · {doc.case_files?.matter_subtype ?? "Not classified"}
-                  </div>
-                  <div className="atty-doc-sla">
-                    <SlaCountdown createdAt={doc.created_at} />
                   </div>
                 </Link>
               ))}
@@ -107,7 +136,7 @@ export default async function AttorneyPage() {
           )}
         </section>
 
-        {/* Active Client Files */}
+        {/* Active Client Files — clickable */}
         <section className="atty-section">
           <h2 className="atty-section-title">Active Client Files</h2>
           {!caseFiles?.length ? (
@@ -133,6 +162,7 @@ export default async function AttorneyPage() {
                   <div className="atty-file-footer">
                     <span>Updated {new Date(cf.updated_at).toLocaleDateString()}</span>
                     <span>{cf.goals?.length ?? 0} goal{cf.goals?.length !== 1 ? "s" : ""}</span>
+                    <span className="atty-file-view-link">View File →</span>
                   </div>
                 </Link>
               ))}

@@ -1,4 +1,4 @@
-import type { CaseFile, FactItem, WizardType, Attachment, RequestedAttachment } from "./types";
+import type { CaseFile, FactItem, WizardType, Attachment, RequestedAttachment, Document } from "./types";
 
 // ── Free chat (Phase I) ──────────────────────────────────────────────────────
 
@@ -472,3 +472,135 @@ Placeholder rules:
 - Cluster related placeholders logically so the client can answer one question and fill multiple spots.
 
 Quality standard: The document must be internally consistent, use defined terms correctly, and be complete enough that an attorney can do a meaningful review rather than a structural rewrite.`;
+
+// ── Attorney review prompts ──────────────────────────────────────────────────
+
+export function buildPreConsultPrompt(
+  caseFile: CaseFile,
+  facts: FactItem[],
+  attachments: Attachment[],
+  documents: Document[]
+): string {
+  const fileContext = buildFileContext(caseFile, facts, attachments);
+  const draftedDocs = documents.filter((d) => d.draft_text || d.status !== "draft");
+  const docSummary = draftedDocs.length
+    ? draftedDocs.map((d) => `• ${d.title} (${d.status.replace(/_/g, " ")})`).join("\n")
+    : "• None";
+
+  return `${fileContext}
+
+DOCUMENTS ON FILE:
+${docSummary}
+
+---
+
+You are preparing Andrew Crawford, Esq. for a client consultation. Produce a concise attorney briefing memo using EXACTLY this format:
+
+---PRE-CONSULT MEMO---
+MATTER OVERVIEW:
+[Matter type, subtype, jurisdiction, how long active — 2-3 sentences]
+
+CLIENT PROFILE:
+[Who the client is, what they want, any notable communication patterns or urgency — 2-3 sentences]
+
+CONFIRMED FACTS:
+• [Key fact — ordered by relevance to the matter]
+
+FACT GAPS:
+• [What is unknown and why it matters for the consult]
+
+DOCUMENTS ON FILE:
+• [Document name and status]
+
+LEGAL STRATEGY:
+[Current strategy, key strengths and risks — 3-5 sentences]
+
+OPEN QUESTIONS:
+• [A specific question Andrew should explore in this consult — one concept per bullet]
+
+CONSULT PRIORITIES:
+1. [Most important action for this meeting — specific and concrete]
+2. [Second priority]
+3. [Third priority if warranted]
+---END MEMO---
+
+Keep each section tight. Andrew is reading this 5 minutes before the call. No fluff.`;
+}
+
+export function buildDocReviewPrompt(
+  doc: Document,
+  caseFile: CaseFile,
+  facts: FactItem[],
+  attachments: Attachment[]
+): string {
+  const fileContext = buildFileContext(caseFile, facts, attachments);
+  const draftText = doc.draft_text ?? "(No draft text — reviewing structured data only)";
+
+  return `${fileContext}
+
+---DOCUMENT UNDER REVIEW---
+Type: ${doc.doc_type.replace(/_/g, " ")}
+Title: ${doc.title}
+
+${draftText}
+---END DOCUMENT---
+
+You are conducting a 48-hour attorney document review for Crawford Law PLLC. Produce a structured review REPORT. Do NOT produce a revised draft. Produce EXACTLY this format:
+
+---DOCUMENT REVIEW---
+DOCUMENT OVERVIEW:
+[What this document does, parties, purpose — 2-3 sentences]
+
+CONSISTENCY WITH LIVING FILE:
+[Does the document reflect the confirmed facts and goals? Note any discrepancies — be specific]
+
+STRUCTURAL ANALYSIS:
+[Is the document complete? Any missing sections, clauses, or execution formalities?]
+
+STRENGTH ANALYSIS:
+• [Protective provision, well-drafted clause, or favorable language — one per bullet]
+
+WEAKNESS ANALYSIS:
+• [Problematic provision, missing protection, or ambiguous language — one per bullet with specific line reference where possible]
+
+PLACEHOLDER AUDIT:
+BLOCKING:
+• [[placeholder]] — [What must be resolved before this document is usable]
+NON-BLOCKING:
+• [[placeholder]] — [Can be resolved at execution or is optional]
+
+LEGAL RISK FLAGS:
+• [Anything requiring immediate attorney attention — or "None identified"]
+
+PRIORITY EDIT LIST:
+1. [Specific directive for the drafter — what to change, add, or remove and why]
+2. [Next priority edit]
+3. [Continue as needed — numbered, most critical first]
+---END REVIEW---
+
+Be precise. Reference specific sections or language where possible. The Priority Edit List becomes the drafter's work order — write it as instructions, not observations.`;
+}
+
+export function buildMergePrompt(doc: Document, reviewReport: string): string {
+  const draftText = doc.draft_text ?? "(No draft text available)";
+
+  return `You are a senior legal drafting assistant at Crawford Law PLLC. You have two inputs:
+
+---ORIGINAL DRAFT---
+${draftText}
+---END ORIGINAL DRAFT---
+
+---ATTORNEY REVIEW REPORT---
+${reviewReport}
+---END REVIEW REPORT---
+
+Your task: Apply the Priority Edit List from the review report to produce an improved draft. Instructions:
+- Follow each numbered directive in the Priority Edit List precisely
+- Maintain the original document's structure and defined terms
+- Use [[PLACEHOLDER — descriptor]] for any remaining unresolved facts
+- Do not add provisions not directed by the review report
+- Do not remove provisions unless the review report directs it
+- Keep all existing [[PLACEHOLDER]] items that are still unresolved
+
+Produce ONLY the improved draft document. No commentary, no headers, no explanation outside the document itself.`;
+}
