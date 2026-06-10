@@ -1,16 +1,17 @@
 export type SubscriptionStatus = "active" | "canceled" | "past_due" | "trialing" | "bypass";
 export type SubscriptionPlan = "phase2" | "consult";
 export type MatterType = "reactive" | "preventive";
-export type CaseStatus = "open" | "closed" | "referred";
+export type CaseStatus = "open" | "closed" | "referred" | "archived";
+export type CaseFileType = "standard" | "quick_consult";
 export type FactStatus = "confirmed" | "gap";
 export type MessageRole = "user" | "assistant";
 export type AttachmentType = "document" | "screenshot" | "other";
 export type AttachmentStatus = "processing" | "ready" | "failed";
 export type RequestedAttachmentStatus = "requested" | "uploaded" | "waived";
+export type ReviewStatus = "reviewing" | "review_ready" | "merging" | "merged";
 
 // All supported wizard types — add new ones here as wizards are built
 export type WizardType =
-  | "intake_summary"
   | "demand_letter"
   | "complaint_letter"
   | "draft_contract"
@@ -32,6 +33,7 @@ export interface Profile {
   full_name: string | null;
   phone: string | null;
   is_attorney: boolean;
+  auto_document_review: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -49,7 +51,7 @@ export interface Subscription {
 
 export interface LegalStrategy {
   summary: string;
-  instruments: string[];       // suggested document types / legal instruments
+  instruments: string[];
   strengths: string[];
   risks: string[];
   recommended_wizards: WizardType[];
@@ -61,6 +63,10 @@ export interface CaseFile {
   matter_type: MatterType | null;
   matter_subtype: string | null;
   status: CaseStatus;
+  file_type: CaseFileType;
+  title: string | null;
+  archive_at: string | null;
+  pre_consult_memo: string | null;
   goals: string[];
   summary: string | null;
   legal_strategy: LegalStrategy | null;
@@ -102,13 +108,16 @@ export interface Document {
   attorney_notes: string | null;
   reviewed_by: string | null;
   reviewed_at: string | null;
+  submitted_at: string | null;
+  review_report: string | null;
+  improved_draft_text: string | null;
+  review_status: ReviewStatus | null;
   created_at: string;
   updated_at: string;
 }
 
 // Human-readable labels for wizard types
 export const WIZARD_LABELS: Record<WizardType, string> = {
-  intake_summary: "Intake Summary",
   demand_letter: "Demand Letter",
   complaint_letter: "Complaint Letter",
   draft_contract: "Draft Contract",

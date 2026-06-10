@@ -2,12 +2,12 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { CaseFile, FactItem, BYPASS_USER_ID, WIZARD_LABELS } from "@/lib/types";
-import type { Document, WizardType, Profile, Subscription } from "@/lib/types";
-import AttachmentPanel from "@/components/AttachmentPanel";
-import LogoutButton from "@/components/LogoutButton";
+import { BYPASS_USER_ID } from "@/lib/types";
+import type { CaseFile } from "@/lib/types";
+import CaseFileCard from "@/components/CaseFileCard";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
+const MAX_ACTIVE_FILES = 10;
 
 async function getData() {
   let userId: string;
@@ -24,115 +24,29 @@ async function getData() {
     userId = user.id;
   }
 
-  const [
-    { data: caseFile },
-    { data: facts },
-    { data: documents },
-    { data: profile },
-    { data: subscription },
-  ] = await Promise.all([
-    db.from("case_files")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("status", "open")
-      .order("opened_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-    db.from("fact_items")
-      .select("*")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: true }),
-    db.from("documents")
-      .select("*")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false }),
-    db.from("profiles")
-      .select("id, email, full_name")
-      .eq("id", userId)
-      .maybeSingle(),
-    db.from("subscriptions")
-      .select("status, plan")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-  ]);
+  const { data: allFiles } = await db
+    .from("case_files")
+    .select("*")
+    .eq("user_id", userId)
+    .in("status", ["open", "archived"])
+    .order("opened_at", { ascending: false });
 
-  // Find pre-warmed docs indexed by wizard type for instant-launch
-  const allDocs = (documents ?? []) as Document[];
-  const preWarmedByType: Record<string, string> = {};
-  for (const doc of allDocs) {
-    if (doc.status === "pre_warmed" && !preWarmedByType[doc.doc_type]) {
-      preWarmedByType[doc.doc_type] = doc.id;
-    }
-  }
+  const files = (allFiles ?? []) as CaseFile[];
+  const activeFiles = files.filter((f) => f.status === "open");
+  const archivedFiles = files.filter((f) => f.status === "archived");
 
-  return {
-    caseFile: caseFile as CaseFile | null,
-    facts: (facts ?? []) as FactItem[],
-    documents: allDocs.filter((d) => d.status !== "pre_warmed"),
-    preWarmedByType,
-    userId,
-    profile: profile as Pick<Profile, "id" | "email" | "full_name"> | null,
-    subscription: subscription as Pick<Subscription, "status" | "plan"> | null,
-  };
-}
-
-function MatterBadge({ type }: { type: string | null }) {
-  if (!type) return null;
-  const label = type === "reactive" ? "Reactive Matter" : "Preventive Matter";
-  return <span className="lf-badge">{label}</span>;
-}
-
-const DOC_STATUS_LABELS: Record<string, string> = {
-  draft: "Draft",
-  pending_review: "Under Review (48h)",
-  approved: "Approved",
-  changes_requested: "Revisions Requested",
-  delivered: "Delivered",
-};
-
-const DOC_STATUS_CLASSES: Record<string, string> = {
-  draft: "lf-doc-status-draft",
-  pending_review: "lf-doc-status-review",
-  approved: "lf-doc-status-approved",
-  changes_requested: "lf-doc-status-changes",
-  delivered: "lf-doc-status-delivered",
-};
-
-function SubBadge({ status, isBypass }: { status: string | null; isBypass: boolean }) {
-  if (isBypass) {
-    return <span className="lf-sub-badge lf-sub-badge-bypass">Test Mode</span>;
-  }
-  if (!status) return null;
-  const cls =
-    status === "active" ? "lf-sub-badge-active" :
-    status === "trialing" ? "lf-sub-badge-trialing" :
-    "lf-sub-badge-none";
-  const label =
-    status === "active" ? "Active" :
-    status === "trialing" ? "Trial" :
-    status === "past_due" ? "Past Due" :
-    status === "canceled" ? "Canceled" :
-    status;
-  return <span className={`lf-sub-badge ${cls}`}>{label}</span>;
+  return { activeFiles, archivedFiles, userId };
 }
 
 export default async function DashboardPage() {
   const hdrs = await headers();
   const isBypass = hdrs.get("x-bypass-auth") === "true" || BYPASS_AUTH;
 
-  const { caseFile, facts, documents, preWarmedByType, profile, subscription } = await getData();
-
-  const confirmed = facts.filter((f) => f.status === "confirmed");
-  const gaps = facts.filter((f) => f.status === "gap");
-  const isEmpty = !caseFile;
-  const strategy = caseFile?.legal_strategy ?? null;
-  const recommendedWizards = strategy?.recommended_wizards ?? [];
+  const { activeFiles, archivedFiles } = await getData();
+  const atLimit = activeFiles.length >= MAX_ACTIVE_FILES;
 
   return (
     <div className="lf-shell">
-      {/* Header */}
       <header className="lf-header">
         <Link href="/" className="lf-header-logo">
           <div className="fc-logo-icon">
@@ -142,33 +56,45 @@ export default async function DashboardPage() {
           </div>
           Instant-Attorney
         </Link>
-
         <div className="lf-header-center">
-          <span className="lf-header-title">Your File</span>
-          {caseFile && <MatterBadge type={caseFile.matter_type} />}
+          <span className="lf-header-title">Your Files</span>
         </div>
-
         <div className="lf-header-right">
-          <div className="lf-user-info">
-            {(profile?.full_name || profile?.email) && (
-              <span className="lf-user-name">
-                {profile.full_name ?? profile.email}
-              </span>
-            )}
-            <SubBadge status={subscription?.status ?? null} isBypass={isBypass} />
-          </div>
-          <Link href="/chat" className="lf-begin-btn">
-            {isEmpty ? "Begin Intake" : "Continue Intake"}
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="9 18 15 12 9 6" />
-            </svg>
-          </Link>
-          {!isBypass && <LogoutButton />}
+          {isBypass && <span className="ob-bypass-badge">Test Mode</span>}
         </div>
       </header>
 
       <main className="lf-main">
-        {isEmpty ? (
+        {/* Intro row */}
+        <div className="lf-files-intro">
+          <p className="lf-files-intro-text">
+            Start a new file, continue where you left off, or ask a quick legal question — all under ACP protection.
+          </p>
+          <div className="lf-files-intro-actions">
+            {atLimit ? (
+              <span className="lf-files-limit-note">
+                Archive a file to open a new one ({MAX_ACTIVE_FILES}/{MAX_ACTIVE_FILES})
+              </span>
+            ) : (
+              <Link href="/chat" className="lf-begin-btn">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                New File
+              </Link>
+            )}
+            <Link href="/chat?type=quick_consult" className="lf-qc-btn">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              </svg>
+              Quick Consult
+              <span className="lf-qc-btn-sub">ACP-protected · any topic</span>
+            </Link>
+          </div>
+        </div>
+
+        {/* Active files */}
+        {activeFiles.length === 0 ? (
           <div className="lf-empty">
             <div className="lf-empty-icon">
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -176,232 +102,34 @@ export default async function DashboardPage() {
                 <polyline points="14 2 14 8 20 8" />
               </svg>
             </div>
-            <h2 className="lf-empty-title">Your file is ready.</h2>
+            <h2 className="lf-empty-title">No active files yet.</h2>
             <p className="lf-empty-sub">
-              Begin your ACP-protected intake interview. As we talk, your goals, facts, and strategy will appear here in your Living File.
+              Start a new intake file to begin building your Living File with Crawford Law, or use Quick Consult for a one-off privileged question.
             </p>
             <Link href="/chat" className="lf-begin-btn lf-begin-btn-lg">
-              Begin Intake &rarr;
+              Begin Intake →
             </Link>
           </div>
         ) : (
-          <div className="lf-grid">
+          <div className="lf-files-list">
+            {activeFiles.map((f) => (
+              <CaseFileCard key={f.id} file={f} mode="active" />
+            ))}
+          </div>
+        )}
 
-            {/* Matter + Next Action */}
-            <div className="lf-card lf-card-sm">
-              <div className="lf-card-label">Matter</div>
-              <div className="lf-card-value">
-                {caseFile.matter_subtype
-                  ? caseFile.matter_subtype.replace(/_/g, " ")
-                  : "Intake in progress"}
-              </div>
-              <div className="lf-card-meta">
-                Opened {new Date(caseFile.opened_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
-              </div>
+        {/* Archived files */}
+        {archivedFiles.length > 0 && (
+          <div className="lf-files-archive-section">
+            <div className="lf-files-section-label">Archive</div>
+            <div className="lf-files-list">
+              {archivedFiles.map((f) => (
+                <CaseFileCard key={f.id} file={f} mode="archived" />
+              ))}
             </div>
-
-            <div className="lf-card lf-card-sm lf-card-action">
-              <div className="lf-card-label">Next Action</div>
-              <div className="lf-card-value lf-next-action">
-                {caseFile.next_action ?? "Continue intake to determine"}
-              </div>
-            </div>
-
-            {/* Case Summary */}
-            {caseFile.summary && (
-              <div className="lf-card lf-card-full">
-                <div className="lf-card-label">Case Summary</div>
-                <p className="lf-summary">{caseFile.summary}</p>
-              </div>
-            )}
-
-            {/* Goals */}
-            <div className="lf-card lf-card-full">
-              <div className="lf-card-label">Your Goals</div>
-              {caseFile.goals && caseFile.goals.length > 0 ? (
-                <ul className="lf-list">
-                  {(caseFile.goals as string[]).map((g, i) => (
-                    <li key={i}>{g}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="lf-empty-field">Goals will appear as identified in your intake chat.</p>
-              )}
-            </div>
-
-            {/* Legal Strategy */}
-            {strategy && (
-              <div className="lf-card lf-card-full lf-card-strategy">
-                <div className="lf-card-label">Legal Strategy</div>
-                {strategy.summary && <p className="lf-strategy-summary">{strategy.summary}</p>}
-
-                <div className="lf-strategy-grid">
-                  {strategy.strengths?.length > 0 && (
-                    <div>
-                      <div className="lf-strategy-sub">Strengths</div>
-                      <ul className="lf-list lf-list-confirmed">
-                        {strategy.strengths.map((s, i) => <li key={i}>{s}</li>)}
-                      </ul>
-                    </div>
-                  )}
-                  {strategy.risks?.length > 0 && (
-                    <div>
-                      <div className="lf-strategy-sub">Risks</div>
-                      <ul className="lf-list lf-list-gap">
-                        {strategy.risks.map((r, i) => <li key={i}>{r}</li>)}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-
-                {strategy.instruments?.length > 0 && (
-                  <div className="lf-instruments">
-                    <div className="lf-strategy-sub">Suggested Instruments</div>
-                    <ul className="lf-list">
-                      {strategy.instruments.map((inst, i) => <li key={i}>{inst}</li>)}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Confirmed Facts + Gaps */}
-            <div className="lf-card lf-card-half">
-              <div className="lf-card-label">
-                Confirmed Facts
-                {confirmed.length > 0 && <span className="lf-count">{confirmed.length}</span>}
-              </div>
-              {confirmed.length > 0 ? (
-                <ul className="lf-list lf-list-confirmed">
-                  {confirmed.map((f) => <li key={f.id}>{f.description}</li>)}
-                </ul>
-              ) : (
-                <p className="lf-empty-field">Facts confirmed during intake will appear here.</p>
-              )}
-            </div>
-
-            <div className="lf-card lf-card-half">
-              <div className="lf-card-label">
-                Open Fact Gaps
-                {gaps.length > 0 && <span className="lf-count lf-count-gap">{gaps.length}</span>}
-              </div>
-              {gaps.length > 0 ? (
-                <ul className="lf-list lf-list-gap">
-                  {gaps.map((f) => <li key={f.id}>{f.description}</li>)}
-                </ul>
-              ) : (
-                <p className="lf-empty-field">Missing facts to track will appear here.</p>
-              )}
-            </div>
-
-            {/* Document Wizards */}
-            <div className="lf-card lf-card-full">
-              <div className="lf-card-label">Document Wizards</div>
-              {recommendedWizards.length > 0 ? (
-                <>
-                  <p className="lf-wizard-hint">Your attorney has suggested the following documents based on your matter. Launch a wizard to begin drafting.</p>
-                  <div className="lf-wizard-grid">
-                    {recommendedWizards.map((wType) => (
-                      <WizardCard
-                        key={wType}
-                        wizardType={wType}
-                        caseFileId={caseFile.id}
-                        preWarmedDocId={preWarmedByType[wType]}
-                      />
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <p className="lf-empty-field">
-                  Document wizards will appear here once your intake establishes a legal strategy. Continue your intake chat to unlock them.
-                </p>
-              )}
-            </div>
-
-            {/* Documents */}
-            <div className="lf-card lf-card-full">
-              <div className="lf-card-label">Your Documents</div>
-              {documents.length > 0 ? (
-                <div className="lf-doc-list">
-                  {documents.map((doc) => (
-                    <div key={doc.id} className="lf-doc-item">
-                      <div className="lf-doc-info">
-                        <span className="lf-doc-title">{doc.title}</span>
-                        <span className="lf-doc-type">{WIZARD_LABELS[doc.doc_type as WizardType] ?? doc.doc_type}</span>
-                      </div>
-                      <div className="lf-doc-right">
-                        <span className={`lf-doc-status ${DOC_STATUS_CLASSES[doc.status] ?? ""}`}>
-                          {DOC_STATUS_LABELS[doc.status] ?? doc.status}
-                        </span>
-                        <span className="lf-doc-date">{new Date(doc.created_at).toLocaleDateString()}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="lf-empty-field">
-                  Documents generated through wizards will appear here once attorney-reviewed.
-                </p>
-              )}
-            </div>
-
-            {/* Attachments */}
-            <div className="lf-card lf-card-full">
-              <div className="lf-card-label">Documents &amp; Attachments</div>
-              <AttachmentPanel caseFileId={caseFile.id} />
-            </div>
-
-            {/* Attorney Assessment */}
-            <div className="lf-card lf-card-full">
-              <div className="lf-card-label">Attorney Assessment</div>
-              {caseFile.attorney_assessment ? (
-                <p className="lf-assessment">{caseFile.attorney_assessment}</p>
-              ) : (
-                <p className="lf-empty-field">Crawford Law will add an assessment once your intake is complete.</p>
-              )}
-            </div>
-
           </div>
         )}
       </main>
     </div>
-  );
-}
-
-function WizardCard({
-  wizardType,
-  caseFileId,
-  preWarmedDocId,
-}: {
-  wizardType: WizardType;
-  caseFileId: string;
-  preWarmedDocId?: string;
-}) {
-  const label = WIZARD_LABELS[wizardType] ?? wizardType;
-  const href = preWarmedDocId
-    ? `/wizard/${wizardType}?caseFileId=${caseFileId}&docId=${preWarmedDocId}`
-    : `/wizard/${wizardType}?caseFileId=${caseFileId}`;
-
-  const icons: Record<WizardType, string> = {
-    intake_summary: "📋",
-    demand_letter: "✉️",
-    complaint_letter: "📣",
-    draft_contract: "📝",
-    draft_waiver: "🤝",
-    wills_trusts: "⚖️",
-    doc_review: "🔍",
-  };
-
-  return (
-    <Link href={href} className={`lf-wizard-card ${preWarmedDocId ? "lf-wizard-card-ready" : ""}`}>
-      <span className="lf-wizard-icon">{icons[wizardType] ?? "📄"}</span>
-      <div className="lf-wizard-card-body">
-        <span className="lf-wizard-label">{label}</span>
-        {preWarmedDocId && (
-          <span className="lf-wizard-ready-badge">Draft ready</span>
-        )}
-      </div>
-      <span className="lf-wizard-arrow">→</span>
-    </Link>
   );
 }
