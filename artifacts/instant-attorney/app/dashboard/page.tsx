@@ -43,21 +43,16 @@ async function getData() {
   const files = (allFiles ?? []) as CaseFile[];
   const activeFiles = files.filter((f) => f.status === "open");
   const archivedFiles = files.filter((f) => f.status === "archived");
+  const totalPendingDocs = (pendingDocs ?? []).length;
 
-  // Build a map: case_file_id → count of pending_review docs
-  const pendingDocsByFile: Record<string, number> = {};
-  for (const doc of (pendingDocs ?? [])) {
-    pendingDocsByFile[doc.case_file_id] = (pendingDocsByFile[doc.case_file_id] ?? 0) + 1;
-  }
-
-  return { activeFiles, archivedFiles, pendingDocsByFile };
+  return { activeFiles, archivedFiles, totalPendingDocs };
 }
 
 export default async function DashboardPage() {
   const hdrs = await headers();
   const isBypass = hdrs.get("x-bypass-auth") === "true" || BYPASS_AUTH;
 
-  const { activeFiles, archivedFiles, pendingDocsByFile } = await getData();
+  const { activeFiles, archivedFiles, totalPendingDocs } = await getData();
   const atLimit = activeFiles.length >= MAX_ACTIVE_FILES;
 
   return (
@@ -80,36 +75,65 @@ export default async function DashboardPage() {
       </header>
 
       <main className="lf-main">
-        {/* Action bar */}
-        <div className="dash-actions">
-          <div className="dash-actions-left">
-            <p className="dash-subtitle">
-              {activeFiles.length === 0
-                ? "Start your first case file to begin working with Crawford Law."
-                : `${activeFiles.length} of ${MAX_ACTIVE_FILES} active file${activeFiles.length !== 1 ? "s" : ""}`
-              }
-            </p>
-          </div>
-          <div className="dash-actions-right">
-            <Link href="/chat?type=quick_consult" className="dash-btn dash-btn-secondary">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+        {/* Action buttons — left-aligned row */}
+        <div className="dash-toolbar">
+          {atLimit ? (
+            <span className="dash-limit-note">
+              {MAX_ACTIVE_FILES}/{MAX_ACTIVE_FILES} files — archive one to open a new file
+            </span>
+          ) : (
+            <Link href="/chat" className="dash-btn dash-btn-primary">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
               </svg>
-              Quick Consult
-              <span className="dash-btn-hint">One-off privileged question</span>
+              Create New File
             </Link>
-            {atLimit ? (
-              <span className="dash-limit-note">
-                {MAX_ACTIVE_FILES}/{MAX_ACTIVE_FILES} files — archive one to open a new file
-              </span>
-            ) : (
-              <Link href="/chat" className="dash-btn dash-btn-primary">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-                Create New File
-              </Link>
-            )}
+          )}
+          <Link href="/chat?type=quick_consult" className="dash-btn dash-btn-secondary">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            </svg>
+            Quick Consult
+            <span className="dash-btn-hint">Discuss any legal topic unrelated to your files</span>
+          </Link>
+          <button className="dash-btn dash-btn-secondary dash-btn--coming-soon" disabled title="Coming soon">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+              <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+            Schedule Consult
+            <span className="dash-btn-hint">Book 1-on-1 time with Andrew Crawford, Esq.</span>
+          </button>
+        </div>
+
+        {/* Global status bar */}
+        <div className="dash-status-bar">
+          <div className="dash-status-left">
+            <span className="dash-status-count">
+              {activeFiles.length} of {MAX_ACTIVE_FILES} active file{activeFiles.length !== 1 ? "s" : ""}
+            </span>
+          </div>
+          <div className="dash-status-right">
+            {/* Pending docs across all files */}
+            <div className={`dash-status-pill${totalPendingDocs > 0 ? " dash-status-pill--active" : ""}`}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="12" y2="17"/>
+              </svg>
+              {totalPendingDocs > 0
+                ? <><strong>{totalPendingDocs}</strong> doc{totalPendingDocs !== 1 ? "s" : ""} awaiting 48-hr review</>
+                : <>No docs pending review</>
+              }
+            </div>
+            {/* Consult status — one global consult */}
+            <div className="dash-status-pill">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+              <span>No consult scheduled</span>
+            </div>
           </div>
         </div>
 
@@ -135,12 +159,7 @@ export default async function DashboardPage() {
         ) : (
           <div className="dash-file-grid">
             {activeFiles.map((f) => (
-              <CaseFileCard
-                key={f.id}
-                file={f}
-                mode="active"
-                pendingDocs={pendingDocsByFile[f.id] ?? 0}
-              />
+              <CaseFileCard key={f.id} file={f} mode="active" />
             ))}
           </div>
         )}
@@ -155,12 +174,7 @@ export default async function DashboardPage() {
             </div>
             <div className="dash-file-grid">
               {archivedFiles.map((f) => (
-                <CaseFileCard
-                  key={f.id}
-                  file={f}
-                  mode="archived"
-                  pendingDocs={0}
-                />
+                <CaseFileCard key={f.id} file={f} mode="archived" />
               ))}
             </div>
           </div>

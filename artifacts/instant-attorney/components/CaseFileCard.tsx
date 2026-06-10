@@ -7,10 +7,9 @@ import type { CaseFile } from "@/lib/types";
 interface CaseFileCardProps {
   file: CaseFile;
   mode: "active" | "archived";
-  pendingDocs: number;
 }
 
-export default function CaseFileCard({ file, mode, pendingDocs }: CaseFileCardProps) {
+export default function CaseFileCard({ file, mode }: CaseFileCardProps) {
   const router = useRouter();
   const [acting, setActing] = useState(false);
   const [error, setError] = useState("");
@@ -105,38 +104,10 @@ export default function CaseFileCard({ file, mode, pendingDocs }: CaseFileCardPr
         </div>
       )}
 
-      {/* Status strip — docs under review + consult */}
-      {mode === "active" && (
-        <div className="card__status-strip">
-          {/* Pending docs */}
-          <div className={`card__status-item${pendingDocs > 0 ? " card__status-item--active" : ""}`}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
-              <line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="12" y2="17"/>
-            </svg>
-            {pendingDocs > 0
-              ? <><strong>{pendingDocs}</strong> doc{pendingDocs !== 1 ? "s" : ""} awaiting 48-hr review</>
-              : <span>No docs pending review</span>
-            }
-          </div>
-
-          {/* Consult status — placeholder until consult scheduling is built */}
-          <div className="card__status-item card__status-item--muted">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-              <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-            </svg>
-            <span>No consult scheduled</span>
-          </div>
-        </div>
-      )}
-
       {/* Footer */}
       <div className="card__footer">
         {mode === "active" ? (
           archiveConfirm ? (
-            /* Archive confirmation */
             <div className="card__archive-confirm">
               <div className="card__archive-warn">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -164,7 +135,6 @@ export default function CaseFileCard({ file, mode, pendingDocs }: CaseFileCardPr
             </div>
           ) : (
             <>
-              {/* Primary: View File */}
               <a href={`/dashboard/${file.id}`} className="card__btn card__btn--primary">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
@@ -173,7 +143,6 @@ export default function CaseFileCard({ file, mode, pendingDocs }: CaseFileCardPr
                 View File
               </a>
 
-              {/* Secondary: Continue Chat */}
               <a href={`/chat?caseFileId=${file.id}`} className="card__btn card__btn--outline">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
@@ -181,16 +150,6 @@ export default function CaseFileCard({ file, mode, pendingDocs }: CaseFileCardPr
                 Continue Chat
               </a>
 
-              {/* Tertiary: Schedule Consult */}
-              <button className="card__btn card__btn--outline card__btn--coming-soon" disabled title="Coming soon">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                  <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-                </svg>
-                Schedule Consult
-              </button>
-
-              {/* Danger: Archive */}
               <button
                 className="card__btn card__btn--ghost card__btn--danger"
                 onClick={() => setArchiveConfirm(true)}
