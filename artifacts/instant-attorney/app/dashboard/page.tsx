@@ -383,7 +383,6 @@ function WizardCard({
     : `/wizard/${wizardType}?caseFileId=${caseFileId}`;
 
   const icons: Record<WizardType, string> = {
-    intake_summary: "📋",
     demand_letter: "✉️",
     complaint_letter: "📣",
     draft_contract: "📝",

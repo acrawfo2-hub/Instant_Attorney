@@ -10,7 +10,6 @@ export type RequestedAttachmentStatus = "requested" | "uploaded" | "waived";
 
 // All supported wizard types — add new ones here as wizards are built
 export type WizardType =
-  | "intake_summary"
   | "demand_letter"
   | "complaint_letter"
   | "draft_contract"
@@ -108,7 +107,6 @@ export interface Document {
 
 // Human-readable labels for wizard types
 export const WIZARD_LABELS: Record<WizardType, string> = {
-  intake_summary: "Intake Summary",
   demand_letter: "Demand Letter",
   complaint_letter: "Complaint Letter",
   draft_contract: "Draft Contract",

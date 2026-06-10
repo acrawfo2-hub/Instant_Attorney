@@ -263,7 +263,17 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
             {streaming && <span className="wiz-doc-updating">Updating…</span>}
           </div>
 
-          {isStreamingDraft ? (
+          {error && !currentDraft ? (
+            <div className="wiz-doc-loading">
+              <p style={{ color: "#b91c1c", fontWeight: 500 }}>{error}</p>
+              <button
+                style={{ marginTop: "1rem", padding: "0.5rem 1.25rem", background: "#1e2d3d", color: "#fff", border: "none", borderRadius: "6px", cursor: "pointer" }}
+                onClick={() => { setError(""); runDrafter([], true); }}
+              >
+                Retry
+              </button>
+            </div>
+          ) : isStreamingDraft ? (
             <div className="wiz-doc-loading">
               <div className="wiz-thinking">
                 <span /><span /><span />

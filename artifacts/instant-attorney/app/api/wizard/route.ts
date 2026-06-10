@@ -34,18 +34,6 @@ export async function POST(req: NextRequest) {
     if (error || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    const { data: sub } = await db
-      .from("subscriptions")
-      .select("status")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    const activeStatuses = ["active", "trialing", "bypass"];
-    if (!sub || !activeStatuses.includes(sub.status)) {
-      return NextResponse.json({ error: "Subscription required" }, { status: 403 });
-    }
-
     userId = user.id;
   }
 
