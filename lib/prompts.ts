@@ -190,6 +190,7 @@ SUGGESTED INSTRUMENTS:
 • [Legal instrument or document type relevant to this matter]
 RECOMMENDED WIZARDS:
 • [wizard_type — one per line, from: intake_summary, demand_letter, complaint_letter, draft_contract, draft_waiver, wills_trusts, doc_review]
+RECOMMEND_CONSULT: [true | false — true if the matter has significant legal complexity, tight deadlines, high financial or liberty stakes, active litigation, or facts that genuinely require attorney judgment before proceeding]
 ---END STRATEGY---
 
 Wizard recommendation rules:

@@ -148,6 +148,27 @@ export default function ClientFileView({
         </div>
       )}
 
+      {/* Consult CTA — client mode only */}
+      {!isAttorney && (
+        <div className={`lf-card lf-card-full lf-consult-banner ${strategy?.recommend_consult ? "lf-consult-banner-recommended" : ""}`}>
+          <div className="lf-consult-banner-inner">
+            <div className="lf-consult-banner-text">
+              {strategy?.recommend_consult ? (
+                <>
+                  <span className="lf-consult-rec-badge">Consult Recommended</span>
+                  <span className="lf-consult-desc">Your attorney has flagged this matter for a live strategy session.</span>
+                </>
+              ) : (
+                <span className="lf-consult-desc">Ready to speak with Andrew Crawford, Esq. directly? Schedule a 1-on-1 strategy session.</span>
+              )}
+            </div>
+            <Link href="/register?upgrade=consult" className="lf-consult-btn">
+              Schedule Consult · $49.99 →
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* Matter + Next Action */}
       <div className="lf-card lf-card-sm">
         <div className="lf-card-label">Matter</div>

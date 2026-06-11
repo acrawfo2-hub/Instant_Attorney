@@ -55,6 +55,7 @@ export interface LegalStrategy {
   strengths: string[];
   risks: string[];
   recommended_wizards: WizardType[];
+  recommend_consult?: boolean;  // true when the AI determines a live attorney consult is warranted
 }
 
 export interface CaseFile {
