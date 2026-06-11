@@ -189,12 +189,11 @@ RISKS:
 SUGGESTED INSTRUMENTS:
 • [Legal instrument or document type relevant to this matter]
 RECOMMENDED WIZARDS:
-• [wizard_type — one per line, from: intake_summary, demand_letter, complaint_letter, draft_contract, draft_waiver, wills_trusts, doc_review]
+• [wizard_type — one per line, from: demand_letter, complaint_letter, draft_contract, draft_waiver, wills_trusts, doc_review]
 ---END STRATEGY---
 
 Wizard recommendation rules:
 - Only suggest wizards that are genuinely useful for this specific matter.
-- intake_summary: always recommend for any matter — it creates the formal intake document for the attorney.
 - demand_letter: recommend when the client has a claim against another party and a demand is appropriate.
 - complaint_letter: recommend for regulatory/agency complaints (EEOC, NLRB, state agencies).
 - draft_contract: recommend when a new agreement needs to be created.
@@ -254,26 +253,6 @@ The KEY/VALUE pairs should contain all structured data needed to generate the do
 }
 
 export const WIZARD_PROMPTS: Record<WizardType, string> = {
-  intake_summary: `${wizardBase(
-    "Intake Summary",
-    "Create the formal intake summary document for Crawford Law attorney review. This is the foundational document that opens the attorney's review of the matter."
-  )}
-
-Required fields for the Intake Summary:
-- Client full name and contact information
-- Matter type and subtype
-- Narrative summary of the client's situation (in the client's own words where possible)
-- Key parties (names, roles, relationships)
-- Timeline of key events (date → event)
-- Client's stated goals
-- Confirmed facts
-- Outstanding fact gaps
-- Urgency / deadline flags
-- Documents the client has in hand
-- Prior legal representation (if any)
-
-Opening: Review the file, confirm what you already know, and ask for anything missing. Work through the checklist methodically. When complete, produce the ---WIZARD COMPLETE--- block.`,
-
   demand_letter: `${wizardBase(
     "Demand Letter",
     "Draft a formal demand letter from the client to the opposing party asserting their claims and requesting specific relief."
