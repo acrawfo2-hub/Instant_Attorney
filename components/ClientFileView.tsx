@@ -268,7 +268,7 @@ export default function ClientFileView({
                 Your attorney has suggested the following documents based on your matter. Launch a wizard to begin drafting.
               </p>
               <div className="lf-wizard-grid">
-                {recommendedWizards.map((wType) => (
+                {recommendedWizards.filter((wType) => wType !== "intake_summary").map((wType) => (
                   <WizardCard
                     key={wType}
                     wizardType={wType}
