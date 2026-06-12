@@ -4427,6 +4427,18 @@ mark.atty-placeholder {
 }
 .atty-second-draft-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .atty-btn-secondary { background: var(--brand-cream); color: var(--brand-text-dk); border: 1px solid var(--brand-border); }
+.atty-btn-primary { background: var(--brand-navy); color: var(--brand-cream-text); border: none; }
+.atty-btn-primary:hover:not(:disabled) { background: var(--brand-navy-md); }
+.atty-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.atty-fitness-warning {
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  border-radius: var(--brand-r-md);
+  padding: 12px 14px;
+  font-size: 13px;
+  color: #92400e;
+}
+.atty-fitness-warning p { margin: 6px 0 0 0; line-height: 1.5; }
 .atty-second-draft-message { font-size: 13px; color: var(--brand-text-md); margin: 0; }
 .atty-second-draft-preview { margin-top: 4px; }
 .wiz-submit-ready {

@@ -1,4 +1,5 @@
 import type { CaseFile, FactItem, WizardType, Attachment, RequestedAttachment, Document } from "./types";
+import { WIZARD_LABELS, docTypeLabel } from "./types";
 
 // ── Free chat (Phase I) ──────────────────────────────────────────────────────
 
@@ -617,8 +618,210 @@ Your task: Apply the Priority Edit List from the review report to produce an imp
 Produce ONLY the improved draft document. No commentary, no headers, no explanation outside the document itself.`;
 }
 
-/** Future second-draft prompt — wire into POST /api/attorney/documents/[id]/second-draft when ready. */
-export function buildSecondDraftPrompt(
+// ── Second draft (attorney refinement) ───────────────────────────────────────
+
+export const DOCUMENT_TYPE_FITNESS_SYSTEM_PROMPT = `You are a senior U.S. attorney at Crawford Law PLLC performing a rapid document-type fitness check before a refined legal draft is generated.
+
+You will receive the client's active file, the document type being drafted, and a summary of the initial draft.
+
+Determine whether this document type is the right legal instrument for this matter. Consider the client's goals, facts, matter type (reactive vs preventive), and whether a different instrument would better serve the client.
+
+Respond using EXACTLY this format:
+
+---DOCUMENT TYPE FITNESS---
+FIT: [yes | no]
+RATIONALE: [2-4 sentences explaining your assessment]
+RECOMMENDED_TYPE: [If FIT is no, the wizard type or instrument that would be more appropriate — e.g. demand_letter, complaint_letter, draft_contract. If FIT is yes, write "none"]
+---END FITNESS---
+
+Be decisive. If the current type is reasonable even if not perfect, answer FIT: yes.`;
+
+export const SECOND_DRAFT_SYSTEM_PROMPT = `SYSTEM PROMPT — LEGAL DOCUMENT REFINEMENT ENGINE (CRAWFORD LAW PLLC)
+
+You are a senior U.S. attorney with extensive experience drafting high-quality, court-ready legal documents. You are assisting Crawford Law PLLC in refining client-facing legal documents generated through an AI intake system.
+
+You will be given:
+
+An initial draft document
+
+A critical review of that draft
+
+The client's active file (facts, context, goals)
+
+Optional attorney notes
+
+Your task is to produce a substantially improved, polished, and usable legal document that could realistically be reviewed, lightly edited, and used by a licensed attorney.
+
+CORE OBJECTIVE
+Transform the provided materials into a clear, professional, and legally sound document that:
+
+Accurately reflects the known facts
+
+Improves structure, clarity, and legal reasoning
+
+Eliminates ambiguity where possible
+
+Avoids fabrication of facts or law
+
+Is suitable for real-world legal use after attorney review
+
+STRICT RELIABILITY RULES (CRITICAL FOR QA)
+NO FABRICATION
+
+Do not invent facts, dates, parties, or procedural history
+
+Do not assume jurisdiction-specific rules unless clearly supported
+
+If information is missing, use a clearly marked placeholder (see below)
+
+CASE LAW & CITATIONS
+
+Only include legal citations if you are highly confident they are accurate and applicable
+
+If uncertain, omit citations entirely rather than risk hallucination
+
+Never fabricate case names, statutes, or legal standards
+
+NO AI SIGNALS
+
+Do not reference AI, drafting processes, or system inputs
+
+Do not include meta-commentary
+
+Do not include phrases like "based on the information provided"
+
+PLACEHOLDER PROTOCOL (MANDATORY)
+If required information is missing, insert a clearly visible placeholder using this exact format:
+
+[PLACEHOLDER: INSERT ___]
+
+Examples:
+
+[PLACEHOLDER: CLIENT FULL LEGAL NAME]
+
+[PLACEHOLDER: DATE OF INCIDENT]
+
+[PLACEHOLDER: COUNTY AND STATE]
+
+Rules:
+
+Be specific about what is missing
+
+Do not guess or approximate
+
+Do not leave silent gaps
+
+DRAFTING STANDARDS
+Use formal legal tone appropriate to the document type
+
+Maintain logical structure with clear headings
+
+Use precise language, not verbose filler
+
+Prefer clarity over complexity
+
+Ensure internal consistency throughout
+
+Use defined terms where appropriate
+
+Format for readability in a Word document (.docx)
+
+DOCUMENT QUALITY IMPROVEMENTS
+You must:
+
+Correct legal phrasing and grammar
+
+Strengthen organization and flow
+
+Resolve inconsistencies in the original draft
+
+Incorporate useful points from the critique and attorney notes
+
+Align the document with the client's apparent legal objective
+
+Remove redundant or weak language
+
+WHEN FACTS ARE UNCERTAIN
+Use neutral phrasing (e.g., "on or about" where appropriate)
+
+Do not overstate claims or conclusions
+
+Avoid asserting legal entitlement unless supported by facts provided
+
+OUTPUT FORMAT
+Produce only the final document text.
+
+Do NOT include:
+
+Explanations
+
+Commentary
+
+Bullet summaries
+
+Notes to the user or attorney
+
+The output should read exactly like a professional legal document ready to be placed into a .docx file.
+
+FINAL CHECK BEFORE OUTPUT
+Before completing:
+
+Confirm no hallucinated facts or law
+
+Confirm all missing info is properly marked with placeholders
+
+Confirm tone is professional and consistent
+
+Confirm document is logically structured and complete`;
+
+const WIZARD_TYPE_OPTIONS = Object.keys(WIZARD_LABELS).join(", ");
+
+export function buildDocumentTypeFitnessUserMessage(
+  parentDoc: Document,
+  caseFile: CaseFile,
+  facts: FactItem[],
+  attachments: Attachment[]
+): string {
+  const fileContext = buildFileContext(caseFile, facts, attachments);
+  const draftPreview = parentDoc.draft_text
+    ? parentDoc.draft_text.slice(0, 4000) + (parentDoc.draft_text.length > 4000 ? "\n\n[...truncated for fitness check...]" : "")
+    : "(No draft text)";
+
+  return `${fileContext}
+
+DOCUMENT TYPE BEING DRAFTED: ${docTypeLabel(parentDoc.doc_type)}
+DOCUMENT TITLE: ${parentDoc.title}
+
+SUPPORTED WIZARD TYPES: ${WIZARD_TYPE_OPTIONS}
+
+INITIAL DRAFT (excerpt):
+${draftPreview}
+
+Assess whether ${docTypeLabel(parentDoc.doc_type)} is the appropriate document type for this matter.`;
+}
+
+export function parseDocumentTypeFitness(text: string): {
+  fit: boolean;
+  rationale: string;
+  recommendedType: string | null;
+} {
+  const match = text.match(/---DOCUMENT TYPE FITNESS---([\s\S]*?)---END FITNESS---/);
+  const block = match ? match[1] : text;
+
+  const fitLine = block.match(/FIT:\s*(yes|no)/i);
+  const rationaleMatch = block.match(/RATIONALE:\s*([\s\S]*?)(?=RECOMMENDED_TYPE:|$)/i);
+  const recommendedMatch = block.match(/RECOMMENDED_TYPE:\s*(.+)/i);
+
+  const fit = fitLine ? fitLine[1].toLowerCase() === "yes" : false;
+  const rationale = rationaleMatch?.[1]?.trim() ?? "Unable to parse fitness assessment.";
+  const recommendedRaw = recommendedMatch?.[1]?.trim() ?? "";
+  const recommendedType =
+    recommendedRaw && recommendedRaw.toLowerCase() !== "none" ? recommendedRaw : null;
+
+  return { fit, rationale, recommendedType };
+}
+
+export function buildSecondDraftUserMessage(
   parentDoc: Document,
   criticalReviewText: string,
   attorneyInstructions: string,
@@ -628,20 +831,26 @@ export function buildSecondDraftPrompt(
 ): string {
   const fileContext = buildFileContext(caseFile, facts, attachments);
   const draftText = parentDoc.draft_text ?? "(No draft text available)";
+  const notesBlock = attorneyInstructions.trim()
+    ? attorneyInstructions.trim()
+    : "(No additional attorney notes provided)";
 
   return `${fileContext}
 
----ORIGINAL CLIENT DRAFT---
-${draftText}
----END ORIGINAL DRAFT---
+DOCUMENT TYPE: ${docTypeLabel(parentDoc.doc_type)}
+DOCUMENT TITLE: ${parentDoc.title}
 
----CRITICAL REVIEW MEMO---
+---INITIAL DRAFT DOCUMENT---
+${draftText}
+---END INITIAL DRAFT---
+
+---CRITICAL REVIEW OF DRAFT---
 ${criticalReviewText}
 ---END CRITICAL REVIEW---
 
----ATTORNEY INSTRUCTIONS (PRIVATE)---
-${attorneyInstructions}
----END ATTORNEY INSTRUCTIONS---
+---ATTORNEY NOTES (PRIVATE — incorporate into revised draft)---
+${notesBlock}
+---END ATTORNEY NOTES---
 
-Produce a revised legal draft incorporating the review memo and attorney instructions. Use a higher-quality drafting standard than the first pass. Use [[PLACEHOLDER — descriptor]] for unresolved facts.`;
+Produce the refined second draft now. Output only the final document text.`;
 }

@@ -107,6 +107,46 @@ export async function upsertCriticalReviewChild(
   return data as Document;
 }
 
+/** Replace any existing second-draft child with a new standalone document row. */
+export async function upsertSecondDraftChild(
+  db: SupabaseClient,
+  parent: Document,
+  draftText: string
+): Promise<Document | null> {
+  await db
+    .from("documents")
+    .delete()
+    .eq("parent_document_id", parent.id)
+    .eq("doc_type", "second_draft");
+
+  const { data, error } = await db
+    .from("documents")
+    .insert({
+      case_file_id: parent.case_file_id,
+      user_id: parent.user_id,
+      parent_document_id: parent.id,
+      doc_type: "second_draft",
+      title: `${parent.title} — Revised Draft`,
+      status: "draft",
+      draft_text: draftText,
+      content_json: {},
+    })
+    .select("*")
+    .single();
+
+  if (error) {
+    console.error("[document-utils] second draft child insert error:", error);
+    return null;
+  }
+
+  await db.from("documents").update({
+    improved_draft_text: draftText,
+    updated_at: new Date().toISOString(),
+  }).eq("id", parent.id);
+
+  return data as Document;
+}
+
 /** Mark a primary draft submitted for attorney review and trigger downstream notifications. */
 export async function finalizeDocumentSubmission(
   db: SupabaseClient,

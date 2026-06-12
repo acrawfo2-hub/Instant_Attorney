@@ -73,8 +73,13 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
   const [done, setDone] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [aiRunning, setAiRunning] = useState(false);
+  const [generatingSecondDraft, setGeneratingSecondDraft] = useState(false);
   const [aiError, setAiError] = useState("");
   const [secondDraftMessage, setSecondDraftMessage] = useState("");
+  const [fitnessWarning, setFitnessWarning] = useState<{
+    rationale: string;
+    recommendedType: string | null;
+  } | null>(null);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -99,7 +104,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
           setAttachments(attData.attachments ?? []);
         }
       }
-      if (data.review_status === "reviewing") {
+      if (data.review_status === "reviewing" || data.review_status === "merging") {
         startPolling();
       }
     } else {
@@ -115,10 +120,11 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
       if (res.ok) {
         const data = await res.json() as DocumentDetail;
         setDoc(data);
-        if (data.review_status !== "reviewing") {
+        if (data.review_status !== "reviewing" && data.review_status !== "merging") {
           clearInterval(pollRef.current!);
           pollRef.current = null;
           setAiRunning(false);
+          setGeneratingSecondDraft(false);
         }
       }
     }, 4000);
@@ -159,11 +165,43 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
   }
 
   async function requestSecondDraft() {
+    if (generatingSecondDraft || !reviewText) return;
+    setGeneratingSecondDraft(true);
     setSecondDraftMessage("");
-    await saveSecondDraftPrompt();
-    const res = await fetch(`/api/attorney/documents/${id}/second-draft`, { method: "POST" });
-    const data = await res.json();
-    setSecondDraftMessage(data.error ?? "Second draft generation is not yet enabled.");
+    setFitnessWarning(null);
+    setAiError("");
+
+    try {
+      await saveSecondDraftPrompt();
+      const res = await fetch(`/api/attorney/documents/${id}/second-draft`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: secondDraftPrompt }),
+      });
+      const data = await res.json();
+
+      if (res.status === 422 && data.fitness) {
+        setFitnessWarning({
+          rationale: data.fitness.rationale,
+          recommendedType: data.fitness.recommendedType ?? data.fitness.recommended_type ?? null,
+        });
+        setSecondDraftMessage(data.error ?? "Document type may not be appropriate for this matter.");
+        setGeneratingSecondDraft(false);
+        return;
+      }
+
+      if (!res.ok) {
+        setSecondDraftMessage(data.error ?? "Second draft generation failed.");
+        setGeneratingSecondDraft(false);
+        return;
+      }
+
+      setSecondDraftMessage("Second draft generated successfully.");
+      await load();
+    } catch {
+      setSecondDraftMessage("Network error — please try again.");
+    }
+    setGeneratingSecondDraft(false);
   }
 
   async function handleAction(action: "approve" | "request_changes") {
@@ -204,7 +242,8 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
   const criticalReview = children.find((c) => c.doc_type === "critical_review");
   const secondDraft = children.find((c) => c.doc_type === "second_draft");
   const reviewText = criticalReview?.draft_text ?? doc.review_report;
-  const isReviewing = doc.review_status === "reviewing" || aiRunning;
+  const isReviewing = doc.review_status === "reviewing" || (aiRunning && !generatingSecondDraft);
+  const isMerging = doc.review_status === "merging" || generatingSecondDraft;
 
   return (
     <div className="atty-review-shell">
@@ -215,6 +254,9 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
           <span className="atty-badge atty-badge-amber">{doc.status.replace(/_/g, " ")}</span>
           {isReviewing && (
             <span className="atty-badge atty-badge-blue atty-badge-pulse">Generating review memo…</span>
+          )}
+          {isMerging && (
+            <span className="atty-badge atty-badge-blue atty-badge-pulse">Generating 2nd draft…</span>
           )}
         </div>
       </header>
@@ -320,6 +362,14 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
             </section>
           </div>
 
+          {isMerging && !secondDraft?.draft_text && (
+            <section className="atty-standalone-doc atty-second-draft-preview">
+              <div className="atty-ai-running">
+                Checking document type fit, then generating revised draft… This may take a minute.
+              </div>
+            </section>
+          )}
+
           {secondDraft?.draft_text && (
             <section className="atty-standalone-doc atty-second-draft-preview">
               <div className="atty-standalone-doc-header">
@@ -338,7 +388,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
           <div className="atty-second-draft-workspace">
             <h2>Second Draft Instructions</h2>
             <p className="atty-second-draft-hint">
-              Private attorney input only — never shown to the client. This will be combined with the client draft, critical review memo, and Living File context when second-draft generation is enabled.
+              Private attorney input only — never shown to the client. Combined with the initial draft, critical review memo, and Living File to generate a refined second draft.
             </p>
             <textarea
               className="atty-second-draft-textarea"
@@ -351,10 +401,24 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
               <button className="atty-btn" onClick={saveSecondDraftPrompt} disabled={savingPrompt}>
                 {savingPrompt ? "Saving…" : promptSaved ? "Saved ✓" : "Save Instructions"}
               </button>
-              <button className="atty-btn atty-btn-secondary" onClick={requestSecondDraft}>
-                Generate 2nd Draft (coming soon)
+              <button
+                className="atty-btn atty-btn-primary"
+                onClick={requestSecondDraft}
+                disabled={generatingSecondDraft || !reviewText || !doc.draft_text}
+                title={!reviewText ? "Run critical review first" : undefined}
+              >
+                {generatingSecondDraft ? "Generating 2nd Draft…" : "Generate 2nd Draft"}
               </button>
             </div>
+            {fitnessWarning && (
+              <div className="atty-fitness-warning">
+                <strong>Document type check did not pass.</strong>
+                <p>{fitnessWarning.rationale}</p>
+                {fitnessWarning.recommendedType && (
+                  <p>Suggested instrument: <em>{fitnessWarning.recommendedType}</em></p>
+                )}
+              </div>
+            )}
             {secondDraftMessage && <p className="atty-second-draft-message">{secondDraftMessage}</p>}
           </div>
 
