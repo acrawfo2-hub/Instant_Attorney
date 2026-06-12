@@ -66,13 +66,13 @@ function DocStatusLine({ doc }: { doc: Document }) {
 // ── Wizard card (client mode only) ──────────────────────────────────────────
 
 const WIZARD_ICONS: Record<WizardType, string> = {
-  intake_summary: "📋",
   demand_letter: "✉️",
   complaint_letter: "📣",
   draft_contract: "📝",
   draft_waiver: "🤝",
   wills_trusts: "⚖️",
   doc_review: "🔍",
+  general_document: "📄",
 };
 
 function WizardCard({
@@ -465,7 +465,7 @@ export default function ClientFileView({
                 Your attorney has suggested the following documents based on your matter. Launch a wizard to begin drafting.
               </p>
               <div className="lf-wizard-grid">
-                {recommendedWizards.filter((w) => w !== "intake_summary" && isValidWizardType(w)).map((wType) => (
+                {recommendedWizards.filter(isValidWizardType).map((wType) => (
                   <WizardCard
                     key={wType}
                     wizardType={wType}
