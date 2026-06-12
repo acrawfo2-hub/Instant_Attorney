@@ -3,7 +3,7 @@
 --
 -- Full migration order:
 --   1. schema.sql
---   2. schema-stage2.sql … schema-stage7.sql
+--   2. schema-stage2.sql … schema-stage9.sql
 --   3. schema-verify.sql (confirm everything is OK)
 -- Then: update profiles set is_attorney = true where email = 'your@email';
 

@@ -9,6 +9,7 @@ import {
   parseDocumentTypeFitness,
 } from "@/lib/prompts";
 import { getChildDocuments, upsertSecondDraftChild } from "@/lib/document-utils";
+import { recordAiFromMessage } from "@/lib/usage-tracker";
 import { BYPASS_USER_ID, docTypeLabel } from "@/lib/types";
 import type { Document, CaseFile, FactItem, Attachment } from "@/lib/types";
 
@@ -116,6 +117,14 @@ export async function POST(
       .map((b) => b.text)
       .join("");
 
+    await recordAiFromMessage(db, fitnessResponse, {
+      userId: parentDoc.user_id,
+      actorId: userId,
+      caseFileId: parentDoc.case_file_id,
+      feature: "attorney_second_draft_fitness",
+      metadata: { document_id: id },
+    });
+
     const fitness = parseDocumentTypeFitness(fitnessText);
 
     if (!fitness.fit) {
@@ -156,6 +165,14 @@ export async function POST(
       .map((b) => b.text)
       .join("")
       .trim();
+
+    await recordAiFromMessage(db, draftResponse, {
+      userId: parentDoc.user_id,
+      actorId: userId,
+      caseFileId: parentDoc.case_file_id,
+      feature: "attorney_second_draft",
+      metadata: { document_id: id },
+    });
 
     if (!secondDraftText) {
       throw new Error("Empty second draft response");

@@ -63,6 +63,12 @@ union all select 'case_files.pre_consult_memo', case when exists (
   select 1 from information_schema.columns
   where table_schema = 'public' and table_name = 'case_files' and column_name = 'pre_consult_memo'
 ) then 'OK' else 'MISSING' end
+union all select 'usage_events', case when exists (
+  select 1 from information_schema.tables where table_schema = 'public' and table_name = 'usage_events'
+) then 'OK' else 'MISSING' end
+union all select 'usage_period_totals', case when exists (
+  select 1 from information_schema.tables where table_schema = 'public' and table_name = 'usage_period_totals'
+) then 'OK' else 'MISSING' end
 union all select 'storage: case-attachments', case when exists (
   select 1 from storage.buckets where id = 'case-attachments'
 ) then 'OK' else 'MISSING' end

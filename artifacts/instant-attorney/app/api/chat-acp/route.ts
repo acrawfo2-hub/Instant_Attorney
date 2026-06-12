@@ -8,6 +8,7 @@ import { pickFirstValidWizard } from "@/lib/document-utils";
 import { triggerPreWarm } from "@/lib/pre-warm";
 import { generateCaseTitle } from "@/lib/title-generator";
 import { toAnthropicBlock, processAttachment } from "@/lib/attachment-processor";
+import { recordAiFromStream, recordStorageUpload } from "@/lib/usage-tracker";
 import { BYPASS_USER_ID } from "@/lib/types";
 import type { CaseFile, FactItem, LegalStrategy, Attachment, RequestedAttachment } from "@/lib/types";
 
@@ -181,6 +182,13 @@ export async function POST(req: NextRequest) {
       } catch (err) {
         controller.error(err);
       } finally {
+        await recordAiFromStream(db, stream, {
+          userId,
+          actorId: userId,
+          caseFileId: resolvedCaseFileId,
+          feature: "chat_acp",
+        });
+
         if (fullResponse) {
           await db.from("intake_messages").insert({
             case_file_id: resolvedCaseFileId,
@@ -256,6 +264,15 @@ export async function POST(req: NextRequest) {
                 });
 
               if (!uploadErr) {
+                await recordStorageUpload(db, {
+                  userId,
+                  actorId: userId,
+                  caseFileId: resolvedCaseFileId,
+                  bytes: buffer.length,
+                  fileName: pendingAttachment.fileName,
+                  mimeType: pendingAttachment.mimeType,
+                });
+
                 const { data: att } = await db
                   .from("attachments")
                   .insert({

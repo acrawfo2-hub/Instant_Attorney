@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { recordAiFromMessage } from "./usage-tracker";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -37,6 +38,20 @@ export async function generateCaseTitle(
 
     if (title) {
       await db.from("case_files").update({ title }).eq("id", caseFileId);
+    }
+
+    const { data: caseFile } = await db
+      .from("case_files")
+      .select("user_id")
+      .eq("id", caseFileId)
+      .single();
+
+    if (caseFile?.user_id) {
+      await recordAiFromMessage(db, response, {
+        userId: caseFile.user_id,
+        caseFileId,
+        feature: "title_generator",
+      });
     }
   } catch (err) {
     console.error("[title-generator] error:", err);

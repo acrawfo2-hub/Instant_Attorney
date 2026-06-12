@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { buildMergePrompt } from "@/lib/prompts";
+import { recordAiFromMessage } from "@/lib/usage-tracker";
 import { BYPASS_USER_ID } from "@/lib/types";
 import type { Document } from "@/lib/types";
 
@@ -56,6 +57,14 @@ export async function POST(
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
       .map((b) => b.text)
       .join("");
+
+    await recordAiFromMessage(db, response, {
+      userId: doc.user_id,
+      actorId: userId,
+      caseFileId: doc.case_file_id,
+      feature: "attorney_merge",
+      metadata: { document_id: id },
+    });
 
     await db.from("documents").update({
       improved_draft_text: improvedDraft,

@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { notifyAttorneyDocumentReady } from "./notify";
+import { recordAiFromMessage } from "./usage-tracker";
 import { buildDocReviewPrompt } from "./prompts";
 import { WIZARD_LABELS } from "./types";
 import type { WizardType, Document, CaseFile, Profile, FactItem, Attachment } from "./types";
@@ -256,6 +257,13 @@ async function autoTriggerReview(
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
       .map((b) => b.text)
       .join("");
+
+    await recordAiFromMessage(db, response, {
+      userId: doc.user_id,
+      caseFileId: doc.case_file_id,
+      feature: "auto_critical_review",
+      metadata: { document_id: docId },
+    });
 
     await upsertCriticalReviewChild(db, doc, reviewReport);
 

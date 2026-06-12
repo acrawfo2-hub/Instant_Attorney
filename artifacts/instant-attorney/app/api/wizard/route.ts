@@ -4,6 +4,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { DRAFTER_SYSTEM_PROMPT, WIZARD_FIELD_HINTS, buildFileContext } from "@/lib/prompts";
 import { parseAndUpdateFile, extractDraftText } from "@/lib/file-parser";
 import { findReusableDocument } from "@/lib/document-utils";
+import { recordAiFromStream } from "@/lib/usage-tracker";
 import { BYPASS_USER_ID, WIZARD_LABELS } from "@/lib/types";
 import type { WizardType, CaseFile, FactItem, Attachment, RequestedAttachment } from "@/lib/types";
 
@@ -103,6 +104,14 @@ export async function POST(req: NextRequest) {
         controller.error(err);
         return;
       }
+
+      await recordAiFromStream(db, stream, {
+        userId,
+        actorId: userId,
+        caseFileId,
+        feature: "wizard",
+        metadata: { wizard_type: wizardType },
+      });
 
       // After stream: update the document record with latest draft text
       const draftText = extractDraftText(fullResponse);

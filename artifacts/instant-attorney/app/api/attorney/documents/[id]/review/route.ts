@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { buildDocReviewPrompt } from "@/lib/prompts";
 import { upsertCriticalReviewChild } from "@/lib/document-utils";
+import { recordAiFromMessage } from "@/lib/usage-tracker";
 import { BYPASS_USER_ID } from "@/lib/types";
 import type { Document, CaseFile, FactItem, Attachment } from "@/lib/types";
 
@@ -72,6 +73,14 @@ export async function POST(
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
       .map((b) => b.text)
       .join("");
+
+    await recordAiFromMessage(db, response, {
+      userId: doc.user_id,
+      actorId: userId,
+      caseFileId: doc.case_file_id,
+      feature: "attorney_review",
+      metadata: { document_id: id },
+    });
 
     const child = await upsertCriticalReviewChild(db, doc as Document, reviewReport);
 

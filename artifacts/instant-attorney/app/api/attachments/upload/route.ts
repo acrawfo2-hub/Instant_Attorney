@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { processAttachment } from "@/lib/attachment-processor";
+import { recordStorageUpload } from "@/lib/usage-tracker";
 import { BYPASS_USER_ID } from "@/lib/types";
 import { randomUUID } from "crypto";
 
@@ -66,6 +67,15 @@ export async function POST(req: NextRequest) {
     console.error("[attachments/upload] storage error:", uploadErr);
     return NextResponse.json({ error: "Storage upload failed" }, { status: 500 });
   }
+
+  await recordStorageUpload(db, {
+    userId,
+    actorId: userId,
+    caseFileId,
+    bytes: file.size,
+    fileName: file.name,
+    mimeType,
+  });
 
   // Insert attachment record
   const { data: attachment, error: insertErr } = await db

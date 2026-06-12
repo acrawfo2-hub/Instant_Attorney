@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { buildPreConsultPrompt } from "@/lib/prompts";
+import { recordAiFromMessage } from "@/lib/usage-tracker";
 import { BYPASS_USER_ID } from "@/lib/types";
 import type { CaseFile, FactItem, Attachment, Document } from "@/lib/types";
 
@@ -58,6 +59,13 @@ export async function POST(
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
       .map((b) => b.text)
       .join("");
+
+    await recordAiFromMessage(db, response, {
+      userId: caseFileRow.user_id,
+      actorId: userId,
+      caseFileId: id,
+      feature: "attorney_pre_consult",
+    });
 
     await db.from("case_files").update({
       pre_consult_memo: memo,

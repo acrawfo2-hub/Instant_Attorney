@@ -3,6 +3,7 @@ import mammoth from "mammoth";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CaseFile, FactItem } from "./types";
 import { buildFileContext } from "./prompts";
+import { recordAiFromMessage } from "./usage-tracker";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -188,6 +189,15 @@ If no companion documents are needed, omit the REQUESTED ATTACHMENTS bullets ent
       max_tokens: 1500,
       messages: [{ role: "user", content: messageContent }],
     });
+
+    if (caseFile?.user_id) {
+      await recordAiFromMessage(db, response, {
+        userId: caseFile.user_id,
+        caseFileId,
+        feature: "attachment_analysis",
+        metadata: { attachment_id: attachmentId, file_name: fileName },
+      });
+    }
 
     const analysisText = response.content
       .filter((b): b is Anthropic.TextBlock => b.type === "text")

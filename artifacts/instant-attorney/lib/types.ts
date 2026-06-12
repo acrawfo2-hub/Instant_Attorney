@@ -216,6 +216,35 @@ export interface RequestedAttachment {
   created_at: string;
 }
 
+export interface UsageEvent {
+  id: string;
+  user_id: string;
+  actor_id: string | null;
+  case_file_id: string | null;
+  category: "ai" | "storage" | "infra";
+  feature: string;
+  model: string | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  bytes: number | null;
+  cost_usd: number;
+  billable: boolean;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface UsagePeriodTotal {
+  user_id: string;
+  period_start: string;
+  period_end: string;
+  ai_cost_usd: number;
+  storage_cost_usd: number;
+  infra_cost_usd: number;
+  total_cost_usd: number;
+  event_count: number;
+  updated_at: string;
+}
+
 // The bypass user used in dev when BYPASS_AUTH=true
 export const BYPASS_USER_ID = "00000000-0000-0000-0000-000000000001";
 export const BYPASS_EMAIL = "test@instant-attorney.dev";

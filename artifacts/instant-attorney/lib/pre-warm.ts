@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { DRAFTER_SYSTEM_PROMPT, WIZARD_FIELD_HINTS, buildFileContext } from "./prompts";
 import { extractDraftText } from "./file-parser";
 import { isValidWizardType } from "./document-utils";
+import { recordAiFromStream } from "./usage-tracker";
 import { WIZARD_LABELS } from "./types";
 import type { CaseFile, FactItem, WizardType, Attachment, RequestedAttachment } from "./types";
 
@@ -54,14 +55,14 @@ export async function triggerPreWarm(
   const initMessage = `Please draft a ${label} based on my Living File. Document type: ${wizardType}`;
 
   let fullResponse = "";
-  try {
-    const stream = anthropic.messages.stream({
-      model: "claude-sonnet-4-6",
-      max_tokens: 3000,
-      system: systemPrompt,
-      messages: [{ role: "user", content: initMessage }],
-    });
+  const stream = anthropic.messages.stream({
+    model: "claude-sonnet-4-6",
+    max_tokens: 3000,
+    system: systemPrompt,
+    messages: [{ role: "user", content: initMessage }],
+  });
 
+  try {
     for await (const event of stream) {
       if (
         event.type === "content_block_delta" &&
@@ -74,6 +75,14 @@ export async function triggerPreWarm(
     console.error("[pre-warm] Anthropic error:", err);
     return;
   }
+
+  await recordAiFromStream(db, stream, {
+    userId,
+    actorId: userId,
+    caseFileId,
+    feature: "pre_warm",
+    metadata: { wizard_type: wizardType },
+  });
 
   const draftText = extractDraftText(fullResponse);
   if (!draftText) {
