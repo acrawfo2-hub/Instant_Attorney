@@ -2053,6 +2053,54 @@ body {
 }
 .lf-instruments { margin-top: 8px; }
 
+/* Instrument row with inline status/action */
+.lf-inst-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.lf-inst-text { flex: 1; }
+.lf-inst-start-btn {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--brand-gold);
+  text-decoration: none;
+  white-space: nowrap;
+  padding: 2px 8px;
+  border: 1px solid rgba(200, 169, 110, 0.4);
+  border-radius: 4px;
+  background: rgba(200, 169, 110, 0.06);
+  transition: background 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+.lf-inst-start-btn:hover {
+  background: rgba(200, 169, 110, 0.14);
+  border-color: var(--brand-gold);
+}
+.lf-inst-pending {
+  font-size: 11px;
+  font-weight: 600;
+  color: #a07a0a;
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border: 1px solid rgba(200, 150, 10, 0.35);
+  border-radius: 4px;
+  background: rgba(200, 150, 10, 0.07);
+}
+.lf-inst-done {
+  font-size: 11px;
+  font-weight: 700;
+  color: #2d7a4f;
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border: 1px solid rgba(45, 122, 79, 0.35);
+  border-radius: 4px;
+  background: rgba(45, 122, 79, 0.07);
+}
+
 /* Wizard grid on dashboard */
 .lf-wizard-hint {
   font-size: 13px;
@@ -3064,6 +3112,46 @@ mark.atty-placeholder {
 .att-upload-zone:hover { background: #f9f8f5; border-color: var(--brand-gold); }
 .att-upload-zone-over { background: #fdf8ec; border-color: var(--brand-gold); color: var(--brand-gold); }
 .att-upload-zone-busy { pointer-events: none; opacity: 0.6; }
+.att-drop-hint { font-size: 12px; color: var(--brand-text-lt); }
+.att-uploading-msg { font-size: 13px; color: var(--brand-text-lt); }
+.att-upload-actions {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  justify-content: center;
+}
+.att-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 5px;
+  border: 1px solid;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.att-upload-btn-analyze {
+  color: var(--brand-gold);
+  border-color: rgba(200, 169, 110, 0.45);
+  background: rgba(200, 169, 110, 0.07);
+}
+.att-upload-btn-analyze:hover {
+  background: rgba(200, 169, 110, 0.15);
+  border-color: var(--brand-gold);
+}
+.att-upload-btn-store {
+  color: var(--brand-text-lt);
+  border-color: var(--brand-border);
+  background: #fff;
+}
+.att-upload-btn-store:hover {
+  background: var(--brand-cream-dk);
+  border-color: var(--brand-text-lt);
+}
+.att-upload-btn:disabled { opacity: 0.5; pointer-events: none; }
 .att-upload-hint { font-size: 11px; color: #bbb; }
 .att-upload-error { font-size: 12px; color: #c0392b; margin: 0; }
 
@@ -3078,15 +3166,19 @@ mark.atty-placeholder {
 }
 .att-item-processing { opacity: 0.75; }
 .att-item-failed { border-color: #f5c6c6; background: #fff8f8; }
+.att-item-stored { background: var(--brand-cream); }
 .att-item-icon { flex-shrink: 0; color: #888; padding-top: 1px; }
 .att-item-body { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .att-item-name { font-size: 13px; font-weight: 600; color: var(--brand-text-dk); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .att-item-summary { font-size: 12px; color: #555; line-height: 1.45; }
 .att-item-urgent { font-size: 11px; color: #c0392b; font-weight: 600; }
+.att-item-processing-note { font-size: 11.5px; color: #888; font-style: italic; }
+.att-item-store-note { font-size: 11px; color: #aaa; }
 .att-item-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
 .att-status { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
 .att-status-processing { color: #888; }
 .att-status-ready { color: #2d7a4f; }
+.att-status-stored { color: #aaa; }
 .att-status-failed { color: #c0392b; }
 .att-view-link { font-size: 11px; color: var(--brand-gold); text-decoration: none; }
 .att-view-link:hover { text-decoration: underline; }

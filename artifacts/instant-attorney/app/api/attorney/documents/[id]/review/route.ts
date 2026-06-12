@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { buildDocReviewPrompt } from "@/lib/prompts";
+import { buildDocReviewUserMessage, DOC_REVIEW_SYSTEM_PROMPT } from "@/lib/prompts";
 import { upsertCriticalReviewChild } from "@/lib/document-utils";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
 import { BYPASS_USER_ID } from "@/lib/types";
@@ -55,7 +55,7 @@ export async function POST(
     updated_at: new Date().toISOString(),
   }).eq("id", id);
 
-  const prompt = buildDocReviewPrompt(
+  const userMessage = buildDocReviewUserMessage(
     doc as Document,
     caseFileRow as CaseFile,
     (factRows ?? []) as FactItem[],
@@ -66,7 +66,14 @@ export async function POST(
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 2000,
-      messages: [{ role: "user", content: prompt }],
+      system: [
+        {
+          type: "text" as const,
+          text: DOC_REVIEW_SYSTEM_PROMPT,
+          cache_control: { type: "ephemeral" as const },
+        },
+      ],
+      messages: [{ role: "user", content: userMessage }],
     });
 
     const reviewReport = response.content

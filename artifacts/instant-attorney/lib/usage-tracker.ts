@@ -59,12 +59,13 @@ export interface UsageEventInput {
 export function computeAiCostUsd(
   model: string,
   inputTokens: number,
-  outputTokens: number
+  outputTokens: number,
+  costMultiplier = 1
 ): number {
   const pricing = MODEL_PRICING_USD_PER_M[model] ?? DEFAULT_MODEL_PRICING;
   const inputCost = (inputTokens / 1_000_000) * pricing.input;
   const outputCost = (outputTokens / 1_000_000) * pricing.output;
-  return roundUsd(inputCost + outputCost);
+  return roundUsd((inputCost + outputCost) * costMultiplier);
 }
 
 /** One month of storage cost attributed at upload time (bytes × $/GB/mo). */
@@ -201,9 +202,16 @@ export async function recordAiUsage(
     outputTokens: number;
     billable?: boolean;
     metadata?: Record<string, unknown>;
+    /** e.g. 0.5 for Anthropic Message Batches API */
+    costMultiplier?: number;
   }
 ): Promise<void> {
-  const costUsd = computeAiCostUsd(params.model, params.inputTokens, params.outputTokens);
+  const costUsd = computeAiCostUsd(
+    params.model,
+    params.inputTokens,
+    params.outputTokens,
+    params.costMultiplier ?? 1
+  );
   await recordUsage(db, {
     userId: params.userId,
     actorId: params.actorId,

@@ -28,6 +28,8 @@ export async function POST(req: NextRequest) {
 
   const file = formData.get("file") as File | null;
   const caseFileId = formData.get("caseFileId") as string | null;
+  // analyze=false → store the file but skip AI processing (default true)
+  const analyze = formData.get("analyze") !== "false";
 
   if (!file || !caseFileId) {
     return NextResponse.json({ error: "file and caseFileId are required" }, { status: 400 });
@@ -88,7 +90,8 @@ export async function POST(req: NextRequest) {
       file_size: file.size,
       storage_path: storagePath,
       attachment_type: attachmentType,
-      status: "processing",
+      // "Store only" uploads skip analysis and go straight to ready
+      status: analyze ? "processing" : "ready",
     })
     .select()
     .single();
@@ -99,10 +102,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Failed to create attachment record" }, { status: 500 });
   }
 
-  // Fire background analysis — do not await
-  processAttachment(serviceDb, attachment.id, buffer, mimeType, file.name, caseFileId).catch(
-    (err) => console.error("[attachments/upload] background processing error:", err)
-  );
+  if (analyze) {
+    // Fire background analysis — do not await
+    processAttachment(serviceDb, attachment.id, buffer, mimeType, file.name, caseFileId).catch(
+      (err) => console.error("[attachments/upload] background processing error:", err)
+    );
+  }
 
-  return NextResponse.json({ id: attachment.id, status: "processing" });
+  return NextResponse.json({ id: attachment.id, status: attachment.status, analyzed: analyze });
 }

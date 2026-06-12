@@ -105,16 +105,22 @@ export function buildFileContext(
     lines.push("", `NEXT ACTION: ${caseFile.next_action}`);
   }
 
-  // Attach analyzed file summaries so all agents have document context
+  // Analyzed docs get full context; stored-only docs appear by name so the
+  // AI knows they exist and can suggest analyzing them if needed.
   const readyAttachments = attachments.filter((a) => a.status === "ready");
   if (readyAttachments.length) {
     lines.push("", "ATTACHED DOCUMENTS:");
     readyAttachments.forEach((a) => {
-      lines.push(`• [${a.attachment_type.toUpperCase()}] ${a.file_name}`);
-      if (a.ai_summary) lines.push(`  Summary: ${a.ai_summary}`);
-      if (a.case_relevance) lines.push(`  Relevance: ${a.case_relevance}`);
-      if (a.urgent_findings && a.urgent_findings !== "None identified") {
-        lines.push(`  [URGENT] ${a.urgent_findings}`);
+      if (a.ai_summary) {
+        lines.push(`• [${a.attachment_type.toUpperCase()}] ${a.file_name}`);
+        lines.push(`  Summary: ${a.ai_summary}`);
+        if (a.case_relevance) lines.push(`  Relevance: ${a.case_relevance}`);
+        if (a.urgent_findings && a.urgent_findings !== "None identified") {
+          lines.push(`  [URGENT] ${a.urgent_findings}`);
+        }
+      } else {
+        // Stored only — present but not AI-analyzed yet
+        lines.push(`• [STORED — not yet analyzed] ${a.file_name}`);
       }
     });
   }
@@ -399,6 +405,30 @@ Required outputs for ---WIZARD COMPLETE---:
 - FIT_TO_CASE: how this document relates to the overall matter strategy
 
 Opening: Ask the client to paste or describe the document they want reviewed.`,
+
+  general_document: `${wizardBase(
+    "Legal Document",
+    "Draft the specific legal instrument identified above in the 'Document being drafted' line. Determine the correct format, structure, and tone from the instrument name and the client's Living File — whether that is a formal letter, regulatory filing, internal policy, legal memorandum, cease and desist, arbitration demand, or any other legal instrument."
+  )}
+
+Format identification — apply the correct legal structure for the instrument:
+- Formal letters (cease & desist, strongly worded, cover, notice): attorney letterhead format, formal salutation, dated, professional close, signature block
+- Regulatory filings (EEOC charge, NLRB charge, state agency complaint, OSHA filing): follow the standard structure for that specific agency and form
+- Internal policies / procedures manuals: defined purpose, scope, numbered sections, definitions, enforcement and amendment clauses
+- Legal memoranda: TO / FROM / DATE / RE header, Issue, Brief Answer, Analysis (IRAC), Conclusion
+- Notices (default, cure, termination, breach): formal date, parties identified by defined terms, specific obligation at issue, cure period if applicable, governing law
+- Arbitration / mediation demands: parties, governing arbitration clause, claims asserted, relief requested
+- Other instruments: apply the structure a senior attorney at a BigLaw firm would use for this specific instrument type
+
+Required fields to gather (adapt to instrument):
+- The specific parties involved (full legal names, roles, addresses)
+- Key facts relevant to this instrument
+- Any deadlines, cure periods, or response windows
+- Governing jurisdiction and law
+- Who signs, who receives, and how it is to be delivered
+- Any exhibits, attachments, or enclosures referenced
+
+Opening: Read the "Document being drafted" line at the top of your context. Confirm what the instrument is and what you understand it to accomplish from the Living File. If you have enough to begin, produce the full draft immediately and then ask only for what is missing. Do not ask for information you already have from the file.`,
 };
 
 // ── Wizard field hints (used by the drafter API to give document-specific guidance) ──
@@ -410,6 +440,7 @@ export const WIZARD_FIELD_HINTS: Record<WizardType, string> = {
   draft_waiver: `Required fields: waiver type (liability release / photo consent / medical consent / indemnification), releasor (name and description — who gives up rights), releasee (name and description — who is protected), specific rights or claims being released, activities or events covered, duration of the waiver, consideration (what the releasor receives), governing law and jurisdiction, voluntary acknowledgment language, signatures block.`,
   wills_trusts: `Required fields vary by instrument — identify instrument first (will / living trust / POA / healthcare directive). For a will: testator full legal name, DOB, state of residence, executor and alternate executor, beneficiaries with shares, specific bequests, residuary clause, witnesses/notary requirements.`,
   doc_review: `Required fields: document type, parties, document purpose/summary, favorable provisions, unfavorable provisions or missing protections, ambiguous language, red flags, recommended edits, fit to overall case strategy.`,
+  general_document: `Required fields vary by instrument — identify instrument type from the "Document being drafted" line, then gather: all parties (full legal names, roles, addresses), specific purpose of the instrument, key facts and dates, governing jurisdiction, response/cure deadlines if applicable, who signs and who receives the document. Apply the correct legal format for this specific instrument type (letter, memo, filing, policy, notice, etc.).`,
 };
 
 // ── Drafter agent system prompt ──────────────────────────────────────────────
@@ -592,6 +623,61 @@ PRIORITY EDIT LIST:
 ---END REVIEW---
 
 Be precise. Reference specific sections or language where possible. The Priority Edit List becomes the drafter's work order — write it as instructions, not observations.`;
+}
+
+// Static instructions extracted from buildDocReviewPrompt for prompt caching
+export const DOC_REVIEW_SYSTEM_PROMPT = `You are conducting a 48-hour attorney document review for Crawford Law PLLC. Produce a structured review REPORT. Do NOT produce a revised draft. Produce EXACTLY this format:
+
+---DOCUMENT REVIEW---
+DOCUMENT OVERVIEW:
+[What this document does, parties, purpose — 2-3 sentences]
+
+CONSISTENCY WITH LIVING FILE:
+[Does the document reflect the confirmed facts and goals? Note any discrepancies — be specific]
+
+STRUCTURAL ANALYSIS:
+[Is the document complete? Any missing sections, clauses, or execution formalities?]
+
+STRENGTH ANALYSIS:
+• [Protective provision, well-drafted clause, or favorable language — one per bullet]
+
+WEAKNESS ANALYSIS:
+• [Problematic provision, missing protection, or ambiguous language — one per bullet with specific line reference where possible]
+
+PLACEHOLDER AUDIT:
+BLOCKING:
+• [[placeholder]] — [What must be resolved before this document is usable]
+NON-BLOCKING:
+• [[placeholder]] — [Can be resolved at execution or is optional]
+
+LEGAL RISK FLAGS:
+• [Anything requiring immediate attorney attention — or "None identified"]
+
+PRIORITY EDIT LIST:
+1. [Specific directive for the drafter — what to change, add, or remove and why]
+2. [Next priority edit]
+3. [Continue as needed — numbered, most critical first]
+---END REVIEW---
+
+Be precise. Reference specific sections or language where possible. The Priority Edit List becomes the drafter's work order — write it as instructions, not observations.`;
+
+// Dynamic part only (for use with DOC_REVIEW_SYSTEM_PROMPT as system)
+export function buildDocReviewUserMessage(
+  doc: Document,
+  caseFile: CaseFile,
+  facts: FactItem[],
+  attachments: Attachment[]
+): string {
+  const fileContext = buildFileContext(caseFile, facts, attachments);
+  const draftText = doc.draft_text ?? "(No draft text — reviewing structured data only)";
+  return `${fileContext}
+
+---DOCUMENT UNDER REVIEW---
+Type: ${doc.doc_type.replace(/_/g, " ")}
+Title: ${doc.title}
+
+${draftText}
+---END DOCUMENT---`;
 }
 
 export function buildMergePrompt(doc: Document, reviewReport: string): string {
