@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { WIZARD_LABELS } from "@/lib/types";
+import { docTypeLabel } from "@/lib/types";
 import type { Document, CaseFile, Profile } from "@/lib/types";
 import AutoReviewToggle from "@/components/AutoReviewToggle";
 import AttorneyFileLog from "@/components/AttorneyFileLog";
@@ -119,7 +119,7 @@ export default async function AttorneyPage() {
                     <td className="atty-td-sla"><ReviewClock submittedAt={doc.submitted_at ?? null} /></td>
                     <td>{doc.profiles?.full_name ?? doc.profiles?.email ?? "Unknown"}</td>
                     <td className="atty-td-doc">
-                      {WIZARD_LABELS[doc.doc_type as keyof typeof WIZARD_LABELS] ?? doc.doc_type}: {doc.title}
+                      {docTypeLabel(doc.doc_type)}: {doc.title}
                       {doc.review_status === "reviewing" && (
                         <span className="atty-inline-badge">AI reviewing…</span>
                       )}

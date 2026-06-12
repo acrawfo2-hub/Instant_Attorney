@@ -1,6 +1,6 @@
 import { Resend } from "resend";
 import type { Document, CaseFile, Profile, ConsultRequest } from "./types";
-import { WIZARD_LABELS } from "./types";
+import { docTypeLabel } from "./types";
 
 let _resend: Resend | null = null;
 function getResend(): Resend {
@@ -23,7 +23,7 @@ export async function notifyAttorneyDocumentReady(
     return;
   }
 
-  const docLabel = WIZARD_LABELS[document.doc_type] ?? document.doc_type;
+  const docLabel = docTypeLabel(document.doc_type);
   const reviewUrl = `https://instant-attorney.com/attorney/review/${document.id}`;
 
   await getResend().emails.send({
@@ -71,7 +71,7 @@ export async function notifyClientDocumentApproved(
 ): Promise<void> {
   if (!process.env.RESEND_API_KEY) return;
 
-  const docLabel = WIZARD_LABELS[document.doc_type] ?? document.doc_type;
+  const docLabel = docTypeLabel(document.doc_type);
 
   await getResend().emails.send({
     from: FROM_EMAIL,

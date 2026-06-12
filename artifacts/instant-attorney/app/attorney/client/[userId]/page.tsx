@@ -1,7 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { WIZARD_LABELS } from "@/lib/types";
+import { docTypeLabel } from "@/lib/types";
 import type { CaseFile, Document, Attachment, Profile } from "@/lib/types";
 
 interface CaseFileWithDocs extends CaseFile {
@@ -220,7 +220,7 @@ export default async function ClientFilePage({
                       >
                         <div className="atty-doc-header">
                           <span className="atty-doc-type">
-                            {WIZARD_LABELS[doc.doc_type] ?? doc.doc_type}
+                            {docTypeLabel(doc.doc_type)}
                           </span>
                           <span
                             className={`atty-badge ${STATUS_COLORS[doc.status] ?? "atty-badge-gray"}`}
