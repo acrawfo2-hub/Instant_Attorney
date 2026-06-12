@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { buildDocReviewPrompt } from "@/lib/prompts";
+import { upsertCriticalReviewChild } from "@/lib/document-utils";
 import { BYPASS_USER_ID } from "@/lib/types";
 import type { Document, CaseFile, FactItem, Attachment } from "@/lib/types";
 
@@ -26,7 +27,6 @@ export async function POST(
     userId = user.id;
   }
 
-  // Attorney-only check
   const { data: profile } = await db.from("profiles").select("is_attorney").eq("id", userId).single();
   if (!profile?.is_attorney) {
     return NextResponse.json({ error: "Attorney access required" }, { status: 403 });
@@ -36,6 +36,7 @@ export async function POST(
     .from("documents")
     .select("*")
     .eq("id", id)
+    .is("parent_document_id", null)
     .single();
 
   if (!doc) return NextResponse.json({ error: "Document not found" }, { status: 404 });
@@ -48,7 +49,6 @@ export async function POST(
 
   if (!caseFileRow) return NextResponse.json({ error: "Case file not found" }, { status: 404 });
 
-  // Mark as reviewing
   await db.from("documents").update({
     review_status: "reviewing",
     updated_at: new Date().toISOString(),
@@ -73,13 +73,17 @@ export async function POST(
       .map((b) => b.text)
       .join("");
 
+    const child = await upsertCriticalReviewChild(db, doc as Document, reviewReport);
+
     await db.from("documents").update({
-      review_report: reviewReport,
       review_status: "review_ready",
       updated_at: new Date().toISOString(),
     }).eq("id", id);
 
-    return NextResponse.json({ review_report: reviewReport });
+    return NextResponse.json({
+      review_report: reviewReport,
+      critical_review_document_id: child?.id ?? null,
+    });
   } catch (err) {
     console.error("[attorney/review] error:", err);
     await db.from("documents").update({

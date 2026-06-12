@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { generateDocument } from "@/lib/doc-generator";
-import { notifyAttorneyDocumentReady } from "@/lib/notify";
+import { finalizeDocumentSubmission } from "@/lib/document-utils";
 import { BYPASS_USER_ID, WIZARD_LABELS } from "@/lib/types";
-import type { CaseFile, FactItem, Profile, WizardType, Document } from "@/lib/types";
+import type { CaseFile, FactItem, Profile, WizardType } from "@/lib/types";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
@@ -67,8 +67,9 @@ export async function POST(req: NextRequest) {
       user_id: userId,
       doc_type: wizardType,
       title: docTitle,
-      status: "pending_review",
+      status: "draft",
       content_json: wizardData,
+      draft_text: null,
     })
     .select("*")
     .single();
@@ -77,10 +78,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Failed to save document record" }, { status: 500 });
   }
 
-  // Notify attorney asynchronously — don't block response
-  notifyAttorneyDocumentReady(docRecord as Document, caseFile, profile).catch((err) =>
-    console.error("[documents/generate] notify error:", err)
-  );
+  await finalizeDocumentSubmission(db, docRecord.id, userId);
 
   // Return the .docx as download (client saves for display; attorney downloads from dashboard)
   return new Response(new Uint8Array(buffer), {

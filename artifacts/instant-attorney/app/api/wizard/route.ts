@@ -2,8 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { DRAFTER_SYSTEM_PROMPT, WIZARD_FIELD_HINTS, buildFileContext } from "@/lib/prompts";
-import { parseAndUpdateFile, extractDraftText, isDraftReadyForReview } from "@/lib/file-parser";
-import { findReusableDocument, finalizeDocumentSubmission } from "@/lib/document-utils";
+import { parseAndUpdateFile, extractDraftText } from "@/lib/file-parser";
+import { findReusableDocument } from "@/lib/document-utils";
 import { BYPASS_USER_ID, WIZARD_LABELS } from "@/lib/types";
 import type { WizardType, CaseFile, FactItem, Attachment, RequestedAttachment } from "@/lib/types";
 
@@ -106,16 +106,14 @@ export async function POST(req: NextRequest) {
 
       // After stream: update the document record with latest draft text
       const draftText = extractDraftText(fullResponse);
-      const readyForReview = isDraftReadyForReview(fullResponse);
 
       if (draftText) {
         const label = WIZARD_LABELS[wizardType as WizardType] ?? wizardType;
         const now = new Date().toISOString();
         const docData = {
           draft_text: draftText,
-          status: readyForReview ? "pending_review" : "draft",
+          status: "draft",
           updated_at: now,
-          ...(readyForReview ? { submitted_at: now } : {}),
         };
 
         let savedDocId = documentId as string | undefined;
@@ -146,10 +144,6 @@ export async function POST(req: NextRequest) {
 
         if (savedDocId) {
           controller.enqueue(encoder.encode(`\x00DOC:${savedDocId}\x00`));
-
-          if (readyForReview) {
-            await finalizeDocumentSubmission(db, savedDocId, userId);
-          }
         }
       }
 

@@ -1,8 +1,9 @@
 import Link from "next/link";
 import AttachmentPanel from "@/components/AttachmentPanel";
+import ReviewSlaClock from "@/components/ReviewSlaClock";
 import type { CaseFile, FactItem, Document, Profile, WizardType, ConsultRequest } from "@/lib/types";
 import { isValidWizardType } from "@/lib/document-utils";
-import { WIZARD_LABELS } from "@/lib/types";
+import { WIZARD_LABELS, docTypeLabel } from "@/lib/types";
 
 // ── Document status display ──────────────────────────────────────────────────
 
@@ -31,6 +32,15 @@ function DocStatusLine({ doc }: { doc: Document }) {
       <div className="lf-doc-status-group">
         <span className={`lf-doc-status ${cls}`}>{label}</span>
         <span className="lf-doc-not-submitted">Not submitted</span>
+      </div>
+    );
+  }
+
+  if (doc.status === "pending_review" && doc.submitted_at) {
+    return (
+      <div className="lf-doc-status-group">
+        <span className={`lf-doc-status ${cls}`}>{label}</span>
+        <ReviewSlaClock submittedAt={doc.submitted_at} compact />
       </div>
     );
   }
@@ -104,6 +114,7 @@ interface ClientFileViewProps {
   caseFile: CaseFile;
   facts: FactItem[];
   documents: Document[];
+  childDocuments?: Document[];
   preWarmedByType: Record<string, string>;
   mode: "client" | "attorney";
   clientProfile?: Profile;
@@ -115,12 +126,18 @@ export default function ClientFileView({
   caseFile,
   facts,
   documents,
+  childDocuments = [],
   preWarmedByType,
   mode,
   clientProfile,
   consultRequest,
   hasConsultSub = false,
 }: ClientFileViewProps) {
+  const childrenByParent = childDocuments.reduce<Record<string, Document[]>>((acc, child) => {
+    if (!child.parent_document_id) return acc;
+    (acc[child.parent_document_id] ??= []).push(child);
+    return acc;
+  }, {});
   const confirmed = facts.filter((f) => f.status === "confirmed");
   const gaps = facts.filter((f) => f.status === "gap");
   const strategy = caseFile.legal_strategy ?? null;
@@ -371,15 +388,36 @@ export default function ClientFileView({
         {documents.length > 0 ? (
           <div className="lf-doc-list">
             {documents.map((doc) => {
+              const children = childrenByParent[doc.id] ?? [];
+              const secondDraft = children.find((c) => c.doc_type === "second_draft");
               const docRow = (
                 <div className="lf-doc-inner">
                   <div className="lf-doc-info">
                     <span className="lf-doc-title">{doc.title}</span>
-                    <span className="lf-doc-type">{WIZARD_LABELS[doc.doc_type as WizardType] ?? doc.doc_type}</span>
+                    <span className="lf-doc-type">{docTypeLabel(doc.doc_type)}</span>
                   </div>
                   <div className="lf-doc-right">
                     <DocStatusLine doc={doc} />
                     <span className="lf-doc-date">{new Date(doc.created_at).toLocaleDateString()}</span>
+                    {!isAttorney && doc.status === "approved" && (
+                      <div className="lf-doc-downloads">
+                        {secondDraft?.draft_text && (
+                          <a href={`/api/documents/${secondDraft.id}/download`} className="lf-doc-download-link">
+                            Download approved document (.docx)
+                          </a>
+                        )}
+                        {doc.draft_text && (
+                          <a href={`/api/documents/${doc.id}/download`} className="lf-doc-download-link lf-doc-download-link-muted">
+                            Download original wizard draft (.docx)
+                          </a>
+                        )}
+                      </div>
+                    )}
+                    {!isAttorney && doc.status === "pending_review" && doc.draft_text && (
+                      <a href={`/api/documents/${doc.id}/download`} className="lf-doc-download-link">
+                        Download submitted draft (.docx)
+                      </a>
+                    )}
                   </div>
                 </div>
               );

@@ -4344,3 +4344,115 @@ mark.atty-placeholder {
   background: var(--brand-white);
   color: var(--brand-text-dk);
 }
+
+/* ── Review SLA clock (client) ─────────────────────────────────────────────── */
+.sla-clock { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.sla-clock-compact { margin-top: 4px; }
+.sla-clock-time { font-size: 12px; color: var(--brand-navy); font-weight: 600; }
+.sla-clock-submitted { font-size: 11px; color: var(--brand-text-lt); }
+.sla-clock-overdue { font-size: 12px; color: #b91c1c; font-weight: 600; }
+
+/* ── Attorney two-document review layout ─────────────────────────────────── */
+.atty-review-body { max-width: 1400px; }
+.atty-two-doc-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+@media (max-width: 1100px) {
+  .atty-two-doc-grid { grid-template-columns: 1fr; }
+}
+.atty-standalone-doc {
+  background: var(--brand-white);
+  border: 1px solid var(--brand-border);
+  border-radius: var(--brand-r-lg);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 320px;
+}
+.atty-standalone-doc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  border-bottom: 1px solid var(--brand-border);
+  padding-bottom: 12px;
+}
+.atty-standalone-doc-header h2 { font-size: 15px; margin: 0; }
+.atty-standalone-doc-sub { font-size: 12px; color: var(--brand-text-lt); margin: 4px 0 0 0; }
+.atty-living-file-link {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand-navy);
+  text-decoration: none;
+}
+.atty-living-file-link:hover { text-decoration: underline; }
+.atty-inline-badge {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+.atty-inline-badge-ready { background: #dcfce7; color: #15803d; }
+.atty-second-draft-workspace {
+  background: var(--brand-white);
+  border: 1px solid var(--brand-border);
+  border-radius: var(--brand-r-lg);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.atty-second-draft-workspace h2 { font-size: 16px; margin: 0; }
+.atty-second-draft-hint { font-size: 13px; color: var(--brand-text-lt); margin: 0; line-height: 1.5; }
+.atty-second-draft-textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--brand-border);
+  border-radius: var(--brand-r-md);
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+  background: var(--brand-cream);
+  color: var(--brand-text-dk);
+  box-sizing: border-box;
+}
+.atty-second-draft-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.atty-btn-secondary { background: var(--brand-cream); color: var(--brand-text-dk); border: 1px solid var(--brand-border); }
+.atty-btn-primary { background: var(--brand-navy); color: var(--brand-cream-text); border: none; }
+.atty-btn-primary:hover:not(:disabled) { background: var(--brand-navy-md); }
+.atty-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.atty-fitness-warning {
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  border-radius: var(--brand-r-md);
+  padding: 12px 14px;
+  font-size: 13px;
+  color: #92400e;
+}
+.atty-fitness-warning p { margin: 6px 0 0 0; line-height: 1.5; }
+.atty-second-draft-message { font-size: 13px; color: var(--brand-text-md); margin: 0; }
+.atty-second-draft-preview { margin-top: 4px; }
+.wiz-submit-ready {
+  font-size: 13px;
+  font-weight: 600;
+  color: #15803d;
+  margin: 0 0 8px 0;
+}
+.lf-doc-downloads { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.lf-doc-download-link {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--brand-navy);
+  text-decoration: none;
+}
+.lf-doc-download-link:hover { text-decoration: underline; }
+.lf-doc-download-link-muted { color: var(--brand-text-lt); font-weight: 500; }

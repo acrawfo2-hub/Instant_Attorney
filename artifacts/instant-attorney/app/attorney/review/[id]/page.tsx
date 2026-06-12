@@ -2,7 +2,9 @@
 
 import { use, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import type { Attachment } from "@/lib/types";
+import Link from "next/link";
+import type { Attachment, Document } from "@/lib/types";
+import { docTypeLabel } from "@/lib/types";
 
 interface DocumentDetail {
   id: string;
@@ -12,11 +14,13 @@ interface DocumentDetail {
   content_json: Record<string, unknown>;
   draft_text: string | null;
   attorney_notes: string | null;
+  attorney_second_draft_prompt: string | null;
   review_report: string | null;
-  improved_draft_text: string | null;
   review_status: string | null;
+  submitted_at: string | null;
   created_at: string;
   case_file_id: string;
+  user_id: string;
   case_files: {
     id: string;
     matter_type: string | null;
@@ -24,31 +28,58 @@ interface DocumentDetail {
     summary: string | null;
     goals: string[];
     next_action: string | null;
-    pre_consult_memo: string | null;
   };
   profiles: {
     full_name: string | null;
     email: string;
     phone: string | null;
   };
+  child_documents?: Document[];
 }
 
-type AIPanel = "pre_consult" | "review" | "improved_draft";
+function renderDocumentText(text: string) {
+  return text.split("\n\n").map((para, i) => (
+    <p key={i}
+      dangerouslySetInnerHTML={{
+        __html: para
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/\[\[([^\]]+)\]\]/g, '<mark class="atty-placeholder">[[<em>$1</em>]]</mark>')
+          .replace(/\n/g, "<br>"),
+      }}
+    />
+  ));
+}
+
+function stripReviewMarkers(text: string) {
+  return text
+    .replace(/---DOCUMENT REVIEW---\n?/, "")
+    .replace(/\n?---END REVIEW---/, "")
+    .trim();
+}
 
 export default function ReviewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
   const [doc, setDoc] = useState<DocumentDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [notes, setNotes] = useState("");
+  const [clientNotes, setClientNotes] = useState("");
+  const [secondDraftPrompt, setSecondDraftPrompt] = useState("");
+  const [promptSaved, setPromptSaved] = useState(false);
+  const [savingPrompt, setSavingPrompt] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-
-  const [activePanel, setActivePanel] = useState<AIPanel | null>(null);
-  const [aiRunning, setAiRunning] = useState<AIPanel | null>(null);
+  const [aiRunning, setAiRunning] = useState(false);
+  const [generatingSecondDraft, setGeneratingSecondDraft] = useState(false);
   const [aiError, setAiError] = useState("");
+  const [secondDraftMessage, setSecondDraftMessage] = useState("");
+  const [fitnessWarning, setFitnessWarning] = useState<{
+    rationale: string;
+    recommendedType: string | null;
+  } | null>(null);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -61,9 +92,10 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
   async function load() {
     const res = await fetch(`/api/documents/${id}`);
     if (res.ok) {
-      const data = await res.json();
+      const data = await res.json() as DocumentDetail;
       setDoc(data);
-      setNotes(data.attorney_notes ?? "");
+      setClientNotes(data.attorney_notes ?? "");
+      setSecondDraftPrompt(data.attorney_second_draft_prompt ?? "");
       const caseFileId = data.case_files?.id;
       if (caseFileId) {
         const attRes = await fetch(`/api/attachments?caseFileId=${caseFileId}`);
@@ -72,7 +104,6 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
           setAttachments(attData.attachments ?? []);
         }
       }
-      // If auto-review is in progress, start polling
       if (data.review_status === "reviewing" || data.review_status === "merging") {
         startPolling();
       }
@@ -87,81 +118,90 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
     pollRef.current = setInterval(async () => {
       const res = await fetch(`/api/documents/${id}`);
       if (res.ok) {
-        const data = await res.json();
+        const data = await res.json() as DocumentDetail;
         setDoc(data);
         if (data.review_status !== "reviewing" && data.review_status !== "merging") {
           clearInterval(pollRef.current!);
           pollRef.current = null;
-          setAiRunning(null);
+          setAiRunning(false);
+          setGeneratingSecondDraft(false);
         }
       }
     }, 4000);
   }
 
-  async function runAI(panel: AIPanel) {
+  async function runManualReview() {
     if (aiRunning) return;
-    setAiRunning(panel);
+    setAiRunning(true);
     setAiError("");
-    setActivePanel(panel);
-
-    let endpoint = "";
-    let method = "POST";
-
-    if (panel === "pre_consult") {
-      endpoint = `/api/attorney/case-files/${doc!.case_files.id}/pre-consult`;
-    } else if (panel === "review") {
-      endpoint = `/api/attorney/documents/${id}/review`;
-    } else if (panel === "improved_draft") {
-      endpoint = `/api/attorney/documents/${id}/merge`;
-    }
-
     try {
-      const res = await fetch(endpoint, { method });
+      const res = await fetch(`/api/attorney/documents/${id}/review`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) {
-        setAiError(data.error ?? "Generation failed");
-        setAiRunning(null);
+        setAiError(data.error ?? "Review failed");
+        setAiRunning(false);
+        return;
+      }
+      await load();
+    } catch {
+      setAiError("Network error — please try again");
+    }
+    setAiRunning(false);
+  }
+
+  async function saveSecondDraftPrompt() {
+    setSavingPrompt(true);
+    setPromptSaved(false);
+    try {
+      const res = await fetch(`/api/attorney/documents/${id}/second-draft-prompt`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: secondDraftPrompt }),
+      });
+      if (res.ok) setPromptSaved(true);
+    } finally {
+      setSavingPrompt(false);
+    }
+  }
+
+  async function requestSecondDraft() {
+    if (generatingSecondDraft || !reviewText) return;
+    setGeneratingSecondDraft(true);
+    setSecondDraftMessage("");
+    setFitnessWarning(null);
+    setAiError("");
+
+    try {
+      await saveSecondDraftPrompt();
+      const res = await fetch(`/api/attorney/documents/${id}/second-draft`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: secondDraftPrompt }),
+      });
+      const data = await res.json();
+
+      if (res.status === 422 && data.fitness) {
+        setFitnessWarning({
+          rationale: data.fitness.rationale,
+          recommendedType: data.fitness.recommendedType ?? data.fitness.recommended_type ?? null,
+        });
+        setSecondDraftMessage(data.error ?? "Document type may not be appropriate for this matter.");
+        setGeneratingSecondDraft(false);
         return;
       }
 
-      // Update local doc state with new data
-      if (panel === "pre_consult" && data.pre_consult_memo) {
-        setDoc((prev) => prev ? {
-          ...prev,
-          case_files: { ...prev.case_files, pre_consult_memo: data.pre_consult_memo },
-        } : prev);
-      } else if (panel === "review" && data.review_report) {
-        setDoc((prev) => prev ? { ...prev, review_report: data.review_report, review_status: "review_ready" } : prev);
-      } else if (panel === "improved_draft" && data.improved_draft_text) {
-        setDoc((prev) => prev ? { ...prev, improved_draft_text: data.improved_draft_text, review_status: "merged" } : prev);
+      if (!res.ok) {
+        setSecondDraftMessage(data.error ?? "Second draft generation failed.");
+        setGeneratingSecondDraft(false);
+        return;
       }
-    } catch {
-      setAiError("Network error — please try again");
-    }
-    setAiRunning(null);
-  }
 
-  async function runFullReview() {
-    if (aiRunning) return;
-    setAiRunning("review");
-    setAiError("");
-    setActivePanel("review");
-    try {
-      const reviewRes = await fetch(`/api/attorney/documents/${id}/review`, { method: "POST" });
-      const reviewData = await reviewRes.json();
-      if (!reviewRes.ok) { setAiError(reviewData.error ?? "Review failed"); setAiRunning(null); return; }
-      setDoc((prev) => prev ? { ...prev, review_report: reviewData.review_report, review_status: "review_ready" } : prev);
-
-      setAiRunning("improved_draft");
-      setActivePanel("improved_draft");
-      const mergeRes = await fetch(`/api/attorney/documents/${id}/merge`, { method: "POST" });
-      const mergeData = await mergeRes.json();
-      if (!mergeRes.ok) { setAiError(mergeData.error ?? "Merge failed"); setAiRunning(null); return; }
-      setDoc((prev) => prev ? { ...prev, improved_draft_text: mergeData.improved_draft_text, review_status: "merged" } : prev);
+      setSecondDraftMessage("Second draft generated successfully.");
+      await load();
     } catch {
-      setAiError("Network error — please try again");
+      setSecondDraftMessage("Network error — please try again.");
     }
-    setAiRunning(null);
+    setGeneratingSecondDraft(false);
   }
 
   async function handleAction(action: "approve" | "request_changes") {
@@ -172,7 +212,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
     const res = await fetch(`/api/documents/${id}/approve`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, attorney_notes: notes }),
+      body: JSON.stringify({ action, attorney_notes: clientNotes }),
     });
 
     if (res.ok) {
@@ -192,35 +232,18 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
     return (
       <div className="atty-review-done">
         <h2>Review submitted</h2>
-        <p>The client has been notified.</p>
+        <p>Your decision has been recorded.</p>
         <button onClick={() => router.push("/attorney")} className="atty-btn">Back to Dashboard</button>
       </div>
     );
   }
 
-  const hasReview = !!doc.review_report;
-  const hasImprovedDraft = !!doc.improved_draft_text;
-  const hasPreConsult = !!doc.case_files.pre_consult_memo;
-  const isAutoReviewing = doc.review_status === "reviewing" || doc.review_status === "merging";
-
-  function renderDocumentText(text: string) {
-    return text.split("\n\n").map((para, i) => (
-      <p key={i}
-        dangerouslySetInnerHTML={{
-          __html: para
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/\[\[([^\]]+)\]\]/g, '<mark class="atty-placeholder">[[<em>$1</em>]]</mark>')
-            .replace(/\n/g, "<br>"),
-        }}
-      />
-    ));
-  }
-
-  function renderPreformatted(text: string) {
-    return <pre className="atty-review-preformatted">{text}</pre>;
-  }
+  const children = doc.child_documents ?? [];
+  const criticalReview = children.find((c) => c.doc_type === "critical_review");
+  const secondDraft = children.find((c) => c.doc_type === "second_draft");
+  const reviewText = criticalReview?.draft_text ?? doc.review_report;
+  const isReviewing = doc.review_status === "reviewing" || (aiRunning && !generatingSecondDraft);
+  const isMerging = doc.review_status === "merging" || generatingSecondDraft;
 
   return (
     <div className="atty-review-shell">
@@ -229,14 +252,16 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
         <div className="atty-review-title">
           <h1>{doc.title}</h1>
           <span className="atty-badge atty-badge-amber">{doc.status.replace(/_/g, " ")}</span>
-          {isAutoReviewing && (
-            <span className="atty-badge atty-badge-blue atty-badge-pulse">AI reviewing…</span>
+          {isReviewing && (
+            <span className="atty-badge atty-badge-blue atty-badge-pulse">Generating review memo…</span>
+          )}
+          {isMerging && (
+            <span className="atty-badge atty-badge-blue atty-badge-pulse">Generating 2nd draft…</span>
           )}
         </div>
       </header>
 
       <div className="atty-review-body">
-        {/* Sidebar */}
         <div className="atty-review-sidebar">
           <div className="atty-review-section">
             <h3>Client</h3>
@@ -251,38 +276,24 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
             {doc.case_files.summary && <p className="atty-review-summary">{doc.case_files.summary}</p>}
           </div>
 
-          {doc.case_files.goals?.length > 0 && (
-            <div className="atty-review-section">
-              <h3>Goals</h3>
-              <ul>
-                {doc.case_files.goals.map((g, i) => <li key={i}>{g}</li>)}
-              </ul>
-            </div>
-          )}
-
-          {doc.case_files.next_action && (
-            <div className="atty-review-section">
-              <h3>Next Action</h3>
-              <p>{doc.case_files.next_action}</p>
-            </div>
-          )}
+          <div className="atty-review-section">
+            <h3>Living File</h3>
+            <Link href={`/attorney/client/${doc.user_id}`} className="atty-living-file-link">
+              View full client file →
+            </Link>
+          </div>
 
           <div className="atty-review-section">
             <h3>Submitted</h3>
-            <p>{new Date(doc.created_at).toLocaleString()}</p>
+            <p>{doc.submitted_at ? new Date(doc.submitted_at).toLocaleString() : new Date(doc.created_at).toLocaleString()}</p>
           </div>
 
           {attachments.length > 0 && (
             <div className="atty-review-section">
-              <h3>Attached Documents</h3>
+              <h3>Attachments</h3>
               {attachments.map((att) => (
                 <div key={att.id} className="atty-att-item">
                   <span className="atty-att-name">{att.file_name}</span>
-                  {att.ai_summary && <span className="atty-att-summary">{att.ai_summary}</span>}
-                  {att.case_relevance && <span className="atty-att-relevance">{att.case_relevance}</span>}
-                  {att.urgent_findings && att.urgent_findings !== "None identified" && (
-                    <span className="atty-att-urgent">{att.urgent_findings}</span>
-                  )}
                   {att.status === "ready" && (
                     <a href={`/api/attachments/${att.id}`} target="_blank" rel="noopener noreferrer" className="atty-att-link">
                       View / Download
@@ -293,198 +304,149 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
             </div>
           )}
 
-          {/* AI Action Buttons */}
           <div className="atty-review-section atty-ai-actions">
-            <h3>AI Tools</h3>
+            <h3>Critical Review</h3>
             <button
-              className={`atty-ai-btn${hasPreConsult ? " atty-ai-btn-done" : ""}`}
-              onClick={() => { setActivePanel("pre_consult"); if (!hasPreConsult) runAI("pre_consult"); }}
-              disabled={!!aiRunning}
+              className={`atty-ai-btn${reviewText ? " atty-ai-btn-done" : ""}`}
+              onClick={runManualReview}
+              disabled={isReviewing}
             >
-              {aiRunning === "pre_consult" ? "Generating…" : hasPreConsult ? "Pre-Consult Memo ✓" : "Pre-Consult Review"}
+              {isReviewing ? "Generating…" : reviewText ? "Re-run Critical Review" : "Run Critical Review"}
             </button>
-            <button
-              className={`atty-ai-btn${hasReview ? " atty-ai-btn-done" : ""}`}
-              onClick={() => { setActivePanel("review"); if (!hasReview) runAI("review"); }}
-              disabled={!!aiRunning || isAutoReviewing}
-            >
-              {aiRunning === "review" || doc.review_status === "reviewing"
-                ? "Reviewing…"
-                : hasReview ? "Doc Review ✓" : "Run Doc Review"}
-            </button>
-            <button
-              className={`atty-ai-btn${hasImprovedDraft ? " atty-ai-btn-done" : ""}`}
-              onClick={() => { setActivePanel("improved_draft"); if (!hasImprovedDraft && hasReview) runAI("improved_draft"); }}
-              disabled={!!aiRunning || !hasReview || doc.review_status === "merging"}
-              title={!hasReview ? "Run document review first" : undefined}
-            >
-              {aiRunning === "improved_draft" || doc.review_status === "merging"
-                ? "Merging…"
-                : hasImprovedDraft ? "Improved Draft ✓" : "Merge Draft"}
-            </button>
-            {!hasReview && !hasImprovedDraft && (
-              <button
-                className="atty-ai-btn atty-ai-btn-full"
-                onClick={runFullReview}
-                disabled={!!aiRunning || isAutoReviewing}
-              >
-                {aiRunning ? "Running…" : "Full Review + Merge"}
-              </button>
-            )}
             {aiError && <p className="atty-ai-error">{aiError}</p>}
           </div>
         </div>
 
-        {/* Main content */}
         <div className="atty-review-content">
+          <div className="atty-two-doc-grid">
+            <section className="atty-standalone-doc">
+              <div className="atty-standalone-doc-header">
+                <div>
+                  <h2>Document 1 — Client Draft</h2>
+                  <p className="atty-standalone-doc-sub">{docTypeLabel(doc.doc_type)} · original wizard output</p>
+                </div>
+                {doc.draft_text && (
+                  <a href={`/api/documents/${id}/download`} download className="atty-btn atty-btn-download">
+                    Download .docx
+                  </a>
+                )}
+              </div>
+              {doc.draft_text ? (
+                <div className="atty-review-draft">{renderDocumentText(doc.draft_text)}</div>
+              ) : (
+                <p className="atty-ai-empty">No draft text available.</p>
+              )}
+            </section>
 
-          {/* Panel tabs */}
-          <div className="atty-panel-tabs">
-            <button
-              className={`atty-panel-tab${!activePanel || activePanel === null ? " atty-panel-tab-active" : ""}`}
-              onClick={() => setActivePanel(null)}
-            >
-              Original Draft
-            </button>
-            {hasPreConsult && (
-              <button
-                className={`atty-panel-tab${activePanel === "pre_consult" ? " atty-panel-tab-active" : ""}`}
-                onClick={() => setActivePanel("pre_consult")}
-              >
-                Pre-Consult Memo
-              </button>
-            )}
-            {(hasReview || doc.review_status === "reviewing") && (
-              <button
-                className={`atty-panel-tab${activePanel === "review" ? " atty-panel-tab-active" : ""}`}
-                onClick={() => setActivePanel("review")}
-              >
-                Review Report {doc.review_status === "reviewing" ? "⟳" : ""}
-              </button>
-            )}
-            {(hasImprovedDraft || doc.review_status === "merging") && (
-              <button
-                className={`atty-panel-tab${activePanel === "improved_draft" ? " atty-panel-tab-active" : ""}`}
-                onClick={() => setActivePanel("improved_draft")}
-              >
-                Improved Draft {doc.review_status === "merging" ? "⟳" : ""}
-              </button>
-            )}
+            <section className="atty-standalone-doc">
+              <div className="atty-standalone-doc-header">
+                <div>
+                  <h2>Document 2 — Critical Review Memo</h2>
+                  <p className="atty-standalone-doc-sub">AI analysis · standalone review document</p>
+                </div>
+                {criticalReview?.id && reviewText && (
+                  <a href={`/api/documents/${criticalReview.id}/download`} download className="atty-btn atty-btn-download">
+                    Download .docx
+                  </a>
+                )}
+              </div>
+              {isReviewing ? (
+                <div className="atty-ai-running">Generating critical review memo…</div>
+              ) : reviewText ? (
+                <pre className="atty-review-preformatted">{stripReviewMarkers(reviewText)}</pre>
+              ) : (
+                <p className="atty-ai-empty">
+                  No review memo yet. Turn on Auto Critical Review in your dashboard, or click Run Critical Review in the sidebar.
+                </p>
+              )}
+            </section>
           </div>
 
-          {/* Panel: Original Draft */}
-          {(!activePanel) && (
-            <>
-              {doc.draft_text ? (
-                <>
-                  <div className="atty-review-doc-header">
-                    <h2>Document Draft</h2>
-                    <a href={`/api/documents/${id}/download`} download className="atty-btn atty-btn-download">
-                      Download .docx
-                    </a>
-                  </div>
-                  <div className="atty-review-draft">
-                    {renderDocumentText(doc.draft_text)}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <h2>Document Data</h2>
-                  <div className="atty-review-data">
-                    {Object.entries(doc.content_json).filter(([k]) => k !== "init_response").map(([key, val]) => (
-                      <div key={key} className="atty-review-field">
-                        <dt>{key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</dt>
-                        <dd>{Array.isArray(val) ? val.join(", ") : String(val ?? "—")}</dd>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-            </>
+          {isMerging && !secondDraft?.draft_text && (
+            <section className="atty-standalone-doc atty-second-draft-preview">
+              <div className="atty-ai-running">
+                Checking document type fit, then generating revised draft… This may take a minute.
+              </div>
+            </section>
           )}
 
-          {/* Panel: Pre-Consult Memo */}
-          {activePanel === "pre_consult" && (
-            <div className="atty-ai-panel">
-              <h2>Pre-Consult Briefing Memo</h2>
-              {aiRunning === "pre_consult" ? (
-                <div className="atty-ai-running">Generating briefing memo…</div>
-              ) : hasPreConsult ? (
-                renderPreformatted(
-                  doc.case_files.pre_consult_memo!
-                    .replace(/---PRE-CONSULT MEMO---\n?/, "")
-                    .replace(/\n?---END MEMO---/, "")
-                    .trim()
-                )
-              ) : (
-                <div className="atty-ai-empty">Click "Pre-Consult Review" to generate the briefing memo.</div>
-              )}
-            </div>
+          {secondDraft?.draft_text && (
+            <section className="atty-standalone-doc atty-second-draft-preview">
+              <div className="atty-standalone-doc-header">
+                <div>
+                  <h2>Document 3 — Revised Draft</h2>
+                  <p className="atty-standalone-doc-sub">Generated second draft (approve this version to send to client)</p>
+                </div>
+                <a href={`/api/documents/${secondDraft.id}/download`} download className="atty-btn atty-btn-download">
+                  Download .docx
+                </a>
+              </div>
+              <div className="atty-review-draft">{renderDocumentText(secondDraft.draft_text)}</div>
+            </section>
           )}
 
-          {/* Panel: Review Report */}
-          {activePanel === "review" && (
-            <div className="atty-ai-panel">
-              <h2>Document Review Report</h2>
-              {(aiRunning === "review" || doc.review_status === "reviewing") ? (
-                <div className="atty-ai-running">Running document review…</div>
-              ) : hasReview ? (
-                renderPreformatted(
-                  doc.review_report!
-                    .replace(/---DOCUMENT REVIEW---\n?/, "")
-                    .replace(/\n?---END REVIEW---/, "")
-                    .trim()
-                )
-              ) : (
-                <div className="atty-ai-empty">Click "Run Doc Review" to generate the review report.</div>
-              )}
-            </div>
-          )}
-
-          {/* Panel: Improved Draft */}
-          {activePanel === "improved_draft" && (
-            <div className="atty-ai-panel">
-              <h2>Improved Draft</h2>
-              {(aiRunning === "improved_draft" || doc.review_status === "merging") ? (
-                <div className="atty-ai-running">Merging review edits into draft…</div>
-              ) : hasImprovedDraft ? (
-                <>
-                  <div className="atty-review-doc-header">
-                    <span className="atty-badge atty-badge-green">Post-Review Draft</span>
-                  </div>
-                  <div className="atty-review-draft">
-                    {renderDocumentText(doc.improved_draft_text!)}
-                  </div>
-                </>
-              ) : (
-                <div className="atty-ai-empty">Run document review first, then click "Merge Draft".</div>
-              )}
-            </div>
-          )}
-
-          {/* Attorney Notes */}
-          <div className="atty-review-notes">
-            <label htmlFor="notes">Attorney Notes (sent to client if changes requested)</label>
+          <div className="atty-second-draft-workspace">
+            <h2>Second Draft Instructions</h2>
+            <p className="atty-second-draft-hint">
+              Private attorney input only — never shown to the client. Combined with the initial draft, critical review memo, and Living File to generate a refined second draft.
+            </p>
             <textarea
-              id="notes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={5}
-              placeholder="Add notes for the client or for the file…"
+              className="atty-second-draft-textarea"
+              value={secondDraftPrompt}
+              onChange={(e) => { setSecondDraftPrompt(e.target.value); setPromptSaved(false); }}
+              rows={6}
+              placeholder="Add directives for the revised draft: tone changes, clauses to add/remove, facts to emphasize, risks to address…"
+            />
+            <div className="atty-second-draft-actions">
+              <button className="atty-btn" onClick={saveSecondDraftPrompt} disabled={savingPrompt}>
+                {savingPrompt ? "Saving…" : promptSaved ? "Saved ✓" : "Save Instructions"}
+              </button>
+              <button
+                className="atty-btn atty-btn-primary"
+                onClick={requestSecondDraft}
+                disabled={generatingSecondDraft || !reviewText || !doc.draft_text}
+                title={!reviewText ? "Run critical review first" : undefined}
+              >
+                {generatingSecondDraft ? "Generating 2nd Draft…" : "Generate 2nd Draft"}
+              </button>
+            </div>
+            {fitnessWarning && (
+              <div className="atty-fitness-warning">
+                <strong>Document type check did not pass.</strong>
+                <p>{fitnessWarning.rationale}</p>
+                {fitnessWarning.recommendedType && (
+                  <p>Suggested instrument: <em>{fitnessWarning.recommendedType}</em></p>
+                )}
+              </div>
+            )}
+            {secondDraftMessage && <p className="atty-second-draft-message">{secondDraftMessage}</p>}
+          </div>
+
+          <div className="atty-review-notes">
+            <label htmlFor="client-notes">Notes to client (only sent if you request changes)</label>
+            <textarea
+              id="client-notes"
+              value={clientNotes}
+              onChange={(e) => setClientNotes(e.target.value)}
+              rows={4}
+              placeholder="Explain what the client should revise…"
               disabled={submitting}
             />
           </div>
 
           {error && <div className="atty-review-error-inline">{error}</div>}
 
-          {/* Final Actions */}
           <div className="atty-review-actions">
             <button
               className="atty-btn atty-btn-approve"
               onClick={() => handleAction("approve")}
               disabled={submitting}
             >
-              {submitting ? "Submitting…" : "Approve & Notify Client"}
+              {submitting
+                ? "Submitting…"
+                : secondDraft?.draft_text
+                  ? "Approve Revised Draft & Notify Client"
+                  : "Approve Draft & Notify Client"}
             </button>
             <button
               className="atty-btn atty-btn-changes"

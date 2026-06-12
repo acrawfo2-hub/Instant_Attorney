@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
 
   const { data: doc, error: docErr } = await db
     .from("documents")
-    .select("id, draft_text, status, content_json, doc_type")
+    .select("id, draft_text, status, content_json, doc_type, submitted_at")
     .eq("case_file_id", caseFileId)
     .eq("doc_type", docType)
     .eq("user_id", userId)

@@ -55,6 +55,11 @@ export type WizardType =
   | "wills_trusts"
   | "doc_review";
 
+/** Child documents created during attorney review (not wizard-generated). */
+export type DerivedDocType = "critical_review" | "second_draft";
+
+export type DocType = WizardType | DerivedDocType;
+
 export type DocumentStatus =
   | "pre_warmed"
   | "draft"
@@ -136,13 +141,15 @@ export interface Document {
   id: string;
   case_file_id: string;
   user_id: string;
-  doc_type: WizardType;
+  parent_document_id: string | null;
+  doc_type: DocType;
   title: string;
   status: DocumentStatus;
   content_json: Record<string, unknown>;
   draft_text: string | null;
   file_path: string | null;
   attorney_notes: string | null;
+  attorney_second_draft_prompt: string | null;
   reviewed_by: string | null;
   reviewed_at: string | null;
   submitted_at: string | null;
@@ -163,6 +170,21 @@ export const WIZARD_LABELS: Record<WizardType, string> = {
   wills_trusts: "Wills & Trusts",
   doc_review: "Document Review",
 };
+
+export const DERIVED_DOC_LABELS: Record<DerivedDocType, string> = {
+  critical_review: "Critical Review Memo",
+  second_draft: "Revised Draft",
+};
+
+export function docTypeLabel(docType: string): string {
+  if (docType in WIZARD_LABELS) return WIZARD_LABELS[docType as WizardType];
+  if (docType in DERIVED_DOC_LABELS) return DERIVED_DOC_LABELS[docType as DerivedDocType];
+  return docType.replace(/_/g, " ");
+}
+
+export function isPrimaryDraft(doc: Pick<Document, "parent_document_id">): boolean {
+  return !doc.parent_document_id;
+}
 
 export interface Attachment {
   id: string;

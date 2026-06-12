@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getChildDocuments } from "@/lib/document-utils";
 import { notifyClientDocumentApproved } from "@/lib/notify";
+import { docTypeLabel } from "@/lib/types";
 import type { Document, Profile } from "@/lib/types";
 
 export async function POST(
@@ -20,7 +22,6 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Verify attorney
   const { data: profile } = await db
     .from("profiles")
     .select("is_attorney")
@@ -31,7 +32,18 @@ export async function POST(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const children = await getChildDocuments(db, id);
+  const secondDraft = children.find((c) => c.doc_type === "second_draft");
+
+  if (action === "approve" && secondDraft && !secondDraft.draft_text) {
+    return NextResponse.json(
+      { error: "A revised draft record exists but has no content yet." },
+      { status: 400 }
+    );
+  }
+
   const newStatus = action === "approve" ? "approved" : "changes_requested";
+  const now = new Date().toISOString();
 
   const { data: doc, error: updateErr } = await db
     .from("documents")
@@ -39,10 +51,11 @@ export async function POST(
       status: newStatus,
       attorney_notes: attorney_notes ?? null,
       reviewed_by: user.id,
-      reviewed_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      reviewed_at: now,
+      updated_at: now,
     })
     .eq("id", id)
+    .is("parent_document_id", null)
     .select("*, profiles!documents_user_id_fkey(*)")
     .single();
 
@@ -50,12 +63,28 @@ export async function POST(
     return NextResponse.json({ error: "Update failed" }, { status: 500 });
   }
 
-  // Notify client if approved
+  if (action === "approve" && secondDraft) {
+    await db.from("documents").update({
+      status: "approved",
+      updated_at: now,
+    }).eq("id", secondDraft.id);
+  }
+
   if (action === "approve" && doc.profiles) {
-    notifyClientDocumentApproved(doc as Document, doc.profiles as Profile).catch(
+    const notifyDoc = {
+      ...(doc as Document),
+      title: secondDraft
+        ? `${docTypeLabel(doc.doc_type)} (Revised)`
+        : doc.title,
+    };
+    notifyClientDocumentApproved(notifyDoc, doc.profiles as Profile).catch(
       (err) => console.error("[approve] notify error:", err)
     );
   }
 
-  return NextResponse.json({ success: true, status: newStatus });
+  return NextResponse.json({
+    success: true,
+    status: newStatus,
+    approved_document_id: secondDraft?.id ?? doc.id,
+  });
 }
