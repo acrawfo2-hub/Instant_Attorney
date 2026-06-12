@@ -47,14 +47,16 @@ export async function GET(
     }
   }
 
-  // Generate a short-lived signed URL for download
+  // Generate a short-lived signed URL and redirect the browser straight to it.
+  // All callers are <a href> links, so a 302 gives them the actual file.
   const serviceDb = createServiceClient();
-  const { data: signedData } = await serviceDb.storage
+  const { data: signedData, error: signErr } = await serviceDb.storage
     .from("case-attachments")
-    .createSignedUrl(attachment.storage_path, 300); // 5 minutes
+    .createSignedUrl(attachment.storage_path, 300); // 5-minute window
 
-  return NextResponse.json({
-    ...attachment,
-    signed_url: signedData?.signedUrl ?? null,
-  });
+  if (signErr || !signedData?.signedUrl) {
+    return NextResponse.json({ error: "Could not generate download link" }, { status: 500 });
+  }
+
+  return NextResponse.redirect(signedData.signedUrl, 302);
 }
