@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, use } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import ReviewSlaClock from "@/components/ReviewSlaClock";
 import { WIZARD_LABELS } from "@/lib/types";
 import type { WizardType } from "@/lib/types";
 
@@ -88,6 +89,8 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   const [documentId, setDocumentId] = useState<string>(preWarmedDocId);
   const [downloading, setDownloading] = useState(false);
   const [submittedForReview, setSubmittedForReview] = useState(false);
+  const [submittedAt, setSubmittedAt] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [initialized, setInitialized] = useState(false);
 
@@ -103,7 +106,13 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   }, []);
 
   function loadExistingDraft(
-    doc: { id: string; draft_text: string; content_json?: { init_response?: string } }
+    doc: {
+      id: string;
+      draft_text: string;
+      status?: string;
+      submitted_at?: string | null;
+      content_json?: { init_response?: string };
+    }
   ) {
     const fakeResponse = `---DRAFT READY---\n${doc.draft_text}\n---END DRAFT---\n\n${doc.content_json?.init_response ?? ""}`;
     const p = parseDrafterResponse(fakeResponse);
@@ -111,6 +120,10 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
     setParsed(p);
     setMessages([{ role: "assistant", content: fakeResponse }]);
     setDocumentId(doc.id);
+    if (doc.status === "pending_review") {
+      setSubmittedForReview(true);
+      setSubmittedAt(doc.submitted_at ?? null);
+    }
   }
 
   async function initializeDraft() {
@@ -204,7 +217,6 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
 
       const p = parseDrafterResponse(fullText);
       setParsed(p);
-      if (p.readyForReview) setSubmittedForReview(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Connection error");
     } finally {
@@ -243,11 +255,20 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   }
 
   async function handleSubmitForReview() {
-    if (!documentId) return;
-    const res = await fetch(`/api/documents/${documentId}/submit`, {
-      method: "POST",
-    });
-    if (res.ok) setSubmittedForReview(true);
+    if (!documentId || submitting) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/documents/${documentId}/submit`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Submit failed");
+      setSubmittedForReview(true);
+      setSubmittedAt(data.submitted_at ?? new Date().toISOString());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Submit failed");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   const currentDraft = parsed?.draftText ?? null;
@@ -323,6 +344,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
               <div className="wiz-review-icon">✓</div>
               <h3>Submitted for Attorney Review</h3>
               <p>Andrew Crawford, Esq. will review your draft within 48 hours. You&apos;ll receive an email when it&apos;s ready.</p>
+              {submittedAt && <ReviewSlaClock submittedAt={submittedAt} />}
               {documentId && (
                 <button className="wiz-dl-btn wiz-dl-btn-full" onClick={handleDownload} disabled={downloading}>
                   {downloading ? "Downloading…" : "Download Current Draft (.docx)"}
@@ -412,19 +434,23 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
                 </div>
               )}
 
-              {/* Submit for review */}
+              {/* Submit for review — explicit click required */}
               {currentDraft && documentId && !streaming && (
                 <div className="wiz-submit-area">
+                  {parsed?.readyForReview && (
+                    <p className="wiz-submit-ready">Your draft is ready for attorney review. Click below to start the 48-hour review window.</p>
+                  )}
                   <p className="wiz-submit-hint">
                     {parsed?.missingFacts.blocking?.length
                       ? `${parsed.missingFacts.blocking.length} blocking item${parsed.missingFacts.blocking.length > 1 ? "s" : ""} remaining — you can still submit and the attorney will flag them.`
-                      : "Draft looks complete. Submit for 48-hour attorney review."}
+                      : "Submitting starts the 48-hour attorney review clock."}
                   </p>
                   <button
                     className="wiz-submit-btn"
                     onClick={handleSubmitForReview}
+                    disabled={submitting}
                   >
-                    Submit for Attorney Review →
+                    {submitting ? "Submitting…" : "Submit for Attorney Review →"}
                   </button>
                 </div>
               )}

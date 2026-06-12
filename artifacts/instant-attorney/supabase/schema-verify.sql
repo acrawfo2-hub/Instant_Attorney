@@ -51,6 +51,14 @@ union all select 'profiles.auto_document_review', case when exists (
   select 1 from information_schema.columns
   where table_schema = 'public' and table_name = 'profiles' and column_name = 'auto_document_review'
 ) then 'OK' else 'MISSING' end
+union all select 'documents.parent_document_id', case when exists (
+  select 1 from information_schema.columns
+  where table_schema = 'public' and table_name = 'documents' and column_name = 'parent_document_id'
+) then 'OK' else 'MISSING' end
+union all select 'documents.attorney_second_draft_prompt', case when exists (
+  select 1 from information_schema.columns
+  where table_schema = 'public' and table_name = 'documents' and column_name = 'attorney_second_draft_prompt'
+) then 'OK' else 'MISSING' end
 union all select 'case_files.pre_consult_memo', case when exists (
   select 1 from information_schema.columns
   where table_schema = 'public' and table_name = 'case_files' and column_name = 'pre_consult_memo'

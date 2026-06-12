@@ -20,7 +20,7 @@ export function pickFirstValidWizard(wizards: string[] | undefined): WizardType 
   return null;
 }
 
-/** Reuse an in-progress or pre-warmed draft instead of creating a duplicate row. */
+/** Reuse an in-progress or pre-warmed primary draft (never child documents). */
 export async function findReusableDocument(
   db: SupabaseClient,
   caseFileId: string,
@@ -32,7 +32,8 @@ export async function findReusableDocument(
     .select("id")
     .eq("case_file_id", caseFileId)
     .eq("doc_type", wizardType)
-    .in("status", ["pre_warmed", "draft"])
+    .is("parent_document_id", null)
+    .in("status", ["pre_warmed", "draft", "changes_requested"])
     .order("updated_at", { ascending: false })
     .limit(1);
 
@@ -44,7 +45,69 @@ export async function findReusableDocument(
   return data;
 }
 
-/** Mark a document submitted for attorney review and trigger downstream notifications. */
+export async function getChildDocuments(
+  db: SupabaseClient,
+  parentId: string
+): Promise<Document[]> {
+  const { data } = await db
+    .from("documents")
+    .select("*")
+    .eq("parent_document_id", parentId)
+    .order("created_at", { ascending: true });
+
+  return (data ?? []) as Document[];
+}
+
+export function getCriticalReviewChild(children: Document[]): Document | null {
+  return children.find((d) => d.doc_type === "critical_review") ?? null;
+}
+
+export function getSecondDraftChild(children: Document[]): Document | null {
+  return children.find((d) => d.doc_type === "second_draft") ?? null;
+}
+
+/** Replace any existing critical-review child with a new standalone document row. */
+export async function upsertCriticalReviewChild(
+  db: SupabaseClient,
+  parent: Document,
+  reviewReport: string
+): Promise<Document | null> {
+  await db
+    .from("documents")
+    .delete()
+    .eq("parent_document_id", parent.id)
+    .eq("doc_type", "critical_review");
+
+  const { data, error } = await db
+    .from("documents")
+    .insert({
+      case_file_id: parent.case_file_id,
+      user_id: parent.user_id,
+      parent_document_id: parent.id,
+      doc_type: "critical_review",
+      title: `${parent.title} — Critical Review`,
+      status: "draft",
+      draft_text: reviewReport,
+      content_json: {},
+    })
+    .select("*")
+    .single();
+
+  if (error) {
+    console.error("[document-utils] critical review child insert error:", error);
+    return null;
+  }
+
+  // Keep parent review_report in sync for legacy readers
+  await db.from("documents").update({
+    review_report: reviewReport,
+    updated_at: new Date().toISOString(),
+  }).eq("id", parent.id);
+
+  return data as Document;
+}
+
+/** Mark a primary draft submitted for attorney review and trigger downstream notifications. */
 export async function finalizeDocumentSubmission(
   db: SupabaseClient,
   docId: string,
@@ -52,12 +115,20 @@ export async function finalizeDocumentSubmission(
 ): Promise<Document | null> {
   const { data: existing } = await db
     .from("documents")
-    .select("submitted_at")
+    .select("id, status, submitted_at, parent_document_id")
     .eq("id", docId)
     .eq("user_id", userId)
     .maybeSingle();
 
-  if (existing?.submitted_at) {
+  if (!existing || existing.parent_document_id) {
+    return null;
+  }
+
+  const isResubmit = existing.status === "changes_requested";
+  const alreadyQueued =
+    existing.status === "pending_review" && !!existing.submitted_at;
+
+  if (alreadyQueued && !isResubmit) {
     const { data: doc } = await db
       .from("documents")
       .select("*, case_files(*), profiles!documents_user_id_fkey(*)")
@@ -67,6 +138,15 @@ export async function finalizeDocumentSubmission(
   }
 
   const now = new Date().toISOString();
+
+  if (isResubmit) {
+    await db
+      .from("documents")
+      .delete()
+      .eq("parent_document_id", docId)
+      .in("doc_type", ["critical_review", "second_draft"]);
+  }
+
   const { data: doc, error } = await db
     .from("documents")
     .update({
@@ -103,9 +183,9 @@ async function autoTriggerReview(
     .from("profiles")
     .select("id, auto_document_review")
     .eq("is_attorney", true)
-    .limit(1);
+    .order("created_at", { ascending: true });
 
-  const attorney = attorneys?.[0];
+  const attorney = attorneys?.find((a) => a.auto_document_review) ?? attorneys?.[0];
   if (!attorney?.auto_document_review) return;
 
   const [{ data: factRows }, { data: attRows }] = await Promise.all([
@@ -125,20 +205,29 @@ async function autoTriggerReview(
     updated_at: new Date().toISOString(),
   }).eq("id", docId);
 
-  const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 2000,
-    messages: [{ role: "user", content: prompt }],
-  });
+  try {
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 2000,
+      messages: [{ role: "user", content: prompt }],
+    });
 
-  const reviewReport = response.content
-    .filter((b): b is Anthropic.TextBlock => b.type === "text")
-    .map((b) => b.text)
-    .join("");
+    const reviewReport = response.content
+      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .map((b) => b.text)
+      .join("");
 
-  await db.from("documents").update({
-    review_report: reviewReport,
-    review_status: "review_ready",
-    updated_at: new Date().toISOString(),
-  }).eq("id", docId);
+    await upsertCriticalReviewChild(db, doc, reviewReport);
+
+    await db.from("documents").update({
+      review_status: "review_ready",
+      updated_at: new Date().toISOString(),
+    }).eq("id", docId);
+  } catch (err) {
+    console.error("[document-utils] auto-review error:", err);
+    await db.from("documents").update({
+      review_status: null,
+      updated_at: new Date().toISOString(),
+    }).eq("id", docId);
+  }
 }

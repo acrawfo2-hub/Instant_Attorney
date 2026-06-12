@@ -29,5 +29,9 @@ export async function POST(
     return NextResponse.json({ error: "Document not found" }, { status: 404 });
   }
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({
+    success: true,
+    submitted_at: doc.submitted_at,
+    status: doc.status,
+  });
 }

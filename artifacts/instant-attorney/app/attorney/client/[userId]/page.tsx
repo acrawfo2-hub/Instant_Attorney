@@ -89,7 +89,7 @@ export default async function ClientFilePage({
 
   const caseFilesWithData: CaseFileWithDocs[] = caseFiles.map((cf) => ({
     ...cf,
-    documents: docs.filter((d) => d.case_file_id === cf.id),
+    documents: docs.filter((d) => d.case_file_id === cf.id && !d.parent_document_id),
     attachments: atts.filter((a) => a.case_file_id === cf.id),
   }));
 

@@ -38,7 +38,8 @@ async function getData() {
       .from("documents")
       .select("case_file_id")
       .eq("user_id", userId)
-      .eq("status", "pending_review"),
+      .eq("status", "pending_review")
+      .is("parent_document_id", null),
     db
       .from("consult_requests")
       .select("*")

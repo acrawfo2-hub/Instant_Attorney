@@ -24,8 +24,8 @@ export default function AutoReviewToggle({ initial }: { initial: boolean }) {
   return (
     <div className="atty-toggle-row">
       <div className="atty-toggle-label">
-        <span>Auto Document Review</span>
-        <span className="atty-toggle-hint">AI reviews documents automatically when submitted</span>
+        <span>Auto Critical Review</span>
+        <span className="atty-toggle-hint">When on, AI generates a critical review memo automatically on each submission. Turn off to run reviews manually.</span>
       </div>
       <button
         className={`atty-toggle-btn${enabled ? " atty-toggle-btn-on" : ""}`}

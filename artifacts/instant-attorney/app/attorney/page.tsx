@@ -73,7 +73,7 @@ export default async function AttorneyPage() {
 
   const docs = (documents ?? []) as DocumentWithRelations[];
   const pending = docs
-    .filter((d) => d.status === "pending_review")
+    .filter((d) => d.status === "pending_review" && !d.parent_document_id)
     .sort((a, b) =>
       new Date(a.submitted_at ?? a.created_at).getTime() -
       new Date(b.submitted_at ?? b.created_at).getTime());
@@ -118,7 +118,15 @@ export default async function AttorneyPage() {
                   <tr key={doc.id} className="atty-tr-urgent">
                     <td className="atty-td-sla"><ReviewClock submittedAt={doc.submitted_at ?? null} /></td>
                     <td>{doc.profiles?.full_name ?? doc.profiles?.email ?? "Unknown"}</td>
-                    <td className="atty-td-doc">{WIZARD_LABELS[doc.doc_type] ?? doc.doc_type}: {doc.title}</td>
+                    <td className="atty-td-doc">
+                      {WIZARD_LABELS[doc.doc_type as keyof typeof WIZARD_LABELS] ?? doc.doc_type}: {doc.title}
+                      {doc.review_status === "reviewing" && (
+                        <span className="atty-inline-badge">AI reviewing…</span>
+                      )}
+                      {doc.review_status === "review_ready" && (
+                        <span className="atty-inline-badge atty-inline-badge-ready">Review memo ready</span>
+                      )}
+                    </td>
                     <td className="atty-td-matter">{matterLabel(doc.case_files)}</td>
                     <td className="atty-td-muted">
                       {doc.submitted_at ? new Date(doc.submitted_at).toLocaleDateString() : "—"}

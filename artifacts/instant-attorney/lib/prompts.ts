@@ -616,3 +616,32 @@ Your task: Apply the Priority Edit List from the review report to produce an imp
 
 Produce ONLY the improved draft document. No commentary, no headers, no explanation outside the document itself.`;
 }
+
+/** Future second-draft prompt — wire into POST /api/attorney/documents/[id]/second-draft when ready. */
+export function buildSecondDraftPrompt(
+  parentDoc: Document,
+  criticalReviewText: string,
+  attorneyInstructions: string,
+  caseFile: CaseFile,
+  facts: FactItem[],
+  attachments: Attachment[]
+): string {
+  const fileContext = buildFileContext(caseFile, facts, attachments);
+  const draftText = parentDoc.draft_text ?? "(No draft text available)";
+
+  return `${fileContext}
+
+---ORIGINAL CLIENT DRAFT---
+${draftText}
+---END ORIGINAL DRAFT---
+
+---CRITICAL REVIEW MEMO---
+${criticalReviewText}
+---END CRITICAL REVIEW---
+
+---ATTORNEY INSTRUCTIONS (PRIVATE)---
+${attorneyInstructions}
+---END ATTORNEY INSTRUCTIONS---
+
+Produce a revised legal draft incorporating the review memo and attorney instructions. Use a higher-quality drafting standard than the first pass. Use [[PLACEHOLDER — descriptor]] for unresolved facts.`;
+}

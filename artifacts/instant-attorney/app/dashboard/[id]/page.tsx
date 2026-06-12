@@ -64,7 +64,8 @@ async function getData(caseFileId: string) {
   return {
     caseFile: caseFile as CaseFile,
     facts: (facts ?? []) as FactItem[],
-    documents: allDocs.filter((d) => d.status !== "pre_warmed"),
+    documents: allDocs.filter((d) => d.status !== "pre_warmed" && !d.parent_document_id),
+    childDocuments: allDocs.filter((d) => !!d.parent_document_id),
     preWarmedByType,
     userId,
     consultRequest: (consultRow as ConsultRequest | null) ?? null,
@@ -84,7 +85,7 @@ export default async function FileDetailPage({
   const result = await getData(id);
   if (!result) notFound();
 
-  const { caseFile, facts, documents, preWarmedByType, consultRequest, hasConsultSub } = result;
+  const { caseFile, facts, documents, childDocuments, preWarmedByType, consultRequest, hasConsultSub } = result;
 
   const title = caseFile.title
     || (caseFile.matter_subtype ? caseFile.matter_subtype.replace(/_/g, " ") : null)
@@ -125,6 +126,7 @@ export default async function FileDetailPage({
           caseFile={caseFile}
           facts={facts}
           documents={documents}
+          childDocuments={childDocuments}
           preWarmedByType={preWarmedByType}
           mode="client"
           consultRequest={consultRequest}

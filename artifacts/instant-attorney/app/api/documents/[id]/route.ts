@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { getChildDocuments } from "@/lib/document-utils";
 import { BYPASS_USER_ID } from "@/lib/types";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
@@ -46,5 +47,10 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  return NextResponse.json(doc);
+  const childDocuments = await getChildDocuments(db, id);
+
+  return NextResponse.json({
+    ...doc,
+    child_documents: childDocuments,
+  });
 }
