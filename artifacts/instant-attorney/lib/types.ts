@@ -9,9 +9,12 @@ export type AttachmentType = "document" | "screenshot" | "other";
 export type AttachmentStatus = "processing" | "ready" | "failed";
 export type RequestedAttachmentStatus = "requested" | "uploaded" | "waived";
 export type ReviewStatus = "reviewing" | "review_ready" | "merging" | "merged";
+/** @deprecated Legacy table — app uses ConsultRequest / consult_requests instead */
 export type ConsultType = "standard" | "quick_consult" | "follow_up";
+/** @deprecated Legacy table — app uses ConsultRequest / consult_requests instead */
 export type ConsultStatus = "needs_scheduling" | "scheduled" | "completed" | "canceled";
 
+/** @deprecated Legacy table — app uses ConsultRequest / consult_requests instead */
 export interface Consult {
   id: string;
   user_id: string;

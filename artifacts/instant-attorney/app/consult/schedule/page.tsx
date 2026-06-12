@@ -35,14 +35,14 @@ export default async function SchedulePage() {
     }
   }
 
-  // Already has a pending/confirmed request
+  // Redirect to dashboard if an active consult request already exists
   const { data: existing } = await db
     .from("consult_requests")
     .select("id, status")
     .eq("user_id", userId)
     .in("status", ["pending", "confirmed", "attorney_proposed"])
     .maybeSingle();
-  if (existing) redirect("/dashboard?consult=pending");
+  if (existing) redirect("/dashboard#consult-status");
 
   // Case files for the optional selector
   const { data: files } = await db

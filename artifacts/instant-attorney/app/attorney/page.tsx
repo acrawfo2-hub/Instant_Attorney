@@ -2,20 +2,15 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { WIZARD_LABELS } from "@/lib/types";
-import type { Document, CaseFile, Profile, Consult } from "@/lib/types";
+import type { Document, CaseFile, Profile } from "@/lib/types";
 import AutoReviewToggle from "@/components/AutoReviewToggle";
 import AttorneyFileLog from "@/components/AttorneyFileLog";
-import ConsultQueue, { type CaseOption } from "@/components/ConsultQueue";
+import ConsultRequestQueue, { type ConsultRequestRow } from "@/components/ConsultRequestQueue";
 
 interface DocumentWithRelations extends Document {
   case_files: CaseFile;
   profiles: Profile;
 }
-
-type ConsultWithRelations = Consult & {
-  profiles: Profile | null;
-  case_files: CaseFile | null;
-};
 
 function ReviewClock({ submittedAt }: { submittedAt: string | null }) {
   if (!submittedAt) return <span className="atty-clock atty-clock-ok">—</span>;
@@ -57,25 +52,24 @@ export default async function AttorneyPage() {
 
   if (!profile?.is_attorney) redirect("/dashboard");
 
-  const { data: documents } = await db
-    .from("documents")
-    .select("*, case_files(*), profiles!documents_user_id_fkey(*)")
-    .order("created_at", { ascending: false })
-    .limit(100);
-
-  // All non-archived case files — powers the client file log and the consult picker.
-  const { data: caseFiles } = await db
-    .from("case_files")
-    .select("*, profiles!case_files_user_id_fkey(*)")
-    .neq("status", "archived")
-    .order("updated_at", { ascending: false })
-    .limit(200);
-
-  const { data: consults } = await db
-    .from("consults")
-    .select("*, profiles!consults_user_id_fkey(*), case_files(*)")
-    .in("status", ["needs_scheduling", "scheduled"])
-    .order("scheduled_at", { ascending: true, nullsFirst: true });
+  const [{ data: documents }, { data: caseFiles }, { data: consultRequests }] = await Promise.all([
+    db
+      .from("documents")
+      .select("*, case_files(*), profiles!documents_user_id_fkey(*)")
+      .order("created_at", { ascending: false })
+      .limit(100),
+    db
+      .from("case_files")
+      .select("*, profiles!case_files_user_id_fkey(*)")
+      .neq("status", "archived")
+      .order("updated_at", { ascending: false })
+      .limit(200),
+    db
+      .from("consult_requests")
+      .select("*, profiles!consult_requests_user_id_fkey(*), case_files(*)")
+      .in("status", ["pending", "attorney_proposed", "confirmed"])
+      .order("created_at", { ascending: false }),
+  ]);
 
   const docs = (documents ?? []) as DocumentWithRelations[];
   const pending = docs
@@ -85,16 +79,7 @@ export default async function AttorneyPage() {
       new Date(b.submitted_at ?? b.created_at).getTime());
 
   const files = (caseFiles ?? []) as (CaseFile & { profiles: Profile | null })[];
-
-  // Consult picker options — open case files only, scoped to client + matter.
-  const caseOptions: CaseOption[] = files
-    .filter((f) => f.status === "open")
-    .map((f) => ({
-      id: f.id,
-      user_id: f.user_id,
-      client_name: f.profiles?.full_name ?? f.profiles?.email ?? "Unknown",
-      matter: matterLabel(f),
-    }));
+  const consults = (consultRequests ?? []) as ConsultRequestRow[];
 
   return (
     <div className="atty-shell">
@@ -114,7 +99,6 @@ export default async function AttorneyPage() {
       </header>
 
       <main className="atty-main">
-        {/* ── Work queue: drafts to review ───────────────────────────── */}
         <section className="atty-section">
           <h2 className="atty-section-title">
             Drafts to Review
@@ -149,19 +133,15 @@ export default async function AttorneyPage() {
           )}
         </section>
 
-        {/* ── Work queue: consults ───────────────────────────────────── */}
         <section className="atty-section">
           <h2 className="atty-section-title">
             Consults
-            <span className="atty-section-hint">to schedule &amp; on the pending schedule</span>
+            {consults.length > 0 && <span className="atty-count">{consults.length}</span>}
+            <span className="atty-section-hint">client requests · confirm times &amp; upcoming calls</span>
           </h2>
-          <ConsultQueue
-            initialConsults={(consults ?? []) as ConsultWithRelations[]}
-            caseOptions={caseOptions}
-          />
+          <ConsultRequestQueue requests={consults} />
         </section>
 
-        {/* ── Client files log ───────────────────────────────────────── */}
         <section className="atty-section">
           <h2 className="atty-section-title">
             Client Files

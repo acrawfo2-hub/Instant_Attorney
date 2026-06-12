@@ -23,7 +23,7 @@ async function getData(caseFileId: string) {
     userId = user.id;
   }
 
-  const [{ data: caseFile }, { data: facts }, { data: documents }, { data: consultRow }] = await Promise.all([
+  const [{ data: caseFile }, { data: facts }, { data: documents }, { data: consultRow }, { data: subRow }] = await Promise.all([
     db.from("case_files")
       .select("*")
       .eq("id", caseFileId)
@@ -40,9 +40,14 @@ async function getData(caseFileId: string) {
     db.from("consult_requests")
       .select("*")
       .eq("user_id", userId)
-      .not("status", "eq", "cancelled")
+      .in("status", ["pending", "confirmed", "attorney_proposed"])
       .order("created_at", { ascending: false })
       .limit(1)
+      .maybeSingle(),
+    db
+      .from("subscriptions")
+      .select("status, plan")
+      .eq("user_id", userId)
       .maybeSingle(),
   ]);
 
@@ -63,6 +68,7 @@ async function getData(caseFileId: string) {
     preWarmedByType,
     userId,
     consultRequest: (consultRow as ConsultRequest | null) ?? null,
+    hasConsultSub: subRow?.plan === "consult" && ["active", "bypass"].includes(subRow?.status ?? ""),
   };
 }
 
@@ -78,7 +84,7 @@ export default async function FileDetailPage({
   const result = await getData(id);
   if (!result) notFound();
 
-  const { caseFile, facts, documents, preWarmedByType, consultRequest } = result;
+  const { caseFile, facts, documents, preWarmedByType, consultRequest, hasConsultSub } = result;
 
   const title = caseFile.title
     || (caseFile.matter_subtype ? caseFile.matter_subtype.replace(/_/g, " ") : null)
@@ -122,6 +128,7 @@ export default async function FileDetailPage({
           preWarmedByType={preWarmedByType}
           mode="client"
           consultRequest={consultRequest}
+          hasConsultSub={hasConsultSub}
         />
       </main>
     </div>

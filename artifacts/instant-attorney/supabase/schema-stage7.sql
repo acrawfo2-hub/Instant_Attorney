@@ -1,9 +1,9 @@
 -- Instant Attorney — Stage 7 Schema Additions
 -- Run this AFTER schema-stage6.sql in the Supabase SQL editor
 
--- ── Consults (attorney scheduling queue) ─────────────────────────────────────
--- Source of truth for consults the attorney needs to schedule and consults
--- already on the pending schedule. Surfaced on the attorney dashboard.
+-- ── Consults (LEGACY — superseded by consult_requests below) ───────────────
+-- Retained for databases that already ran this migration. The app no longer
+-- reads or writes this table; use consult_requests as the single source of truth.
 create table if not exists consults (
   id              uuid default gen_random_uuid() primary key,
   user_id         uuid references profiles(id) on delete cascade not null,
@@ -33,8 +33,8 @@ create policy "attorneys_manage_all_consults"
   on consults for all
   using (exists (select 1 from profiles where id = auth.uid() and is_attorney = true));
 
--- ── Consult requests (client scheduling tool) ────────────────────────────────
--- Client-facing flow: propose 3 times, attorney confirms or counters.
+-- ── Consult requests (SOURCE OF TRUTH for consult scheduling) ───────────────
+-- Client proposes 3 times → attorney confirms or counters → client accepts.
 create table if not exists consult_requests (
   id               uuid default gen_random_uuid() primary key,
   user_id          uuid references profiles(id) on delete cascade not null,

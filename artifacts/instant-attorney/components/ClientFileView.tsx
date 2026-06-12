@@ -107,6 +107,7 @@ interface ClientFileViewProps {
   mode: "client" | "attorney";
   clientProfile?: Profile;
   consultRequest?: ConsultRequest | null;
+  hasConsultSub?: boolean;
 }
 
 export default function ClientFileView({
@@ -117,6 +118,7 @@ export default function ClientFileView({
   mode,
   clientProfile,
   consultRequest,
+  hasConsultSub = false,
 }: ClientFileViewProps) {
   const confirmed = facts.filter((f) => f.status === "confirmed");
   const gaps = facts.filter((f) => f.status === "gap");
@@ -181,7 +183,7 @@ export default function ClientFileView({
                   <span className="lf-consult-rec-badge lf-consult-rec-badge-proposed">New Time Proposed</span>
                   <span className="lf-consult-desc">Andrew suggested: <strong>{timeStr}</strong></span>
                 </div>
-                <Link href="/dashboard" className="lf-consult-btn">Review →</Link>
+                <Link href="/dashboard#consult-status" className="lf-consult-btn">Respond →</Link>
               </div>
             </div>
           );
@@ -211,8 +213,11 @@ export default function ClientFileView({
                   <span className="lf-consult-desc">Ready to speak with Andrew Crawford, Esq. directly? Schedule a 1-on-1 strategy session.</span>
                 )}
               </div>
-              <Link href="/register?upgrade=consult" className="lf-consult-btn">
-                Schedule Consult · $49.99 →
+              <Link
+                href={hasConsultSub ? "/consult/schedule" : "/register?upgrade=consult"}
+                className="lf-consult-btn"
+              >
+                {hasConsultSub ? "Schedule Consult →" : "Schedule Consult · $49.99 →"}
               </Link>
             </div>
           </div>

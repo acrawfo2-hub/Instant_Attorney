@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import type { ConsultRequest } from "@/lib/types";
 
 function fmtCST(iso: string): string {
@@ -29,6 +30,7 @@ export default function ConsultActions({
   const [proposeInput, setProposeInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const router = useRouter();
 
   async function act(action: string, time?: string) {
     setLoading(true);
@@ -48,6 +50,7 @@ export default function ConsultActions({
       setConfirmedTime(updated.confirmed_time);
       setProposedTime(updated.attorney_proposed_time);
       setShowPropose(false);
+      router.refresh();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Error");
     } finally {
@@ -60,7 +63,9 @@ export default function ConsultActions({
       <div className="ca-confirmed">
         <span className="ca-badge ca-badge-confirmed">Confirmed</span>
         <span className="ca-time">{confirmedTime ? fmtCST(confirmedTime) : "—"}</span>
+        <button className="ca-btn-sm ca-btn-primary" onClick={() => act("complete")} disabled={loading}>Mark complete</button>
         <button className="ca-btn-sm ca-btn-cancel" onClick={() => act("cancel")} disabled={loading}>Cancel</button>
+        {error && <div className="ca-error">{error}</div>}
       </div>
     );
   }
@@ -70,7 +75,8 @@ export default function ConsultActions({
       <div className="ca-confirmed">
         <span className="ca-badge ca-badge-proposed">Awaiting Client</span>
         <span className="ca-time">{proposedTime ? fmtCST(proposedTime) : "—"}</span>
-        <button className="ca-btn-sm ca-btn-cancel" onClick={() => act("cancel")} disabled={loading}>Cancel</button>
+        <button className="ca-btn-sm ca-btn-cancel" onClick={() => act("cancel")} disabled={loading}>Cancel request</button>
+        {error && <div className="ca-error">{error}</div>}
       </div>
     );
   }
