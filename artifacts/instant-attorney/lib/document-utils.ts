@@ -5,7 +5,7 @@ import { DOC_REVIEW_SYSTEM_PROMPT, buildDocReviewUserMessage } from "./prompts";
 import { WIZARD_LABELS } from "./types";
 import type { WizardType, Document, CaseFile, Profile, FactItem, Attachment } from "./types";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
 
 export function isValidWizardType(type: string): type is WizardType {
   return type in WIZARD_LABELS;

@@ -14,7 +14,7 @@ import { BYPASS_USER_ID, docTypeLabel } from "@/lib/types";
 import type { Document, CaseFile, FactItem, Attachment } from "@/lib/types";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
 
 const FITNESS_MODEL = "claude-haiku-4-5-20251001";
 const SECOND_DRAFT_MODEL = "claude-opus-4-6";

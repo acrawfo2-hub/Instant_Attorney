@@ -7,7 +7,7 @@ import { BYPASS_USER_ID } from "@/lib/types";
 import type { Document } from "@/lib/types";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
 
 export async function POST(
   _req: NextRequest,

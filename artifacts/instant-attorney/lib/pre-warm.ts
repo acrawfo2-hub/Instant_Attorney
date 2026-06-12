@@ -5,7 +5,7 @@ import { isValidWizardType } from "./document-utils";
 import { WIZARD_LABELS } from "./types";
 import type { CaseFile, FactItem, WizardType, Attachment, RequestedAttachment } from "./types";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
 
 export async function triggerPreWarm(
   db: SupabaseClient,

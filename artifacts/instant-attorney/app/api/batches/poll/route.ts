@@ -6,7 +6,7 @@ import { upsertCriticalReviewChild } from "@/lib/document-utils";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
 import type { Document } from "@/lib/types";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
 /** Anthropic Message Batches API list-price discount */
 const BATCH_COST_MULTIPLIER = 0.5;
 

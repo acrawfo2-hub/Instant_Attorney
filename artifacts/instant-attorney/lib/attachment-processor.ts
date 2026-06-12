@@ -5,7 +5,7 @@ import type { CaseFile, FactItem } from "./types";
 import { buildFileContext } from "./prompts";
 import { recordAiFromMessage } from "./usage-tracker";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
 
 /** Remove a failed or abandoned attachment from storage and the database. */
 export async function removeAttachment(
