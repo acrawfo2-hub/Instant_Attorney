@@ -1,5 +1,11 @@
 -- Instant Attorney — Stage 1 Schema
--- Run this in the Supabase SQL editor after creating your project
+-- Run this in the Supabase SQL editor after creating your project.
+--
+-- Full migration order:
+--   1. schema.sql
+--   2. schema-stage2.sql … schema-stage7.sql
+--   3. schema-verify.sql (confirm everything is OK)
+-- Then: update profiles set is_attorney = true where email = 'your@email';
 
 -- Enable UUID extension (usually already enabled on Supabase)
 create extension if not exists "uuid-ossp";
@@ -74,6 +80,10 @@ alter table subscriptions enable row level security;
 
 create policy "users_read_own_subscriptions"
   on subscriptions for select using (auth.uid() = user_id);
+
+-- Required for Stripe checkout / webhook upserts (onConflict: user_id)
+create unique index if not exists subscriptions_user_id_unique
+  on subscriptions (user_id);
 
 -- ── Case files (Living File) ────────────────────────────────────────────────
 create table if not exists case_files (

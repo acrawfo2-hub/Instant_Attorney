@@ -34,6 +34,11 @@ create policy "users_read_own_documents"
 create policy "users_insert_own_documents"
   on documents for insert with check (auth.uid() = user_id);
 
+drop policy if exists "users_update_own_documents" on documents;
+create policy "users_update_own_documents"
+  on documents for update
+  using (auth.uid() = user_id);
+
 create policy "attorneys_read_all_documents"
   on documents for select
   using (
