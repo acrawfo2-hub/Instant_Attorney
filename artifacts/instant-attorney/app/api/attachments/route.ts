@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { removeAttachment } from "@/lib/attachment-processor";
 import { BYPASS_USER_ID } from "@/lib/types";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
@@ -31,13 +32,31 @@ export async function GET(req: NextRequest) {
   const caseFileId = req.nextUrl.searchParams.get("caseFileId");
   if (!caseFileId) return NextResponse.json({ error: "caseFileId required" }, { status: 400 });
 
-  // Attorneys can see all attachments for any case file; clients see only their own
-  const attQ = db
+  const serviceDb = createServiceClient();
+
+  // Purge any legacy failed rows so they never linger in the UI
+  const failedQ = serviceDb
+    .from("attachments")
+    .select("id, storage_path")
+    .eq("case_file_id", caseFileId)
+    .eq("status", "failed");
+  if (!isAttorney) failedQ.eq("user_id", userId);
+  const { data: failedRows } = await failedQ;
+  if (failedRows?.length) {
+    await Promise.all(
+      failedRows.map((row: { id: string; storage_path: string }) =>
+        removeAttachment(serviceDb, row.id, row.storage_path)
+      )
+    );
+  }
+
+  const attQ = serviceDb
     .from("attachments")
     .select("*")
     .eq("case_file_id", caseFileId)
+    .neq("status", "failed")
     .order("created_at", { ascending: false });
-  const reqQ = db
+  const reqQ = serviceDb
     .from("requested_attachments")
     .select("*")
     .eq("case_file_id", caseFileId)

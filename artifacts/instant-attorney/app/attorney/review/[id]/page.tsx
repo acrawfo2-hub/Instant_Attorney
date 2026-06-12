@@ -279,6 +279,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
                 <div key={att.id} className="atty-att-item">
                   <span className="atty-att-name">{att.file_name}</span>
                   {att.ai_summary && <span className="atty-att-summary">{att.ai_summary}</span>}
+                  {att.case_relevance && <span className="atty-att-relevance">{att.case_relevance}</span>}
                   {att.urgent_findings && att.urgent_findings !== "None identified" && (
                     <span className="atty-att-urgent">{att.urgent_findings}</span>
                   )}

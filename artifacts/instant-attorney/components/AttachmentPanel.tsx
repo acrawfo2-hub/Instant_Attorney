@@ -10,7 +10,6 @@ interface AttachmentPanelProps {
 const STATUS_LABELS: Record<string, string> = {
   processing: "Analyzing…",
   ready: "Ready",
-  failed: "Failed",
 };
 
 export default function AttachmentPanel({ caseFileId }: AttachmentPanelProps) {
@@ -25,7 +24,7 @@ export default function AttachmentPanel({ caseFileId }: AttachmentPanelProps) {
     const res = await fetch(`/api/attachments?caseFileId=${caseFileId}`);
     if (res.ok) {
       const data = await res.json();
-      setAttachments(data.attachments ?? []);
+      setAttachments((data.attachments ?? []).filter((a: Attachment) => a.status !== "failed"));
       setRequested(data.requestedAttachments ?? []);
     }
   }, [caseFileId]);

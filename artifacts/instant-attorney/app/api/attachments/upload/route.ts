@@ -85,6 +85,7 @@ export async function POST(req: NextRequest) {
 
   if (insertErr || !attachment) {
     console.error("[attachments/upload] insert error:", insertErr);
+    await serviceDb.storage.from("case-attachments").remove([storagePath]).catch(() => {});
     return NextResponse.json({ error: "Failed to create attachment record" }, { status: 500 });
   }
 

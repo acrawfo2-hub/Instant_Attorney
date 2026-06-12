@@ -6,6 +6,25 @@ import { buildFileContext } from "./prompts";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+/** Remove a failed or abandoned attachment from storage and the database. */
+export async function removeAttachment(
+  db: SupabaseClient,
+  attachmentId: string,
+  storagePath?: string | null
+): Promise<void> {
+  let path = storagePath;
+  if (!path) {
+    const { data } = await db.from("attachments").select("storage_path").eq("id", attachmentId).single();
+    path = data?.storage_path;
+  }
+  if (path) {
+    await db.storage.from("case-attachments").remove([path]).catch((err) => {
+      console.error("[attachment-processor] storage remove error:", err);
+    });
+  }
+  await db.from("attachments").delete().eq("id", attachmentId);
+}
+
 const SUPPORTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 const SUPPORTED_TEXT_TYPES = new Set([
   "text/plain", "text/markdown", "text/csv", "text/html",
@@ -129,7 +148,7 @@ export async function processAttachment(
       contentBlocks = await toAnthropicBlock(buffer, mimeType, fileName);
     } catch (convErr) {
       console.error("[attachment-processor] conversion failed:", convErr);
-      await db.from("attachments").update({ status: "failed", updated_at: new Date().toISOString() }).eq("id", attachmentId);
+      await removeAttachment(db, attachmentId);
       return;
     }
 
@@ -313,9 +332,6 @@ If no companion documents are needed, omit the REQUESTED ATTACHMENTS bullets ent
     }
   } catch (err) {
     console.error("[attachment-processor] error:", err);
-    await db.from("attachments").update({
-      status: "failed",
-      updated_at: new Date().toISOString(),
-    }).eq("id", attachmentId);
+    await removeAttachment(db, attachmentId);
   }
 }

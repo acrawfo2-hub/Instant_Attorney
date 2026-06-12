@@ -79,6 +79,7 @@ export default async function ClientFilePage({
           .from("attachments")
           .select("*")
           .in("case_file_id", caseFileIds)
+          .neq("status", "failed")
           .order("created_at", { ascending: false })
       : { data: [] },
   ]);
@@ -269,6 +270,18 @@ export default async function ClientFilePage({
                               {att.ai_summary}
                             </div>
                           )}
+                          {att.case_relevance && (
+                            <div className="atty-att-relevance">
+                              {att.case_relevance}
+                            </div>
+                          )}
+                          {att.key_sections?.length > 0 && (
+                            <ul className="atty-att-sections">
+                              {att.key_sections.map((s, i) => (
+                                <li key={i}>{s}</li>
+                              ))}
+                            </ul>
+                          )}
                           {att.urgent_findings &&
                             att.urgent_findings !== "None identified" && (
                               <div className="atty-att-urgent">
@@ -278,9 +291,9 @@ export default async function ClientFilePage({
                         </div>
                         <div className="atty-att-side">
                           <span
-                            className={`atty-badge ${att.status === "ready" ? "atty-badge-green" : att.status === "failed" ? "atty-badge-amber" : "atty-badge-gray"}`}
+                            className={`atty-badge ${att.status === "ready" ? "atty-badge-green" : "atty-badge-gray"}`}
                           >
-                            {att.status}
+                            {att.status === "processing" ? "analyzing" : att.status}
                           </span>
                           {att.status === "ready" && (
                             <a
