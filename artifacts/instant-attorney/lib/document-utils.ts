@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { notifyAttorneyDocumentReady } from "./notify";
-import { buildDocReviewPrompt, DOC_REVIEW_SYSTEM_PROMPT, buildDocReviewUserMessage } from "./prompts";
+import { DOC_REVIEW_SYSTEM_PROMPT, buildDocReviewUserMessage } from "./prompts";
 import { WIZARD_LABELS } from "./types";
 import type { WizardType, Document, CaseFile, Profile, FactItem, Attachment } from "./types";
 
