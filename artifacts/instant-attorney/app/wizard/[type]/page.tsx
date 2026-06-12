@@ -102,6 +102,17 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  function loadExistingDraft(
+    doc: { id: string; draft_text: string; content_json?: { init_response?: string } }
+  ) {
+    const fakeResponse = `---DRAFT READY---\n${doc.draft_text}\n---END DRAFT---\n\n${doc.content_json?.init_response ?? ""}`;
+    const p = parseDrafterResponse(fakeResponse);
+    if (!p.draftText) p.draftText = doc.draft_text;
+    setParsed(p);
+    setMessages([{ role: "assistant", content: fakeResponse }]);
+    setDocumentId(doc.id);
+  }
+
   async function initializeDraft() {
     // If we have a pre-warmed doc, load it from the server and show immediately
     if (preWarmedDocId) {
@@ -110,13 +121,25 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
         if (res.ok) {
           const doc = await res.json();
           if (doc.draft_text) {
-            // Reconstruct a fake initial response to initialize messages
-            const fakeResponse = `---DRAFT READY---\n${doc.draft_text}\n---END DRAFT---\n\n${doc.content_json?.init_response ?? ""}`;
-            const p = parseDrafterResponse(fakeResponse);
-            if (!p.draftText) p.draftText = doc.draft_text;
-            setParsed(p);
-            setMessages([{ role: "assistant", content: fakeResponse }]);
-            setDocumentId(preWarmedDocId);
+            loadExistingDraft(doc);
+            return;
+          }
+        }
+      } catch {
+        // Fall through to lookup / fresh generation
+      }
+    }
+
+    // Reuse an existing pre-warmed or in-progress draft (avoids duplicate rows)
+    if (caseFileId) {
+      try {
+        const res = await fetch(
+          `/api/documents/lookup?caseFileId=${encodeURIComponent(caseFileId)}&docType=${encodeURIComponent(wizardType)}`
+        );
+        if (res.ok) {
+          const doc = await res.json();
+          if (doc.draft_text) {
+            loadExistingDraft(doc);
             return;
           }
         }
@@ -139,7 +162,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
       : history;
 
     const aiMsg: Message = { role: "assistant", content: "" };
-    setMessages(isInit ? [aiMsg] : [...history.slice(0, -1), aiMsg]);
+    setMessages(isInit ? [aiMsg] : [...history, aiMsg]);
 
     try {
       const res = await fetch("/api/wizard", {
@@ -196,11 +219,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
 
     const userMsg: Message = { role: "user", content: userText };
     const newHistory = [...messages, userMsg];
-    setMessages(newHistory);
-
-    // Add placeholder AI message
-    setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
-    await runDrafter([...newHistory, { role: "assistant", content: "" }], false);
+    await runDrafter(newHistory, false);
   }
 
   async function handleDownload() {

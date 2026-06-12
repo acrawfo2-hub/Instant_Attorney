@@ -1,6 +1,7 @@
 import Link from "next/link";
 import AttachmentPanel from "@/components/AttachmentPanel";
 import type { CaseFile, FactItem, Document, Profile, WizardType, ConsultRequest } from "@/lib/types";
+import { isValidWizardType } from "@/lib/document-utils";
 import { WIZARD_LABELS } from "@/lib/types";
 
 // ── Document status display ──────────────────────────────────────────────────
@@ -344,7 +345,7 @@ export default function ClientFileView({
                 Your attorney has suggested the following documents based on your matter. Launch a wizard to begin drafting.
               </p>
               <div className="lf-wizard-grid">
-                {recommendedWizards.filter((wType) => wType !== "intake_summary").map((wType) => (
+                {recommendedWizards.filter(isValidWizardType).map((wType) => (
                   <WizardCard
                     key={wType}
                     wizardType={wType}
