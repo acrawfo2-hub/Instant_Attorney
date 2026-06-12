@@ -79,12 +79,24 @@ export async function POST(req: NextRequest) {
   const documentLabel = (wizardType === "general_document" && instrument)
     ? instrument
     : WIZARD_LABELS[wizardType as WizardType];
-  const systemPrompt = `${fileContext}\n\nDocument being drafted: ${documentLabel}\n${fieldHints}\n\n${DRAFTER_SYSTEM_PROMPT}`;
-
   const stream = anthropic.messages.stream({
     model: "claude-sonnet-4-6",
     max_tokens: 3500,
-    system: systemPrompt,
+    system: [
+      {
+        type: "text" as const,
+        text: DRAFTER_SYSTEM_PROMPT,
+      },
+      {
+        type: "text" as const,
+        text: `Document being drafted: ${documentLabel}\n\n${fieldHints}`,
+        cache_control: { type: "ephemeral" as const },
+      },
+      {
+        type: "text" as const,
+        text: fileContext,
+      },
+    ],
     messages: sanitizedMessages,
   });
 

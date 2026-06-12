@@ -102,10 +102,6 @@ export async function POST(req: NextRequest) {
     ? buildFileContext(caseFile, facts, attachments, requestedAttachments)
     : "";
 
-  const systemPrompt = fileContext
-    ? `${fileContext}\n\n${ACP_CHAT_SYSTEM_PROMPT}`
-    : ACP_CHAT_SYSTEM_PROMPT;
-
   // Build Anthropic messages — replace last user message with multimodal if attachment present
   type AnthropicMessage = { role: "user" | "assistant"; content: Anthropic.MessageParam["content"] };
   const anthropicMessages: AnthropicMessage[] = messages.map((m) => ({
@@ -157,7 +153,14 @@ export async function POST(req: NextRequest) {
   const stream = anthropic.messages.stream({
     model: "claude-sonnet-4-6",
     max_tokens: 1500,
-    system: systemPrompt,
+    system: [
+      {
+        type: "text" as const,
+        text: ACP_CHAT_SYSTEM_PROMPT,
+        cache_control: { type: "ephemeral" as const },
+      },
+      ...(fileContext ? [{ type: "text" as const, text: fileContext }] : []),
+    ],
     messages: anthropicMessages,
   });
 
