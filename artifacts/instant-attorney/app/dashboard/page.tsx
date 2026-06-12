@@ -110,8 +110,8 @@ export default async function DashboardPage() {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
             </svg>
-            Quick Consult
-            <span className="dash-btn-hint">Discuss any legal topic unrelated to your files</span>
+            Quick Question
+            <span className="dash-btn-hint">Seek legal advice on any legal topic unrelated to your files</span>
           </Link>
           {consult && consult.status !== "cancelled" && consult.status !== "completed" ? (
             <a href="#consult-status" className="dash-btn dash-btn-secondary dash-btn--consult-active">
@@ -206,7 +206,7 @@ export default async function DashboardPage() {
             </div>
             <h2 className="dash-empty-title">No active files</h2>
             <p className="dash-empty-sub">
-              Begin an intake to build your Living File with Crawford Law, or use Quick Consult for any privileged one-off question.
+              Begin an intake to build your Living File with Crawford Law, or use Quick Question for any privileged one-off question.
             </p>
             <Link href="/chat" className="dash-btn dash-btn-primary dash-btn-lg">
               Begin Intake

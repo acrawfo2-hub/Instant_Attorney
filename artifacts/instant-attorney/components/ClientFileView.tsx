@@ -95,7 +95,6 @@ function WizardCard({
         <span className="lf-wizard-label">{label}</span>
         {preWarmedDocId && <span className="lf-wizard-ready-badge">Draft ready</span>}
       </div>
-      <span className="lf-wizard-arrow">→</span>
     </Link>
   );
 }
@@ -362,7 +361,7 @@ export default function ClientFileView({
                 Your attorney has suggested the following documents based on your matter. Launch a wizard to begin drafting.
               </p>
               <div className="lf-wizard-grid">
-                {recommendedWizards.filter(isValidWizardType).map((wType) => (
+                {recommendedWizards.filter((w) => w !== "intake_summary" && isValidWizardType(w)).map((wType) => (
                   <WizardCard
                     key={wType}
                     wizardType={wType}
