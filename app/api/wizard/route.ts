@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { DRAFTER_SYSTEM_PROMPT, buildFileContext } from "@/lib/prompts";
+import { DRAFTER_SYSTEM_PROMPT, WIZARD_FIELD_HINTS, buildFileContext } from "@/lib/prompts";
 import { parseAndUpdateFile, extractDraftText, isDraftReadyForReview } from "@/lib/file-parser";
 import { BYPASS_USER_ID, WIZARD_LABELS } from "@/lib/types";
 import type { WizardType, CaseFile, FactItem, Attachment, RequestedAttachment } from "@/lib/types";
@@ -63,7 +63,8 @@ export async function POST(req: NextRequest) {
   const attachments = (attachmentRows ?? []) as Attachment[];
   const requestedAttachments = (requestedRows ?? []) as RequestedAttachment[];
   const fileContext = caseFile ? buildFileContext(caseFile, facts, attachments, requestedAttachments) : "";
-  const systemPrompt = `${fileContext}\n\n${DRAFTER_SYSTEM_PROMPT}`;
+  const fieldHints = WIZARD_FIELD_HINTS[wizardType as WizardType];
+  const systemPrompt = `${fileContext}\n\nDocument being drafted: ${WIZARD_LABELS[wizardType as WizardType]}\n${fieldHints}\n\n${DRAFTER_SYSTEM_PROMPT}`;
 
   const stream = anthropic.messages.stream({
     model: "claude-sonnet-4-6",

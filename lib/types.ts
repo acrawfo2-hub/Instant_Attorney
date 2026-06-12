@@ -55,6 +55,7 @@ export interface LegalStrategy {
   strengths: string[];
   risks: string[];
   recommended_wizards: WizardType[];
+  recommend_consult?: boolean;  // true when the AI determines a live attorney consult is warranted
 }
 
 export interface CaseFile {
@@ -96,6 +97,22 @@ export interface IntakeMessage {
 }
 
 export type ReviewStatus = "reviewing" | "review_ready" | "merging" | "merged";
+
+export type ConsultStatus = "pending" | "confirmed" | "attorney_proposed" | "cancelled" | "completed";
+
+export interface ConsultRequest {
+  id: string;
+  user_id: string;
+  case_file_id: string | null;
+  status: ConsultStatus;
+  proposed_times: string[];          // ISO timestamps — client's 3 picks
+  confirmed_time: string | null;
+  attorney_proposed_time: string | null;
+  client_phone: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
 export interface Document {
   id: string;

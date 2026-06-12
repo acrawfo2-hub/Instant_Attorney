@@ -141,12 +141,15 @@ async function parseLegalStrategy(
   const block = match[1];
   const summaryMatch = block.match(/SUMMARY:\s*([\s\S]*?)(?=\nSTRENGTHS:|\nRISKS:|\nSUGGESTED|\nRECOMMENDED|$)/i);
 
+  const consultMatch = block.match(/RECOMMEND_CONSULT:\s*(true|false)/i);
+
   const strategy: LegalStrategy = {
     summary: summaryMatch?.[1]?.trim() ?? "",
     instruments: extractBullets(block, "SUGGESTED INSTRUMENTS"),
     strengths: extractBullets(block, "STRENGTHS"),
     risks: extractBullets(block, "RISKS"),
     recommended_wizards: extractBullets(block, "RECOMMENDED WIZARDS") as WizardType[],
+    recommend_consult: consultMatch ? consultMatch[1].toLowerCase() === "true" : undefined,
   };
 
   await db

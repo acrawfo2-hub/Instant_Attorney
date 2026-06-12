@@ -190,6 +190,7 @@ SUGGESTED INSTRUMENTS:
 • [Legal instrument or document type relevant to this matter]
 RECOMMENDED WIZARDS:
 • [wizard_type — one per line, from: intake_summary, demand_letter, complaint_letter, draft_contract, draft_waiver, wills_trusts, doc_review]
+RECOMMEND_CONSULT: [true | false — true if the matter has significant legal complexity, tight deadlines, high financial or liberty stakes, active litigation, or facts that genuinely require attorney judgment before proceeding]
 ---END STRATEGY---
 
 Wizard recommendation rules:
@@ -397,6 +398,17 @@ Required outputs for ---WIZARD COMPLETE---:
 - FIT_TO_CASE: how this document relates to the overall matter strategy
 
 Opening: Ask the client to paste or describe the document they want reviewed.`,
+};
+
+// ── Wizard field hints (used by the drafter API to give document-specific guidance) ──
+export const WIZARD_FIELD_HINTS: Record<WizardType, string> = {
+  intake_summary: `Required fields: client full name and contact, matter type/subtype, narrative summary, key parties, timeline of events, client goals, confirmed facts, outstanding gaps, urgency/deadline flags, documents in hand, prior legal representation.`,
+  demand_letter: `Required fields: sender (client) full name and address, recipient (opposing party) full name and address, date of letter, factual background (concise/chronological), legal basis for claim, specific demands/relief requested, response deadline (10–30 days), consequences if demand not met.`,
+  complaint_letter: `Required fields: complainant name and contact, agency receiving complaint, respondent name and address, nature of complaint, protected class or right at issue, chronological factual narrative, witnesses, supporting documents, relief requested, verification/signature block.`,
+  draft_contract: `Required fields: contract type, parties (full legal names and roles), effective date and term, core obligations of each party, compensation/consideration, IP provisions, confidentiality provisions, termination conditions, dispute resolution, governing law, signatures block.`,
+  draft_waiver: `Required fields: waiver type (liability release / photo consent / medical consent / indemnification), releasor (name and description — who gives up rights), releasee (name and description — who is protected), specific rights or claims being released, activities or events covered, duration of the waiver, consideration (what the releasor receives), governing law and jurisdiction, voluntary acknowledgment language, signatures block.`,
+  wills_trusts: `Required fields vary by instrument — identify instrument first (will / living trust / POA / healthcare directive). For a will: testator full legal name, DOB, state of residence, executor and alternate executor, beneficiaries with shares, specific bequests, residuary clause, witnesses/notary requirements.`,
+  doc_review: `Required fields: document type, parties, document purpose/summary, favorable provisions, unfavorable provisions or missing protections, ambiguous language, red flags, recommended edits, fit to overall case strategy.`,
 };
 
 // ── Drafter agent system prompt ──────────────────────────────────────────────

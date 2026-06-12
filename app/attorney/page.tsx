@@ -2,11 +2,16 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { WIZARD_LABELS } from "@/lib/types";
-import type { Document, CaseFile, Profile } from "@/lib/types";
+import type { Document, CaseFile, Profile, ConsultRequest } from "@/lib/types";
 import AutoReviewToggle from "@/components/AutoReviewToggle";
+import ConsultActions from "@/components/ConsultActions";
 
 interface DocumentWithRelations extends Document {
   case_files: CaseFile;
+  profiles: Profile;
+}
+
+interface ConsultWithProfile extends ConsultRequest {
   profiles: Profile;
 }
 
@@ -75,7 +80,23 @@ export default async function AttorneyPage() {
     .order("updated_at", { ascending: false })
     .limit(50);
 
+  const { data: pendingConsults } = await db
+    .from("consult_requests")
+    .select("*, profiles!consult_requests_user_id_fkey(*)")
+    .in("status", ["pending", "attorney_proposed"])
+    .order("created_at", { ascending: true })
+    .limit(20);
+
+  const { data: confirmedConsults } = await db
+    .from("consult_requests")
+    .select("*, profiles!consult_requests_user_id_fkey(*)")
+    .in("status", ["confirmed"])
+    .order("confirmed_time", { ascending: true })
+    .limit(10);
+
   const docs = (documents ?? []) as DocumentWithRelations[];
+  const activConsults = (pendingConsults ?? []) as ConsultWithProfile[];
+  const upcomingConsults = (confirmedConsults ?? []) as ConsultWithProfile[];
   const pending = docs.filter((d) => d.status === "pending_review");
   const others = docs.filter((d) => d.status !== "pending_review");
 
@@ -97,6 +118,61 @@ export default async function AttorneyPage() {
       </header>
 
       <main className="atty-main">
+        {/* Consult Requests */}
+        {(activConsults.length > 0 || upcomingConsults.length > 0) && (
+          <section className="atty-section atty-section-consults">
+            <h2 className="atty-section-title">
+              Consult Requests
+              {activConsults.length > 0 && <span className="atty-count atty-count-urgent">{activConsults.length}</span>}
+            </h2>
+
+            {activConsults.length > 0 && (
+              <div className="atty-consult-list">
+                {activConsults.map((c) => (
+                  <div key={c.id} className="atty-consult-card atty-consult-card-pending">
+                    <div className="atty-consult-header">
+                      <div>
+                        <div className="atty-consult-client">{c.profiles?.full_name ?? c.profiles?.email ?? "Unknown client"}</div>
+                        <div className="atty-consult-phone">{c.client_phone ?? "—"}</div>
+                      </div>
+                      <span className={`atty-badge ${c.status === "attorney_proposed" ? "atty-badge-blue" : "atty-badge-amber"}`}>
+                        {c.status === "attorney_proposed" ? "Awaiting Client" : "Awaiting Confirmation"}
+                      </span>
+                    </div>
+                    {c.notes && <div className="atty-consult-notes">&ldquo;{c.notes}&rdquo;</div>}
+                    <ConsultActions consult={c} clientName={c.profiles?.full_name ?? c.profiles?.email ?? "Client"} />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {upcomingConsults.length > 0 && (
+              <>
+                <h3 className="atty-subsection-title">Upcoming Confirmed</h3>
+                <div className="atty-consult-list">
+                  {upcomingConsults.map((c) => (
+                    <div key={c.id} className="atty-consult-card atty-consult-card-confirmed">
+                      <div className="atty-consult-header">
+                        <div>
+                          <div className="atty-consult-client">{c.profiles?.full_name ?? c.profiles?.email ?? "Unknown client"}</div>
+                          <div className="atty-consult-phone">{c.client_phone ?? "—"}</div>
+                        </div>
+                        <span className="atty-badge atty-badge-green">Confirmed</span>
+                      </div>
+                      <div className="atty-consult-time">
+                        {c.confirmed_time
+                          ? new Date(c.confirmed_time).toLocaleString("en-US", { timeZone: "America/Chicago", weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" })
+                          : "—"}
+                      </div>
+                      {c.notes && <div className="atty-consult-notes">&ldquo;{c.notes}&rdquo;</div>}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </section>
+        )}
+
         {/* Pending Review — 48-hour clock */}
         <section className="atty-section">
           <h2 className="atty-section-title">

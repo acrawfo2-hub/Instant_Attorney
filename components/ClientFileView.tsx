@@ -1,6 +1,6 @@
 import Link from "next/link";
 import AttachmentPanel from "@/components/AttachmentPanel";
-import type { CaseFile, FactItem, Document, Profile, WizardType } from "@/lib/types";
+import type { CaseFile, FactItem, Document, Profile, WizardType, ConsultRequest } from "@/lib/types";
 import { WIZARD_LABELS } from "@/lib/types";
 
 // ── Document status display ──────────────────────────────────────────────────
@@ -106,6 +106,7 @@ interface ClientFileViewProps {
   preWarmedByType: Record<string, string>;
   mode: "client" | "attorney";
   clientProfile?: Profile;
+  consultRequest?: ConsultRequest | null;
 }
 
 export default function ClientFileView({
@@ -115,6 +116,7 @@ export default function ClientFileView({
   preWarmedByType,
   mode,
   clientProfile,
+  consultRequest,
 }: ClientFileViewProps) {
   const confirmed = facts.filter((f) => f.status === "confirmed");
   const gaps = facts.filter((f) => f.status === "gap");
@@ -147,6 +149,75 @@ export default function ClientFileView({
           </div>
         </div>
       )}
+
+      {/* Consult status / CTA — client mode only */}
+      {!isAttorney && (() => {
+        const cr = consultRequest;
+        if (cr?.status === "confirmed" && cr.confirmed_time) {
+          const timeStr = new Date(cr.confirmed_time).toLocaleString("en-US", {
+            timeZone: "America/Chicago", weekday: "long", month: "long", day: "numeric",
+            hour: "numeric", minute: "2-digit", timeZoneName: "short",
+          });
+          return (
+            <div className="lf-card lf-card-full lf-consult-banner lf-consult-banner-confirmed">
+              <div className="lf-consult-banner-inner">
+                <div className="lf-consult-banner-text">
+                  <span className="lf-consult-rec-badge lf-consult-rec-badge-confirmed">Consult Confirmed</span>
+                  <span className="lf-consult-desc"><strong>{timeStr}</strong> · Andrew will call {cr.client_phone ?? "you"}</span>
+                </div>
+              </div>
+            </div>
+          );
+        }
+        if (cr?.status === "attorney_proposed" && cr.attorney_proposed_time) {
+          const timeStr = new Date(cr.attorney_proposed_time).toLocaleString("en-US", {
+            timeZone: "America/Chicago", weekday: "short", month: "short", day: "numeric",
+            hour: "numeric", minute: "2-digit", timeZoneName: "short",
+          });
+          return (
+            <div className="lf-card lf-card-full lf-consult-banner lf-consult-banner-proposed">
+              <div className="lf-consult-banner-inner">
+                <div className="lf-consult-banner-text">
+                  <span className="lf-consult-rec-badge lf-consult-rec-badge-proposed">New Time Proposed</span>
+                  <span className="lf-consult-desc">Andrew suggested: <strong>{timeStr}</strong></span>
+                </div>
+                <Link href="/dashboard" className="lf-consult-btn">Review →</Link>
+              </div>
+            </div>
+          );
+        }
+        if (cr?.status === "pending") {
+          return (
+            <div className="lf-card lf-card-full lf-consult-banner lf-consult-banner-pending">
+              <div className="lf-consult-banner-inner">
+                <div className="lf-consult-banner-text">
+                  <span className="lf-consult-rec-badge lf-consult-rec-badge-pending">Awaiting Confirmation</span>
+                  <span className="lf-consult-desc">Your 3 preferred times have been submitted. Andrew will confirm one shortly.</span>
+                </div>
+              </div>
+            </div>
+          );
+        }
+        return (
+          <div className={`lf-card lf-card-full lf-consult-banner ${strategy?.recommend_consult ? "lf-consult-banner-recommended" : ""}`}>
+            <div className="lf-consult-banner-inner">
+              <div className="lf-consult-banner-text">
+                {strategy?.recommend_consult ? (
+                  <>
+                    <span className="lf-consult-rec-badge">Consult Recommended</span>
+                    <span className="lf-consult-desc">Your attorney has flagged this matter for a live strategy session.</span>
+                  </>
+                ) : (
+                  <span className="lf-consult-desc">Ready to speak with Andrew Crawford, Esq. directly? Schedule a 1-on-1 strategy session.</span>
+                )}
+              </div>
+              <Link href="/register?upgrade=consult" className="lf-consult-btn">
+                Schedule Consult · $49.99 →
+              </Link>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Matter + Next Action */}
       <div className="lf-card lf-card-sm">
@@ -268,7 +339,7 @@ export default function ClientFileView({
                 Your attorney has suggested the following documents based on your matter. Launch a wizard to begin drafting.
               </p>
               <div className="lf-wizard-grid">
-                {recommendedWizards.map((wType) => (
+                {recommendedWizards.filter((wType) => wType !== "intake_summary").map((wType) => (
                   <WizardCard
                     key={wType}
                     wizardType={wType}

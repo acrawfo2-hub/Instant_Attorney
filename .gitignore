@@ -55,3 +55,4 @@ Thumbs.db
 
 # MCP config (may contain auth tokens)
 .mcp.json
+.claude/worktrees/
