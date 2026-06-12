@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { BYPASS_USER_ID } from "@/lib/types";
-import type { CaseFile } from "@/lib/types";
+import type { CaseFile, ConsultRequest } from "@/lib/types";
 import CaseFileCard from "@/components/CaseFileCard";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
@@ -26,7 +26,7 @@ async function getData() {
     userId = user.id;
   }
 
-  const [{ data: allFiles }, { data: pendingDocs }] = await Promise.all([
+  const [{ data: allFiles }, { data: pendingDocs }, { data: consultRow }, { data: subRow }] = await Promise.all([
     db
       .from("case_files")
       .select("*")
@@ -38,21 +38,36 @@ async function getData() {
       .select("case_file_id")
       .eq("user_id", userId)
       .eq("status", "pending_review"),
+    db
+      .from("consult_requests")
+      .select("*")
+      .eq("user_id", userId)
+      .not("status", "eq", "cancelled")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    db
+      .from("subscriptions")
+      .select("status, plan")
+      .eq("user_id", userId)
+      .maybeSingle(),
   ]);
 
   const files = (allFiles ?? []) as CaseFile[];
   const activeFiles = files.filter((f) => f.status === "open");
   const archivedFiles = files.filter((f) => f.status === "archived");
   const totalPendingDocs = (pendingDocs ?? []).length;
+  const consult = consultRow as ConsultRequest | null;
+  const hasConsultSub = subRow?.plan === "consult" && ["active", "bypass"].includes(subRow?.status ?? "");
 
-  return { activeFiles, archivedFiles, totalPendingDocs };
+  return { activeFiles, archivedFiles, totalPendingDocs, consult, hasConsultSub };
 }
 
 export default async function DashboardPage() {
   const hdrs = await headers();
   const isBypass = hdrs.get("x-bypass-auth") === "true" || BYPASS_AUTH;
 
-  const { activeFiles, archivedFiles, totalPendingDocs } = await getData();
+  const { activeFiles, archivedFiles, totalPendingDocs, consult, hasConsultSub } = await getData();
   const atLimit = activeFiles.length >= MAX_ACTIVE_FILES;
 
   return (
@@ -96,14 +111,36 @@ export default async function DashboardPage() {
             Quick Consult
             <span className="dash-btn-hint">Discuss any legal topic unrelated to your files</span>
           </Link>
-          <button className="dash-btn dash-btn-secondary dash-btn--coming-soon" disabled title="Coming soon">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-              <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-            </svg>
-            Schedule Consult
-            <span className="dash-btn-hint">Book 1-on-1 time with Andrew Crawford, Esq.</span>
-          </button>
+          {consult && consult.status !== "cancelled" ? (
+            <Link href="/consult/schedule" className="dash-btn dash-btn-secondary dash-btn--consult-active">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+              View Consult
+              <span className="dash-btn-hint">
+                {consult.status === "confirmed" ? "Confirmed — see details below" : "Pending attorney confirmation"}
+              </span>
+            </Link>
+          ) : hasConsultSub ? (
+            <Link href="/consult/schedule" className="dash-btn dash-btn-secondary">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+              Schedule Consult
+              <span className="dash-btn-hint">Book 1-on-1 time with Andrew Crawford, Esq.</span>
+            </Link>
+          ) : (
+            <Link href="/register?upgrade=consult" className="dash-btn dash-btn-secondary">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+              Schedule Consult · $49.99
+              <span className="dash-btn-hint">Book 1-on-1 time with Andrew Crawford, Esq.</span>
+            </Link>
+          )}
         </div>
 
         {/* Global status bar */}
@@ -126,13 +163,24 @@ export default async function DashboardPage() {
                 : <>No docs pending review</>
               }
             </div>
-            {/* Consult status — one global consult */}
-            <div className="dash-status-pill">
+            {/* Consult status */}
+            <div className={`dash-status-pill${consult?.status === "confirmed" ? " dash-status-pill--active" : ""}`}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
                 <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
               </svg>
-              <span>No consult scheduled</span>
+              {!consult || consult.status === "cancelled" ? (
+                <span>No consult scheduled</span>
+              ) : consult.status === "confirmed" && consult.confirmed_time ? (
+                <span>
+                  Consult confirmed ·{" "}
+                  <strong>{new Date(consult.confirmed_time).toLocaleString("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" })}</strong>
+                </span>
+              ) : consult.status === "attorney_proposed" && consult.attorney_proposed_time ? (
+                <span>New time proposed — <Link href="/consult/schedule" className="dash-status-link">review it</Link></span>
+              ) : (
+                <span>Consult pending attorney confirmation</span>
+              )}
             </div>
           </div>
         </div>

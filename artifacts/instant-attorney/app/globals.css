@@ -2437,122 +2437,6 @@ body {
 .atty-file-action { font-size: 12px; color: var(--brand-text-xlt); }
 .atty-file-footer { display: flex; justify-content: space-between; font-size: 11px; color: var(--brand-text-xlt); margin-top: 4px; }
 
-/* ── Attorney dense tables (work queue + file log) ── */
-.atty-section-hint { font-size: 11px; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--brand-text-xlt); }
-
-.atty-table {
-  width: 100%;
-  border-collapse: collapse;
-  background: #fff;
-  border: 1px solid var(--brand-border, #e8e2d6);
-  border-radius: 10px;
-  overflow: hidden;
-  font-size: 13px;
-}
-.atty-table thead th {
-  text-align: left;
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--brand-text-xlt);
-  background: var(--brand-cream, #f7f3ec);
-  padding: 9px 14px;
-  border-bottom: 1px solid var(--brand-border, #e8e2d6);
-  white-space: nowrap;
-}
-.atty-table tbody td {
-  padding: 11px 14px;
-  border-bottom: 1px solid #f1ece2;
-  color: var(--brand-text-dk);
-  vertical-align: middle;
-}
-.atty-table tbody tr:last-child td { border-bottom: none; }
-.atty-tr-link { cursor: pointer; transition: background 0.12s ease; }
-.atty-tr-link:hover { background: var(--brand-cream, #faf7f1); }
-.atty-tr-urgent td { box-shadow: none; }
-.atty-tr-urgent td:first-child { border-left: 3px solid #c8960a; }
-
-.atty-th-sort { cursor: pointer; user-select: none; }
-.atty-th-sort:hover { color: var(--brand-text-md); }
-.atty-th-arrow { margin-left: 3px; color: var(--brand-gold); }
-
-.atty-td-muted { color: var(--brand-text-xlt); white-space: nowrap; }
-.atty-td-matter { color: var(--brand-text-lt); }
-.atty-td-doc { font-weight: 600; }
-.atty-td-when { font-weight: 600; white-space: nowrap; }
-.atty-td-sla { white-space: nowrap; }
-.atty-td-arrow { text-align: right; white-space: nowrap; }
-.atty-row-link { color: var(--brand-gold); font-weight: 600; font-size: 12px; text-decoration: none; }
-.atty-row-link:hover { text-decoration: underline; }
-.atty-td-arrow > span:last-child { color: var(--brand-text-xlt); }
-
-.atty-client-link {
-  background: none; border: none; padding: 0; cursor: pointer;
-  font: inherit; color: var(--brand-text-dk); font-weight: 600; text-align: left;
-}
-.atty-client-link:hover { color: var(--brand-gold); text-decoration: underline; }
-
-.atty-clock { font-size: 12px; font-weight: 700; padding: 2px 7px; border-radius: 6px; white-space: nowrap; }
-.atty-clock-ok { background: #e8f5e9; color: #2d7a4f; }
-.atty-clock-urgent { background: #fff8e1; color: #c8960a; }
-.atty-clock-overdue { background: #fee; color: #c00; }
-
-.atty-status-open { background: #e8f5e9; color: #2d7a4f; }
-.atty-status-closed { background: #f0f0f0; color: #666; }
-.atty-status-referred { background: #e3f2fd; color: #1565c0; }
-.atty-status-archived { background: #f0f0f0; color: #999; }
-
-/* File log */
-.atty-log-hint, .atty-log-filter { font-size: 12px; color: var(--brand-text-xlt); margin-bottom: 10px; }
-.atty-log-filter { display: flex; align-items: center; gap: 10px; }
-.atty-log-filter strong { color: var(--brand-text-dk); }
-.atty-chip-clear {
-  background: none; border: 1px solid var(--brand-border, #e8e2d6); border-radius: 20px;
-  padding: 2px 10px; font-size: 11px; cursor: pointer; color: var(--brand-text-lt);
-}
-.atty-chip-clear:hover { border-color: var(--brand-gold); color: var(--brand-gold); }
-
-/* Consult queue */
-.atty-consults { display: flex; flex-direction: column; gap: 20px; }
-.atty-consult-group-title {
-  font-size: 12px; font-weight: 700; color: var(--brand-text-md);
-  margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
-}
-.atty-consult-empty { display: flex; align-items: center; gap: 16px; }
-.atty-td-schedule { display: flex; align-items: center; gap: 8px; }
-.atty-td-actions { white-space: nowrap; text-align: right; }
-.atty-td-actions .atty-btn-sm + .atty-btn-sm { margin-left: 6px; }
-
-.atty-btn-sm {
-  font-size: 12px; font-weight: 600; padding: 5px 11px; border-radius: 6px;
-  border: 1px solid var(--brand-border, #e8e2d6); background: #fff; color: var(--brand-text-md);
-  cursor: pointer; white-space: nowrap;
-}
-.atty-btn-sm:hover { border-color: var(--brand-gold); color: var(--brand-text-dk); }
-.atty-btn-sm:disabled { opacity: 0.5; cursor: not-allowed; }
-.atty-btn-primary { background: var(--brand-navy, #1c2b3a); color: #fff; border-color: var(--brand-navy, #1c2b3a); }
-.atty-btn-primary:hover { background: var(--brand-navy-dk, #14202b); color: #fff; }
-.atty-btn-ghost { border-color: transparent; background: transparent; color: var(--brand-text-lt); }
-.atty-btn-ghost:hover { color: #c00; border-color: transparent; }
-
-.atty-input-sm {
-  font-size: 13px; padding: 5px 9px; border-radius: 6px;
-  border: 1px solid var(--brand-border, #e8e2d6); background: #fff; color: var(--brand-text-dk);
-}
-.atty-input-sm:focus { outline: none; border-color: var(--brand-gold); }
-
-.atty-add-consult {
-  margin-top: 4px; padding: 16px; border: 1px dashed var(--brand-border, #e8e2d6);
-  border-radius: 10px; background: var(--brand-cream, #faf7f1);
-  display: flex; flex-direction: column; gap: 12px;
-}
-.atty-add-row { display: flex; flex-wrap: wrap; gap: 14px; }
-.atty-add-consult label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 600; color: var(--brand-text-lt); }
-.atty-add-notes { width: 100%; }
-.atty-add-notes .atty-input-sm { width: 100%; }
-.atty-add-actions { display: flex; gap: 8px; }
-
 /* Attorney review page */
 .atty-review-loading, .atty-review-error {
   display: flex; align-items: center; justify-content: center;
@@ -3732,3 +3616,687 @@ mark.atty-placeholder {
 .atty-toggle-btn-on { background: rgba(52,199,89,0.15); border-color: rgba(52,199,89,0.4); color: #34c759; }
 .atty-toggle-btn-on:hover { background: rgba(52,199,89,0.25); }
 .atty-toggle-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Consult CTA banner (client file view) ───────────────────────────────── */
+.lf-consult-banner {
+  border-left: 2.5px solid var(--brand-gold);
+}
+.lf-consult-banner-recommended {
+  border-left-color: #34c759;
+  background: rgba(52, 199, 89, 0.04);
+}
+.lf-consult-banner-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.lf-consult-banner-text {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+.lf-consult-rec-badge {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #34c759;
+  background: rgba(52, 199, 89, 0.12);
+  border: 0.5px solid rgba(52, 199, 89, 0.3);
+  border-radius: 20px;
+  padding: 2px 10px;
+  white-space: nowrap;
+}
+.lf-consult-desc {
+  font-size: 13px;
+  color: var(--brand-text-md);
+}
+.lf-consult-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 18px;
+  background: var(--brand-gold);
+  color: var(--brand-cream-heading);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-dm-sans, "DM Sans"), sans-serif;
+  border-radius: var(--brand-r-md);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+.lf-consult-btn:hover { background: var(--brand-gold-lt); }
+@media (max-width: 600px) {
+  .lf-consult-banner-inner { flex-direction: column; align-items: flex-start; }
+  .lf-consult-btn { width: 100%; justify-content: center; }
+}
+
+/* ── Consult status badge variants ───────────────────────────────────────── */
+.lf-consult-banner-confirmed { border-left-color: #34c759; background: rgba(52,199,89,0.04); }
+.lf-consult-banner-pending   { border-left-color: #ff9f0a; background: rgba(255,159,10,0.04); }
+.lf-consult-banner-proposed  { border-left-color: #5ac8fa; background: rgba(90,200,250,0.05); }
+
+.lf-consult-rec-badge-confirmed { background: rgba(52,199,89,0.12); border-color: rgba(52,199,89,0.3); color: #34c759; }
+.lf-consult-rec-badge-pending   { background: rgba(255,159,10,0.12); border-color: rgba(255,159,10,0.3); color: #ff9f0a; }
+.lf-consult-rec-badge-proposed  { background: rgba(90,200,250,0.12); border-color: rgba(90,200,250,0.3); color: #5ac8fa; }
+
+/* ── Consult Scheduler page ──────────────────────────────────────────────── */
+.cs-shell { min-height: 100vh; background: var(--brand-cream); display: flex; flex-direction: column; }
+.cs-header { background: var(--brand-navy, #1a1a2e); padding: 0 2rem; height: 56px; display: flex; align-items: center; }
+.cs-header-inner { max-width: 900px; width: 100%; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; }
+.cs-brand { display: flex; align-items: center; gap: 8px; color: rgba(255,255,255,0.85); font-size: 14px; font-weight: 500; }
+.cs-header-title { color: rgba(255,255,255,0.5); font-size: 13px; }
+.cs-main { max-width: 900px; width: 100%; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+.cs-intro { margin-bottom: 2rem; text-align: center; }
+.cs-intro-title { font-size: 22px; color: var(--brand-text-dk); margin: 0 0 0.5rem; }
+.cs-intro-sub { font-size: 14px; color: var(--brand-text-md); margin: 0; }
+
+.cs-scheduler { display: flex; flex-direction: column; gap: 1.5rem; }
+
+/* Calendar + slots row */
+.cs-picker-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+@media (max-width: 640px) { .cs-picker-row { grid-template-columns: 1fr; } }
+
+.cs-calendar-panel, .cs-slots-panel {
+  background: var(--brand-white);
+  border: 0.5px solid var(--brand-border);
+  border-radius: var(--brand-r-lg);
+  padding: 1.25rem;
+}
+
+/* Calendar nav */
+.cs-cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+.cs-cal-nav-btn {
+  background: none; border: 0.5px solid var(--brand-border); border-radius: 6px;
+  width: 28px; height: 28px; cursor: pointer; font-size: 16px; color: var(--brand-text-md);
+  display: flex; align-items: center; justify-content: center;
+}
+.cs-cal-nav-btn:hover { background: var(--brand-cream-dk); }
+.cs-cal-month { font-size: 14px; font-weight: 600; color: var(--brand-text-dk); }
+
+/* Calendar grid */
+.cs-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.cs-cal-dow { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--brand-text-xlt); text-align: center; padding: 4px 0 8px; }
+.cs-day {
+  aspect-ratio: 1;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 500; color: var(--brand-text-dk);
+  background: none; border: none; border-radius: 6px; cursor: pointer;
+  transition: background 0.1s;
+}
+.cs-day:hover:not(:disabled):not(.cs-day-selected) { background: var(--brand-cream-dk); }
+.cs-day-other { color: var(--brand-text-xlt); }
+.cs-day-disabled { color: var(--brand-border); cursor: not-allowed; }
+.cs-day-selected { background: var(--brand-navy, #1a1a2e) !important; color: #fff; }
+.cs-day-has-pick { background: rgba(200,169,110,0.15); color: var(--brand-gold); font-weight: 700; }
+
+/* Slots */
+.cs-slots-empty { font-size: 13px; color: var(--brand-text-xlt); padding: 1rem 0; }
+.cs-slots-date { font-size: 13px; font-weight: 600; color: var(--brand-text-dk); margin-bottom: 0.75rem; }
+.cs-slots-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; max-height: 320px; overflow-y: auto; }
+.cs-slot {
+  padding: 8px 10px; font-size: 12px; font-weight: 500;
+  color: var(--brand-text-dk); background: var(--brand-cream);
+  border: 0.5px solid var(--brand-border); border-radius: 6px;
+  cursor: pointer; text-align: left; transition: all 0.1s;
+}
+.cs-slot:hover:not(:disabled) { border-color: var(--brand-gold); color: var(--brand-gold); }
+.cs-slot-selected { background: var(--brand-gold) !important; color: #fff !important; border-color: var(--brand-gold) !important; }
+.cs-slot-maxed { opacity: 0.35; cursor: not-allowed; }
+.cs-slot-check { font-size: 11px; }
+
+/* Chips */
+.cs-chips-area { background: var(--brand-white); border: 0.5px solid var(--brand-border); border-radius: var(--brand-r-lg); padding: 1rem 1.25rem; }
+.cs-chips-label { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--brand-text-xlt); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 8px; }
+.cs-chips-count { background: var(--brand-gold); color: #fff; border-radius: 20px; padding: 0px 8px; font-size: 10px; }
+.cs-chips-empty { font-size: 13px; color: var(--brand-text-xlt); }
+.cs-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.cs-chip {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--brand-cream-dk); border: 0.5px solid var(--brand-border);
+  border-radius: 20px; padding: 4px 10px 4px 8px;
+  font-size: 12px; color: var(--brand-text-dk);
+}
+.cs-chip-num { background: var(--brand-gold); color: #fff; border-radius: 50%; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; flex-shrink: 0; }
+.cs-chip-remove { background: none; border: none; cursor: pointer; color: var(--brand-text-xlt); font-size: 14px; padding: 0; line-height: 1; }
+.cs-chip-remove:hover { color: #ff3b30; }
+
+/* Form */
+.cs-form { background: var(--brand-white); border: 0.5px solid var(--brand-border); border-radius: var(--brand-r-lg); padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; }
+.cs-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+@media (max-width: 640px) { .cs-form-row { grid-template-columns: 1fr; } }
+.cs-form-field { display: flex; flex-direction: column; gap: 4px; }
+.cs-form-label { font-size: 12px; font-weight: 600; color: var(--brand-text-dk); }
+.cs-form-req { color: #ff3b30; }
+.cs-form-optional { color: var(--brand-text-xlt); font-weight: 400; }
+.cs-form-input {
+  padding: 9px 12px; font-size: 13px; font-family: var(--font-dm-sans, "DM Sans"), sans-serif;
+  background: var(--brand-cream); border: 0.5px solid var(--brand-border);
+  border-radius: var(--brand-r-md); color: var(--brand-text-dk); outline: none;
+  transition: border-color 0.15s;
+}
+.cs-form-input:focus { border-color: var(--brand-gold); }
+.cs-form-select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px; }
+.cs-form-textarea { resize: vertical; min-height: 72px; }
+.cs-form-hint { font-size: 11px; color: var(--brand-text-xlt); }
+.cs-form-error { font-size: 13px; color: #ff3b30; background: rgba(255,59,48,0.06); border: 0.5px solid rgba(255,59,48,0.2); border-radius: 6px; padding: 8px 12px; }
+.cs-submit-btn {
+  padding: 12px 24px; font-size: 14px; font-weight: 600;
+  font-family: var(--font-dm-sans, "DM Sans"), sans-serif;
+  background: var(--brand-gold); color: var(--brand-cream-heading);
+  border: none; border-radius: var(--brand-r-md); cursor: pointer;
+  transition: background 0.15s; align-self: flex-end;
+}
+.cs-submit-btn:hover:not(:disabled) { background: var(--brand-gold-lt); }
+.cs-submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Attorney consult section ─────────────────────────────────────────────── */
+.atty-section-consults { border-left: 3px solid var(--brand-gold); padding-left: 1rem; }
+.atty-count-urgent { background: #ff3b30; color: #fff; }
+.atty-subsection-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--brand-text-xlt); margin: 1.25rem 0 0.5rem; }
+.atty-consult-list { display: flex; flex-direction: column; gap: 0.75rem; }
+.atty-consult-card {
+  background: var(--brand-white); border: 0.5px solid var(--brand-border);
+  border-radius: var(--brand-r-lg); padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;
+}
+.atty-consult-card-pending { border-left: 3px solid #ff9f0a; }
+.atty-consult-card-confirmed { border-left: 3px solid #34c759; }
+.atty-consult-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.atty-consult-client { font-size: 14px; font-weight: 600; color: var(--brand-text-dk); }
+.atty-consult-phone { font-size: 12px; color: var(--brand-text-md); margin-top: 2px; }
+.atty-consult-time { font-size: 14px; font-weight: 600; color: var(--brand-gold); }
+.atty-consult-notes { font-size: 12px; color: var(--brand-text-md); font-style: italic; }
+
+/* ConsultActions component */
+.ca-actions { display: flex; flex-direction: column; gap: 0.75rem; }
+.ca-actions-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--brand-text-xlt); }
+.ca-confirm-options { display: flex; flex-direction: column; gap: 0.5rem; }
+.ca-time-btns { display: flex; flex-direction: column; gap: 6px; }
+.ca-btn-time {
+  padding: 8px 14px; font-size: 12px; font-weight: 500; text-align: left;
+  background: var(--brand-cream); border: 0.5px solid var(--brand-border);
+  border-radius: 6px; cursor: pointer; color: var(--brand-text-dk);
+  transition: all 0.1s; font-family: var(--font-dm-sans, "DM Sans"), sans-serif;
+}
+.ca-btn-time:hover:not(:disabled) { border-color: #34c759; color: #34c759; background: rgba(52,199,89,0.05); }
+.ca-divider-or { font-size: 11px; color: var(--brand-text-xlt); text-align: center; }
+.ca-propose-form { display: flex; flex-direction: column; gap: 8px; }
+.ca-propose-label { font-size: 12px; font-weight: 600; color: var(--brand-text-dk); }
+.ca-propose-input {
+  padding: 8px 12px; font-size: 13px; background: var(--brand-cream);
+  border: 0.5px solid var(--brand-border); border-radius: 6px;
+  font-family: var(--font-dm-sans, "DM Sans"), sans-serif; color: var(--brand-text-dk);
+}
+.ca-propose-actions { display: flex; gap: 8px; }
+.ca-btn {
+  padding: 8px 16px; font-size: 12px; font-weight: 600; border-radius: 6px;
+  cursor: pointer; border: none; font-family: var(--font-dm-sans, "DM Sans"), sans-serif;
+  transition: all 0.15s;
+}
+.ca-btn-primary { background: var(--brand-gold); color: var(--brand-cream-heading); }
+.ca-btn-primary:hover:not(:disabled) { background: var(--brand-gold-lt); }
+.ca-btn-secondary { background: var(--brand-cream-dk); color: var(--brand-text-dk); border: 0.5px solid var(--brand-border); }
+.ca-btn-ghost { background: none; color: var(--brand-text-md); border: 0.5px solid var(--brand-border); }
+.ca-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.ca-btn-sm { padding: 4px 10px; font-size: 11px; border-radius: 4px; font-weight: 600; cursor: pointer; border: none; font-family: var(--font-dm-sans,"DM Sans"),sans-serif; }
+.ca-btn-cancel { background: rgba(255,59,48,0.08); color: #ff3b30; border: 0.5px solid rgba(255,59,48,0.2); }
+.ca-confirmed { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ca-time { font-size: 13px; font-weight: 600; color: var(--brand-text-dk); }
+.ca-badge { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; border-radius: 20px; padding: 2px 8px; border: 0.5px solid; }
+.ca-badge-confirmed { background: rgba(52,199,89,0.12); border-color: rgba(52,199,89,0.3); color: #34c759; }
+.ca-badge-proposed  { background: rgba(90,200,250,0.12); border-color: rgba(90,200,250,0.3); color: #5ac8fa; }
+.ca-badge-cancelled { background: rgba(255,59,48,0.08); border-color: rgba(255,59,48,0.2); color: #ff3b30; }
+.ca-badge-completed { background: rgba(52,199,89,0.08); border-color: rgba(52,199,89,0.15); color: #34c759; }
+.ca-error { font-size: 12px; color: #ff3b30; }
+
+/* Dashboard status link */
+.dash-status-link { color: var(--brand-gold); text-decoration: underline; cursor: pointer; }
+
+/* ── CONSULT SCHEDULER ─────────────────────────────────────────────────────── */
+.cs-shell {
+  min-height: 100vh;
+  background: var(--brand-cream);
+  padding: 2rem 1rem 4rem;
+}
+.cs-shell .lf-header {
+  background: var(--brand-white);
+  border-bottom: 0.5px solid var(--brand-border);
+}
+.cs-page-title {
+  max-width: 900px;
+  margin: 2rem auto 1.25rem;
+  padding: 0 0.5rem;
+}
+.cs-page-title h1 {
+  font-family: var(--font-playfair, "Playfair Display"), serif;
+  font-size: 1.65rem;
+  font-weight: 500;
+  color: var(--brand-text-dk);
+  margin-bottom: 0.25rem;
+}
+.cs-page-title p {
+  font-size: 13.5px;
+  color: var(--brand-text-lt);
+}
+.cs-card {
+  max-width: 900px;
+  margin: 0 auto 1.5rem;
+  background: var(--brand-white);
+  border: 0.5px solid var(--brand-border);
+  border-radius: var(--brand-r-lg);
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  overflow: hidden;
+}
+@media (max-width: 720px) {
+  .cs-card { grid-template-columns: 1fr; }
+}
+.cs-calendar {
+  border-right: 0.5px solid var(--brand-border);
+  padding: 1.25rem;
+}
+@media (max-width: 720px) {
+  .cs-calendar { border-right: none; border-bottom: 0.5px solid var(--brand-border); }
+}
+.cs-cal-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+.cs-cal-month {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--brand-text-dk);
+}
+.cs-cal-nav-btn {
+  background: none;
+  border: 0.5px solid var(--brand-border);
+  border-radius: var(--brand-r-sm);
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--brand-text-md);
+  transition: background 0.15s;
+}
+.cs-cal-nav-btn:hover { background: var(--brand-cream); }
+.cs-cal-nav-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.cs-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+.cs-cal-dow {
+  text-align: center;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--brand-text-xlt);
+  padding: 4px 0 6px;
+  text-transform: uppercase;
+}
+.cs-day {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: var(--brand-text-md);
+  border-radius: var(--brand-r-sm);
+  cursor: pointer;
+  border: none;
+  background: none;
+  font-family: var(--font-dm-sans, "DM Sans"), sans-serif;
+  transition: background 0.12s, color 0.12s;
+  position: relative;
+}
+.cs-day:hover:not(.cs-day-disabled) { background: var(--brand-cream); color: var(--brand-text-dk); }
+.cs-day-disabled { color: rgba(26,22,18,0.22); cursor: not-allowed; }
+.cs-day-today { font-weight: 700; color: var(--brand-gold); }
+.cs-day-selected {
+  background: var(--brand-navy);
+  color: var(--brand-white) !important;
+  font-weight: 600;
+}
+.cs-day-has-selection::after {
+  content: '';
+  position: absolute;
+  bottom: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--brand-gold);
+}
+.cs-day-empty { cursor: default; }
+.cs-slots {
+  padding: 1.25rem;
+  overflow-y: auto;
+  max-height: 480px;
+}
+.cs-slots-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 200px;
+  gap: 0.5rem;
+  color: var(--brand-text-xlt);
+  font-size: 13.5px;
+}
+.cs-slots-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand-text-dk);
+  margin-bottom: 0.75rem;
+}
+.cs-slot-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+@media (max-width: 500px) {
+  .cs-slot-grid { grid-template-columns: repeat(2, 1fr); }
+}
+.cs-slot {
+  padding: 8px 6px;
+  border: 0.5px solid var(--brand-border);
+  border-radius: var(--brand-r-sm);
+  font-size: 12.5px;
+  color: var(--brand-text-md);
+  background: var(--brand-white);
+  cursor: pointer;
+  font-family: var(--font-dm-sans, "DM Sans"), sans-serif;
+  text-align: center;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.cs-slot:hover:not(.cs-slot-disabled) {
+  background: var(--brand-cream);
+  border-color: var(--brand-gold);
+  color: var(--brand-text-dk);
+}
+.cs-slot-selected {
+  background: var(--brand-navy);
+  border-color: var(--brand-navy);
+  color: var(--brand-white) !important;
+  font-weight: 600;
+}
+.cs-slot-disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  background: var(--brand-cream);
+}
+.cs-chips-area {
+  max-width: 900px;
+  margin: 0 auto 1.25rem;
+  padding: 0 0.5rem;
+}
+.cs-chips-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--brand-text-lt);
+  margin-bottom: 0.5rem;
+}
+.cs-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 36px;
+  align-items: center;
+}
+.cs-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--brand-navy);
+  color: var(--brand-white);
+  padding: 5px 10px 5px 12px;
+  border-radius: 20px;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.cs-chip-remove {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.55);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  transition: color 0.12s;
+}
+.cs-chip-remove:hover { color: #fff; }
+.cs-chips-empty {
+  font-size: 13px;
+  color: var(--brand-text-xlt);
+  font-style: italic;
+}
+.cs-form {
+  max-width: 900px;
+  margin: 0 auto;
+  background: var(--brand-white);
+  border: 0.5px solid var(--brand-border);
+  border-radius: var(--brand-r-lg);
+  padding: 1.5rem;
+}
+.cs-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+.cs-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.cs-field label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--brand-text-lt);
+}
+.cs-field input,
+.cs-field textarea,
+.cs-field select {
+  padding: 9px 12px;
+  border: 0.5px solid var(--brand-border);
+  border-radius: var(--brand-r-sm);
+  font-size: 13.5px;
+  color: var(--brand-text-dk);
+  background: var(--brand-white);
+  font-family: var(--font-dm-sans, "DM Sans"), sans-serif;
+  transition: border-color 0.15s;
+}
+.cs-field input:focus,
+.cs-field textarea:focus,
+.cs-field select:focus {
+  outline: none;
+  border-color: var(--brand-gold);
+}
+.cs-field textarea { resize: vertical; min-height: 80px; }
+.cs-submit-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.cs-submit-hint {
+  font-size: 12.5px;
+  color: var(--brand-text-lt);
+}
+.cs-submit-btn {
+  padding: 10px 28px;
+  background: var(--brand-gold);
+  color: var(--brand-navy);
+  border: none;
+  border-radius: var(--brand-r-md);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font-dm-sans, "DM Sans"), sans-serif;
+  transition: background 0.15s, opacity 0.15s;
+}
+.cs-submit-btn:hover { background: var(--brand-gold-lt); }
+.cs-submit-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.cs-error {
+  font-size: 13px;
+  color: #c44444;
+  margin-top: 0.5rem;
+}
+
+/* ── Consult status cards ────────────────────────────────────────────────── */
+.consult-status-card {
+  border-radius: var(--brand-r-md);
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  border: 0.5px solid var(--brand-border);
+  background: var(--brand-white);
+  margin-bottom: 0.75rem;
+}
+.consult-status-confirmed {
+  border-left: 3px solid #34c759;
+  background: rgba(52, 199, 89, 0.04);
+}
+.consult-status-pending {
+  border-left: 3px solid var(--brand-gold);
+  background: rgba(200, 169, 110, 0.04);
+}
+.consult-status-proposed {
+  border-left: 3px solid #5ac8fa;
+  background: rgba(90, 200, 250, 0.04);
+}
+.consult-status-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.consult-status-body { flex: 1; }
+.consult-status-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--brand-text-dk);
+  margin-bottom: 3px;
+}
+.consult-status-detail {
+  font-size: 12.5px;
+  color: var(--brand-text-md);
+}
+.consult-status-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.consult-status-btn {
+  padding: 5px 14px;
+  border-radius: var(--brand-r-sm);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  font-family: var(--font-dm-sans, "DM Sans"), sans-serif;
+  transition: background 0.15s;
+}
+.consult-status-btn-accept {
+  background: var(--brand-navy);
+  color: var(--brand-white);
+}
+.consult-status-btn-accept:hover { background: var(--brand-navy-md); }
+.consult-status-btn-decline {
+  background: rgba(196, 68, 68, 0.12);
+  color: #c44444;
+}
+.consult-status-btn-decline:hover { background: rgba(196, 68, 68, 0.2); }
+
+/* ── Attorney consult sections ──────────────────────────────────────────── */
+.atty-consult-card {
+  background: var(--brand-cream);
+  border: 0.5px solid var(--brand-border);
+  border-radius: var(--brand-r-md);
+  padding: 1rem 1.25rem;
+  margin-bottom: 0.75rem;
+}
+.atty-consult-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.6rem;
+}
+.atty-consult-client {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--brand-text-dk);
+}
+.atty-consult-phone {
+  font-size: 12.5px;
+  color: var(--brand-text-lt);
+  margin-top: 2px;
+}
+.atty-consult-times {
+  font-size: 12.5px;
+  color: var(--brand-text-md);
+  margin-bottom: 0.75rem;
+  line-height: 1.7;
+}
+.atty-consult-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.atty-consult-time-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.atty-consult-time-btn {
+  padding: 5px 12px;
+  font-size: 12px;
+  border-radius: var(--brand-r-sm);
+  background: var(--brand-navy);
+  color: var(--brand-white);
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-dm-sans, "DM Sans"), sans-serif;
+  transition: background 0.12s;
+}
+.atty-consult-time-btn:hover { background: var(--brand-navy-md); }
+.atty-consult-propose-form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.atty-consult-propose-form input {
+  padding: 6px 10px;
+  border: 0.5px solid var(--brand-border);
+  border-radius: var(--brand-r-sm);
+  font-size: 12.5px;
+  font-family: var(--font-dm-sans, "DM Sans"), sans-serif;
+  background: var(--brand-white);
+  color: var(--brand-text-dk);
+}

@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { CaseFile, FactItem, BYPASS_USER_ID } from "@/lib/types";
-import type { Document } from "@/lib/types";
+import type { Document, ConsultRequest } from "@/lib/types";
 import ClientFileView from "@/components/ClientFileView";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
@@ -23,7 +23,7 @@ async function getData(caseFileId: string) {
     userId = user.id;
   }
 
-  const [{ data: caseFile }, { data: facts }, { data: documents }] = await Promise.all([
+  const [{ data: caseFile }, { data: facts }, { data: documents }, { data: consultRow }] = await Promise.all([
     db.from("case_files")
       .select("*")
       .eq("id", caseFileId)
@@ -37,6 +37,13 @@ async function getData(caseFileId: string) {
       .select("*")
       .eq("case_file_id", caseFileId)
       .order("created_at", { ascending: false }),
+    db.from("consult_requests")
+      .select("*")
+      .eq("user_id", userId)
+      .not("status", "eq", "cancelled")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
 
   if (!caseFile) return null;
@@ -55,6 +62,7 @@ async function getData(caseFileId: string) {
     documents: allDocs.filter((d) => d.status !== "pre_warmed"),
     preWarmedByType,
     userId,
+    consultRequest: (consultRow as ConsultRequest | null) ?? null,
   };
 }
 
@@ -70,7 +78,7 @@ export default async function FileDetailPage({
   const result = await getData(id);
   if (!result) notFound();
 
-  const { caseFile, facts, documents, preWarmedByType } = result;
+  const { caseFile, facts, documents, preWarmedByType, consultRequest } = result;
 
   const title = caseFile.title
     || (caseFile.matter_subtype ? caseFile.matter_subtype.replace(/_/g, " ") : null)
@@ -113,6 +121,7 @@ export default async function FileDetailPage({
           documents={documents}
           preWarmedByType={preWarmedByType}
           mode="client"
+          consultRequest={consultRequest}
         />
       </main>
     </div>

@@ -1,12 +1,12 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { DRAFTER_SYSTEM_PROMPT, buildFileContext } from "@/lib/prompts";
+import { DRAFTER_SYSTEM_PROMPT, WIZARD_FIELD_HINTS, buildFileContext } from "@/lib/prompts";
 import { parseAndUpdateFile, extractDraftText, isDraftReadyForReview } from "@/lib/file-parser";
 import { BYPASS_USER_ID, WIZARD_LABELS } from "@/lib/types";
 import type { WizardType, CaseFile, FactItem, Attachment, RequestedAttachment } from "@/lib/types";
 
-const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
 export async function POST(req: NextRequest) {
@@ -34,6 +34,18 @@ export async function POST(req: NextRequest) {
     if (error || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const { data: sub } = await db
+      .from("subscriptions")
+      .select("status")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    const activeStatuses = ["active", "trialing", "bypass"];
+    if (!sub || !activeStatuses.includes(sub.status)) {
+      return NextResponse.json({ error: "Subscription required" }, { status: 403 });
+    }
+
     userId = user.id;
   }
 
@@ -51,7 +63,8 @@ export async function POST(req: NextRequest) {
   const attachments = (attachmentRows ?? []) as Attachment[];
   const requestedAttachments = (requestedRows ?? []) as RequestedAttachment[];
   const fileContext = caseFile ? buildFileContext(caseFile, facts, attachments, requestedAttachments) : "";
-  const systemPrompt = `${fileContext}\n\n${DRAFTER_SYSTEM_PROMPT}`;
+  const fieldHints = WIZARD_FIELD_HINTS[wizardType as WizardType];
+  const systemPrompt = `${fileContext}\n\nDocument being drafted: ${WIZARD_LABELS[wizardType as WizardType]}\n${fieldHints}\n\n${DRAFTER_SYSTEM_PROMPT}`;
 
   const stream = anthropic.messages.stream({
     model: "claude-sonnet-4-6",

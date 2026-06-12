@@ -26,6 +26,22 @@ export interface Consult {
   updated_at: string;
 }
 
+export type ConsultRequestStatus = "pending" | "confirmed" | "attorney_proposed" | "cancelled" | "completed";
+
+export interface ConsultRequest {
+  id: string;
+  user_id: string;
+  case_file_id: string | null;
+  status: ConsultRequestStatus;
+  proposed_times: string[];
+  confirmed_time: string | null;
+  attorney_proposed_time: string | null;
+  client_phone: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // All supported wizard types — add new ones here as wizards are built
 export type WizardType =
   | "demand_letter"
@@ -71,6 +87,7 @@ export interface LegalStrategy {
   strengths: string[];
   risks: string[];
   recommended_wizards: WizardType[];
+  recommend_consult?: boolean;
 }
 
 export interface CaseFile {
