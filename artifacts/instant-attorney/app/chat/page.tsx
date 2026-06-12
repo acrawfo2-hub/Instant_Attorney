@@ -286,7 +286,7 @@ function AcpChatInner() {
 
         <div className="fc-topbar-center">
           <span className="fc-phase-label">
-            {isQuickConsult ? "Quick Consult · ACP Protected" : "Phase II · Privileged Intake"}
+            {isQuickConsult ? "Quick Question · ACP Protected" : "Phase II · Privileged Intake"}
           </span>
         </div>
 
@@ -295,7 +295,7 @@ function AcpChatInner() {
             <button
               className="fc-upgrade-btn"
               style={{ background: "rgba(200,169,110,0.15)", color: "var(--brand-gold)" }}
-              onClick={() => setShowQcModal(true)}
+              onClick={() => caseFileId ? setShowQcModal(true) : router.push("/dashboard")}
             >
               Save or Close
             </button>
@@ -322,7 +322,7 @@ function AcpChatInner() {
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
           </svg>
-          Quick Consult — this conversation is ACP-protected but will be archived in 7 days unless you save it. Click <strong>Save or Close</strong> when done.
+          Quick Question — this conversation is ACP-protected but will be archived in 7 days unless you save it. Click <strong>Save or Close</strong> when done.
         </div>
       )}
 

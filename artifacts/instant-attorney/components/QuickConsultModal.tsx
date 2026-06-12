@@ -75,7 +75,7 @@ export default function QuickConsultModal({ caseFileId, onClose }: QuickConsultM
             </svg>
           </div>
           <div>
-            <h3 className="qc-modal-title">Save this Quick Consult?</h3>
+            <h3 className="qc-modal-title">Save this Quick Question?</h3>
             <p className="qc-modal-sub">This conversation will be archived and permanently deleted in 7 days unless you save it now.</p>
           </div>
         </div>
