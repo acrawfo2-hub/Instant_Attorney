@@ -9,6 +9,22 @@ export type AttachmentType = "document" | "screenshot" | "other";
 export type AttachmentStatus = "processing" | "ready" | "failed";
 export type RequestedAttachmentStatus = "requested" | "uploaded" | "waived";
 export type ReviewStatus = "reviewing" | "review_ready" | "merging" | "merged";
+export type ConsultType = "standard" | "quick_consult" | "follow_up";
+export type ConsultStatus = "needs_scheduling" | "scheduled" | "completed" | "canceled";
+
+export interface Consult {
+  id: string;
+  user_id: string;
+  case_file_id: string | null;
+  consult_type: ConsultType;
+  status: ConsultStatus;
+  scheduled_at: string | null;
+  duration_minutes: number | null;
+  location: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
 // All supported wizard types — add new ones here as wizards are built
 export type WizardType =
