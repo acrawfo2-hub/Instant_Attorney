@@ -105,16 +105,22 @@ export function buildFileContext(
     lines.push("", `NEXT ACTION: ${caseFile.next_action}`);
   }
 
-  // Attach analyzed file summaries so all agents have document context
+  // Analyzed docs get full context; stored-only docs appear by name so the
+  // AI knows they exist and can suggest analyzing them if needed.
   const readyAttachments = attachments.filter((a) => a.status === "ready");
   if (readyAttachments.length) {
     lines.push("", "ATTACHED DOCUMENTS:");
     readyAttachments.forEach((a) => {
-      lines.push(`• [${a.attachment_type.toUpperCase()}] ${a.file_name}`);
-      if (a.ai_summary) lines.push(`  Summary: ${a.ai_summary}`);
-      if (a.case_relevance) lines.push(`  Relevance: ${a.case_relevance}`);
-      if (a.urgent_findings && a.urgent_findings !== "None identified") {
-        lines.push(`  [URGENT] ${a.urgent_findings}`);
+      if (a.ai_summary) {
+        lines.push(`• [${a.attachment_type.toUpperCase()}] ${a.file_name}`);
+        lines.push(`  Summary: ${a.ai_summary}`);
+        if (a.case_relevance) lines.push(`  Relevance: ${a.case_relevance}`);
+        if (a.urgent_findings && a.urgent_findings !== "None identified") {
+          lines.push(`  [URGENT] ${a.urgent_findings}`);
+        }
+      } else {
+        // Stored only — present but not AI-analyzed yet
+        lines.push(`• [STORED — not yet analyzed] ${a.file_name}`);
       }
     });
   }
