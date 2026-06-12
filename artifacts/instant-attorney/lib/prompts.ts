@@ -619,6 +619,61 @@ PRIORITY EDIT LIST:
 Be precise. Reference specific sections or language where possible. The Priority Edit List becomes the drafter's work order — write it as instructions, not observations.`;
 }
 
+// Static instructions extracted from buildDocReviewPrompt for prompt caching
+export const DOC_REVIEW_SYSTEM_PROMPT = `You are conducting a 48-hour attorney document review for Crawford Law PLLC. Produce a structured review REPORT. Do NOT produce a revised draft. Produce EXACTLY this format:
+
+---DOCUMENT REVIEW---
+DOCUMENT OVERVIEW:
+[What this document does, parties, purpose — 2-3 sentences]
+
+CONSISTENCY WITH LIVING FILE:
+[Does the document reflect the confirmed facts and goals? Note any discrepancies — be specific]
+
+STRUCTURAL ANALYSIS:
+[Is the document complete? Any missing sections, clauses, or execution formalities?]
+
+STRENGTH ANALYSIS:
+• [Protective provision, well-drafted clause, or favorable language — one per bullet]
+
+WEAKNESS ANALYSIS:
+• [Problematic provision, missing protection, or ambiguous language — one per bullet with specific line reference where possible]
+
+PLACEHOLDER AUDIT:
+BLOCKING:
+• [[placeholder]] — [What must be resolved before this document is usable]
+NON-BLOCKING:
+• [[placeholder]] — [Can be resolved at execution or is optional]
+
+LEGAL RISK FLAGS:
+• [Anything requiring immediate attorney attention — or "None identified"]
+
+PRIORITY EDIT LIST:
+1. [Specific directive for the drafter — what to change, add, or remove and why]
+2. [Next priority edit]
+3. [Continue as needed — numbered, most critical first]
+---END REVIEW---
+
+Be precise. Reference specific sections or language where possible. The Priority Edit List becomes the drafter's work order — write it as instructions, not observations.`;
+
+// Dynamic part only (for use with DOC_REVIEW_SYSTEM_PROMPT as system)
+export function buildDocReviewUserMessage(
+  doc: Document,
+  caseFile: CaseFile,
+  facts: FactItem[],
+  attachments: Attachment[]
+): string {
+  const fileContext = buildFileContext(caseFile, facts, attachments);
+  const draftText = doc.draft_text ?? "(No draft text — reviewing structured data only)";
+  return `${fileContext}
+
+---DOCUMENT UNDER REVIEW---
+Type: ${doc.doc_type.replace(/_/g, " ")}
+Title: ${doc.title}
+
+${draftText}
+---END DOCUMENT---`;
+}
+
 export function buildMergePrompt(doc: Document, reviewReport: string): string {
   const draftText = doc.draft_text ?? "(No draft text available)";
 

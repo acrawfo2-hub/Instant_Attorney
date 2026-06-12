@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { notifyAttorneyDocumentReady } from "./notify";
-import { buildDocReviewPrompt } from "./prompts";
+import { buildDocReviewPrompt, DOC_REVIEW_SYSTEM_PROMPT, buildDocReviewUserMessage } from "./prompts";
 import { WIZARD_LABELS } from "./types";
 import type { WizardType, Document, CaseFile, Profile, FactItem, Attachment } from "./types";
 
@@ -233,7 +233,7 @@ async function autoTriggerReview(
     db.from("attachments").select("*").eq("case_file_id", doc.case_file_id).eq("status", "ready"),
   ]);
 
-  const prompt = buildDocReviewPrompt(
+  const userMessage = buildDocReviewUserMessage(
     doc,
     doc.case_files,
     (factRows ?? []) as FactItem[],
@@ -246,25 +246,41 @@ async function autoTriggerReview(
   }).eq("id", docId);
 
   try {
-    const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 2000,
-      messages: [{ role: "user", content: prompt }],
+    const batch = await anthropic.messages.batches.create({
+      requests: [
+        {
+          custom_id: docId,
+          params: {
+            model: "claude-sonnet-4-6",
+            max_tokens: 2000,
+            system: [
+              {
+                type: "text" as const,
+                text: DOC_REVIEW_SYSTEM_PROMPT,
+                cache_control: { type: "ephemeral" as const },
+              },
+            ],
+            messages: [{ role: "user" as const, content: userMessage }],
+          },
+        },
+      ],
     });
 
-    const reviewReport = response.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("");
-
-    await upsertCriticalReviewChild(db, doc, reviewReport);
+    // Store batch ID in the document's content_json for the poll handler to pick up
+    const { data: current } = await db
+      .from("documents")
+      .select("content_json")
+      .eq("id", docId)
+      .single();
 
     await db.from("documents").update({
-      review_status: "review_ready",
+      content_json: { ...(current?.content_json ?? {}), review_batch_job_id: batch.id },
       updated_at: new Date().toISOString(),
     }).eq("id", docId);
+
+    console.log(`[auto-review] Batch submitted for doc ${docId} (batch: ${batch.id})`);
   } catch (err) {
-    console.error("[document-utils] auto-review error:", err);
+    console.error("[document-utils] auto-review batch error:", err);
     await db.from("documents").update({
       review_status: null,
       updated_at: new Date().toISOString(),

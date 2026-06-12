@@ -104,7 +104,13 @@ export async function POST(
     const fitnessResponse = await anthropic.messages.create({
       model: FITNESS_MODEL,
       max_tokens: 600,
-      system: DOCUMENT_TYPE_FITNESS_SYSTEM_PROMPT,
+      system: [
+        {
+          type: "text" as const,
+          text: DOCUMENT_TYPE_FITNESS_SYSTEM_PROMPT,
+          cache_control: { type: "ephemeral" as const },
+        },
+      ],
       messages: [{
         role: "user",
         content: buildDocumentTypeFitnessUserMessage(parentDoc, caseFile, facts, attachments),
@@ -137,7 +143,13 @@ export async function POST(
     const draftResponse = await anthropic.messages.create({
       model: SECOND_DRAFT_MODEL,
       max_tokens: 8000,
-      system: SECOND_DRAFT_SYSTEM_PROMPT,
+      system: [
+        {
+          type: "text" as const,
+          text: SECOND_DRAFT_SYSTEM_PROMPT,
+          cache_control: { type: "ephemeral" as const },
+        },
+      ],
       messages: [{
         role: "user",
         content: buildSecondDraftUserMessage(
