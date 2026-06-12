@@ -2053,6 +2053,54 @@ body {
 }
 .lf-instruments { margin-top: 8px; }
 
+/* Instrument row with inline status/action */
+.lf-inst-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.lf-inst-text { flex: 1; }
+.lf-inst-start-btn {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--brand-gold);
+  text-decoration: none;
+  white-space: nowrap;
+  padding: 2px 8px;
+  border: 1px solid rgba(200, 169, 110, 0.4);
+  border-radius: 4px;
+  background: rgba(200, 169, 110, 0.06);
+  transition: background 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+.lf-inst-start-btn:hover {
+  background: rgba(200, 169, 110, 0.14);
+  border-color: var(--brand-gold);
+}
+.lf-inst-pending {
+  font-size: 11px;
+  font-weight: 600;
+  color: #a07a0a;
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border: 1px solid rgba(200, 150, 10, 0.35);
+  border-radius: 4px;
+  background: rgba(200, 150, 10, 0.07);
+}
+.lf-inst-done {
+  font-size: 11px;
+  font-weight: 700;
+  color: #2d7a4f;
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border: 1px solid rgba(45, 122, 79, 0.35);
+  border-radius: 4px;
+  background: rgba(45, 122, 79, 0.07);
+}
+
 /* Wizard grid on dashboard */
 .lf-wizard-hint {
   font-size: 13px;

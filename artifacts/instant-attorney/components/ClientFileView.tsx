@@ -1,3 +1,4 @@
+import React from "react";
 import Link from "next/link";
 import AttachmentPanel from "@/components/AttachmentPanel";
 import ReviewSlaClock from "@/components/ReviewSlaClock";
@@ -98,6 +99,25 @@ function WizardCard({
       <span className="lf-wizard-arrow">→</span>
     </Link>
   );
+}
+
+// ── Instrument → wizard type heuristic ──────────────────────────────────────
+
+function guessWizardType(instrument: string): WizardType | null {
+  const lower = instrument.toLowerCase();
+  if (lower.includes("waiver")) return "draft_waiver";
+  if (lower.includes("demand")) return "demand_letter";
+  if (lower.includes("complaint")) return "complaint_letter";
+  if (lower.includes("will") || lower.includes("trust")) return "wills_trusts";
+  if (lower.includes("review only")) return "doc_review";
+  if (
+    lower.includes("contract") ||
+    lower.includes("agreement") ||
+    lower.includes("subcontract") ||
+    lower.includes("policy") ||
+    lower.includes("manual")
+  ) return "draft_contract";
+  return null;
 }
 
 // ── Matter badge ─────────────────────────────────────────────────────────────
@@ -316,7 +336,39 @@ export default function ClientFileView({
             <div className="lf-instruments">
               <div className="lf-strategy-sub">Suggested Instruments</div>
               <ul className="lf-list">
-                {strategy.instruments.map((inst, i) => <li key={i}>{inst}</li>)}
+                {strategy.instruments.map((inst, i) => {
+                  const wizardType = !isAttorney ? guessWizardType(inst) : null;
+                  if (!wizardType) return <li key={i}>{inst}</li>;
+
+                  const doc = documents.find((d) => d.doc_type === wizardType);
+                  const preWarmedId = preWarmedByType[wizardType];
+
+                  let action: React.ReactNode;
+                  if (doc?.status === "pending_review") {
+                    action = <span className="lf-inst-pending">Awaiting 48hr Review</span>;
+                  } else if (doc?.status === "approved" || doc?.status === "delivered") {
+                    action = <span className="lf-inst-done">✓ Completed</span>;
+                  } else if (doc?.status === "draft" || doc?.status === "changes_requested") {
+                    const href = `/wizard/${wizardType}?caseFileId=${caseFile.id}&docId=${doc.id}`;
+                    action = (
+                      <Link href={href} className="lf-inst-start-btn">
+                        {doc.status === "changes_requested" ? "Revisions Needed →" : "Continue Draft →"}
+                      </Link>
+                    );
+                  } else {
+                    const href = preWarmedId
+                      ? `/wizard/${wizardType}?caseFileId=${caseFile.id}&docId=${preWarmedId}`
+                      : `/wizard/${wizardType}?caseFileId=${caseFile.id}`;
+                    action = <Link href={href} className="lf-inst-start-btn">Start Document →</Link>;
+                  }
+
+                  return (
+                    <li key={i} className="lf-inst-row">
+                      <span className="lf-inst-text">{inst}</span>
+                      {action}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}
