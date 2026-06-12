@@ -1,7 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { DRAFTER_SYSTEM_PROMPT, buildFileContext } from "./prompts";
+import { DRAFTER_SYSTEM_PROMPT, WIZARD_FIELD_HINTS, buildFileContext } from "./prompts";
 import { extractDraftText } from "./file-parser";
+import { isValidWizardType } from "./document-utils";
 import { WIZARD_LABELS } from "./types";
 import type { CaseFile, FactItem, WizardType, Attachment, RequestedAttachment } from "./types";
 
@@ -13,7 +14,12 @@ export async function triggerPreWarm(
   userId: string,
   wizardType: WizardType
 ): Promise<void> {
-  const label = WIZARD_LABELS[wizardType] ?? wizardType;
+  if (!isValidWizardType(wizardType)) {
+    console.warn("[pre-warm] Skipping invalid wizard type:", wizardType);
+    return;
+  }
+
+  const label = WIZARD_LABELS[wizardType];
 
   // Check if a pre-warmed draft already exists for this case file + doc type
   const { data: existing } = await db
@@ -42,7 +48,8 @@ export async function triggerPreWarm(
   const attachments = (attachmentRows ?? []) as Attachment[];
   const requestedAttachments = (requestedRows ?? []) as RequestedAttachment[];
   const fileContext = buildFileContext(caseFile, facts, attachments, requestedAttachments);
-  const systemPrompt = `${fileContext}\n\n${DRAFTER_SYSTEM_PROMPT}`;
+  const fieldHints = WIZARD_FIELD_HINTS[wizardType];
+  const systemPrompt = `${fileContext}\n\nDocument being drafted: ${label}\n${fieldHints}\n\n${DRAFTER_SYSTEM_PROMPT}`;
 
   const initMessage = `Please draft a ${label} based on my Living File. Document type: ${wizardType}`;
 

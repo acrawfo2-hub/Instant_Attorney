@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { DRAFTER_SYSTEM_PROMPT, WIZARD_FIELD_HINTS, buildFileContext } from "@/lib/prompts";
 import { parseAndUpdateFile, extractDraftText, isDraftReadyForReview } from "@/lib/file-parser";
+import { findReusableDocument, finalizeDocumentSubmission } from "@/lib/document-utils";
 import { BYPASS_USER_ID, WIZARD_LABELS } from "@/lib/types";
 import type { WizardType, CaseFile, FactItem, Attachment, RequestedAttachment } from "@/lib/types";
 
@@ -22,6 +23,16 @@ export async function POST(req: NextRequest) {
 
   if (!caseFileId) {
     return NextResponse.json({ error: "caseFileId required" }, { status: 400 });
+  }
+
+  // Drop empty assistant turns — they break Anthropic message validation on follow-ups
+  const sanitizedMessages = messages.filter(
+    (m: { role: string; content: string }) =>
+      !(m.role === "assistant" && !m.content?.trim())
+  );
+
+  if (!sanitizedMessages.length) {
+    return NextResponse.json({ error: "Invalid messages" }, { status: 400 });
   }
 
   let userId: string;
@@ -70,7 +81,7 @@ export async function POST(req: NextRequest) {
     model: "claude-sonnet-4-6",
     max_tokens: 3500,
     system: systemPrompt,
-    messages,
+    messages: sanitizedMessages,
   });
 
   const encoder = new TextEncoder();
@@ -99,14 +110,23 @@ export async function POST(req: NextRequest) {
 
       if (draftText) {
         const label = WIZARD_LABELS[wizardType as WizardType] ?? wizardType;
+        const now = new Date().toISOString();
         const docData = {
           draft_text: draftText,
           status: readyForReview ? "pending_review" : "draft",
-          updated_at: new Date().toISOString(),
+          updated_at: now,
+          ...(readyForReview ? { submitted_at: now } : {}),
         };
 
-        if (documentId) {
-          await db.from("documents").update(docData).eq("id", documentId);
+        let savedDocId = documentId as string | undefined;
+
+        if (!savedDocId) {
+          const existing = await findReusableDocument(db, caseFileId, wizardType, userId);
+          savedDocId = existing?.id;
+        }
+
+        if (savedDocId) {
+          await db.from("documents").update(docData).eq("id", savedDocId);
         } else {
           const { data: inserted } = await db
             .from("documents")
@@ -121,9 +141,14 @@ export async function POST(req: NextRequest) {
             .select("id")
             .single();
 
-          // Signal the new document ID to the client in the final chunk
-          if (inserted?.id) {
-            controller.enqueue(encoder.encode(`\x00DOC:${inserted.id}\x00`));
+          savedDocId = inserted?.id;
+        }
+
+        if (savedDocId) {
+          controller.enqueue(encoder.encode(`\x00DOC:${savedDocId}\x00`));
+
+          if (readyForReview) {
+            await finalizeDocumentSubmission(db, savedDocId, userId);
           }
         }
       }

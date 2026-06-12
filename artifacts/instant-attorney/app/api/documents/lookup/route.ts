@@ -1,19 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { isValidWizardType } from "@/lib/document-utils";
 import { BYPASS_USER_ID } from "@/lib/types";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id } = await params;
+export async function GET(req: NextRequest) {
+  const caseFileId = req.nextUrl.searchParams.get("caseFileId");
+  const docType = req.nextUrl.searchParams.get("docType");
+
+  if (!caseFileId || !docType) {
+    return NextResponse.json({ error: "caseFileId and docType required" }, { status: 400 });
+  }
+
+  if (!isValidWizardType(docType)) {
+    return NextResponse.json({ error: "Invalid doc type" }, { status: 400 });
+  }
+
   const db = BYPASS_AUTH ? createServiceClient() : await createClient();
 
   let userId: string;
-  let isAttorney = false;
-
   if (BYPASS_AUTH) {
     userId = BYPASS_USER_ID;
   } else {
@@ -22,28 +28,21 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     userId = user.id;
-
-    const { data: profile } = await db
-      .from("profiles")
-      .select("is_attorney")
-      .eq("id", user.id)
-      .single();
-
-    isAttorney = profile?.is_attorney ?? false;
   }
 
   const { data: doc, error: docErr } = await db
     .from("documents")
-    .select("*, case_files(*), profiles!documents_user_id_fkey(*)")
-    .eq("id", id)
-    .single();
+    .select("id, draft_text, status, content_json, doc_type")
+    .eq("case_file_id", caseFileId)
+    .eq("doc_type", docType)
+    .eq("user_id", userId)
+    .in("status", ["pre_warmed", "draft"])
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
   if (docErr || !doc) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
-
-  if (!BYPASS_AUTH && doc.user_id !== userId && !isAttorney) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   return NextResponse.json(doc);

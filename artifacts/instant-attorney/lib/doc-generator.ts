@@ -23,6 +23,8 @@ export interface DocGenInput {
 
 export async function generateDocument(input: DocGenInput): Promise<Buffer> {
   switch (input.docType) {
+    case "intake_summary":
+      return generateIntakeSummary(input);
     case "demand_letter":
       return generateDemandLetter(input);
     case "complaint_letter":

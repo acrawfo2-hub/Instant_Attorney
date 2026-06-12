@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { ACP_CHAT_SYSTEM_PROMPT, buildFileContext } from "@/lib/prompts";
 import { parseAndUpdateFile } from "@/lib/file-parser";
+import { pickFirstValidWizard } from "@/lib/document-utils";
 import { triggerPreWarm } from "@/lib/pre-warm";
 import { generateCaseTitle } from "@/lib/title-generator";
 import { toAnthropicBlock, processAttachment } from "@/lib/attachment-processor";
@@ -228,9 +229,9 @@ export async function POST(req: NextRequest) {
                 .single();
 
               const strategy = freshFile?.legal_strategy as LegalStrategy | null;
-              const topWizard = strategy?.recommended_wizards?.[0];
-              if (topWizard) {
-                triggerPreWarm(db, resolvedCaseFileId, userId, topWizard).catch(
+              const preWarmWizard = pickFirstValidWizard(strategy?.recommended_wizards);
+              if (preWarmWizard) {
+                triggerPreWarm(db, resolvedCaseFileId, userId, preWarmWizard).catch(
                   (err) => console.error("[chat-acp] pre-warm error:", err)
                 );
               }
