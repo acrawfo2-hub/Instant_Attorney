@@ -1,3 +1,4 @@
+import React from "react";
 import Link from "next/link";
 import AttachmentPanel from "@/components/AttachmentPanel";
 import ReviewSlaClock from "@/components/ReviewSlaClock";
@@ -97,6 +98,72 @@ function WizardCard({
       </div>
     </Link>
   );
+}
+
+// ── Instrument → wizard type heuristic ──────────────────────────────────────
+// Maps instrument description text to the best matching wizard type.
+// Returns "general_document" for anything that doesn't fit a specific type.
+
+function guessWizardType(instrument: string): WizardType {
+  const lower = instrument.toLowerCase();
+
+  // Releases / waivers
+  if (lower.includes("waiver") || lower.includes("release") || lower.includes("indemnification"))
+    return "draft_waiver";
+
+  // Demand-style letters (cease & desist, strongly worded, notices of breach, etc.)
+  if (
+    lower.includes("cease and desist") ||
+    lower.includes("cease & desist") ||
+    lower.includes("demand letter") ||
+    lower.includes("strongly worded") ||
+    lower.includes("notice of breach") ||
+    lower.includes("notice of default") ||
+    lower.includes("demand")
+  ) return "demand_letter";
+
+  // Regulatory / agency complaints
+  if (
+    lower.includes("eeoc") ||
+    lower.includes("nlrb") ||
+    lower.includes("osha") ||
+    lower.includes("twc") ||
+    lower.includes("regulatory complaint") ||
+    lower.includes("agency complaint") ||
+    lower.includes("complaint letter") ||
+    lower.includes("complaint to")
+  ) return "complaint_letter";
+
+  // Estate planning
+  if (
+    lower.includes("will ") || lower.includes("wills") ||
+    lower.includes("trust") ||
+    lower.includes("estate plan") ||
+    lower.includes("power of attorney") ||
+    lower.includes("healthcare directive") ||
+    lower.includes("living will")
+  ) return "wills_trusts";
+
+  // Document review (third-party drafted, review only)
+  if (
+    lower.includes("review only") ||
+    (lower.includes("review") && (lower.includes("agreement") || lower.includes("contract") || lower.includes("document")))
+  ) return "doc_review";
+
+  // Contracts / agreements / policies
+  if (
+    lower.includes("contract") ||
+    lower.includes("agreement") ||
+    lower.includes("subcontract") ||
+    lower.includes("mou") ||
+    lower.includes("memorandum of understanding") ||
+    lower.includes("policy") ||
+    lower.includes("manual") ||
+    lower.includes("procedures")
+  ) return "draft_contract";
+
+  // Everything else → generic high-quality legal document
+  return "general_document";
 }
 
 // ── Matter badge ─────────────────────────────────────────────────────────────
@@ -315,7 +382,44 @@ export default function ClientFileView({
             <div className="lf-instruments">
               <div className="lf-strategy-sub">Suggested Instruments</div>
               <ul className="lf-list">
-                {strategy.instruments.map((inst, i) => <li key={i}>{inst}</li>)}
+                {strategy.instruments.map((inst, i) => {
+                  if (isAttorney) return <li key={i}>{inst}</li>;
+
+                  const wizardType = guessWizardType(inst);
+                  const doc = documents.find((d) => d.doc_type === wizardType);
+                  const preWarmedId = preWarmedByType[wizardType];
+
+                  // Build the wizard URL — pass instrument name for general_document so the AI knows what to draft
+                  const instrumentParam = wizardType === "general_document"
+                    ? `&instrument=${encodeURIComponent(inst)}`
+                    : "";
+
+                  let action: React.ReactNode;
+                  if (doc?.status === "pending_review") {
+                    action = <span className="lf-inst-pending">Awaiting 48hr Review</span>;
+                  } else if (doc?.status === "approved" || doc?.status === "delivered") {
+                    action = <span className="lf-inst-done">✓ Completed</span>;
+                  } else if (doc?.status === "draft" || doc?.status === "changes_requested") {
+                    const href = `/wizard/${wizardType}?caseFileId=${caseFile.id}&docId=${doc.id}${instrumentParam}`;
+                    action = (
+                      <Link href={href} className="lf-inst-start-btn">
+                        {doc.status === "changes_requested" ? "Revisions Needed →" : "Continue Draft →"}
+                      </Link>
+                    );
+                  } else {
+                    const href = preWarmedId
+                      ? `/wizard/${wizardType}?caseFileId=${caseFile.id}&docId=${preWarmedId}${instrumentParam}`
+                      : `/wizard/${wizardType}?caseFileId=${caseFile.id}${instrumentParam}`;
+                    action = <Link href={href} className="lf-inst-start-btn">Start Document →</Link>;
+                  }
+
+                  return (
+                    <li key={i} className="lf-inst-row">
+                      <span className="lf-inst-text">{inst}</span>
+                      {action}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}

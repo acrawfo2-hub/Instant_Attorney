@@ -80,7 +80,11 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   const preWarmedDocId = searchParams.get("docId") ?? "";
 
   const wizardType = type as WizardType;
-  const label = WIZARD_LABELS[wizardType] ?? wizardType;
+  const instrumentParam = searchParams.get("instrument") ?? "";
+  // For general_document, use the specific instrument name as the display label
+  const label = (wizardType === "general_document" && instrumentParam)
+    ? instrumentParam
+    : (WIZARD_LABELS[wizardType] ?? wizardType);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -169,7 +173,9 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
     setStreaming(true);
     setError("");
 
-    const initMsg = `Please draft a ${label} based on my Living File. Document type: ${wizardType}`;
+    const initMsg = instrumentParam
+      ? `Please draft a ${instrumentParam} based on my Living File.`
+      : `Please draft a ${label} based on my Living File. Document type: ${wizardType}`;
     const outgoingMessages = isInit
       ? [{ role: "user" as const, content: initMsg }]
       : history;
@@ -186,6 +192,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
           caseFileId,
           wizardType,
           documentId: documentId || undefined,
+          instrument: instrumentParam || undefined,
         }),
       });
 

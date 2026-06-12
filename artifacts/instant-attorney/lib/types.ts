@@ -53,7 +53,8 @@ export type WizardType =
   | "draft_contract"
   | "draft_waiver"
   | "wills_trusts"
-  | "doc_review";
+  | "doc_review"
+  | "general_document";
 
 /** Child documents created during attorney review (not wizard-generated). */
 export type DerivedDocType = "critical_review" | "second_draft";
@@ -169,6 +170,7 @@ export const WIZARD_LABELS: Record<WizardType, string> = {
   draft_waiver: "Draft Waiver",
   wills_trusts: "Wills & Trusts",
   doc_review: "Document Review",
+  general_document: "Legal Document",
 };
 
 export const DERIVED_DOC_LABELS: Record<DerivedDocType, string> = {

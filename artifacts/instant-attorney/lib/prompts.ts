@@ -399,6 +399,30 @@ Required outputs for ---WIZARD COMPLETE---:
 - FIT_TO_CASE: how this document relates to the overall matter strategy
 
 Opening: Ask the client to paste or describe the document they want reviewed.`,
+
+  general_document: `${wizardBase(
+    "Legal Document",
+    "Draft the specific legal instrument identified above in the 'Document being drafted' line. Determine the correct format, structure, and tone from the instrument name and the client's Living File — whether that is a formal letter, regulatory filing, internal policy, legal memorandum, cease and desist, arbitration demand, or any other legal instrument."
+  )}
+
+Format identification — apply the correct legal structure for the instrument:
+- Formal letters (cease & desist, strongly worded, cover, notice): attorney letterhead format, formal salutation, dated, professional close, signature block
+- Regulatory filings (EEOC charge, NLRB charge, state agency complaint, OSHA filing): follow the standard structure for that specific agency and form
+- Internal policies / procedures manuals: defined purpose, scope, numbered sections, definitions, enforcement and amendment clauses
+- Legal memoranda: TO / FROM / DATE / RE header, Issue, Brief Answer, Analysis (IRAC), Conclusion
+- Notices (default, cure, termination, breach): formal date, parties identified by defined terms, specific obligation at issue, cure period if applicable, governing law
+- Arbitration / mediation demands: parties, governing arbitration clause, claims asserted, relief requested
+- Other instruments: apply the structure a senior attorney at a BigLaw firm would use for this specific instrument type
+
+Required fields to gather (adapt to instrument):
+- The specific parties involved (full legal names, roles, addresses)
+- Key facts relevant to this instrument
+- Any deadlines, cure periods, or response windows
+- Governing jurisdiction and law
+- Who signs, who receives, and how it is to be delivered
+- Any exhibits, attachments, or enclosures referenced
+
+Opening: Read the "Document being drafted" line at the top of your context. Confirm what the instrument is and what you understand it to accomplish from the Living File. If you have enough to begin, produce the full draft immediately and then ask only for what is missing. Do not ask for information you already have from the file.`,
 };
 
 // ── Wizard field hints (used by the drafter API to give document-specific guidance) ──
@@ -410,6 +434,7 @@ export const WIZARD_FIELD_HINTS: Record<WizardType, string> = {
   draft_waiver: `Required fields: waiver type (liability release / photo consent / medical consent / indemnification), releasor (name and description — who gives up rights), releasee (name and description — who is protected), specific rights or claims being released, activities or events covered, duration of the waiver, consideration (what the releasor receives), governing law and jurisdiction, voluntary acknowledgment language, signatures block.`,
   wills_trusts: `Required fields vary by instrument — identify instrument first (will / living trust / POA / healthcare directive). For a will: testator full legal name, DOB, state of residence, executor and alternate executor, beneficiaries with shares, specific bequests, residuary clause, witnesses/notary requirements.`,
   doc_review: `Required fields: document type, parties, document purpose/summary, favorable provisions, unfavorable provisions or missing protections, ambiguous language, red flags, recommended edits, fit to overall case strategy.`,
+  general_document: `Required fields vary by instrument — identify instrument type from the "Document being drafted" line, then gather: all parties (full legal names, roles, addresses), specific purpose of the instrument, key facts and dates, governing jurisdiction, response/cure deadlines if applicable, who signs and who receives the document. Apply the correct legal format for this specific instrument type (letter, memo, filing, policy, notice, etc.).`,
 };
 
 // ── Drafter agent system prompt ──────────────────────────────────────────────
