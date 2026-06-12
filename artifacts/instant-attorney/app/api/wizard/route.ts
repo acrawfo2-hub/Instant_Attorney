@@ -11,7 +11,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
 export async function POST(req: NextRequest) {
-  const { messages, caseFileId, wizardType, documentId } = await req.json();
+  const { messages, caseFileId, wizardType, documentId, instrument } = await req.json();
 
   if (!Array.isArray(messages) || messages.length === 0) {
     return NextResponse.json({ error: "Invalid messages" }, { status: 400 });
@@ -75,7 +75,11 @@ export async function POST(req: NextRequest) {
   const requestedAttachments = (requestedRows ?? []) as RequestedAttachment[];
   const fileContext = caseFile ? buildFileContext(caseFile, facts, attachments, requestedAttachments) : "";
   const fieldHints = WIZARD_FIELD_HINTS[wizardType as WizardType];
-  const systemPrompt = `${fileContext}\n\nDocument being drafted: ${WIZARD_LABELS[wizardType as WizardType]}\n${fieldHints}\n\n${DRAFTER_SYSTEM_PROMPT}`;
+  // For general_document, use the specific instrument name so the AI knows exactly what to draft
+  const documentLabel = (wizardType === "general_document" && instrument)
+    ? instrument
+    : WIZARD_LABELS[wizardType as WizardType];
+  const systemPrompt = `${fileContext}\n\nDocument being drafted: ${documentLabel}\n${fieldHints}\n\n${DRAFTER_SYSTEM_PROMPT}`;
 
   const stream = anthropic.messages.stream({
     model: "claude-sonnet-4-6",
@@ -108,7 +112,7 @@ export async function POST(req: NextRequest) {
       const draftText = extractDraftText(fullResponse);
 
       if (draftText) {
-        const label = WIZARD_LABELS[wizardType as WizardType] ?? wizardType;
+        const label = documentLabel;
         const now = new Date().toISOString();
         const docData = {
           draft_text: draftText,
