@@ -129,6 +129,8 @@ function AcpChatInner() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputAreaRef = useRef<HTMLDivElement>(null);
   const hasUserMessages = messages.some((m) => m.role === "user");
+  const userMessageCount = messages.filter((m) => m.role === "user").length;
+  const showFileCta = userMessageCount >= 2 && !loading && !!caseFileId;
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -393,6 +395,24 @@ function AcpChatInner() {
 
         <div ref={messagesEndRef} />
       </main>
+
+      {/* GO TO FILE CTA — appears after 2+ user messages */}
+      {showFileCta && (
+        <div className="fc-file-cta">
+          <div className="fc-file-cta-inner">
+            <div className="fc-file-cta-text">
+              <span className="fc-file-cta-eyebrow">⚡ Your Living File is ready</span>
+              <span className="fc-file-cta-headline">Start drafting your legal documents now</span>
+            </div>
+            <button
+              className="fc-file-cta-btn"
+              onClick={() => router.push(caseFileId ? `/dashboard?caseFileId=${caseFileId}` : "/dashboard")}
+            >
+              Go to File → Start Documents
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* INPUT */}
       <div

@@ -457,12 +457,15 @@ export default function ClientFileView({
 
       {/* Document Wizards — client mode only */}
       {!isAttorney && (
-        <div className="lf-card lf-card-full">
-          <div className="lf-card-label">Document Wizards</div>
+        <div className="lf-card lf-card-full lf-wizard-spotlight">
+          <div className="lf-wizard-spotlight-header">
+            <div className="lf-wizard-spotlight-eyebrow">⚡ Your Next Step</div>
+            <div className="lf-card-label">Start Your Documents</div>
+          </div>
           {recommendedWizards.length > 0 ? (
             <>
               <p className="lf-wizard-hint">
-                Your attorney has suggested the following documents based on your matter. Launch a wizard to begin drafting.
+                Click a document below to start drafting — the AI will compose a complete first draft from your Living File in under 2 minutes.
               </p>
               <div className="lf-wizard-grid">
                 {recommendedWizards.filter(isValidWizardType).map((wType) => (

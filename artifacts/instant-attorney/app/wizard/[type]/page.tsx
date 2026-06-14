@@ -6,6 +6,8 @@ import ReviewSlaClock from "@/components/ReviewSlaClock";
 import { WIZARD_LABELS } from "@/lib/types";
 import type { WizardType } from "@/lib/types";
 
+const WIZARD_TIMEOUT_MS = 150_000; // 2.5 min — legal docs can be long
+
 interface Message {
   role: "user" | "assistant";
   content: string;
@@ -98,8 +100,17 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   const [error, setError] = useState("");
   const [initialized, setInitialized] = useState(false);
 
+  const [elapsed, setElapsed] = useState(0);
+  const abortRef = useRef<AbortController | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const draftRef = useRef<HTMLDivElement>(null);
+
+  // Elapsed-seconds ticker while streaming
+  useEffect(() => {
+    if (!streaming) { setElapsed(0); return; }
+    const id = setInterval(() => setElapsed(s => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [streaming]);
 
   useEffect(() => {
     if (!initialized) {
@@ -170,6 +181,11 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   }
 
   async function runDrafter(history: Message[], isInit = false) {
+    abortRef.current?.abort();
+    const abort = new AbortController();
+    abortRef.current = abort;
+    const timeoutId = setTimeout(() => abort.abort(), WIZARD_TIMEOUT_MS);
+
     setStreaming(true);
     setError("");
 
@@ -194,9 +210,13 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
           documentId: documentId || undefined,
           instrument: instrumentParam || undefined,
         }),
+        signal: abort.signal,
       });
 
-      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        throw new Error(body || `Server error ${res.status}`);
+      }
       if (!res.body) throw new Error("No stream body");
 
       const reader = res.body.getReader();
@@ -225,8 +245,15 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
       const p = parseDrafterResponse(fullText);
       setParsed(p);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Connection error");
+      if (err instanceof Error && err.name === "AbortError") {
+        setError(
+          "Drafting took too long and was stopped automatically. Legal documents can take up to 2 minutes — please try again and keep this tab open while it works."
+        );
+      } else {
+        setError(err instanceof Error ? err.message : "Connection error");
+      }
     } finally {
+      clearTimeout(timeoutId);
       setStreaming(false);
       inputRef.current?.focus();
     }
@@ -312,20 +339,26 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
 
           {error && !currentDraft ? (
             <div className="wiz-doc-loading">
-              <p style={{ color: "#b91c1c", fontWeight: 500 }}>{error}</p>
-              <button
-                style={{ marginTop: "1rem", padding: "0.5rem 1.25rem", background: "#1e2d3d", color: "#fff", border: "none", borderRadius: "6px", cursor: "pointer" }}
-                onClick={() => { setError(""); runDrafter([], true); }}
-              >
-                Retry
+              <div className="wiz-gen-error-icon">⚠</div>
+              <p className="wiz-gen-error-msg">{error}</p>
+              <button className="wiz-retry-btn" onClick={() => { setError(""); runDrafter([], true); }}>
+                Try Again →
               </button>
             </div>
           ) : isStreamingDraft ? (
-            <div className="wiz-doc-loading">
+            <div className="wiz-doc-loading wiz-doc-loading-active">
               <div className="wiz-thinking">
                 <span /><span /><span />
               </div>
-              <p>Drafting your {label} from your Living File…</p>
+              <p className="wiz-gen-title">Composing your {label}…</p>
+              <p className="wiz-gen-subtitle">Reading your Living File and drafting a complete first version. Legal documents typically take <strong>30–90 seconds</strong> — keep this tab open.</p>
+              {elapsed > 0 && (
+                <p className="wiz-gen-elapsed">
+                  {elapsed < 90
+                    ? `${elapsed}s — still working…`
+                    : `${elapsed}s — almost there, finalizing the draft…`}
+                </p>
+              )}
             </div>
           ) : currentDraft ? (
             <div className="wiz-doc-content">

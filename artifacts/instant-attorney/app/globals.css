@@ -4548,3 +4548,171 @@ mark.atty-placeholder {
 }
 .lf-doc-download-link:hover { text-decoration: underline; }
 .lf-doc-download-link-muted { color: var(--brand-text-lt); font-weight: 500; }
+
+/* ── Wizard spotlight (dashboard "Your Next Step") ──────────────────────────── */
+@keyframes wizard-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(193, 154, 58, 0), 0 2px 12px rgba(0,0,0,0.06); }
+  50%       { box-shadow: 0 0 0 6px rgba(193, 154, 58, 0.18), 0 2px 12px rgba(0,0,0,0.06); }
+}
+@keyframes wizard-card-flash {
+  0%, 100% { border-color: var(--brand-border); background: var(--brand-cream); }
+  50%       { border-color: var(--brand-gold); background: #fffbee; }
+}
+.lf-wizard-spotlight {
+  border: 2px solid var(--brand-gold) !important;
+  animation: wizard-glow 2.2s ease-in-out infinite;
+  background: linear-gradient(135deg, #fffdf5 0%, var(--brand-cream) 100%) !important;
+}
+.lf-wizard-spotlight-header {
+  margin-bottom: 12px;
+}
+.lf-wizard-spotlight-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--brand-gold);
+  margin-bottom: 4px;
+}
+.lf-wizard-spotlight .lf-card-label {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--brand-navy);
+  letter-spacing: -0.01em;
+}
+.lf-wizard-spotlight .lf-wizard-card {
+  animation: wizard-card-flash 2.2s ease-in-out infinite;
+  border-width: 2px;
+  padding: 16px 18px;
+  font-size: 15px;
+  box-shadow: 0 2px 8px rgba(193,154,58,0.12);
+}
+.lf-wizard-spotlight .lf-wizard-card:hover {
+  animation: none;
+  background: var(--brand-cream-dk);
+  border-color: var(--brand-gold);
+  box-shadow: 0 4px 16px rgba(193,154,58,0.25);
+  transform: translateY(-2px);
+}
+
+/* ── Chat page "Go to File" CTA ──────────────────────────────────────────────── */
+@keyframes cta-appear {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes cta-pulse-border {
+  0%, 100% { border-color: var(--brand-gold); }
+  50%       { border-color: #e8b84b; }
+}
+.fc-file-cta {
+  padding: 0 16px 12px;
+  animation: cta-appear 0.4s ease both;
+}
+.fc-file-cta-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: linear-gradient(135deg, #1e2d3d 0%, #243447 100%);
+  border: 2px solid var(--brand-gold);
+  border-radius: 12px;
+  padding: 18px 22px;
+  animation: cta-pulse-border 2s ease-in-out infinite;
+  box-shadow: 0 4px 20px rgba(193,154,58,0.2);
+}
+.fc-file-cta-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.fc-file-cta-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--brand-gold);
+}
+.fc-file-cta-headline {
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+}
+.fc-file-cta-btn {
+  flex-shrink: 0;
+  background: var(--brand-gold);
+  color: var(--brand-navy);
+  border: none;
+  border-radius: 8px;
+  padding: 12px 22px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
+  box-shadow: 0 2px 8px rgba(193,154,58,0.35);
+}
+.fc-file-cta-btn:hover {
+  background: #e8b84b;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(193,154,58,0.45);
+}
+
+/* ── Wizard loading state (improved) ──────────────────────────────────────────── */
+.wiz-doc-loading-active {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 12px;
+  padding: 48px 32px;
+}
+.wiz-gen-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--brand-navy);
+  margin: 0;
+}
+.wiz-gen-subtitle {
+  font-size: 14px;
+  color: var(--brand-text-md);
+  max-width: 380px;
+  line-height: 1.6;
+  margin: 0;
+}
+.wiz-gen-elapsed {
+  font-size: 13px;
+  color: var(--brand-text-lt);
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+}
+.wiz-gen-error-icon {
+  font-size: 28px;
+  margin-bottom: 4px;
+}
+.wiz-gen-error-msg {
+  font-size: 14px;
+  color: #b91c1c;
+  font-weight: 500;
+  max-width: 380px;
+  line-height: 1.6;
+  margin: 0;
+}
+.wiz-retry-btn {
+  margin-top: 8px;
+  padding: 10px 24px;
+  background: var(--brand-navy);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.wiz-retry-btn:hover { background: #243447; }
+
+@media (max-width: 600px) {
+  .fc-file-cta-inner { flex-direction: column; align-items: stretch; }
+  .fc-file-cta-btn { text-align: center; }
+}
