@@ -4,9 +4,12 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { DRAFTER_SYSTEM_PROMPT, WIZARD_FIELD_HINTS, buildFileContext } from "@/lib/prompts";
 import { parseAndUpdateFile, extractDraftText } from "@/lib/file-parser";
 import { findReusableDocument } from "@/lib/document-utils";
-import { recordAiFromStream } from "@/lib/usage-tracker";
+import { recordAiFromMessage } from "@/lib/usage-tracker";
 import { BYPASS_USER_ID, WIZARD_LABELS } from "@/lib/types";
 import type { WizardType, CaseFile, FactItem, Attachment, RequestedAttachment } from "@/lib/types";
+
+// Allow up to 5 minutes for this route — legal doc generation can be slow
+export const maxDuration = 300;
 
 const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
@@ -76,120 +79,104 @@ export async function POST(req: NextRequest) {
   const requestedAttachments = (requestedRows ?? []) as RequestedAttachment[];
   const fileContext = caseFile ? buildFileContext(caseFile, facts, attachments, requestedAttachments) : "";
   const fieldHints = WIZARD_FIELD_HINTS[wizardType as WizardType];
-  // For general_document, use the specific instrument name so the AI knows exactly what to draft
+
   const documentLabel = (wizardType === "general_document" && instrument)
     ? instrument
     : WIZARD_LABELS[wizardType as WizardType];
-  const stream = anthropic.messages.stream({
-    model: "claude-sonnet-4-6",
-    max_tokens: 3500,
-    system: [
-      {
-        type: "text" as const,
-        text: DRAFTER_SYSTEM_PROMPT,
-      },
-      {
-        type: "text" as const,
-        text: `Document being drafted: ${documentLabel}\n\n${fieldHints}`,
-        cache_control: { type: "ephemeral" as const },
-      },
-      {
-        type: "text" as const,
-        text: fileContext,
-      },
-    ],
-    messages: sanitizedMessages,
-  });
 
-  const encoder = new TextEncoder();
-  let fullResponse = "";
+  // Non-streaming call — works reliably through any proxy/deployment environment.
+  // Streaming was silently dropped by Replit's production proxy, causing the wizard
+  // to appear permanently stuck. This guarantees the response arrives.
+  let message: Anthropic.Message;
+  try {
+    message = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 3500,
+      system: [
+        {
+          type: "text" as const,
+          text: DRAFTER_SYSTEM_PROMPT,
+        },
+        {
+          type: "text" as const,
+          text: `Document being drafted: ${documentLabel}\n\n${fieldHints}`,
+          cache_control: { type: "ephemeral" as const },
+        },
+        {
+          type: "text" as const,
+          text: fileContext,
+        },
+      ],
+      messages: sanitizedMessages,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Anthropic API error";
+    console.error("[wizard] Anthropic error:", msg);
+    return NextResponse.json({ error: `AI generation failed: ${msg}` }, { status: 502 });
+  }
 
-  const readable = new ReadableStream({
-    async start(controller) {
-      try {
-        for await (const event of stream) {
-          if (
-            event.type === "content_block_delta" &&
-            event.delta.type === "text_delta"
-          ) {
-            fullResponse += event.delta.text;
-            controller.enqueue(encoder.encode(event.delta.text));
-          }
-        }
-      } catch (err) {
-        controller.error(err);
-        return;
-      }
+  const fullResponse = message.content
+    .filter((b) => b.type === "text")
+    .map((b) => (b as Anthropic.TextBlock).text)
+    .join("");
 
-      await recordAiFromStream(db, stream, {
-        userId,
-        actorId: userId,
-        caseFileId,
-        feature: "wizard",
-        metadata: { wizard_type: wizardType },
-      });
+  // Record usage (fire-and-forget, don't block the response)
+  recordAiFromMessage(db, message, {
+    userId,
+    actorId: userId,
+    caseFileId,
+    feature: "wizard",
+    metadata: { wizard_type: wizardType },
+  }).catch((e) => console.error("[wizard] usage record error:", e));
 
-      // After stream: update the document record with latest draft text
-      const draftText = extractDraftText(fullResponse);
+  // Save the draft text to the documents table
+  const draftText = extractDraftText(fullResponse);
+  let savedDocId: string | undefined = documentId as string | undefined;
 
-      if (draftText) {
-        const label = documentLabel;
-        const now = new Date().toISOString();
-        const docData = {
-          draft_text: draftText,
-          status: "draft",
-          updated_at: now,
-        };
+  if (draftText) {
+    const now = new Date().toISOString();
+    const docData = {
+      draft_text: draftText,
+      status: "draft",
+      updated_at: now,
+    };
 
-        let savedDocId = documentId as string | undefined;
+    if (!savedDocId) {
+      const existing = await findReusableDocument(db, caseFileId, wizardType, userId);
+      savedDocId = existing?.id;
+    }
 
-        if (!savedDocId) {
-          const existing = await findReusableDocument(db, caseFileId, wizardType, userId);
-          savedDocId = existing?.id;
-        }
+    if (savedDocId) {
+      await db.from("documents").update(docData).eq("id", savedDocId);
+    } else {
+      const { data: inserted } = await db
+        .from("documents")
+        .insert({
+          case_file_id: caseFileId,
+          user_id: userId,
+          doc_type: wizardType,
+          title: `${documentLabel} — ${new Date().toLocaleDateString()}`,
+          content_json: { init_response: fullResponse },
+          ...docData,
+        })
+        .select("id")
+        .single();
 
-        if (savedDocId) {
-          await db.from("documents").update(docData).eq("id", savedDocId);
-        } else {
-          const { data: inserted } = await db
-            .from("documents")
-            .insert({
-              case_file_id: caseFileId,
-              user_id: userId,
-              doc_type: wizardType,
-              title: `${label} — ${new Date().toLocaleDateString()}`,
-              content_json: {},
-              ...docData,
-            })
-            .select("id")
-            .single();
+      savedDocId = inserted?.id;
+    }
+  }
 
-          savedDocId = inserted?.id;
-        }
+  // Update the Living File if the drafter produced a FILE UPDATE block
+  if (fullResponse.includes("---FILE UPDATE---")) {
+    try {
+      await parseAndUpdateFile(db, caseFileId, userId, fullResponse);
+    } catch (parseErr) {
+      console.error("[wizard] file parser error:", parseErr);
+    }
+  }
 
-        if (savedDocId) {
-          controller.enqueue(encoder.encode(`\x00DOC:${savedDocId}\x00`));
-        }
-      }
-
-      // Update the Living File if drafter produced a FILE UPDATE block
-      if (fullResponse.includes("---FILE UPDATE---")) {
-        try {
-          await parseAndUpdateFile(db, caseFileId, userId, fullResponse);
-        } catch (parseErr) {
-          console.error("[wizard] file parser error:", parseErr);
-        }
-      }
-
-      controller.close();
-    },
-  });
-
-  return new Response(readable, {
-    headers: {
-      "Content-Type": "text/plain; charset=utf-8",
-      "Cache-Control": "no-cache",
-      "X-Accel-Buffering": "no",
-    },
+  return NextResponse.json({
+    text: fullResponse,
+    documentId: savedDocId ?? null,
   });
 }
