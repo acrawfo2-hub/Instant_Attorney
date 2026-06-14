@@ -4942,6 +4942,33 @@ mark.atty-placeholder {
   transition: background 0.15s;
 }
 .wiz-retry-btn:hover { background: #243447; }
+.wiz-gen-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  align-items: center;
+  margin-top: 8px;
+}
+.wiz-gen-error-back {
+  padding: 10px 20px;
+  background: #fff;
+  color: var(--brand-navy);
+  border: 1px solid #d4d9e0;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.wiz-gen-error-back:hover { background: #f3f5f8; border-color: #b8c0cc; }
+.wiz-gen-error-reassure {
+  font-size: 13px;
+  color: #64748b;
+  max-width: 380px;
+  line-height: 1.6;
+  margin: 4px 0 0;
+}
 
 @media (max-width: 600px) {
   .fc-file-cta-inner { flex-direction: column; align-items: stretch; }

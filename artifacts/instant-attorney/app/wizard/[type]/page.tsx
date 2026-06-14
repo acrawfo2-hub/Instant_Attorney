@@ -332,9 +332,17 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
             <div className="wiz-doc-loading">
               <div className="wiz-gen-error-icon">⚠</div>
               <p className="wiz-gen-error-msg">{error}</p>
-              <button className="wiz-retry-btn" onClick={() => { setError(""); runDrafter([], true); }}>
-                Try Again →
-              </button>
+              <div className="wiz-gen-error-actions">
+                <button className="wiz-retry-btn" onClick={() => { setError(""); runDrafter([], true); }}>
+                  Try Again →
+                </button>
+                <button className="wiz-gen-error-back" onClick={() => router.push("/dashboard")}>
+                  ← Back to my file
+                </button>
+              </div>
+              <p className="wiz-gen-error-reassure">
+                Nothing is lost — your file and answers are saved. You can come back and try again any time.
+              </p>
             </div>
           ) : isStreamingDraft ? (
             <div className="wiz-doc-loading wiz-doc-loading-active">

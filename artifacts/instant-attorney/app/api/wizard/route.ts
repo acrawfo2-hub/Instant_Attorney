@@ -86,12 +86,16 @@ export async function POST(req: NextRequest) {
     ? instrument
     : WIZARD_LABELS[wizardType as WizardType];
 
-  // Non-streaming call — works reliably through any proxy/deployment environment.
-  // Streaming was silently dropped by Replit's production proxy, causing the wizard
-  // to appear permanently stuck. This guarantees the response arrives.
+  // Stream server-side, then assemble the full message before responding.
+  // Why streaming: the SDK refuses a *non-streaming* request whose max_tokens is
+  // large enough to risk a >10-minute response (our full document ceiling is
+  // 64k tokens), throwing "Streaming is required…" before the call even leaves
+  // the server — which 502'd every draft generation. Consuming the stream here
+  // and returning a single JSON payload keeps the client contract unchanged and
+  // proxy-safe (we never pass SSE through Replit's proxy to the browser).
   let message: Anthropic.Message;
   try {
-    message = await anthropic.messages.create({
+    const stream = anthropic.messages.stream({
       model: "claude-sonnet-4-6",
       max_tokens: maxOutputTokensFor("claude-sonnet-4-6"),
       system: [
@@ -111,10 +115,16 @@ export async function POST(req: NextRequest) {
       ],
       messages: sanitizedMessages,
     });
+    message = await stream.finalMessage();
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Anthropic API error";
     console.error("[wizard] Anthropic error:", msg);
-    return NextResponse.json({ error: `AI generation failed: ${msg}` }, { status: 502 });
+    // Keep the client-facing message friendly — never leak raw SDK internals to
+    // a client. The drafter route always recovers into a usable state on retry.
+    return NextResponse.json(
+      { error: "We couldn't finish generating your draft just now. Please try again in a moment." },
+      { status: 502 }
+    );
   }
 
   const fullResponse = message.content
