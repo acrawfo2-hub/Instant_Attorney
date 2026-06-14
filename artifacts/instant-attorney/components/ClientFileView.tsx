@@ -1,6 +1,7 @@
 import React from "react";
 import Link from "next/link";
 import AttachmentPanel from "@/components/AttachmentPanel";
+import NextStepGuide from "@/components/NextStepGuide";
 import ReviewSlaClock from "@/components/ReviewSlaClock";
 import type { CaseFile, FactItem, Document, Profile, WizardType, ConsultRequest } from "@/lib/types";
 import { isValidWizardType } from "@/lib/document-utils";
@@ -212,6 +213,17 @@ export default function ClientFileView({
 
   return (
     <div className="lf-grid">
+      {/* Plain-language guidance layer — always shows the one obvious next step.
+          Client mode only; sits on top of the detailed Living File below. */}
+      {!isAttorney && (
+        <NextStepGuide
+          caseFile={caseFile}
+          documents={documents}
+          facts={facts}
+          preWarmedByType={preWarmedByType}
+        />
+      )}
+
       {/* Attorney banner */}
       {isAttorney && clientProfile && (
         <div className="lf-card lf-card-full lf-atty-banner">
@@ -310,7 +322,10 @@ export default function ClientFileView({
 
       {/* Matter + Next Action */}
       <div className="lf-card lf-card-sm">
-        <div className="lf-card-label">Matter</div>
+        <div className="lf-card-label">
+          Matter
+          {!isAttorney && <span className="lf-plain-caption">What your case is about</span>}
+        </div>
         <div className="lf-card-value">
           {caseFile.matter_subtype
             ? caseFile.matter_subtype.replace(/_/g, " ")
@@ -356,7 +371,10 @@ export default function ClientFileView({
       {/* Legal Strategy */}
       {strategy && (
         <div className="lf-card lf-card-full lf-card-strategy">
-          <div className="lf-card-label">Legal Strategy</div>
+          <div className="lf-card-label">
+            Legal Strategy
+            {!isAttorney && <span className="lf-plain-caption">Your game plan, in plain terms</span>}
+          </div>
           {strategy.summary && <p className="lf-strategy-summary">{strategy.summary}</p>}
 
           <div className="lf-strategy-grid">
@@ -380,7 +398,10 @@ export default function ClientFileView({
 
           {strategy.instruments?.length > 0 && (
             <div className="lf-instruments">
-              <div className="lf-strategy-sub">Suggested Instruments</div>
+              <div className="lf-strategy-sub">
+                Suggested Instruments
+                {!isAttorney && <span className="lf-plain-caption lf-plain-caption-sub">Documents we can create for you</span>}
+              </div>
               <ul className="lf-list">
                 {strategy.instruments.map((inst, i) => {
                   if (isAttorney) return <li key={i}>{inst}</li>;
@@ -431,6 +452,7 @@ export default function ClientFileView({
         <div className="lf-card-label">
           Confirmed Facts
           {confirmed.length > 0 && <span className="lf-count">{confirmed.length}</span>}
+          {!isAttorney && <span className="lf-plain-caption">What we know so far</span>}
         </div>
         {confirmed.length > 0 ? (
           <ul className="lf-list lf-list-confirmed">
@@ -445,6 +467,7 @@ export default function ClientFileView({
         <div className="lf-card-label">
           Open Fact Gaps
           {gaps.length > 0 && <span className="lf-count lf-count-gap">{gaps.length}</span>}
+          {!isAttorney && <span className="lf-plain-caption">Details still needed — these are okay to leave for now</span>}
         </div>
         {gaps.length > 0 ? (
           <ul className="lf-list lf-list-gap">
@@ -479,15 +502,36 @@ export default function ClientFileView({
               </div>
             </>
           ) : (
-            <p className="lf-empty-field">
-              Document wizards will appear here once your intake establishes a legal strategy. Continue your intake chat to unlock them.
-            </p>
+            <>
+              <p className="lf-wizard-hint">
+                The more you share in your private chat, the better your documents will be — but
+                you don&apos;t have to wait. You can start a document right now and we&apos;ll fill
+                in the rest as we go. Missing details are never a problem.
+              </p>
+              <div className="lf-wizard-grid">
+                <Link
+                  href={`/wizard/general_document?caseFileId=${caseFile.id}`}
+                  className="lf-wizard-card"
+                >
+                  <span className="lf-wizard-icon">📄</span>
+                  <div className="lf-wizard-card-body">
+                    <span className="lf-wizard-label">Start a document now</span>
+                  </div>
+                </Link>
+                <Link href={`/chat?caseFileId=${caseFile.id}`} className="lf-wizard-card">
+                  <span className="lf-wizard-icon">💬</span>
+                  <div className="lf-wizard-card-body">
+                    <span className="lf-wizard-label">Tell us more first</span>
+                  </div>
+                </Link>
+              </div>
+            </>
           )}
         </div>
       )}
 
       {/* Documents */}
-      <div className="lf-card lf-card-full">
+      <div className="lf-card lf-card-full" id="documents">
         <div className="lf-card-label">
           {isAttorney ? "Client Documents" : "Your Documents"}
         </div>
