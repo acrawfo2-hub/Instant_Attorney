@@ -1,1 +1,2 @@
-- [Instant-Attorney Supabase & AI telemetry](instant-attorney-supabase.md) — app uses Supabase directly, manual SQL schema, piggyback AI signals on usage_events.metadata jsonb.
+- [Screenshotting Vite previews](canvas-vite-preview-screenshots.md) — external_url shots of mockup-sandbox previews go blank/flaky; use app_preview instead.
+- [Instant-Attorney on Supabase](instant-attorney-supabase.md) — this app uses Supabase directly (not Drizzle); Anthropic key env is process.env.Claude_Instant_Attorney.
