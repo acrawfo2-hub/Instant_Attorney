@@ -5,6 +5,7 @@ import { buildPreConsultPrompt } from "@/lib/prompts";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
 import { BYPASS_USER_ID } from "@/lib/types";
 import type { CaseFile, FactItem, Attachment, Document } from "@/lib/types";
+import { logTruncation } from "@/lib/truncation-logger";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
@@ -67,12 +68,23 @@ export async function POST(
       feature: "attorney_pre_consult",
     });
 
+    const truncated = response.stop_reason === "max_tokens";
+    if (truncated) {
+      logTruncation({
+        endpoint: "attorney/pre-consult",
+        feature: "attorney_pre_consult",
+        caseFileId: id,
+        userId: caseFileRow.user_id,
+        outputTokens: response.usage.output_tokens,
+      });
+    }
+
     await db.from("case_files").update({
       pre_consult_memo: memo,
       updated_at: new Date().toISOString(),
     }).eq("id", id);
 
-    return NextResponse.json({ pre_consult_memo: memo });
+    return NextResponse.json({ pre_consult_memo: memo, truncated });
   } catch (err) {
     console.error("[attorney/pre-consult] error:", err);
     return NextResponse.json({ error: "Memo generation failed" }, { status: 500 });

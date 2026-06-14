@@ -12,6 +12,7 @@ import { getChildDocuments, upsertSecondDraftChild } from "@/lib/document-utils"
 import { recordAiFromMessage } from "@/lib/usage-tracker";
 import { BYPASS_USER_ID, docTypeLabel } from "@/lib/types";
 import type { Document, CaseFile, FactItem, Attachment } from "@/lib/types";
+import { logTruncation } from "@/lib/truncation-logger";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
@@ -186,7 +187,20 @@ export async function POST(
       metadata: { document_id: id },
     });
 
-    if (!secondDraftText) {
+    const truncated = draftResponse.stop_reason === "max_tokens";
+    if (truncated) {
+      logTruncation({
+        endpoint: "attorney/second-draft",
+        feature: "attorney_second_draft",
+        documentId: id,
+        caseFileId: parentDoc.case_file_id,
+        userId: parentDoc.user_id,
+        outputTokens: draftResponse.usage.output_tokens,
+      });
+    }
+
+    // Only throw on a truly empty (non-truncated) response — truncated partial output is valid
+    if (!secondDraftText && !truncated) {
       throw new Error("Empty second draft response");
     }
 
@@ -202,6 +216,7 @@ export async function POST(
       fitness,
       second_draft_document_id: child?.id ?? null,
       improved_draft_text: secondDraftText,
+      truncated,
     });
   } catch (err) {
     console.error("[attorney/second-draft] error:", err);

@@ -5,6 +5,7 @@ import { buildMergePrompt } from "@/lib/prompts";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
 import { BYPASS_USER_ID } from "@/lib/types";
 import type { Document } from "@/lib/types";
+import { logTruncation } from "@/lib/truncation-logger";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
@@ -66,13 +67,25 @@ export async function POST(
       metadata: { document_id: id },
     });
 
+    const truncated = response.stop_reason === "max_tokens";
+    if (truncated) {
+      logTruncation({
+        endpoint: "attorney/merge",
+        feature: "attorney_merge",
+        documentId: id,
+        caseFileId: doc.case_file_id,
+        userId: doc.user_id,
+        outputTokens: response.usage.output_tokens,
+      });
+    }
+
     await db.from("documents").update({
       improved_draft_text: improvedDraft,
       review_status: "merged",
       updated_at: new Date().toISOString(),
     }).eq("id", id);
 
-    return NextResponse.json({ improved_draft_text: improvedDraft });
+    return NextResponse.json({ improved_draft_text: improvedDraft, truncated });
   } catch (err) {
     console.error("[attorney/merge] error:", err);
     await db.from("documents").update({

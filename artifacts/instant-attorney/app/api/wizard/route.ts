@@ -7,6 +7,7 @@ import { findReusableDocument } from "@/lib/document-utils";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
 import { BYPASS_USER_ID, WIZARD_LABELS } from "@/lib/types";
 import type { WizardType, CaseFile, FactItem, Attachment, RequestedAttachment } from "@/lib/types";
+import { logTruncation } from "@/lib/truncation-logger";
 
 // Allow up to 5 minutes for this route — legal doc generation can be slow
 export const maxDuration = 300;
@@ -175,9 +176,21 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const truncated = message.stop_reason === "max_tokens";
+  if (truncated) {
+    logTruncation({
+      endpoint: "wizard",
+      feature: wizardType,
+      documentId: savedDocId,
+      caseFileId,
+      userId,
+      outputTokens: message.usage.output_tokens,
+    });
+  }
+
   return NextResponse.json({
     text: fullResponse,
     documentId: savedDocId ?? null,
-    truncated: message.stop_reason === "max_tokens",
+    truncated,
   });
 }

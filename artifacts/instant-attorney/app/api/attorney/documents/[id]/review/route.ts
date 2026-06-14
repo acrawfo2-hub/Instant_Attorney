@@ -6,6 +6,7 @@ import { upsertCriticalReviewChild } from "@/lib/document-utils";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
 import { BYPASS_USER_ID } from "@/lib/types";
 import type { Document, CaseFile, FactItem, Attachment } from "@/lib/types";
+import { logTruncation } from "@/lib/truncation-logger";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
@@ -89,6 +90,18 @@ export async function POST(
       metadata: { document_id: id },
     });
 
+    const truncated = response.stop_reason === "max_tokens";
+    if (truncated) {
+      logTruncation({
+        endpoint: "attorney/review",
+        feature: "attorney_review",
+        documentId: id,
+        caseFileId: doc.case_file_id,
+        userId: doc.user_id,
+        outputTokens: response.usage.output_tokens,
+      });
+    }
+
     const child = await upsertCriticalReviewChild(db, doc as Document, reviewReport);
 
     await db.from("documents").update({
@@ -99,6 +112,7 @@ export async function POST(
     return NextResponse.json({
       review_report: reviewReport,
       critical_review_document_id: child?.id ?? null,
+      truncated,
     });
   } catch (err) {
     console.error("[attorney/review] error:", err);

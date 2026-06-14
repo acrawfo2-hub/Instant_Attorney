@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { extractDraftText } from "@/lib/file-parser";
 import { upsertCriticalReviewChild } from "@/lib/document-utils";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
+import { logTruncation } from "@/lib/truncation-logger";
 import type { Document } from "@/lib/types";
 
 const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
@@ -58,6 +59,18 @@ export async function GET(req: NextRequest) {
           .map((b) => b.text)
           .join("");
 
+        const truncated = result.result.message.stop_reason === "max_tokens";
+        if (truncated) {
+          logTruncation({
+            endpoint: "batches/poll/pre-warm",
+            feature: "pre_warm",
+            documentId: doc.id,
+            caseFileId: doc.case_file_id,
+            userId: doc.user_id,
+            outputTokens: result.result.message.usage.output_tokens,
+          });
+        }
+
         const draftText = extractDraftText(text);
         if (draftText) {
           await recordAiFromMessage(db, result.result.message, {
@@ -70,11 +83,15 @@ export async function GET(req: NextRequest) {
 
           await db.from("documents").update({
             draft_text: draftText,
-            content_json: { init_response: text },
+            content_json: { init_response: text, ...(truncated ? { truncated: true } : {}) },
             updated_at: new Date().toISOString(),
           }).eq("id", doc.id);
           results.preWarm.completed++;
-          console.log(`[batch-poll] Pre-warm complete for doc ${doc.id}`);
+          console.log(`[batch-poll] Pre-warm complete for doc ${doc.id}${truncated ? " (truncated)" : ""}`);
+        } else if (truncated) {
+          // Truncated before draft block was emitted — leave doc in pre_warmed state for retry
+          results.preWarm.errors++;
+          console.warn(`[batch-poll] Pre-warm truncated with no extractable draft for doc ${doc.id} — leaving for retry`);
         } else {
           results.preWarm.errors++;
           await db.from("documents").delete().eq("id", doc.id);
@@ -123,6 +140,18 @@ export async function GET(req: NextRequest) {
           .map((b) => b.text)
           .join("");
 
+        const reviewTruncated = result.result.message.stop_reason === "max_tokens";
+        if (reviewTruncated) {
+          logTruncation({
+            endpoint: "batches/poll/review",
+            feature: "auto_critical_review",
+            documentId: doc.id,
+            caseFileId: doc.case_file_id,
+            userId: doc.user_id,
+            outputTokens: result.result.message.usage.output_tokens,
+          });
+        }
+
         await recordAiFromMessage(db, result.result.message, {
           userId: doc.user_id,
           actorId: null,
@@ -134,7 +163,7 @@ export async function GET(req: NextRequest) {
 
         await upsertCriticalReviewChild(db, doc as unknown as Document, reviewReport);
 
-        const cj = { ...(doc.content_json as Record<string, unknown> ?? {}) };
+        const cj: Record<string, unknown> = { ...(doc.content_json as Record<string, unknown> ?? {}), ...(reviewTruncated ? { review_truncated: true } : {}) };
         delete cj.review_batch_job_id;
         await db.from("documents").update({
           review_status: "review_ready",
@@ -143,7 +172,7 @@ export async function GET(req: NextRequest) {
         }).eq("id", doc.id);
 
         results.review.completed++;
-        console.log(`[batch-poll] Auto-review complete for doc ${doc.id}`);
+        console.log(`[batch-poll] Auto-review complete for doc ${doc.id}${reviewTruncated ? " (truncated)" : ""}`);
       }
     } catch (err) {
       results.review.errors++;

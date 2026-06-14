@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
+import { logTruncation } from "@/lib/truncation-logger";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { ACP_CHAT_SYSTEM_PROMPT, buildFileContext } from "@/lib/prompts";
 import { parseAndUpdateFile } from "@/lib/file-parser";
@@ -303,6 +304,21 @@ export async function POST(req: NextRequest) {
               console.error("[chat-acp] screenshot storage error:", err);
             }
           }
+        }
+        const finalMsg = await stream.finalMessage().catch(() => null);
+        if (finalMsg?.stop_reason === "max_tokens") {
+          logTruncation({
+            endpoint: "chat-acp",
+            feature: "chat_acp",
+            userId,
+            caseFileId: resolvedCaseFileId,
+            outputTokens: finalMsg.usage.output_tokens,
+          });
+          controller.enqueue(
+            encoder.encode(
+              "\n\n_This response may be incomplete. Feel free to ask me to continue._"
+            )
+          );
         }
         controller.close();
       }

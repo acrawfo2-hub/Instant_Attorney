@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CaseFile, FactItem } from "./types";
 import { buildFileContext } from "./prompts";
 import { recordAiFromMessage } from "./usage-tracker";
+import { logTruncation } from "./truncation-logger";
 
 const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
 
@@ -196,6 +197,17 @@ If no companion documents are needed, omit the REQUESTED ATTACHMENTS bullets ent
         caseFileId,
         feature: "attachment_analysis",
         metadata: { attachment_id: attachmentId, file_name: fileName },
+      });
+    }
+
+    if (response.stop_reason === "max_tokens") {
+      logTruncation({
+        endpoint: "attachment-processor",
+        feature: "attachment_analysis",
+        caseFileId,
+        userId: caseFile?.user_id,
+        documentId: attachmentId,
+        outputTokens: response.usage.output_tokens,
       });
     }
 

@@ -418,6 +418,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [extraNote, setExtraNote] = useState("");
   const [justUpdated, setJustUpdated] = useState(false);
+  const [truncatedDraft, setTruncatedDraft] = useState(false);
 
   const [elapsed, setElapsed] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
@@ -537,10 +538,11 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
         throw new Error(body?.error || `Server error ${res.status}`);
       }
 
-      const data = await res.json() as { text: string; documentId: string | null };
+      const data = await res.json() as { text: string; documentId: string | null; truncated?: boolean };
       const fullText = data.text ?? "";
 
       if (data.documentId) setDocumentId(data.documentId);
+      if (data.truncated) setTruncatedDraft(true);
 
       setMessages((prev) => {
         const next = [...prev];
@@ -761,6 +763,25 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
             </div>
           ) : (
             <>
+              {/* Truncation amber notice — soft warning, never blocks the checklist */}
+              {truncatedDraft && currentDraft && (
+                <div className="wiz-truncation-notice" role="status">
+                  <span className="wiz-truncation-icon">⚠</span>
+                  <span>
+                    The AI draft may have been cut short on a very long document. Review the
+                    draft carefully for any abrupt endings, then fill in the fields below and
+                    click <strong>Update Draft</strong> — or send to the attorney as-is.
+                  </span>
+                  <button
+                    className="wiz-truncation-dismiss"
+                    onClick={() => setTruncatedDraft(false)}
+                    aria-label="Dismiss notice"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
               {/* Guided checklist — one field per piece of info the draft needs */}
               {currentDraft && neededItems.length > 0 && (
                 <div className="wiz-checklist">

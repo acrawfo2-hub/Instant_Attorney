@@ -331,6 +331,15 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
                   </a>
                 )}
               </div>
+              {Boolean(doc.content_json?.truncated) && (
+                <div className="doc-truncation-notice" role="status">
+                  <span className="doc-truncation-icon">⚠</span>
+                  <span>
+                    This draft was generated from a very long document and may have been cut
+                    short. Review the full text for any abrupt endings before finalizing.
+                  </span>
+                </div>
+              )}
               {doc.draft_text ? (
                 <div className="atty-review-draft">{renderDocumentText(doc.draft_text)}</div>
               ) : (
