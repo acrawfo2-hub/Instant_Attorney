@@ -104,8 +104,10 @@ export async function POST(
 
     const child = await upsertCriticalReviewChild(db, doc as Document, reviewReport);
 
+    const existingCj = (doc.content_json as Record<string, unknown>) ?? {};
     await db.from("documents").update({
       review_status: "review_ready",
+      content_json: truncated ? { ...existingCj, truncated: true } : existingCj,
       updated_at: new Date().toISOString(),
     }).eq("id", id);
 

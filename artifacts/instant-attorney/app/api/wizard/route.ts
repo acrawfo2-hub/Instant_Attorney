@@ -130,6 +130,18 @@ export async function POST(req: NextRequest) {
     metadata: { wizard_type: wizardType },
   }).catch((e) => console.error("[wizard] usage record error:", e));
 
+  // Detect truncation before saving so the flag lands in content_json
+  const truncated = message.stop_reason === "max_tokens";
+  if (truncated) {
+    logTruncation({
+      endpoint: "wizard",
+      feature: wizardType,
+      caseFileId,
+      userId,
+      outputTokens: message.usage.output_tokens,
+    });
+  }
+
   // Save the draft text to the documents table
   const draftText = extractDraftText(fullResponse);
   let savedDocId: string | undefined = documentId as string | undefined;
@@ -148,7 +160,14 @@ export async function POST(req: NextRequest) {
     }
 
     if (savedDocId) {
-      await db.from("documents").update(docData).eq("id", savedDocId);
+      // Merge truncated flag into existing content_json when re-generating
+      if (truncated) {
+        const { data: existingDoc } = await db.from("documents").select("content_json").eq("id", savedDocId).single();
+        const existingCj = (existingDoc?.content_json as Record<string, unknown>) ?? {};
+        await db.from("documents").update({ ...docData, content_json: { ...existingCj, truncated: true } }).eq("id", savedDocId);
+      } else {
+        await db.from("documents").update(docData).eq("id", savedDocId);
+      }
     } else {
       const { data: inserted } = await db
         .from("documents")
@@ -157,7 +176,7 @@ export async function POST(req: NextRequest) {
           user_id: userId,
           doc_type: wizardType,
           title: `${documentLabel} — ${new Date().toLocaleDateString()}`,
-          content_json: { init_response: fullResponse },
+          content_json: { init_response: fullResponse, ...(truncated ? { truncated: true } : {}) },
           ...docData,
         })
         .select("id")
@@ -167,6 +186,11 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Log document ID now that it's known
+  if (truncated && savedDocId) {
+    logTruncation({ endpoint: "wizard/doc-saved", documentId: savedDocId });
+  }
+
   // Update the Living File if the drafter produced a FILE UPDATE block
   if (fullResponse.includes("---FILE UPDATE---")) {
     try {
@@ -174,18 +198,6 @@ export async function POST(req: NextRequest) {
     } catch (parseErr) {
       console.error("[wizard] file parser error:", parseErr);
     }
-  }
-
-  const truncated = message.stop_reason === "max_tokens";
-  if (truncated) {
-    logTruncation({
-      endpoint: "wizard",
-      feature: wizardType,
-      documentId: savedDocId,
-      caseFileId,
-      userId,
-      outputTokens: message.usage.output_tokens,
-    });
   }
 
   return NextResponse.json({

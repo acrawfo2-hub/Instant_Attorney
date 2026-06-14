@@ -206,8 +206,10 @@ export async function POST(
 
     const child = await upsertSecondDraftChild(db, parentDoc, secondDraftText);
 
+    const existingCj = (parentDoc.content_json as Record<string, unknown>) ?? {};
     await db.from("documents").update({
       review_status: "merged",
+      content_json: truncated ? { ...existingCj, truncated: true } : existingCj,
       updated_at: new Date().toISOString(),
     }).eq("id", id);
 

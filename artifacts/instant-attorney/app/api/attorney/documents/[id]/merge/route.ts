@@ -79,9 +79,11 @@ export async function POST(
       });
     }
 
+    const existingCj = (doc.content_json as Record<string, unknown>) ?? {};
     await db.from("documents").update({
       improved_draft_text: improvedDraft,
       review_status: "merged",
+      content_json: truncated ? { ...existingCj, truncated: true } : existingCj,
       updated_at: new Date().toISOString(),
     }).eq("id", id);
 
