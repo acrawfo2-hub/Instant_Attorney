@@ -122,6 +122,7 @@ function AcpChatInner() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [streamingText, setStreamingText] = useState("");
+  const [chatTruncated, setChatTruncated] = useState(false);
   const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [showQcModal, setShowQcModal] = useState(false);
@@ -253,6 +254,14 @@ function AcpChatInner() {
         setStreamingText(full);
       }
 
+      // Detect structured truncation sentinel emitted by the server
+      const TRUNC_SENTINEL = "\x01TRUNCATED\x01";
+      if (full.endsWith(TRUNC_SENTINEL)) {
+        full = full.slice(0, -TRUNC_SENTINEL.length);
+        setChatTruncated(true);
+      } else {
+        setChatTruncated(false);
+      }
       setMessages((prev) => [...prev, { role: "assistant", content: full }]);
       setStreamingText("");
     } catch {
@@ -376,6 +385,15 @@ function AcpChatInner() {
             <div className="fc-bubble fc-bubble-ai fc-bubble-streaming">
               {renderContent(streamingText)}
               <span className="fc-cursor" />
+            </div>
+          </div>
+        )}
+
+        {chatTruncated && !loading && (
+          <div className="fc-msg-row fc-msg-row-ai">
+            <div className="chat-truncation-notice" role="status">
+              <span>⚠</span>
+              <span>Response may be incomplete — feel free to ask me to continue where I left off.</span>
             </div>
           </div>
         )}

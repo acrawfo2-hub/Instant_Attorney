@@ -163,7 +163,7 @@ export async function GET(req: NextRequest) {
 
         await upsertCriticalReviewChild(db, doc as unknown as Document, reviewReport);
 
-        const cj: Record<string, unknown> = { ...(doc.content_json as Record<string, unknown> ?? {}), ...(reviewTruncated ? { review_truncated: true } : {}) };
+        const cj: Record<string, unknown> = { ...(doc.content_json as Record<string, unknown> ?? {}), ...(reviewTruncated ? { truncated: true } : {}) };
         delete cj.review_batch_job_id;
         await db.from("documents").update({
           review_status: "review_ready",

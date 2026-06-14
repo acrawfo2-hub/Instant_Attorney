@@ -38,11 +38,9 @@ export async function POST(req: NextRequest) {
             feature: "free_chat",
             outputTokens: finalMsg.usage.output_tokens,
           });
-          controller.enqueue(
-            encoder.encode(
-              "\n\n_This response may be incomplete. Feel free to ask me to continue._"
-            )
-          );
+          // Sentinel the client can detect to show a soft truncation notice.
+          // \x01 is a non-printable ASCII control character that never appears in AI text.
+          controller.enqueue(encoder.encode("\x01TRUNCATED\x01"));
         }
       } catch (err) {
         controller.error(err);

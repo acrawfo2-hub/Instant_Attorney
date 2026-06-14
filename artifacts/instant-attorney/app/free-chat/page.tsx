@@ -73,6 +73,7 @@ export default function FreeChatPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [streamingText, setStreamingText] = useState("");
+  const [chatTruncated, setChatTruncated] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const exchangeCount = messages.filter((m) => m.role === "user").length;
@@ -127,6 +128,14 @@ export default function FreeChatPage() {
         setStreamingText(full);
       }
 
+      // Detect structured truncation sentinel emitted by the server
+      const TRUNC_SENTINEL = "\x01TRUNCATED\x01";
+      if (full.endsWith(TRUNC_SENTINEL)) {
+        full = full.slice(0, -TRUNC_SENTINEL.length);
+        setChatTruncated(true);
+      } else {
+        setChatTruncated(false);
+      }
       setMessages((prev) => [...prev, { role: "assistant", content: full }]);
       setStreamingText("");
     } catch {
@@ -224,6 +233,16 @@ export default function FreeChatPage() {
             <div className="fc-bubble fc-bubble-ai fc-bubble-streaming">
               {renderContent(streamingText)}
               <span className="fc-cursor" />
+            </div>
+          </div>
+        )}
+
+        {/* Truncation notice — shown after stream ends when sentinel was detected */}
+        {chatTruncated && !loading && (
+          <div className="fc-msg-row fc-msg-row-ai">
+            <div className="chat-truncation-notice" role="status">
+              <span>⚠</span>
+              <span>Response may be incomplete — feel free to ask me to continue where I left off.</span>
             </div>
           </div>
         )}
