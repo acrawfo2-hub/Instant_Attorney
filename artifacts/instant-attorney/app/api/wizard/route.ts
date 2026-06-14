@@ -68,6 +68,21 @@ export async function POST(req: NextRequest) {
     }
 
     userId = user.id;
+
+    // Guard against operating on someone else's case. This route writes
+    // fact_items and documents keyed by the caller-supplied caseFileId, and
+    // fact_items RLS only checks user_id (NOT case ownership) — so without this
+    // an authed user could attach facts/drafts to another user's case. The
+    // RLS-scoped select returns nothing for a case the caller doesn't own.
+    const { data: ownedCase } = await db
+      .from("case_files")
+      .select("id")
+      .eq("id", caseFileId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (!ownedCase) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
   }
 
   // Load current file state — refreshed on every call so answers update the context
