@@ -197,8 +197,11 @@ SUGGESTED INSTRUMENTS:
 • [Legal instrument or document type relevant to this matter]
 RECOMMENDED WIZARDS:
 • [wizard_type — one per line, from: demand_letter, complaint_letter, draft_contract, draft_waiver, wills_trusts, doc_review, general_document]
+LEAD RATIONALE: [one short sentence: why the FIRST recommended wizard above is the single most important document to complete first — e.g., a response deadline, statute of limitations, or that other documents depend on it]
 RECOMMEND_CONSULT: [true | false — true if the matter has significant legal complexity, tight deadlines, high financial or liberty stakes, active litigation, or facts that genuinely require attorney judgment before proceeding]
 ---END STRATEGY---
+
+IMPORTANT: List RECOMMENDED WIZARDS in PRIORITY ORDER — the single most important document first. Most files need more than one document; the first one is the client's lead document and everything else follows it.
 
 Wizard recommendation rules:
 - Only suggest wizards that are genuinely useful for this specific matter.

@@ -66,6 +66,9 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   const [extraNote, setExtraNote] = useState("");
   const [justUpdated, setJustUpdated] = useState(false);
   const [truncatedDraft, setTruncatedDraft] = useState(false);
+  // Confirmed facts already in the Living File — used to suppress checklist
+  // questions the file already answers (never ask the same thing twice).
+  const [knownFacts, setKnownFacts] = useState<string[]>([]);
 
   const [elapsed, setElapsed] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
@@ -191,7 +194,12 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
         throw new Error(body?.error || `Server error ${res.status}`);
       }
 
-      const data = await res.json() as { text: string; documentId: string | null; truncated?: boolean };
+      const data = await res.json() as {
+        text: string;
+        documentId: string | null;
+        truncated?: boolean;
+        knownFacts?: string[];
+      };
       const fullText = data.text ?? "";
 
       if (data.documentId) {
@@ -199,6 +207,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
         docIdRef.current = data.documentId;
       }
       if (data.truncated) setTruncatedDraft(true);
+      if (Array.isArray(data.knownFacts)) setKnownFacts(data.knownFacts);
 
       setMessages((prev) => {
         const next = [...prev];
@@ -279,7 +288,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   // labeled update so the model knows exactly what each answer is for.
   async function handleSubmitAnswers() {
     if (streaming || submitting || !parsed) return;
-    const items = buildNeededItems(parsed);
+    const items = buildNeededItems(parsed, knownFacts);
     const msg = buildBundledMessage(items, answers, extraNote);
     if (!msg) return;
 
@@ -349,7 +358,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
 
   const currentDraft = parsed?.draftText ?? null;
   const isStreamingDraft = streaming && !currentDraft;
-  const neededItems = parsed ? buildNeededItems(parsed) : [];
+  const neededItems = parsed ? buildNeededItems(parsed, knownFacts) : [];
   const blockingCount = neededItems.filter((it) => it.severity === "blocking").length;
   const filledCount = neededItems.filter((it) => answers[it.id]?.trim()).length;
   const hasAnyInput = filledCount > 0 || extraNote.trim().length > 0;

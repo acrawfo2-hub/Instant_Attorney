@@ -257,9 +257,17 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Return the file's confirmed facts so the client checklist can suppress any
+  // question the Living File already answers — including facts captured while
+  // drafting an earlier document in this same file (never ask twice).
+  const knownFacts = facts
+    .filter((f) => f.status === "confirmed")
+    .map((f) => f.description);
+
   return NextResponse.json({
     text: fullResponse,
     documentId: savedDocId ?? null,
     truncated,
+    knownFacts,
   });
 }

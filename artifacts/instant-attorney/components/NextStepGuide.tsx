@@ -1,6 +1,15 @@
 import Link from "next/link";
 import type { CaseFile, Document, FactItem } from "@/lib/types";
 import { computeNextStep } from "@/lib/next-step";
+import type { PlanStatus } from "@/lib/next-step";
+
+const PLAN_STATUS_LABEL: Record<PlanStatus, string> = {
+  not_started: "Not started",
+  in_progress: "In progress",
+  sent: "With attorney",
+  changes_requested: "Changes requested",
+  approved: "Approved",
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // NextStepGuide — the friendly, plain-language guidance LAYER.
@@ -41,8 +50,24 @@ export default function NextStepGuide({
 }: NextStepGuideProps) {
   const guide = computeNextStep(caseFile, documents, facts, preWarmedByType);
 
+  // Show the multi-document context only when the file truly has more than one
+  // planned document — single-document files look exactly as before.
+  const multiDoc = (guide.activeDocPosition?.total ?? 0) > 1;
+
   return (
     <section className={`lf-nextstep lf-nextstep-${guide.tone}`} aria-label="What to do next">
+      {/* "Document X of N" — tells the user this file has more than one document */}
+      {multiDoc && guide.activeDocPosition && (
+        <div className="lf-doc-counter">
+          <span className="lf-doc-counter-pill">
+            Document {guide.activeDocPosition.index} of {guide.activeDocPosition.total}
+          </span>
+          <span className="lf-doc-counter-note">
+            Your file includes several documents — let&apos;s get this one finished first.
+          </span>
+        </div>
+      )}
+
       {/* Progress spine — visual "where am I in the process" */}
       <ol className="lf-stepper" aria-label="Your progress">
         {guide.steps.map((step, i) => (
@@ -80,6 +105,40 @@ export default function NextStepGuide({
           </div>
         )}
       </div>
+
+      {/* File roadmap — the other documents in this file's plan. Collapsed by
+          default so it informs without competing with the one hero action. */}
+      {multiDoc && (
+        <details className="lf-roadmap">
+          <summary className="lf-roadmap-summary">
+            See your file&apos;s plan ({guide.plan.length} documents)
+          </summary>
+          <ol className="lf-roadmap-list">
+            {guide.plan.map((item) => {
+              const isActive = item.priority === guide.activeDocPosition?.index;
+              return (
+                <li
+                  key={`${item.wizard}-${item.priority}`}
+                  className={`lf-roadmap-item lf-roadmap-item-${item.status}${isActive ? " lf-roadmap-item-active" : ""}`}
+                >
+                  <span className="lf-roadmap-num">{item.priority}</span>
+                  <span className="lf-roadmap-label">
+                    {item.label}
+                    {item.isLead && <span className="lf-roadmap-lead">Most important</span>}
+                  </span>
+                  <span className={`lf-roadmap-status lf-roadmap-status-${item.status}`}>
+                    {PLAN_STATUS_LABEL[item.status]}
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+          <p className="lf-roadmap-note">
+            You don&apos;t have to do these all at once. Finish your most important
+            document first — your attorney can adjust the order any time.
+          </p>
+        </details>
+      )}
     </section>
   );
 }

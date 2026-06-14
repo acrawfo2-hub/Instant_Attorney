@@ -2,7 +2,9 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { docTypeLabel } from "@/lib/types";
+import { buildDocumentPlan } from "@/lib/next-step";
 import type { CaseFile, Document, Attachment, Profile } from "@/lib/types";
+import DocumentPlanEditor from "./DocumentPlanEditor";
 
 interface CaseFileWithDocs extends CaseFile {
   documents: Document[];
@@ -204,6 +206,20 @@ export default async function ClientFilePage({
                   <strong>Next action:</strong> {cf.next_action}
                 </div>
               )}
+
+              {/* Document plan — AI ranking + attorney lead override */}
+              {(() => {
+                const plan = buildDocumentPlan(cf, cf.documents);
+                if (plan.length === 0) return null;
+                return (
+                  <DocumentPlanEditor
+                    caseFileId={cf.id}
+                    items={plan}
+                    leadOverride={cf.legal_strategy?.lead_override ?? null}
+                    rationale={cf.legal_strategy?.lead_rationale}
+                  />
+                );
+              })()}
 
               {/* Documents for this case file */}
               {cf.documents.length > 0 && (

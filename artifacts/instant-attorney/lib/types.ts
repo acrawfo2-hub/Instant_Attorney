@@ -95,8 +95,17 @@ export interface LegalStrategy {
   instruments: string[];
   strengths: string[];
   risks: string[];
+  /** Ranked list of recommended document wizards — index 0 is the AI's lead pick. */
   recommended_wizards: WizardType[];
   recommend_consult?: boolean;
+  /**
+   * Attorney's manual override of the lead (most-important) document. When set,
+   * it wins over the AI's recommended_wizards[0] ranking. null/undefined = defer
+   * to the AI ranking.
+   */
+  lead_override?: WizardType | null;
+  /** One-line rationale for why the lead document is the priority. */
+  lead_rationale?: string;
 }
 
 export interface CaseFile {

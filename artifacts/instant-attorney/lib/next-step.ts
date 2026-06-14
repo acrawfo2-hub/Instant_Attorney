@@ -1,4 +1,5 @@
 import type { CaseFile, Document, FactItem, WizardType } from "@/lib/types";
+import { WIZARD_LABELS } from "@/lib/types";
 import { isValidWizardType } from "@/lib/document-utils";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -9,12 +10,18 @@ import { isValidWizardType } from "@/lib/document-utils";
 // existing Living File — it never replaces the detailed cards, it just tells a
 // lay person, in one obvious place, exactly what to click next.
 //
+// A file is usually MORE than one document: the attorney strategy ranks several
+// instruments. We drive ONE document — the "lead" (most important) — all the way
+// to attorney approval via the 5-step spine, while a roadmap shows the user the
+// other documents in their file so they know there's more to come. The lead is
+// the AI's top-ranked wizard unless the attorney overrides it.
+//
 // Core principle (matches the doc generator): nothing is ever a dead end.
 // Even with no strategy and no facts, the user always gets a way to move
 // forward — including a way to generate a document with placeholders.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** The five plainly-worded stages every file moves through. */
+/** The five plainly-worded stages every document moves through. */
 export const STEP_LABELS = [
   "Tell your story",
   "Create your document",
@@ -37,6 +44,27 @@ export interface NextStepLink {
 
 export type NextStepTone = "action" | "waiting" | "done";
 
+/** Where a single planned document sits in its journey to approval. */
+export type PlanStatus =
+  | "not_started"
+  | "in_progress"
+  | "sent"
+  | "changes_requested"
+  | "approved";
+
+/** One document in the file's overall strategy, with its current status. */
+export interface PlanItem {
+  wizard: WizardType;
+  label: string;
+  /** 1-indexed priority — 1 is the lead (most important) document. */
+  priority: number;
+  status: PlanStatus;
+  /** The top-level document id, if one has been created for this item. */
+  docId?: string;
+  /** True for the single lead/most-important document. */
+  isLead: boolean;
+}
+
 export interface NextStepGuide {
   /** 1-indexed active stage (1–5), used for the progress spine. */
   activeStep: number;
@@ -47,6 +75,10 @@ export interface NextStepGuide {
   tone: NextStepTone;
   cta?: NextStepLink;
   secondary?: NextStepLink;
+  /** The full ranked document plan for the file (empty before a strategy exists). */
+  plan: PlanItem[];
+  /** Position of the document the spine is currently tracking, for "X of N" UI. */
+  activeDocPosition?: { index: number; total: number };
 }
 
 function hasDraftText(d: Document): boolean {
@@ -58,17 +90,74 @@ function wizardHref(caseFileId: string, wType: WizardType, docId?: string): stri
   return docId ? `${base}&docId=${docId}` : base;
 }
 
+/** The effective lead document type: attorney override wins over the AI ranking. */
+export function effectiveLeadWizard(caseFile: CaseFile): WizardType | null {
+  const recommended = (caseFile.legal_strategy?.recommended_wizards ?? []).filter(isValidWizardType);
+  const override = caseFile.legal_strategy?.lead_override;
+  if (override && isValidWizardType(override)) return override;
+  return recommended[0] ?? null;
+}
+
+/** Map a document's lifecycle status to its place in the plan journey. */
+function planStatusForDoc(doc: Document | undefined): PlanStatus {
+  if (!doc) return "not_started";
+  switch (doc.status) {
+    case "approved":
+    case "delivered":
+      return "approved";
+    case "changes_requested":
+      return "changes_requested";
+    case "pending_review":
+      return "sent";
+    case "draft":
+      return hasDraftText(doc) ? "in_progress" : "not_started";
+    default:
+      // pre_warmed and anything else: nothing the user has touched yet
+      return "not_started";
+  }
+}
+
 /**
- * Pick the document type to offer when the user is starting fresh.
- * Prefers the attorney-recommended wizard; otherwise falls back to a general
- * legal document so the path is NEVER blocked.
+ * Build the file's ranked document plan from the attorney strategy. The lead
+ * (attorney override, else AI's top pick) is always priority 1; the remaining
+ * recommended wizards follow in their ranked order. Each item's status is
+ * derived from its matching top-level document. Returns [] before any strategy
+ * exists.
+ */
+export function buildDocumentPlan(caseFile: CaseFile, documents: Document[]): PlanItem[] {
+  const recommended = (caseFile.legal_strategy?.recommended_wizards ?? []).filter(isValidWizardType);
+  if (!recommended.length) return [];
+
+  const lead = effectiveLeadWizard(caseFile);
+  const ordered: WizardType[] = [];
+  if (lead) ordered.push(lead);
+  for (const w of recommended) {
+    if (!ordered.includes(w)) ordered.push(w);
+  }
+
+  return ordered.map((wizard, i) => {
+    const doc = documents.find((d) => d.doc_type === wizard && !d.parent_document_id);
+    return {
+      wizard,
+      label: WIZARD_LABELS[wizard],
+      priority: i + 1,
+      status: planStatusForDoc(doc),
+      docId: doc?.id,
+      isLead: wizard === lead,
+    };
+  });
+}
+
+/**
+ * Pick the document type to offer when the user is starting fresh and there is
+ * no ranked plan. Prefers the attorney-recommended lead wizard; otherwise falls
+ * back to a general legal document so the path is NEVER blocked.
  */
 function pickCreateTarget(
   caseFile: CaseFile,
   preWarmedByType: Record<string, string>,
 ): { wType: WizardType; docId?: string } {
-  const recommended = (caseFile.legal_strategy?.recommended_wizards ?? []).filter(isValidWizardType);
-  const wType = recommended[0] ?? "general_document";
+  const wType = effectiveLeadWizard(caseFile) ?? "general_document";
   return { wType, docId: preWarmedByType[wType] };
 }
 
@@ -88,8 +177,113 @@ export function computeNextStep(
 ): NextStepGuide {
   const id = caseFile.id;
 
-  // ── Signals ────────────────────────────────────────────────────────────────
   const hasStory = facts.length > 0 || !!caseFile.legal_strategy;
+  const plan = buildDocumentPlan(caseFile, documents);
+
+  // ── Multi-document path: drive the active document to approval ───────────────
+  // The active document is the lead until it's approved, then the next-highest
+  // priority document that still needs work. This keeps the spine honest (it
+  // tracks ONE real document) instead of averaging unrelated documents together.
+  if (plan.length) {
+    const activeItem = plan.find((p) => p.status !== "approved") ?? plan[plan.length - 1];
+    const s = activeItem.status;
+
+    const stepDone = [
+      hasStory, // 1 Tell your story (shared across the whole file)
+      s !== "not_started", // 2 Create — this document has a draft
+      s === "sent" || s === "changes_requested" || s === "approved", // 3 Send
+      s === "approved", // 4 Attorney review
+      false, // 5 Get your document — the finish line, never auto-checked
+    ];
+
+    let activeStep: number;
+    let title: string;
+    let body: string;
+    let tone: NextStepTone = "action";
+    let cta: NextStepLink | undefined;
+    let secondary: NextStepLink | undefined;
+
+    const nextToStart = plan.find(
+      (p) => p.status === "not_started" && p.priority !== activeItem.priority,
+    );
+    const rationale = caseFile.legal_strategy?.lead_rationale?.trim();
+
+    if (s === "in_progress") {
+      activeStep = 3;
+      title = `Review your ${activeItem.label} and send it to your attorney`;
+      body =
+        "Your document is drafted and waiting. Look it over, fill in any blanks you can, then send it to Andrew. It's completely fine to leave blanks — he'll finish them for you.";
+      cta = { label: "Open my draft →", href: wizardHref(id, activeItem.wizard, activeItem.docId) };
+    } else if (s === "changes_requested") {
+      activeStep = 3;
+      title = `Your attorney suggested changes to your ${activeItem.label}`;
+      body =
+        "Andrew reviewed this document and asked for a few updates. Open it to see what he suggested and send it back when you're ready.";
+      cta = { label: "See the changes →", href: wizardHref(id, activeItem.wizard, activeItem.docId) };
+    } else if (s === "sent") {
+      activeStep = 4;
+      tone = "waiting";
+      title = `Your attorney is reviewing your ${activeItem.label}`;
+      body =
+        "Nice work — you've sent this document to Andrew Crawford, Esq. He'll review it within 48 hours and you'll get an email when it's ready. There's nothing you need to do right now.";
+      if (nextToStart) {
+        secondary = {
+          label: `Get a head start on your ${nextToStart.label}`,
+          href: wizardHref(id, nextToStart.wizard, preWarmedByType[nextToStart.wizard]),
+        };
+      }
+    } else if (s === "approved") {
+      // Reached only when EVERY document in the plan is approved.
+      activeStep = 5;
+      tone = "done";
+      title = plan.length > 1 ? "All your documents are ready" : "Your finished document is ready";
+      body =
+        "Andrew has reviewed and approved your documents. You can download them below, ready to use. Need something else? You can always start a new document or ask a question.";
+      cta = { label: "Get my documents →", href: "#documents" };
+    } else {
+      // not_started — create this document.
+      activeStep = 2;
+      if (activeItem.priority === 1) {
+        title = activeItem.isLead
+          ? `Create your most important document: your ${activeItem.label}`
+          : `Create your first document: your ${activeItem.label}`;
+        body = rationale
+          ? `Your attorney's strategy starts here — ${rationale} We'll write a complete first draft for you in under two minutes; anything still missing gets marked so you (or Andrew) can fill it in later.`
+          : "This is the most important document in your file. We'll write a complete first draft for you in under two minutes — even if some details are still missing, we'll mark those spots so you (or Andrew) can fill them in later.";
+      } else {
+        title = `Create your next document: your ${activeItem.label}`;
+        body =
+          "Your most important document is moving along — this is the next one in your file's plan. We'll write a complete first draft in under two minutes; missing details are never a problem.";
+      }
+      cta = {
+        label: `Create my ${activeItem.label} →`,
+        href: wizardHref(id, activeItem.wizard, preWarmedByType[activeItem.wizard]),
+      };
+    }
+
+    const steps: SpineStep[] = STEP_LABELS.map((label, i) => ({
+      label,
+      state: i + 1 === activeStep ? "current" : stepDone[i] ? "done" : "upcoming",
+    }));
+
+    const eyebrow =
+      tone === "waiting" ? "Nothing to do right now" : tone === "done" ? "All done" : "Here's what to do next";
+
+    return {
+      activeStep,
+      steps,
+      eyebrow,
+      title,
+      body,
+      tone,
+      cta,
+      secondary,
+      plan,
+      activeDocPosition: { index: activeItem.priority, total: plan.length },
+    };
+  }
+
+  // ── Pre-strategy path: no ranked plan yet, never a dead end ───────────────────
   const canCreate =
     (caseFile.legal_strategy?.recommended_wizards ?? []).some(isValidWizardType) ||
     (caseFile.legal_strategy?.instruments?.length ?? 0) > 0;
@@ -100,18 +294,16 @@ export function computeNextStep(
   const approvedDoc = documents.find((d) => d.status === "approved" || d.status === "delivered");
   const anyDocCreated = documents.some(hasDraftText);
 
-  // ── Per-stage completion (independent of the chosen action) ──────────────────
   const stepDone = [
-    hasStory, // 1 Tell your story
-    anyDocCreated, // 2 Create your document
+    hasStory,
+    anyDocCreated,
     documents.some((d) =>
       ["pending_review", "approved", "delivered", "changes_requested"].includes(d.status),
-    ), // 3 Send to your attorney
-    documents.some((d) => d.status === "approved" || d.status === "delivered"), // 4 Attorney review
-    false, // 5 Get your document — always the finish line, never auto-checked
+    ),
+    documents.some((d) => d.status === "approved" || d.status === "delivered"),
+    false,
   ];
 
-  // ── Choose the one next action ───────────────────────────────────────────────
   let activeStep: number;
   let title: string;
   let body: string;
@@ -165,7 +357,6 @@ export function computeNextStep(
       "We'll write a complete first draft for you in under two minutes. Missing details are never a problem — we mark those spots and your attorney fills them in.";
     cta = { label: "Create a document →", href: wizardHref(id, wType, docId) };
   } else {
-    // No strategy yet — but NEVER a dead end. Keep talking OR jump straight to a draft.
     activeStep = 1;
     title = "Tell us a little more about your situation";
     body =
@@ -179,14 +370,11 @@ export function computeNextStep(
 
   const steps: SpineStep[] = STEP_LABELS.map((label, i) => ({
     label,
-    // The active step always wins, so the "you are here" highlight never
-    // disappears — even when that step also counts as done (e.g. a revision
-    // was requested, or a new draft exists alongside an already-sent doc).
     state: i + 1 === activeStep ? "current" : stepDone[i] ? "done" : "upcoming",
   }));
 
   const eyebrow =
     tone === "waiting" ? "Nothing to do right now" : tone === "done" ? "All done" : "Here's what to do next";
 
-  return { activeStep, steps, eyebrow, title, body, tone, cta, secondary };
+  return { activeStep, steps, eyebrow, title, body, tone, cta, secondary, plan };
 }

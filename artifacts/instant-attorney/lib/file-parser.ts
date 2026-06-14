@@ -154,6 +154,18 @@ async function parseLegalStrategy(
   const summaryMatch = block.match(/SUMMARY:\s*([\s\S]*?)(?=\nSTRENGTHS:|\nRISKS:|\nSUGGESTED|\nRECOMMENDED|$)/i);
 
   const consultMatch = block.match(/RECOMMEND_CONSULT:\s*(true|false)/i);
+  const rationaleMatch = block.match(/LEAD RATIONALE:\s*([\s\S]*?)(?=\nRECOMMEND_CONSULT:|\n---|$)/i);
+  const leadRationale = rationaleMatch?.[1]?.trim();
+
+  // Preserve any attorney lead override across strategy re-parses — a later chat
+  // turn that regenerates the strategy must not silently wipe the attorney's
+  // manual choice of the most-important document.
+  const { data: existing } = await db
+    .from("case_files")
+    .select("legal_strategy")
+    .eq("id", caseFileId)
+    .single();
+  const priorOverride = (existing?.legal_strategy as LegalStrategy | null)?.lead_override ?? null;
 
   const strategy: LegalStrategy = {
     summary: summaryMatch?.[1]?.trim() ?? "",
@@ -162,6 +174,8 @@ async function parseLegalStrategy(
     risks: extractBullets(block, "RISKS"),
     recommended_wizards: extractBullets(block, "RECOMMENDED WIZARDS") as WizardType[],
     recommend_consult: consultMatch ? consultMatch[1].toLowerCase() === "true" : undefined,
+    lead_rationale: leadRationale || undefined,
+    lead_override: priorOverride,
   };
 
   await db
