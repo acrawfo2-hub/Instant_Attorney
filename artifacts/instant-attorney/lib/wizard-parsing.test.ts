@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   parseDrafterResponse,
   buildNeededItems,
+  buildFallbackTemplate,
+  deriveQuestionsFromTemplate,
   ensureChecklistNeeds,
   buildBundledMessage,
   type ParsedDrafter,
@@ -161,4 +163,110 @@ test("a free-form note alone still produces a message", () => {
   const msg = buildBundledMessage(items, {}, "Add an arbitration clause.");
   assert.ok(msg);
   assert.ok(msg!.includes("Additional details: Add an arbitration clause."));
+});
+
+// ── Regression 4: auto-recovery from a broken/empty AI draft ─────────────────
+// The wizard must never strand the user on a blank screen. When the AI call
+// fails or returns garbage with no recognizable markers, the page builds a
+// fallback template AND derives the checklist of info the user still needs.
+// These tests mirror that absolute-fallback path in runDrafter().
+
+// Replicates the runDrafter() recovery branch so the test guards the real flow.
+function recoverFromAiResponse(fullText: string, label: string, wizardType: string): ParsedDrafter {
+  let p = parseDrafterResponse(fullText);
+  // If the model returned prose with no markers, use the whole thing as the draft.
+  if (!p.draftText && fullText.trim()) {
+    p = { ...p, draftText: fullText.trim() };
+  }
+  // Absolute fallback — empty/garbled AI text yields a template + derived needs.
+  if (!p.draftText) {
+    const template = buildFallbackTemplate(label, wizardType);
+    const derived = deriveQuestionsFromTemplate(template);
+    p = {
+      ...p,
+      draftText: template,
+      missingFacts: {
+        blocking: p.missingFacts.blocking.length ? p.missingFacts.blocking : derived.blocking,
+        nonBlocking: p.missingFacts.nonBlocking,
+      },
+      questions: p.questions.length ? p.questions : derived.questions,
+    };
+  }
+  return ensureChecklistNeeds(p);
+}
+
+test("empty AI response falls back to a template and a derived checklist of needs", () => {
+  // The AI returned nothing usable (failed call / empty body).
+  const p = recoverFromAiResponse("", "Settlement Agreement", "draft_contract");
+
+  // A usable draft is guaranteed, not a blank screen.
+  assert.ok(p.draftText, "a fallback draft must be produced");
+  assert.ok(/AGREEMENT/.test(p.draftText!), "the contract template should be used");
+  assert.ok(/\[\[[^\]]+\]\]/.test(p.draftText!), "the template carries fillable placeholders");
+
+  // A checklist of needed items is derived directly from the template gaps.
+  assert.ok(p.questions.length > 0, "questions must be derived so the user knows what's needed");
+  assert.ok(p.missingFacts.blocking.length > 0, "blocking missing-facts must be derived");
+
+  const items = buildNeededItems(p);
+  assert.ok(items.length > 0, "the right pane checklist must not be empty");
+});
+
+test("garbled AI text with no markers becomes the draft (whole response used)", () => {
+  const garbled = "lorem ipsum dolor sit amet, no markers here at all, just prose.";
+  const p = recoverFromAiResponse(garbled, "Demand Letter", "demand_letter");
+
+  // No ---DRAFT READY--- markers, so the entire response is treated as the draft.
+  assert.equal(p.draftText, garbled);
+  // It has no bracketed gaps, so no derived needs are invented.
+  assert.equal(p.missingFacts.blocking.length, 0);
+  assert.equal(p.questions.length, 0);
+});
+
+test("prose with no markers is preserved verbatim as the draft", () => {
+  const prose = [
+    "Dear Mr. Smith,",
+    "",
+    "This letter concerns the outstanding balance on your account.",
+    "Please remit payment at your earliest convenience.",
+  ].join("\n");
+  const p = recoverFromAiResponse(prose, "Demand Letter", "demand_letter");
+  assert.equal(p.draftText, prose, "the whole prose response becomes the draft");
+});
+
+for (const wizardType of ["demand_letter", "draft_contract", "draft_waiver", "generic"]) {
+  test(`buildFallbackTemplate(${wizardType}) produces fillable [[placeholders]]`, () => {
+    const template = buildFallbackTemplate("Test Document", wizardType);
+    assert.ok(template.trim().length > 0, "template must not be empty");
+
+    const placeholders = template.match(/\[\[[^\]]+\]\]/g) ?? [];
+    assert.ok(placeholders.length > 0, `${wizardType} template must have [[placeholders]]`);
+
+    // Every placeholder must be a real fillable gap (non-empty between brackets).
+    assert.ok(
+      placeholders.every((ph) => ph.replace(/^\[\[|\]\]$/g, "").trim().length > 0),
+      "placeholders must not be empty brackets"
+    );
+
+    // Each type yields a derivable checklist from its own placeholders.
+    const derived = deriveQuestionsFromTemplate(template);
+    assert.ok(derived.questions.length > 0, `${wizardType} must derive at least one question`);
+    assert.ok(derived.blocking.length > 0, `${wizardType} must derive at least one blocking need`);
+  });
+}
+
+test("each wizard type yields a distinct, type-appropriate template", () => {
+  const demand = buildFallbackTemplate("X", "demand_letter");
+  const contract = buildFallbackTemplate("X", "draft_contract");
+  const waiver = buildFallbackTemplate("X", "draft_waiver");
+  const generic = buildFallbackTemplate("X", "general_document");
+
+  assert.ok(/DEMAND/.test(demand));
+  assert.ok(/AGREEMENT/.test(contract));
+  assert.ok(/RELEASE AND WAIVER/.test(waiver));
+  // The generic branch handles any unknown type without throwing.
+  assert.ok(generic.includes("PRELIMINARY NOTE"));
+
+  const all = [demand, contract, waiver, generic];
+  assert.equal(new Set(all).size, all.length, "templates should differ by type");
 });
