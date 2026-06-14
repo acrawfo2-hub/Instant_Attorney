@@ -179,7 +179,10 @@ export function computeNextStep(
 
   const steps: SpineStep[] = STEP_LABELS.map((label, i) => ({
     label,
-    state: stepDone[i] ? "done" : i + 1 === activeStep ? "current" : "upcoming",
+    // The active step always wins, so the "you are here" highlight never
+    // disappears — even when that step also counts as done (e.g. a revision
+    // was requested, or a new draft exists alongside an already-sent doc).
+    state: i + 1 === activeStep ? "current" : stepDone[i] ? "done" : "upcoming",
   }));
 
   const eyebrow =
