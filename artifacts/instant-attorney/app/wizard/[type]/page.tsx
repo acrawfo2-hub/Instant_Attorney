@@ -15,7 +15,11 @@ import {
 } from "@/lib/wizard-parsing";
 import type { ParsedDrafter } from "@/lib/wizard-parsing";
 
-const WIZARD_TIMEOUT_MS = 150_000; // 2.5 min — legal docs can be long
+// Keep just under the server route's maxDuration (300s) so a long but legitimate
+// draft finishes server-side instead of being aborted by the client. If the
+// client does give up, the draft is still saved server-side and recovered via the
+// /api/documents/lookup path on the next visit.
+const WIZARD_TIMEOUT_MS = 290_000; // ~4.8 min — legal docs can be long
 
 interface Message {
   role: "user" | "assistant";

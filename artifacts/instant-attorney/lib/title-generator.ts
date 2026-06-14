@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { recordAiFromMessage } from "./usage-tracker";
 
-const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
+const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney, maxRetries: 4 });
 
 export async function generateCaseTitle(
   db: SupabaseClient,

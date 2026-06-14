@@ -7,7 +7,7 @@ import { recordAiFromMessage } from "./usage-tracker";
 import { logTruncation } from "./truncation-logger";
 import { maxOutputTokensFor, limitSignalMetadata } from "./token-limits";
 
-const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
+const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney, maxRetries: 4 });
 
 /** Remove a failed or abandoned attachment from storage and the database. */
 export async function removeAttachment(

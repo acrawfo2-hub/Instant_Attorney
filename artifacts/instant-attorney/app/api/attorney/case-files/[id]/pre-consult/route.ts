@@ -8,8 +8,11 @@ import type { CaseFile, FactItem, Attachment, Document } from "@/lib/types";
 import { logTruncation } from "@/lib/truncation-logger";
 import { maxOutputTokensFor, limitSignalMetadata } from "@/lib/token-limits";
 
+// Pre-consult memo generation can be slow — give the model room to finish.
+export const maxDuration = 300;
+
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
-const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
+const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney, maxRetries: 4 });
 
 export async function POST(
   _req: NextRequest,
@@ -51,11 +54,13 @@ export async function POST(
   );
 
   try {
-    const response = await anthropic.messages.create({
+    // Stream and assemble — non-streaming at the 64k ceiling is rejected by the
+    // SDK ("Streaming is required…") before it reaches the API.
+    const response = await anthropic.messages.stream({
       model: "claude-sonnet-4-6",
       max_tokens: maxOutputTokensFor("claude-sonnet-4-6"),
       messages: [{ role: "user", content: prompt }],
-    });
+    }).finalMessage();
 
     const memo = response.content
       .filter((b): b is Anthropic.TextBlock => b.type === "text")

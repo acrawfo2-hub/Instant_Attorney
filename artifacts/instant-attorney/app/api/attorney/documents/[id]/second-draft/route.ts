@@ -15,8 +15,11 @@ import type { Document, CaseFile, FactItem, Attachment } from "@/lib/types";
 import { logTruncation } from "@/lib/truncation-logger";
 import { maxOutputTokensFor, limitSignalMetadata } from "@/lib/token-limits";
 
+// Two model calls (fitness + full second draft) — give the route room to finish.
+export const maxDuration = 300;
+
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
-const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
+const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney, maxRetries: 4 });
 
 const FITNESS_MODEL = "claude-haiku-4-5-20251001";
 const SECOND_DRAFT_MODEL = "claude-opus-4-6";
@@ -104,7 +107,9 @@ export async function POST(
   }).eq("id", id);
 
   try {
-    const fitnessResponse = await anthropic.messages.create({
+    // Stream and assemble — non-streaming calls at our token ceilings are rejected
+    // by the SDK ("Streaming is required…") before they reach the API.
+    const fitnessResponse = await anthropic.messages.stream({
       model: FITNESS_MODEL,
       max_tokens: maxOutputTokensFor(FITNESS_MODEL),
       system: [
@@ -118,7 +123,7 @@ export async function POST(
         role: "user",
         content: buildDocumentTypeFitnessUserMessage(parentDoc, caseFile, facts, attachments),
       }],
-    });
+    }).finalMessage();
 
     const fitnessText = fitnessResponse.content
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
@@ -159,7 +164,7 @@ export async function POST(
       );
     }
 
-    const draftResponse = await anthropic.messages.create({
+    const draftResponse = await anthropic.messages.stream({
       model: SECOND_DRAFT_MODEL,
       max_tokens: maxOutputTokensFor(SECOND_DRAFT_MODEL),
       system: [
@@ -180,7 +185,7 @@ export async function POST(
           attachments
         ),
       }],
-    });
+    }).finalMessage();
 
     const secondDraftText = draftResponse.content
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
