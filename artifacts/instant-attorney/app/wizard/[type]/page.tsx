@@ -69,6 +69,35 @@ function renderDraftWithHighlights(text: string): string {
     .replace(/\n/g, "<br>");
 }
 
+// Turn the [[placeholders]] inside a fallback template into the same kind of
+// blocking missing-facts + follow-up questions the AI would normally produce,
+// so the wizard always tells the user exactly what info it still needs.
+function deriveQuestionsFromTemplate(template: string): {
+  blocking: string[];
+  questions: string[];
+} {
+  const seen = new Set<string>();
+  const items: string[] = [];
+  const re = /\[\[([^\]]+)\]\]/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(template)) !== null) {
+    const raw = m[1].trim();
+    // Use the descriptor before any "— ..." or "..., e.g." clarifier as the key
+    const key = raw.split(/—|,|\(/)[0].trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    items.push(raw);
+  }
+
+  const blocking = items.map((i) => `Need: ${i}`);
+  const questions = items.map((i) => {
+    const clean = i.replace(/\s*—.*$/, "").replace(/\s*,?\s*e\.g\..*$/i, "").trim();
+    return `What is the ${clean.toLowerCase()}?`;
+  });
+
+  return { blocking, questions };
+}
+
 // Guarantee a usable first draft even when the AI call fails or returns nothing.
 // The attorney's review pass will improve it regardless of starting quality.
 function buildFallbackTemplate(label: string, wizardType: string): string {
@@ -407,9 +436,19 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
       if (!p.draftText && fullText.trim()) {
         p = { ...p, draftText: fullText.trim() };
       }
-      // Absolute fallback — guarantee something is shown
+      // Absolute fallback — guarantee a draft AND the questions needed to finish it
       if (!p.draftText) {
-        p = { ...p, draftText: buildFallbackTemplate(label, wizardType) };
+        const template = buildFallbackTemplate(label, wizardType);
+        const derived = deriveQuestionsFromTemplate(template);
+        p = {
+          ...p,
+          draftText: template,
+          missingFacts: {
+            blocking: p.missingFacts.blocking.length ? p.missingFacts.blocking : derived.blocking,
+            nonBlocking: p.missingFacts.nonBlocking,
+          },
+          questions: p.questions.length ? p.questions : derived.questions,
+        };
       }
       setParsed(p);
     } catch (err) {
