@@ -564,6 +564,18 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
             </div>
           ) : (
             <>
+              {/* Persistent reassurance — blanks never block your draft */}
+              {currentDraft && (
+                <div className="wiz-reassure" role="note">
+                  <span className="wiz-reassure-icon">✓</span>
+                  <div>
+                    <strong>It&apos;s okay to leave blanks.</strong> Your draft is ready now. Fill in
+                    what you know, then send it — Andrew Crawford, Esq. will fill in anything that&apos;s
+                    missing and follow up with you about it.
+                  </div>
+                </div>
+              )}
+
               {/* Truncation amber notice — soft warning, never blocks the checklist */}
               {truncatedDraft && currentDraft && (
                 <div className="wiz-truncation-notice" role="status">
