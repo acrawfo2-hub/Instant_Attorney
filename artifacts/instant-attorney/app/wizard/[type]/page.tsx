@@ -100,17 +100,22 @@ function humanizeLabel(raw: string): string {
 }
 
 // Pull the unique [[placeholders]] out of a draft, in document order.
-function extractPlaceholders(draft: string): { raw: string; key: string }[] {
+// Dedupe on the FULL normalized text so distinct placeholders that share a base
+// descriptor (e.g. "FULL LEGAL NAME — Party A" vs "FULL LEGAL NAME — Party B")
+// stay separate. `matchKey` keeps the short pre-dash descriptor purely for
+// loose matching against free-form blocking/hint text.
+function extractPlaceholders(draft: string): { raw: string; dedupeKey: string; matchKey: string }[] {
   const seen = new Set<string>();
-  const out: { raw: string; key: string }[] = [];
+  const out: { raw: string; dedupeKey: string; matchKey: string }[] = [];
   const re = /\[\[([^\]]+)\]\]/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(draft)) !== null) {
     const raw = m[1].trim();
-    const key = raw.split(/—|,|\(/)[0].trim().toLowerCase();
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    out.push({ raw, key });
+    const dedupeKey = raw.replace(/\s+/g, " ").toLowerCase();
+    if (!dedupeKey || seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    const matchKey = raw.split(/—|,|\(/)[0].trim().toLowerCase();
+    out.push({ raw, dedupeKey, matchKey });
   }
   return out;
 }
@@ -128,18 +133,22 @@ function buildNeededItems(parsed: ParsedDrafter): NeededItem[] {
 
   if (placeholders.length) {
     items = placeholders.map((p, i) => {
-      // Blocking only when the placeholder is explicitly named in a blocking
-      // missing-fact. With no blocking signal, treat it as helpful rather than
+      // Blocking only when the placeholder is named in a blocking missing-fact —
+      // match on the full text first, then fall back to the short descriptor.
+      // With no blocking signal at all, treat it as helpful rather than
       // overstating what's "required".
-      const isBlocking = blockingText.includes(p.key);
-      // Find a descriptive hint: prefer a missing-fact line mentioning this key.
+      const isBlocking =
+        blockingText.includes(p.dedupeKey) || blockingText.includes(p.matchKey);
+      // Find a descriptive hint: prefer a missing-fact line mentioning this item.
       const hintLine =
-        [...parsed.missingFacts.blocking, ...parsed.missingFacts.nonBlocking].find((l) =>
-          l.toLowerCase().includes(p.key)
-        ) ?? "";
+        [...parsed.missingFacts.blocking, ...parsed.missingFacts.nonBlocking].find((l) => {
+          const lower = l.toLowerCase();
+          return lower.includes(p.dedupeKey) || lower.includes(p.matchKey);
+        }) ?? "";
       const hint = hintLine.replace(/\[\[[^\]]+\]\]\s*[—-]?\s*/, "").trim();
+      const slug = p.dedupeKey.replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
       return {
-        id: p.key || `ph-${i}`,
+        id: `${slug || "ph"}-${i}`,
         label: humanizeLabel(p.raw),
         hint,
         severity: isBlocking ? "blocking" : "helpful",
