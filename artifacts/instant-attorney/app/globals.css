@@ -3222,6 +3222,63 @@ mark.wiz-placeholder {
   max-width: 480px;
 }
 
+/* ── Admin: Token Limit Monitor ─────────────────────────────────────────── */
+.admin-shell { min-height: 100vh; background: #f6f7f9; color: #1a1a1a; }
+.admin-header { background: #fff; border-bottom: 1px solid #e5e7eb; }
+.admin-header-inner {
+  max-width: 1100px; margin: 0 auto; padding: 16px 24px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.admin-brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 16px; }
+.admin-header-right { display: flex; align-items: center; gap: 16px; }
+.admin-name { font-size: 13px; color: #6b7280; }
+.admin-link { font-size: 13px; color: #2563eb; text-decoration: none; }
+.admin-link:hover { text-decoration: underline; }
+.admin-main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+.admin-intro { font-size: 14px; line-height: 1.6; color: #374151; max-width: 760px; margin: 0 0 24px; }
+.admin-cards { display: flex; gap: 16px; margin-bottom: 32px; flex-wrap: wrap; }
+.admin-card {
+  flex: 1; min-width: 180px; background: #fff; border: 1px solid #e5e7eb;
+  border-radius: 12px; padding: 18px 20px; display: flex; flex-direction: column; gap: 4px;
+}
+.admin-card-warn { border-color: #f59e0b; background: #fffbeb; }
+.admin-card-danger { border-color: #ef4444; background: #fef2f2; }
+.admin-card-num { font-size: 30px; font-weight: 700; line-height: 1; }
+.admin-card-label { font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.03em; }
+.admin-section { margin-bottom: 32px; }
+.admin-section-title {
+  font-size: 15px; font-weight: 600; margin: 0 0 12px;
+  display: flex; align-items: center; gap: 8px;
+}
+.admin-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 22px; height: 22px; padding: 0 7px; border-radius: 11px;
+  background: #fef3c7; color: #92400e; font-size: 12px; font-weight: 600;
+}
+.admin-empty {
+  padding: 20px; background: #fff; border: 1px dashed #d1d5db;
+  border-radius: 10px; color: #6b7280; font-size: 14px;
+}
+.admin-table {
+  width: 100%; border-collapse: collapse; background: #fff;
+  border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden; font-size: 13px;
+}
+.admin-table th {
+  text-align: left; padding: 10px 14px; background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb; font-weight: 600; color: #374151; white-space: nowrap;
+}
+.admin-table td { padding: 10px 14px; border-bottom: 1px solid #f3f4f6; }
+.admin-table tr:last-child td { border-bottom: none; }
+.admin-tr-warn { background: #fffdf5; }
+.admin-td-feature { font-weight: 500; }
+.admin-td-muted { color: #6b7280; }
+.admin-danger-text { color: #b91c1c; }
+.admin-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 6px;
+  background: #f3f4f6; color: #6b7280; font-size: 12px; font-weight: 500;
+}
+.admin-badge-danger { background: #fee2e2; color: #b91c1c; }
+
 .atty-review-draft {
   background: var(--brand-white);
   border: 1px solid var(--brand-border);

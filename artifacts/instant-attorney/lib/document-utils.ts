@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { notifyAttorneyDocumentReady } from "./notify";
 import { DOC_REVIEW_SYSTEM_PROMPT, buildDocReviewUserMessage } from "./prompts";
 import { WIZARD_LABELS } from "./types";
+import { maxOutputTokensFor } from "./token-limits";
 import type { WizardType, Document, CaseFile, Profile, FactItem, Attachment } from "./types";
 
 const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
@@ -252,7 +253,7 @@ async function autoTriggerReview(
           custom_id: docId,
           params: {
             model: "claude-sonnet-4-6",
-            max_tokens: 8000,
+            max_tokens: maxOutputTokensFor("claude-sonnet-4-6"),
             system: [
               {
                 type: "text" as const,

@@ -5,6 +5,7 @@ import type { CaseFile, FactItem } from "./types";
 import { buildFileContext } from "./prompts";
 import { recordAiFromMessage } from "./usage-tracker";
 import { logTruncation } from "./truncation-logger";
+import { maxOutputTokensFor, limitSignalMetadata } from "./token-limits";
 
 const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
 
@@ -187,7 +188,7 @@ If no companion documents are needed, omit the REQUESTED ATTACHMENTS bullets ent
 
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 4000,
+      max_tokens: maxOutputTokensFor("claude-sonnet-4-6"),
       messages: [{ role: "user", content: messageContent }],
     });
 
@@ -196,7 +197,16 @@ If no companion documents are needed, omit the REQUESTED ATTACHMENTS bullets ent
         userId: caseFile.user_id,
         caseFileId,
         feature: "attachment_analysis",
-        metadata: { attachment_id: attachmentId, file_name: fileName },
+        metadata: {
+          attachment_id: attachmentId,
+          file_name: fileName,
+          ...limitSignalMetadata({
+            model: response.model,
+            outputTokens: response.usage.output_tokens,
+            priorLimit: 4000,
+            stopReason: response.stop_reason,
+          }),
+        },
       });
     }
 

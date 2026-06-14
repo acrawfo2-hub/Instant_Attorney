@@ -5,6 +5,7 @@ import { extractDraftText } from "@/lib/file-parser";
 import { upsertCriticalReviewChild } from "@/lib/document-utils";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
 import { logTruncation } from "@/lib/truncation-logger";
+import { limitSignalMetadata } from "@/lib/token-limits";
 import type { Document } from "@/lib/types";
 
 const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
@@ -78,7 +79,17 @@ export async function GET(req: NextRequest) {
             caseFileId: doc.case_file_id,
             feature: "pre_warm",
             costMultiplier: BATCH_COST_MULTIPLIER,
-            metadata: { document_id: doc.id, batch_id: batchId, wizard_type: doc.doc_type },
+            metadata: {
+              document_id: doc.id,
+              batch_id: batchId,
+              wizard_type: doc.doc_type,
+              ...limitSignalMetadata({
+                model: result.result.message.model,
+                outputTokens: result.result.message.usage.output_tokens,
+                priorLimit: 8000,
+                stopReason: result.result.message.stop_reason,
+              }),
+            },
           });
 
           await db.from("documents").update({
@@ -158,7 +169,16 @@ export async function GET(req: NextRequest) {
           caseFileId: doc.case_file_id,
           feature: "auto_critical_review",
           costMultiplier: BATCH_COST_MULTIPLIER,
-          metadata: { document_id: doc.id, batch_id: batchId },
+          metadata: {
+            document_id: doc.id,
+            batch_id: batchId,
+            ...limitSignalMetadata({
+              model: result.result.message.model,
+              outputTokens: result.result.message.usage.output_tokens,
+              priorLimit: 8000,
+              stopReason: result.result.message.stop_reason,
+            }),
+          },
         });
 
         await upsertCriticalReviewChild(db, doc as unknown as Document, reviewReport);

@@ -7,6 +7,7 @@ import { recordAiFromMessage } from "@/lib/usage-tracker";
 import { BYPASS_USER_ID } from "@/lib/types";
 import type { Document, CaseFile, FactItem, Attachment } from "@/lib/types";
 import { logTruncation } from "@/lib/truncation-logger";
+import { maxOutputTokensFor, limitSignalMetadata } from "@/lib/token-limits";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
@@ -66,7 +67,7 @@ export async function POST(
   try {
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 8000,
+      max_tokens: maxOutputTokensFor("claude-sonnet-4-6"),
       system: [
         {
           type: "text" as const,
@@ -87,7 +88,15 @@ export async function POST(
       actorId: userId,
       caseFileId: doc.case_file_id,
       feature: "attorney_review",
-      metadata: { document_id: id },
+      metadata: {
+        document_id: id,
+        ...limitSignalMetadata({
+          model: response.model,
+          outputTokens: response.usage.output_tokens,
+          priorLimit: 8000,
+          stopReason: response.stop_reason,
+        }),
+      },
     });
 
     const truncated = response.stop_reason === "max_tokens";

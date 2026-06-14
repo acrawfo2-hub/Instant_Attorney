@@ -8,6 +8,7 @@ import { recordAiFromMessage } from "@/lib/usage-tracker";
 import { BYPASS_USER_ID, WIZARD_LABELS } from "@/lib/types";
 import type { WizardType, CaseFile, FactItem, Attachment, RequestedAttachment } from "@/lib/types";
 import { logTruncation } from "@/lib/truncation-logger";
+import { maxOutputTokensFor, limitSignalMetadata } from "@/lib/token-limits";
 
 // Allow up to 5 minutes for this route — legal doc generation can be slow
 export const maxDuration = 300;
@@ -92,7 +93,7 @@ export async function POST(req: NextRequest) {
   try {
     message = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 8000,
+      max_tokens: maxOutputTokensFor("claude-sonnet-4-6"),
       system: [
         {
           type: "text" as const,
@@ -127,7 +128,15 @@ export async function POST(req: NextRequest) {
     actorId: userId,
     caseFileId,
     feature: "wizard",
-    metadata: { wizard_type: wizardType },
+    metadata: {
+      wizard_type: wizardType,
+      ...limitSignalMetadata({
+        model: message.model,
+        outputTokens: message.usage.output_tokens,
+        priorLimit: 8000,
+        stopReason: message.stop_reason,
+      }),
+    },
   }).catch((e) => console.error("[wizard] usage record error:", e));
 
   // Detect truncation before saving so the flag lands in content_json

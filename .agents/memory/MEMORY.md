@@ -1,0 +1,1 @@
+- [Instant-Attorney Supabase & AI telemetry](instant-attorney-supabase.md) — app uses Supabase directly, manual SQL schema, piggyback AI signals on usage_events.metadata jsonb.

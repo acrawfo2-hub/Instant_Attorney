@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { DRAFTER_SYSTEM_PROMPT, WIZARD_FIELD_HINTS, buildFileContext } from "./prompts";
 import { isValidWizardType } from "./document-utils";
 import { WIZARD_LABELS } from "./types";
+import { maxOutputTokensFor } from "./token-limits";
 import type { CaseFile, FactItem, WizardType, Attachment, RequestedAttachment } from "./types";
 
 const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
@@ -77,7 +78,7 @@ export async function triggerPreWarm(
           custom_id: inserted.id,
           params: {
             model: "claude-sonnet-4-6",
-            max_tokens: 8000,
+            max_tokens: maxOutputTokensFor("claude-sonnet-4-6"),
             system: [
               {
                 type: "text" as const,

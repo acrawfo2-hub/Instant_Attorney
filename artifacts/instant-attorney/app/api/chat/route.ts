@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest } from "next/server";
 import { FREE_CHAT_SYSTEM_PROMPT } from "@/lib/prompts";
 import { logTruncation } from "@/lib/truncation-logger";
+import { maxOutputTokensFor } from "@/lib/token-limits";
 
 const client = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
 
@@ -14,7 +15,7 @@ export async function POST(req: NextRequest) {
 
   const stream = client.messages.stream({
     model: "claude-sonnet-4-6",
-    max_tokens: 4000,
+    max_tokens: maxOutputTokensFor("claude-sonnet-4-6"),
     system: FREE_CHAT_SYSTEM_PROMPT,
     messages,
   });

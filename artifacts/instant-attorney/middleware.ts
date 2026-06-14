@@ -4,7 +4,7 @@ import { createServerClient } from "@supabase/ssr";
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
 // Routes that require an authenticated session
-const AUTH_REQUIRED = ["/dashboard", "/chat", "/onboarding", "/wizard", "/attorney"];
+const AUTH_REQUIRED = ["/dashboard", "/chat", "/onboarding", "/wizard", "/attorney", "/admin"];
 // Redirect logged-in users away from these
 const GUEST_ONLY = ["/login", "/register"];
 

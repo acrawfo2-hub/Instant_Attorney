@@ -9,7 +9,8 @@ import { pickFirstValidWizard } from "@/lib/document-utils";
 import { triggerPreWarm } from "@/lib/pre-warm";
 import { generateCaseTitle } from "@/lib/title-generator";
 import { toAnthropicBlock, processAttachment } from "@/lib/attachment-processor";
-import { recordAiFromStream, recordStorageUpload } from "@/lib/usage-tracker";
+import { recordAiFromMessage, recordStorageUpload } from "@/lib/usage-tracker";
+import { maxOutputTokensFor, limitSignalMetadata } from "@/lib/token-limits";
 import { BYPASS_USER_ID } from "@/lib/types";
 import type { CaseFile, FactItem, LegalStrategy, Attachment, RequestedAttachment } from "@/lib/types";
 
@@ -154,7 +155,7 @@ export async function POST(req: NextRequest) {
   // Stream from Anthropic
   const stream = anthropic.messages.stream({
     model: "claude-sonnet-4-6",
-    max_tokens: 4000,
+    max_tokens: maxOutputTokensFor("claude-sonnet-4-6"),
     system: [
       {
         type: "text" as const,
@@ -186,12 +187,21 @@ export async function POST(req: NextRequest) {
       } catch (err) {
         controller.error(err);
       } finally {
-        await recordAiFromStream(db, stream, {
-          userId,
-          actorId: userId,
-          caseFileId: resolvedCaseFileId,
-          feature: "chat_acp",
-        });
+        const finalMsg = await stream.finalMessage().catch(() => null);
+        if (finalMsg) {
+          await recordAiFromMessage(db, finalMsg, {
+            userId,
+            actorId: userId,
+            caseFileId: resolvedCaseFileId,
+            feature: "chat_acp",
+            metadata: { ...limitSignalMetadata({
+              model: finalMsg.model,
+              outputTokens: finalMsg.usage.output_tokens,
+              priorLimit: 4000,
+              stopReason: finalMsg.stop_reason,
+            }) },
+          });
+        }
 
         if (fullResponse) {
           await db.from("intake_messages").insert({
@@ -305,7 +315,6 @@ export async function POST(req: NextRequest) {
             }
           }
         }
-        const finalMsg = await stream.finalMessage().catch(() => null);
         if (finalMsg?.stop_reason === "max_tokens") {
           logTruncation({
             endpoint: "chat-acp",

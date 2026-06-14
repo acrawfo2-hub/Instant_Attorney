@@ -13,6 +13,7 @@ import { recordAiFromMessage } from "@/lib/usage-tracker";
 import { BYPASS_USER_ID, docTypeLabel } from "@/lib/types";
 import type { Document, CaseFile, FactItem, Attachment } from "@/lib/types";
 import { logTruncation } from "@/lib/truncation-logger";
+import { maxOutputTokensFor, limitSignalMetadata } from "@/lib/token-limits";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
@@ -105,7 +106,7 @@ export async function POST(
   try {
     const fitnessResponse = await anthropic.messages.create({
       model: FITNESS_MODEL,
-      max_tokens: 600,
+      max_tokens: maxOutputTokensFor(FITNESS_MODEL),
       system: [
         {
           type: "text" as const,
@@ -129,7 +130,15 @@ export async function POST(
       actorId: userId,
       caseFileId: parentDoc.case_file_id,
       feature: "attorney_second_draft_fitness",
-      metadata: { document_id: id },
+      metadata: {
+        document_id: id,
+        ...limitSignalMetadata({
+          model: fitnessResponse.model,
+          outputTokens: fitnessResponse.usage.output_tokens,
+          priorLimit: 600,
+          stopReason: fitnessResponse.stop_reason,
+        }),
+      },
     });
 
     const fitness = parseDocumentTypeFitness(fitnessText);
@@ -152,7 +161,7 @@ export async function POST(
 
     const draftResponse = await anthropic.messages.create({
       model: SECOND_DRAFT_MODEL,
-      max_tokens: 8000,
+      max_tokens: maxOutputTokensFor(SECOND_DRAFT_MODEL),
       system: [
         {
           type: "text" as const,
@@ -184,7 +193,15 @@ export async function POST(
       actorId: userId,
       caseFileId: parentDoc.case_file_id,
       feature: "attorney_second_draft",
-      metadata: { document_id: id },
+      metadata: {
+        document_id: id,
+        ...limitSignalMetadata({
+          model: draftResponse.model,
+          outputTokens: draftResponse.usage.output_tokens,
+          priorLimit: 8000,
+          stopReason: draftResponse.stop_reason,
+        }),
+      },
     });
 
     const truncated = draftResponse.stop_reason === "max_tokens";
