@@ -25,6 +25,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     userId = user.id;
+
+    // Guard against generating a document onto someone else's case. This route
+    // inserts a documents row keyed by the caller-supplied caseFileId; verify the
+    // caller owns it. The RLS-scoped select returns nothing for a foreign case.
+    const { data: ownedCase } = await db
+      .from("case_files")
+      .select("id")
+      .eq("id", caseFileId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (!ownedCase) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
   }
 
   // Load all needed data in parallel
