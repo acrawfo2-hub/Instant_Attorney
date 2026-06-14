@@ -9,8 +9,11 @@ import type { Document, CaseFile, FactItem, Attachment } from "@/lib/types";
 import { logTruncation } from "@/lib/truncation-logger";
 import { maxOutputTokensFor, limitSignalMetadata } from "@/lib/token-limits";
 
+// Legal-document review can be slow — give the model room to finish.
+export const maxDuration = 300;
+
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
-const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
+const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney, maxRetries: 4 });
 
 export async function POST(
   _req: NextRequest,
@@ -65,7 +68,11 @@ export async function POST(
   );
 
   try {
-    const response = await anthropic.messages.create({
+    // Stream server-side and assemble the final message. A non-streaming request
+    // at our full 64k token ceiling is rejected by the SDK ("Streaming is
+    // required…") before it leaves the server — the same failure that 502'd the
+    // client wizard. Consuming the stream here keeps the JSON response contract.
+    const response = await anthropic.messages.stream({
       model: "claude-sonnet-4-6",
       max_tokens: maxOutputTokensFor("claude-sonnet-4-6"),
       system: [
@@ -76,7 +83,7 @@ export async function POST(
         },
       ],
       messages: [{ role: "user", content: userMessage }],
-    });
+    }).finalMessage();
 
     const reviewReport = response.content
       .filter((b): b is Anthropic.TextBlock => b.type === "text")

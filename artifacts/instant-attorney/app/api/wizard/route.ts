@@ -13,11 +13,15 @@ import { maxOutputTokensFor, limitSignalMetadata } from "@/lib/token-limits";
 // Allow up to 5 minutes for this route — legal doc generation can be slow
 export const maxDuration = 300;
 
-const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
+const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney, maxRetries: 4 });
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
 export async function POST(req: NextRequest) {
-  const { messages, caseFileId, wizardType, documentId, instrument } = await req.json();
+  const body = await req.json().catch(() => null);
+  if (!body || typeof body !== "object") {
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
+  const { messages, caseFileId, wizardType, documentId, instrument } = body;
 
   if (!Array.isArray(messages) || messages.length === 0) {
     return NextResponse.json({ error: "Invalid messages" }, { status: 400 });
@@ -161,8 +165,12 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Save the draft text to the documents table
-  const draftText = extractDraftText(fullResponse);
+  // Save the draft text to the documents table. Always persist *something* when
+  // the model returned any text: if it omitted the ---DRAFT READY--- markers (or
+  // truncated before them), fall back to the raw response so the client always
+  // gets a documentId back and can submit for attorney review. A markerless
+  // response must never strand a client with an on-screen draft they can't send.
+  const draftText = extractDraftText(fullResponse) ?? (fullResponse.trim() || null);
   let savedDocId: string | undefined = documentId as string | undefined;
 
   if (draftText) {

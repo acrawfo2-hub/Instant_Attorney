@@ -8,8 +8,11 @@ import type { Document } from "@/lib/types";
 import { logTruncation } from "@/lib/truncation-logger";
 import { maxOutputTokensFor, limitSignalMetadata } from "@/lib/token-limits";
 
+// Merging attorney edits into a full draft can be slow — give it room to finish.
+export const maxDuration = 300;
+
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
-const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
+const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney, maxRetries: 4 });
 
 export async function POST(
   _req: NextRequest,
@@ -49,11 +52,13 @@ export async function POST(
   const prompt = buildMergePrompt(doc as Document, doc.review_report as string);
 
   try {
-    const response = await anthropic.messages.create({
+    // Stream and assemble server-side — a non-streaming call at the 64k ceiling is
+    // rejected by the SDK ("Streaming is required…") before reaching the API.
+    const response = await anthropic.messages.stream({
       model: "claude-sonnet-4-6",
       max_tokens: maxOutputTokensFor("claude-sonnet-4-6"),
       messages: [{ role: "user", content: prompt }],
-    });
+    }).finalMessage();
 
     const improvedDraft = response.content
       .filter((b): b is Anthropic.TextBlock => b.type === "text")

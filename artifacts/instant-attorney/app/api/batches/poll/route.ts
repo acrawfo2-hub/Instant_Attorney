@@ -8,7 +8,7 @@ import { logTruncation } from "@/lib/truncation-logger";
 import { limitSignalMetadata } from "@/lib/token-limits";
 import type { Document } from "@/lib/types";
 
-const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
+const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney, maxRetries: 4 });
 /** Anthropic Message Batches API list-price discount */
 const BATCH_COST_MULTIPLIER = 0.5;
 

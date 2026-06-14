@@ -6,7 +6,7 @@ import { WIZARD_LABELS } from "./types";
 import { maxOutputTokensFor } from "./token-limits";
 import type { CaseFile, FactItem, WizardType, Attachment, RequestedAttachment } from "./types";
 
-const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
+const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney, maxRetries: 4 });
 
 export async function triggerPreWarm(
   db: SupabaseClient,

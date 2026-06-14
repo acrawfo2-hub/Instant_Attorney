@@ -4,7 +4,7 @@ import { FREE_CHAT_SYSTEM_PROMPT } from "@/lib/prompts";
 import { logTruncation } from "@/lib/truncation-logger";
 import { maxOutputTokensFor } from "@/lib/token-limits";
 
-const client = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
+const client = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney, maxRetries: 4 });
 
 export async function POST(req: NextRequest) {
   const { messages } = await req.json();

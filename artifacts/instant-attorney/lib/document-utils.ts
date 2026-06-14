@@ -6,7 +6,7 @@ import { WIZARD_LABELS } from "./types";
 import { maxOutputTokensFor } from "./token-limits";
 import type { WizardType, Document, CaseFile, Profile, FactItem, Attachment } from "./types";
 
-const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney });
+const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney, maxRetries: 4 });
 
 export function isValidWizardType(type: string): type is WizardType {
   return type in WIZARD_LABELS;

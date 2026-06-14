@@ -48,7 +48,13 @@ export async function GET(
   }
 
   const caseFile = doc.case_files as CaseFile;
-  const buffer = await generateDocxFromText(doc.title, doc.draft_text, caseFile);
+  let buffer: Buffer;
+  try {
+    buffer = await generateDocxFromText(doc.title, doc.draft_text, caseFile);
+  } catch (err) {
+    console.error("[documents/download] docx generation error:", err);
+    return NextResponse.json({ error: "Could not build the document file" }, { status: 500 });
+  }
   const filename = `${doc.title.replace(/\s+/g, "_")}.docx`;
 
   return new Response(new Uint8Array(buffer), {
