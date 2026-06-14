@@ -153,7 +153,7 @@ export async function POST(req: NextRequest) {
   // Stream from Anthropic
   const stream = anthropic.messages.stream({
     model: "claude-sonnet-4-6",
-    max_tokens: 1500,
+    max_tokens: 4000,
     system: [
       {
         type: "text" as const,

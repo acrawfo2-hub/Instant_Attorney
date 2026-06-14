@@ -77,7 +77,7 @@ export async function triggerPreWarm(
           custom_id: inserted.id,
           params: {
             model: "claude-sonnet-4-6",
-            max_tokens: 3000,
+            max_tokens: 8000,
             system: [
               {
                 type: "text" as const,

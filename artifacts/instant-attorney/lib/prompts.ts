@@ -848,7 +848,7 @@ export function buildDocumentTypeFitnessUserMessage(
 ): string {
   const fileContext = buildFileContext(caseFile, facts, attachments);
   const draftPreview = parentDoc.draft_text
-    ? parentDoc.draft_text.slice(0, 4000) + (parentDoc.draft_text.length > 4000 ? "\n\n[...truncated for fitness check...]" : "")
+    ? parentDoc.draft_text.slice(0, 16000) + (parentDoc.draft_text.length > 16000 ? "\n\n[...truncated for fitness check...]" : "")
     : "(No draft text)";
 
   return `${fileContext}
