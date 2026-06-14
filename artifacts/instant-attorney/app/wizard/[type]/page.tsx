@@ -247,6 +247,30 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
     }
   }
 
+  // Persist the client's checklist answers as confirmed facts on the file BEFORE
+  // any draft generation. These are key facts — they must survive even if the
+  // drafter fails, times out, or the tab is closed.
+  // Returns true when there was nothing to save OR the save succeeded. Returns
+  // false only when a real save was attempted and failed — the caller then stops
+  // and tells the client to retry, so answers are never silently discarded.
+  async function persistAnswers(items: ReturnType<typeof buildNeededItems>): Promise<boolean> {
+    const filled = items
+      .filter((it) => answers[it.id]?.trim())
+      .map((it) => ({ label: it.label, value: answers[it.id].trim() }));
+    const note = extraNote.trim();
+    if (!filled.length && !note) return true;
+    try {
+      const res = await fetch("/api/wizard/save-answers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ caseFileId, answers: filled, extraNote: note }),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
   // Bundle every filled checklist field (plus any free-form note) into a single
   // labeled update so the model knows exactly what each answer is for.
   async function handleSubmitAnswers() {
@@ -254,6 +278,15 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
     const items = buildNeededItems(parsed);
     const msg = buildBundledMessage(items, answers, extraNote);
     if (!msg) return;
+
+    // Save the answers as facts first, independent of (and before) generation.
+    // If this fails we stop here — answers stay in the form so the client can
+    // retry — rather than generate and risk losing them.
+    const saved = await persistAnswers(items);
+    if (!saved) {
+      setError("We couldn't save your answers just now — they're still here. Please tap Update again in a moment.");
+      return;
+    }
 
     setJustUpdated(false);
     const userMsg: Message = { role: "user", content: msg };
