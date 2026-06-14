@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
   try {
     message = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 3500,
+      max_tokens: 8000,
       system: [
         {
           type: "text" as const,
@@ -178,5 +178,6 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     text: fullResponse,
     documentId: savedDocId ?? null,
+    truncated: message.stop_reason === "max_tokens",
   });
 }

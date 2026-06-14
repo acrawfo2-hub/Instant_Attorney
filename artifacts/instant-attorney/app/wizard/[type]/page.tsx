@@ -26,7 +26,18 @@ function parseDrafterResponse(text: string): ParsedDrafter {
   const questionsMatch = text.match(/---FOLLOW-UP---([\s\S]*?)---END FOLLOW-UP---/);
   const fileUpdateMatch = text.match(/---FILE UPDATE---([\s\S]*?)---END FILE UPDATE---/);
 
-  const draftText = draftMatch ? draftMatch[1].trim() : null;
+  // Resilient draft extraction: if the closing marker is missing (truncation),
+  // take everything after the opening marker up to the next block marker.
+  let draftText: string | null = null;
+  if (draftMatch) {
+    draftText = draftMatch[1].trim();
+  } else {
+    const openDraft = text.match(/---DRAFT READY---([\s\S]*)/);
+    if (openDraft) {
+      const rest = openDraft[1].split(/---(?:MISSING FACTS|FOLLOW-UP|FILE UPDATE)---/)[0].trim();
+      draftText = rest.length ? rest : null;
+    }
+  }
 
   const blocking: string[] = [];
   const nonBlocking: string[] = [];
@@ -67,6 +78,99 @@ function renderDraftWithHighlights(text: string): string {
     .replace(/\[\[([^\]]+)\]\]/g, '<mark class="wiz-placeholder">[[<span>$1</span>]]</mark>')
     .replace(/\n\n+/g, "</p><p>")
     .replace(/\n/g, "<br>");
+}
+
+// A single piece of information the draft still needs, rendered as its own
+// labeled input in the guided checklist.
+interface NeededItem {
+  id: string;
+  label: string;       // clear, human-readable name of what to provide
+  hint: string;        // short why-it-matters / example, if available
+  severity: "blocking" | "helpful";
+}
+
+// Make an ALL-CAPS placeholder descriptor read like a normal label.
+// "FULL LEGAL NAME — Party A" -> "Full legal name — Party A"
+function humanizeLabel(raw: string): string {
+  const cleaned = raw
+    .split(" ")
+    .map((w) => (/^[A-Z][A-Z0-9./-]+$/.test(w) ? w.charAt(0) + w.slice(1).toLowerCase() : w))
+    .join(" ");
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+}
+
+// Pull the unique [[placeholders]] out of a draft, in document order.
+function extractPlaceholders(draft: string): { raw: string; key: string }[] {
+  const seen = new Set<string>();
+  const out: { raw: string; key: string }[] = [];
+  const re = /\[\[([^\]]+)\]\]/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(draft)) !== null) {
+    const raw = m[1].trim();
+    const key = raw.split(/—|,|\(/)[0].trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ raw, key });
+  }
+  return out;
+}
+
+// Build the guided checklist of needed items. Prefer the actual [[placeholders]]
+// in the draft (those are the literal blanks to fill); fall back to the parsed
+// missing-facts / questions when the draft has no bracketed placeholders.
+// Blocking items always come first.
+function buildNeededItems(parsed: ParsedDrafter): NeededItem[] {
+  const draft = parsed.draftText ?? "";
+  const blockingText = parsed.missingFacts.blocking.join(" \n ").toLowerCase();
+  const placeholders = extractPlaceholders(draft);
+
+  let items: NeededItem[] = [];
+
+  if (placeholders.length) {
+    items = placeholders.map((p, i) => {
+      // Blocking only when the placeholder is explicitly named in a blocking
+      // missing-fact. With no blocking signal, treat it as helpful rather than
+      // overstating what's "required".
+      const isBlocking = blockingText.includes(p.key);
+      // Find a descriptive hint: prefer a missing-fact line mentioning this key.
+      const hintLine =
+        [...parsed.missingFacts.blocking, ...parsed.missingFacts.nonBlocking].find((l) =>
+          l.toLowerCase().includes(p.key)
+        ) ?? "";
+      const hint = hintLine.replace(/\[\[[^\]]+\]\]\s*[—-]?\s*/, "").trim();
+      return {
+        id: p.key || `ph-${i}`,
+        label: humanizeLabel(p.raw),
+        hint,
+        severity: isBlocking ? "blocking" : "helpful",
+      };
+    });
+  } else {
+    // No bracketed placeholders — derive from missing-facts, then questions.
+    const clean = (s: string) => s.replace(/\[\[[^\]]+\]\]\s*[—-]?\s*/, "").trim();
+    parsed.missingFacts.blocking.forEach((b, i) =>
+      items.push({ id: `b-${i}`, label: clean(b), hint: "", severity: "blocking" })
+    );
+    parsed.missingFacts.nonBlocking.forEach((b, i) =>
+      items.push({ id: `nb-${i}`, label: clean(b), hint: "", severity: "helpful" })
+    );
+    if (!items.length) {
+      parsed.questions.forEach((q, i) =>
+        items.push({
+          id: `q-${i}`,
+          label: q.replace(/^\((?:blocking|important|helpful)\)\s*/i, "").trim(),
+          hint: "",
+          severity: /^\(blocking\)/i.test(q) ? "blocking" : "helpful",
+        })
+      );
+    }
+  }
+
+  // Blocking first, preserve original order within each group.
+  return [
+    ...items.filter((it) => it.severity === "blocking"),
+    ...items.filter((it) => it.severity === "helpful"),
+  ];
 }
 
 // Turn the [[placeholders]] inside a fallback template into the same kind of
@@ -291,7 +395,6 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
     : (WIZARD_LABELS[wizardType] ?? wizardType);
 
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [parsed, setParsed] = useState<ParsedDrafter | null>(null);
   const [documentId, setDocumentId] = useState<string>(preWarmedDocId);
@@ -301,6 +404,11 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [initialized, setInitialized] = useState(false);
+
+  // Guided checklist: per-field answers + "anything else" note + update feedback
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [extraNote, setExtraNote] = useState("");
+  const [justUpdated, setJustUpdated] = useState(false);
 
   const [elapsed, setElapsed] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
@@ -382,7 +490,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
     await runDrafter([], true);
   }
 
-  async function runDrafter(history: Message[], isInit = false) {
+  async function runDrafter(history: Message[], isInit = false): Promise<boolean> {
     abortRef.current?.abort();
     const abort = new AbortController();
     abortRef.current = abort;
@@ -450,7 +558,28 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
           questions: p.questions.length ? p.questions : derived.questions,
         };
       }
+      // Guarantee the right pane is never empty when the draft still has gaps:
+      // if the model gave a draft with [[placeholders]] but no follow-up
+      // questions/missing-facts (e.g. truncated), derive them from the draft.
+      const hasGapMarkers = /\[\[[^\]]+\]\]/.test(p.draftText ?? "");
+      const hasNeeds =
+        p.missingFacts.blocking.length > 0 ||
+        p.missingFacts.nonBlocking.length > 0 ||
+        p.questions.length > 0;
+      if (p.draftText && hasGapMarkers && !hasNeeds) {
+        const derived = deriveQuestionsFromTemplate(p.draftText);
+        p = {
+          ...p,
+          missingFacts: { blocking: derived.blocking, nonBlocking: [] },
+          questions: derived.questions,
+        };
+      }
+
+      // New draft arrived — clear any previously typed answers
+      setAnswers({});
+      setExtraNote("");
       setParsed(p);
+      return true;
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
         setError(
@@ -459,6 +588,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
       } else {
         setError(err instanceof Error ? err.message : "Connection error");
       }
+      return false;
     } finally {
       clearTimeout(timeoutId);
       setStreaming(false);
@@ -466,13 +596,28 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
     }
   }
 
-  async function handleAnswer(userText: string) {
-    if (streaming || !userText.trim()) return;
-    setInput("");
+  // Bundle every filled checklist field (plus any free-form note) into a single
+  // labeled update so the model knows exactly what each answer is for.
+  async function handleSubmitAnswers() {
+    if (streaming || !parsed) return;
+    const items = buildNeededItems(parsed);
+    const filled = items.filter((it) => answers[it.id]?.trim());
+    const note = extraNote.trim();
+    if (!filled.length && !note) return;
 
-    const userMsg: Message = { role: "user", content: userText };
-    const newHistory = [...messages, userMsg];
-    await runDrafter(newHistory, false);
+    const lines = filled.map((it) => `- ${it.label}: ${answers[it.id].trim()}`);
+    if (note) lines.push(`- Additional details: ${note}`);
+    const msg =
+      `Here is information to fill into the draft. Please re-render the COMPLETE updated draft incorporating these answers, then show any questions that still remain:\n\n` +
+      lines.join("\n");
+
+    setJustUpdated(false);
+    const userMsg: Message = { role: "user", content: msg };
+    const ok = await runDrafter([...messages, userMsg], false);
+    if (ok) {
+      setJustUpdated(true);
+      setTimeout(() => setJustUpdated(false), 6000);
+    }
   }
 
   async function handleDownload() {
@@ -514,6 +659,10 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
 
   const currentDraft = parsed?.draftText ?? null;
   const isStreamingDraft = streaming && !currentDraft;
+  const neededItems = parsed ? buildNeededItems(parsed) : [];
+  const blockingCount = neededItems.filter((it) => it.severity === "blocking").length;
+  const filledCount = neededItems.filter((it) => answers[it.id]?.trim()).length;
+  const hasAnyInput = filledCount > 0 || extraNote.trim().length > 0;
 
   return (
     <div className="wiz-shell wiz-shell-v2">
@@ -603,101 +752,128 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
             </div>
           ) : (
             <>
-              {/* Blocking questions */}
-              {parsed?.missingFacts.blocking && parsed.missingFacts.blocking.length > 0 && (
-                <div className="wiz-qa-section wiz-qa-blocking">
-                  <div className="wiz-qa-section-label">
-                    <span className="wiz-qa-dot wiz-qa-dot-red" />
-                    Blocking — needed to finalize
+              {/* Guided checklist — one field per piece of info the draft needs */}
+              {currentDraft && neededItems.length > 0 && (
+                <div className="wiz-checklist">
+                  <div className="wiz-checklist-head">
+                    <h3 className="wiz-checklist-title">Finish your draft</h3>
+                    <p className="wiz-checklist-sub">
+                      Fill in what you know — you don&apos;t have to answer everything.
+                      The more you provide, the more complete your document, and the
+                      faster the attorney can finalize it. Type your answers, then
+                      click <strong>Update Draft</strong> once at the bottom.
+                    </p>
+                    {blockingCount > 0 && (
+                      <p className="wiz-checklist-count">
+                        <span className="wiz-qa-dot wiz-qa-dot-red" />
+                        {blockingCount} item{blockingCount > 1 ? "s" : ""} needed before this can be finalized
+                      </p>
+                    )}
                   </div>
-                  <ul className="wiz-gap-list">
-                    {parsed.missingFacts.blocking.map((item, i) => (
-                      <li key={i} className="wiz-gap-item wiz-gap-blocking">
-                        {item}
-                      </li>
+
+                  <div className="wiz-field-list">
+                    {neededItems.map((it) => (
+                      <div
+                        key={it.id}
+                        className={`wiz-field ${it.severity === "blocking" ? "wiz-field-blocking" : ""}`}
+                      >
+                        <label className="wiz-field-label" htmlFor={`fld-${it.id}`}>
+                          <span
+                            className={`wiz-qa-dot ${it.severity === "blocking" ? "wiz-qa-dot-red" : "wiz-qa-dot-amber"}`}
+                          />
+                          {it.label}
+                          {it.severity === "blocking" && <span className="wiz-field-tag">required</span>}
+                        </label>
+                        {it.hint && <p className="wiz-field-hint">{it.hint}</p>}
+                        <input
+                          id={`fld-${it.id}`}
+                          className="wiz-field-input"
+                          type="text"
+                          value={answers[it.id] ?? ""}
+                          disabled={streaming}
+                          placeholder="Type your answer…"
+                          onChange={(e) =>
+                            setAnswers((prev) => ({ ...prev, [it.id]: e.target.value }))
+                          }
+                        />
+                      </div>
                     ))}
-                  </ul>
+                  </div>
+
+                  <div className="wiz-field wiz-field-note">
+                    <label className="wiz-field-label" htmlFor="fld-extra">
+                      Anything else the attorney should know? (optional)
+                    </label>
+                    <textarea
+                      id="fld-extra"
+                      ref={inputRef}
+                      className="wiz-input"
+                      rows={3}
+                      value={extraNote}
+                      disabled={streaming}
+                      placeholder="Add any extra context, special requests, or clarifications…"
+                      onChange={(e) => setExtraNote(e.target.value)}
+                    />
+                  </div>
+
+                  {justUpdated && (
+                    <div className="wiz-updated-confirm">Draft updated ✓</div>
+                  )}
+
+                  <button
+                    className="wiz-send"
+                    onClick={handleSubmitAnswers}
+                    disabled={streaming || !hasAnyInput}
+                  >
+                    {streaming
+                      ? "Updating draft…"
+                      : filledCount > 0
+                        ? `Update Draft with ${filledCount} Answer${filledCount > 1 ? "s" : ""} →`
+                        : "Update Draft →"}
+                  </button>
                 </div>
               )}
 
-              {/* Non-blocking */}
-              {parsed?.missingFacts.nonBlocking && parsed.missingFacts.nonBlocking.length > 0 && (
-                <div className="wiz-qa-section">
-                  <div className="wiz-qa-section-label">
-                    <span className="wiz-qa-dot wiz-qa-dot-amber" />
-                    Non-blocking — can finalize at signing
-                  </div>
-                  <ul className="wiz-gap-list">
-                    {parsed.missingFacts.nonBlocking.map((item, i) => (
-                      <li key={i} className="wiz-gap-item">{item}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Questions */}
-              {parsed?.questions && parsed.questions.length > 0 && (
-                <div className="wiz-qa-section">
-                  <div className="wiz-qa-section-label">Questions</div>
-                  <ol className="wiz-question-list">
-                    {parsed.questions.map((q, i) => (
-                      <li key={i} className="wiz-question-item">{q}</li>
-                    ))}
-                  </ol>
+              {/* No remaining gaps — draft looks complete */}
+              {currentDraft && neededItems.length === 0 && (
+                <div className="wiz-checklist wiz-checklist-complete">
+                  <h3 className="wiz-checklist-title">Your draft looks complete</h3>
+                  <p className="wiz-checklist-sub">
+                    We didn&apos;t find any remaining blanks. Review the document on the
+                    left, then send it to the attorney below.
+                  </p>
+                  {justUpdated && <div className="wiz-updated-confirm">Draft updated ✓</div>}
                 </div>
               )}
 
               {error && <div className="wiz-error">{error}</div>}
 
-              {/* Answer input */}
+              {/* Send to Attorney — always visible once a draft exists */}
               {currentDraft && (
-                <div className="wiz-answer-area">
-                  <textarea
-                    ref={inputRef}
-                    className="wiz-input"
-                    placeholder={
-                      parsed?.questions?.[0]
-                        ? `Answer: "${parsed.questions[0].replace(/^\(.*?\)\s*/, "").substring(0, 60)}…"`
-                        : "Answer a question or provide additional information…"
-                    }
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    rows={3}
-                    disabled={streaming}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        handleAnswer(input);
-                      }
-                    }}
-                  />
-                  <button
-                    className="wiz-send"
-                    onClick={() => handleAnswer(input)}
-                    disabled={streaming || !input.trim()}
-                  >
-                    {streaming ? "Updating draft…" : "Update Draft →"}
-                  </button>
-                </div>
-              )}
-
-              {/* Submit for review — explicit click required */}
-              {currentDraft && documentId && !streaming && (
                 <div className="wiz-submit-area">
-                  {parsed?.readyForReview && (
-                    <p className="wiz-submit-ready">Your draft is ready for attorney review. Click below to start the 48-hour review window.</p>
-                  )}
+                  <div className="wiz-attorney-framing">
+                    <p className="wiz-attorney-lead">Ready when you are</p>
+                    <p className="wiz-attorney-body">
+                      You can send your draft to the attorney at any time. The more
+                      information you add above, the more likely you&apos;ll get back a
+                      finished, ready-to-sign document instead of follow-up questions.
+                    </p>
+                  </div>
                   <p className="wiz-submit-hint">
-                    {parsed?.missingFacts.blocking?.length
-                      ? `${parsed.missingFacts.blocking.length} blocking item${parsed.missingFacts.blocking.length > 1 ? "s" : ""} remaining — you can still submit and the attorney will flag them.`
-                      : "Submitting starts the 48-hour attorney review clock."}
+                    {blockingCount > 0
+                      ? `${blockingCount} item${blockingCount > 1 ? "s" : ""} still missing — you can still send now and the attorney will follow up on what's needed.`
+                      : "Sending starts the 48-hour attorney review clock."}
                   </p>
                   <button
                     className="wiz-submit-btn"
                     onClick={handleSubmitForReview}
-                    disabled={submitting}
+                    disabled={submitting || streaming || !documentId}
                   >
-                    {submitting ? "Submitting…" : "Submit for Attorney Review →"}
+                    {submitting
+                      ? "Sending…"
+                      : !documentId
+                        ? "Preparing draft…"
+                        : "Send to Attorney →"}
                   </button>
                 </div>
               )}

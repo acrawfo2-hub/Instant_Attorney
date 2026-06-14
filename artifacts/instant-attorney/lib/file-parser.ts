@@ -2,9 +2,21 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { WizardType, LegalStrategy } from "./types";
 
 // Extracts the draft text from a ---DRAFT READY--- block.
+// Resilient to truncation: if the closing ---END DRAFT--- marker is missing
+// (e.g. the model hit its token limit mid-draft), take everything after the
+// opening marker up to the next block marker, so a long draft is still saved.
 export function extractDraftText(text: string): string | null {
-  const match = text.match(/---DRAFT READY---([\s\S]*?)---END DRAFT---/);
-  return match ? match[1].trim() : null;
+  const closed = text.match(/---DRAFT READY---([\s\S]*?)---END DRAFT---/);
+  if (closed) return closed[1].trim();
+
+  const open = text.match(/---DRAFT READY---([\s\S]*)/);
+  if (open) {
+    // Stop at the next block marker if one started, otherwise take the rest.
+    const rest = open[1].split(/---(?:MISSING FACTS|FOLLOW-UP|FILE UPDATE)---/)[0];
+    const trimmed = rest.trim();
+    return trimmed.length ? trimmed : null;
+  }
+  return null;
 }
 
 // Returns true when the drafter signals the draft is ready for attorney review.

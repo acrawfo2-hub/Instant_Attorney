@@ -2979,7 +2979,126 @@ mark.wiz-placeholder {
   cursor: pointer;
   transition: background 0.15s;
 }
-.wiz-submit-btn:hover { background: var(--brand-navy-md); }
+.wiz-submit-btn:hover:not(:disabled) { background: var(--brand-navy-md); }
+.wiz-submit-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* Guided "finish your draft" checklist */
+.wiz-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.wiz-checklist-head { display: flex; flex-direction: column; gap: 8px; }
+.wiz-checklist-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--brand-navy);
+  margin: 0;
+}
+.wiz-checklist-sub {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--brand-text-md);
+  margin: 0;
+}
+.wiz-checklist-count {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #c0392b;
+  margin: 2px 0 0;
+}
+.wiz-checklist-complete .wiz-checklist-title { color: #2f7a3f; }
+
+.wiz-field-list { display: flex; flex-direction: column; gap: 14px; }
+.wiz-field { display: flex; flex-direction: column; gap: 6px; }
+.wiz-field-blocking {
+  background: #fff8f7;
+  border-left: 3px solid #e53e3e;
+  padding: 10px 12px;
+  border-radius: var(--brand-r-md);
+}
+.wiz-field-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand-text-dk);
+}
+.wiz-field-tag {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #c0392b;
+  background: #fdeaea;
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+.wiz-field-hint {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--brand-text-xlt);
+  margin: 0;
+}
+.wiz-field-input {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--brand-border);
+  border-radius: var(--brand-r-md);
+  font-size: 14px;
+  font-family: inherit;
+  background: var(--brand-cream);
+  color: var(--brand-text-dk);
+}
+.wiz-field-input:focus { outline: none; border-color: var(--brand-gold); }
+.wiz-field-note {
+  border-top: 1px solid var(--brand-border);
+  padding-top: 14px;
+}
+
+.wiz-updated-confirm {
+  font-size: 13px;
+  font-weight: 700;
+  color: #2f7a3f;
+  background: #eef7ef;
+  border: 1px solid #cfe6d2;
+  border-radius: var(--brand-r-md);
+  padding: 9px 12px;
+  text-align: center;
+}
+
+.wiz-checklist .wiz-send {
+  width: 100%;
+  align-self: stretch;
+  padding: 12px;
+}
+
+/* Attorney handoff framing */
+.wiz-attorney-framing {
+  background: var(--brand-cream);
+  border: 1px solid var(--brand-border);
+  border-radius: var(--brand-r-md);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+.wiz-attorney-lead {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--brand-navy);
+  margin: 0 0 4px;
+}
+.wiz-attorney-body {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--brand-text-md);
+  margin: 0;
+}
 
 /* Review submitted state */
 .wiz-review-submitted {
