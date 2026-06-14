@@ -67,6 +67,11 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   const abortRef = useRef<AbortController | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const draftRef = useRef<HTMLDivElement>(null);
+  // A synchronous mirror of the saved document id. State updates are async, so
+  // right after a generation finishes the `documentId` state is still stale
+  // inside the same handler that needs to auto-send the draft to the attorney —
+  // this ref always holds the freshest id.
+  const docIdRef = useRef<string>(preWarmedDocId);
 
   // Elapsed-seconds ticker while streaming
   useEffect(() => {
@@ -98,6 +103,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
     setParsed(p);
     setMessages([{ role: "assistant", content: fakeResponse }]);
     setDocumentId(doc.id);
+    docIdRef.current = doc.id;
     if (doc.status === "pending_review") {
       setSubmittedForReview(true);
       setSubmittedAt(doc.submitted_at ?? null);
@@ -184,7 +190,10 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
       const data = await res.json() as { text: string; documentId: string | null; truncated?: boolean };
       const fullText = data.text ?? "";
 
-      if (data.documentId) setDocumentId(data.documentId);
+      if (data.documentId) {
+        setDocumentId(data.documentId);
+        docIdRef.current = data.documentId;
+      }
       if (data.truncated) setTruncatedDraft(true);
 
       setMessages((prev) => {
@@ -241,7 +250,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   // Bundle every filled checklist field (plus any free-form note) into a single
   // labeled update so the model knows exactly what each answer is for.
   async function handleSubmitAnswers() {
-    if (streaming || !parsed) return;
+    if (streaming || submitting || !parsed) return;
     const items = buildNeededItems(parsed);
     const msg = buildBundledMessage(items, answers, extraNote);
     if (!msg) return;
@@ -251,7 +260,11 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
     const ok = await runDrafter([...messages, userMsg], false);
     if (ok) {
       setJustUpdated(true);
-      setTimeout(() => setJustUpdated(false), 6000);
+      // Bias toward moving the document forward: once the client has answered a
+      // round of questions, update the draft AND send it straight to the
+      // attorney (placeholders and all). Previously answers only saved a local
+      // "draft" the client had to separately submit — so progress looked lost.
+      await submitToAttorney();
     }
   }
 
@@ -275,12 +288,17 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
     }
   }
 
-  async function handleSubmitForReview() {
-    if (!documentId || submitting) return;
+  async function submitToAttorney() {
+    if (submitting) return;
+    const id = docIdRef.current || documentId;
+    if (!id) {
+      setError("Your draft was saved but we couldn't send it just yet. Please click “Send to Attorney” again in a moment.");
+      return;
+    }
     setSubmitting(true);
     setError("");
     try {
-      const res = await fetch(`/api/documents/${documentId}/submit`, { method: "POST" });
+      const res = await fetch(`/api/documents/${id}/submit`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Submit failed");
       setSubmittedForReview(true);
@@ -433,9 +451,10 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
                     <h3 className="wiz-checklist-title">Finish your draft</h3>
                     <p className="wiz-checklist-sub">
                       Fill in what you know — you don&apos;t have to answer everything.
-                      The more you provide, the more complete your document, and the
-                      faster the attorney can finalize it. Type your answers, then
-                      click <strong>Update Draft</strong> once at the bottom.
+                      When you&apos;re done, click <strong>Update Draft &amp; Send to
+                      Attorney</strong>: we&apos;ll update your document and send it
+                      straight to Andrew Crawford, Esq. for review. Anything you leave
+                      blank stays as a highlighted placeholder for him to finalize.
                     </p>
                     {blockingCount > 0 && (
                       <p className="wiz-checklist-count">
@@ -497,13 +516,15 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
                   <button
                     className="wiz-send"
                     onClick={handleSubmitAnswers}
-                    disabled={streaming || !hasAnyInput}
+                    disabled={streaming || submitting || !hasAnyInput}
                   >
                     {streaming
                       ? "Updating draft…"
-                      : filledCount > 0
-                        ? `Update Draft with ${filledCount} Answer${filledCount > 1 ? "s" : ""} →`
-                        : "Update Draft →"}
+                      : submitting
+                        ? "Sending to attorney…"
+                        : filledCount > 0
+                          ? `Update Draft & Send to Attorney (${filledCount} answer${filledCount > 1 ? "s" : ""}) →`
+                          : "Update Draft & Send to Attorney →"}
                   </button>
                 </div>
               )}
@@ -522,32 +543,39 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
 
               {error && <div className="wiz-error">{error}</div>}
 
-              {/* Send to Attorney — always visible once a draft exists */}
+              {/* Send as-is — for clients who have nothing to add and just want the
+                  current draft in front of the attorney right now. If they HAVE
+                  typed answers, this routes through handleSubmitAnswers first so
+                  those answers aren't lost. */}
               {currentDraft && (
                 <div className="wiz-submit-area">
                   <div className="wiz-attorney-framing">
-                    <p className="wiz-attorney-lead">Ready when you are</p>
+                    <p className="wiz-attorney-lead">Nothing to add?</p>
                     <p className="wiz-attorney-body">
-                      You can send your draft to the attorney at any time. The more
-                      information you add above, the more likely you&apos;ll get back a
-                      finished, ready-to-sign document instead of follow-up questions.
+                      You can send the current draft to Andrew Crawford, Esq. right
+                      now, exactly as it is. He&apos;ll fill in any highlighted blanks
+                      and follow up with you about anything he needs.
                     </p>
                   </div>
                   <p className="wiz-submit-hint">
                     {blockingCount > 0
-                      ? `${blockingCount} item${blockingCount > 1 ? "s" : ""} still missing — you can still send now and the attorney will follow up on what's needed.`
+                      ? `${blockingCount} item${blockingCount > 1 ? "s" : ""} still blank — that's okay, the attorney will follow up on what's needed.`
                       : "Sending starts the 48-hour attorney review clock."}
                   </p>
                   <button
                     className="wiz-submit-btn"
-                    onClick={handleSubmitForReview}
+                    onClick={hasAnyInput ? handleSubmitAnswers : submitToAttorney}
                     disabled={submitting || streaming || !documentId}
                   >
                     {submitting
                       ? "Sending…"
-                      : !documentId
-                        ? "Preparing draft…"
-                        : "Send to Attorney →"}
+                      : streaming
+                        ? "Working…"
+                        : !documentId
+                          ? "Preparing draft…"
+                          : hasAnyInput
+                            ? "Update Draft & Send to Attorney →"
+                            : "Send Draft to Attorney As-Is →"}
                   </button>
                 </div>
               )}

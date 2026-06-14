@@ -167,11 +167,6 @@ export async function POST(req: NextRequest) {
 
   if (draftText) {
     const now = new Date().toISOString();
-    const docData = {
-      draft_text: draftText,
-      status: "draft",
-      updated_at: now,
-    };
 
     if (!savedDocId) {
       const existing = await findReusableDocument(db, caseFileId, wizardType, userId);
@@ -179,14 +174,32 @@ export async function POST(req: NextRequest) {
     }
 
     if (savedDocId) {
+      // Preserve where the document already is in its lifecycle. Once a client
+      // has sent a draft for review (pending_review) — or the attorney has asked
+      // for changes (changes_requested), or finalized it (approved/delivered) —
+      // editing it again must NOT silently knock it back to a plain "draft".
+      // Doing so would drop it out of the attorney's queue and make the client's
+      // progress disappear. Only a brand-new or still-"pre_warmed" suggestion
+      // gets promoted to "draft".
+      const { data: existingDoc } = await db
+        .from("documents")
+        .select("status, content_json")
+        .eq("id", savedDocId)
+        .single();
+      const curStatus = existingDoc?.status as string | undefined;
+      const nextStatus = curStatus && curStatus !== "pre_warmed" ? curStatus : "draft";
+
+      const update: Record<string, unknown> = {
+        draft_text: draftText,
+        status: nextStatus,
+        updated_at: now,
+      };
       // Merge truncated flag into existing content_json when re-generating
       if (truncated) {
-        const { data: existingDoc } = await db.from("documents").select("content_json").eq("id", savedDocId).single();
         const existingCj = (existingDoc?.content_json as Record<string, unknown>) ?? {};
-        await db.from("documents").update({ ...docData, content_json: { ...existingCj, truncated: true } }).eq("id", savedDocId);
-      } else {
-        await db.from("documents").update(docData).eq("id", savedDocId);
+        update.content_json = { ...existingCj, truncated: true };
       }
+      await db.from("documents").update(update).eq("id", savedDocId);
     } else {
       const { data: inserted } = await db
         .from("documents")
@@ -196,7 +209,9 @@ export async function POST(req: NextRequest) {
           doc_type: wizardType,
           title: `${documentLabel} — ${new Date().toLocaleDateString()}`,
           content_json: { init_response: fullResponse, ...(truncated ? { truncated: true } : {}) },
-          ...docData,
+          draft_text: draftText,
+          status: "draft",
+          updated_at: now,
         })
         .select("id")
         .single();

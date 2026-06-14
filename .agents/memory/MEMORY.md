@@ -1,3 +1,4 @@
 - [Screenshotting Vite previews](canvas-vite-preview-screenshots.md) — external_url shots of mockup-sandbox previews go blank/flaky; use app_preview instead.
 - [Instant-Attorney on Supabase](instant-attorney-supabase.md) — this app uses Supabase directly (not Drizzle); Anthropic key env is process.env.Claude_Instant_Attorney.
 - [Anthropic "Streaming is required"](anthropic-streaming-required.md) — sync messages.create() with large max_tokens throws+502s; use messages.stream().finalMessage(), return JSON.
+- [Wizard push-forward flow](instant-attorney-wizard-flow.md) — answering wizard questions auto-sends draft to attorney; wizard route must NOT downgrade an elevated doc status to "draft" on edit.
