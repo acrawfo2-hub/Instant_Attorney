@@ -2,11 +2,18 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { docTypeLabel } from "@/lib/types";
-import type { CaseFile, Document, Attachment, Profile } from "@/lib/types";
+import type {
+  CaseFile,
+  Document,
+  Attachment,
+  Profile,
+  IntakeMessage,
+} from "@/lib/types";
 
 interface CaseFileWithDocs extends CaseFile {
   documents: Document[];
   attachments: Attachment[];
+  messages: IntakeMessage[];
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -66,31 +73,41 @@ export default async function ClientFilePage({
 
   const caseFileIds = caseFiles.map((cf) => cf.id);
 
-  const [{ data: rawDocs }, { data: rawAtts }] = await Promise.all([
-    caseFileIds.length
-      ? db
-          .from("documents")
-          .select("*")
-          .in("case_file_id", caseFileIds)
-          .order("created_at", { ascending: false })
-      : { data: [] },
-    caseFileIds.length
-      ? db
-          .from("attachments")
-          .select("*")
-          .in("case_file_id", caseFileIds)
-          .neq("status", "failed")
-          .order("created_at", { ascending: false })
-      : { data: [] },
-  ]);
+  const [{ data: rawDocs }, { data: rawAtts }, { data: rawMsgs }] =
+    await Promise.all([
+      caseFileIds.length
+        ? db
+            .from("documents")
+            .select("*")
+            .in("case_file_id", caseFileIds)
+            .order("created_at", { ascending: false })
+        : { data: [] },
+      caseFileIds.length
+        ? db
+            .from("attachments")
+            .select("*")
+            .in("case_file_id", caseFileIds)
+            .neq("status", "failed")
+            .order("created_at", { ascending: false })
+        : { data: [] },
+      caseFileIds.length
+        ? db
+            .from("intake_messages")
+            .select("*")
+            .in("case_file_id", caseFileIds)
+            .order("created_at", { ascending: true })
+        : { data: [] },
+    ]);
 
   const docs = (rawDocs ?? []) as Document[];
   const atts = (rawAtts ?? []) as Attachment[];
+  const msgs = (rawMsgs ?? []) as IntakeMessage[];
 
   const caseFilesWithData: CaseFileWithDocs[] = caseFiles.map((cf) => ({
     ...cf,
     documents: docs.filter((d) => d.case_file_id === cf.id && !d.parent_document_id),
     attachments: atts.filter((a) => a.case_file_id === cf.id),
+    messages: msgs.filter((m) => m.case_file_id === cf.id),
   }));
 
   const client = clientProfile as Profile;
@@ -312,11 +329,38 @@ export default async function ClientFilePage({
                 </div>
               )}
 
-              {cf.documents.length === 0 && cf.attachments.length === 0 && (
-                <div className="atty-empty" style={{ marginTop: 12 }}>
-                  No documents or attachments yet
+              {/* Intake conversation for this case file */}
+              {cf.messages.length > 0 && (
+                <div className="atty-case-subsection">
+                  <h3 className="atty-case-subtitle">
+                    Intake Conversation ({cf.messages.length})
+                  </h3>
+                  <div className="atty-chat-list">
+                    {cf.messages.map((m) => (
+                      <div
+                        key={m.id}
+                        className={`atty-chat-msg ${m.role === "user" ? "atty-chat-user" : "atty-chat-assistant"}`}
+                      >
+                        <span className="atty-chat-role">
+                          {m.role === "user" ? "Client" : "Assistant"}
+                          <span className="atty-chat-time">
+                            {new Date(m.created_at).toLocaleString()}
+                          </span>
+                        </span>
+                        {m.content}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
+
+              {cf.documents.length === 0 &&
+                cf.attachments.length === 0 &&
+                cf.messages.length === 0 && (
+                  <div className="atty-empty" style={{ marginTop: 12 }}>
+                    No documents, attachments, or messages yet
+                  </div>
+                )}
             </section>
           ))
         )}

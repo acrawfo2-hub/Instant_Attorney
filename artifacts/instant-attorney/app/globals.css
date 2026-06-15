@@ -2485,6 +2485,163 @@ body {
 .atty-file-action { font-size: 12px; color: var(--brand-text-xlt); }
 .atty-file-footer { display: flex; justify-content: space-between; font-size: 11px; color: var(--brand-text-xlt); margin-top: 4px; }
 
+/* ── Attorney dashboard tables & file log ── */
+.atty-section-hint {
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--brand-text-xlt);
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: 8px;
+}
+
+.atty-log { display: block; }
+.atty-log-hint {
+  font-size: 12px;
+  color: var(--brand-text-xlt);
+  margin-bottom: 12px;
+}
+.atty-log-filter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--brand-text-md);
+  margin-bottom: 12px;
+}
+.atty-log-filter strong { color: var(--brand-text-dk); }
+.atty-chip-clear {
+  background: var(--brand-cream-dk);
+  border: 0.5px solid var(--brand-border);
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 12px;
+  color: var(--brand-text-md);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s;
+}
+.atty-chip-clear:hover { background: #ddd8cf; color: var(--brand-text-dk); }
+
+.atty-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--brand-white);
+  border: 0.5px solid var(--brand-border);
+  border-radius: var(--brand-r-md);
+  overflow: hidden;
+  font-size: 14px;
+  color: var(--brand-text-dk);
+}
+.atty-table thead th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--brand-text-lt);
+  padding: 12px 16px;
+  background: var(--brand-cream);
+  border-bottom: 0.5px solid var(--brand-border);
+  white-space: nowrap;
+}
+.atty-table tbody td {
+  padding: 13px 16px;
+  color: var(--brand-text-dk);
+  border-bottom: 0.5px solid var(--brand-border);
+  vertical-align: middle;
+}
+.atty-table tbody tr:last-child td { border-bottom: none; }
+
+.atty-th-sort { cursor: pointer; user-select: none; transition: color 0.15s; }
+.atty-th-sort:hover { color: var(--brand-text-dk); }
+.atty-th-arrow { margin-left: 4px; color: var(--brand-gold); }
+
+.atty-tr-link { cursor: pointer; transition: background 0.15s; }
+.atty-tr-link:hover { background: var(--brand-cream); }
+.atty-tr-urgent { transition: background 0.15s; }
+.atty-tr-urgent:hover { background: var(--brand-cream); }
+
+.atty-td-sla { white-space: nowrap; }
+.atty-td-doc { font-weight: 600; color: var(--brand-text-dk); }
+.atty-td-matter { color: var(--brand-text-md); font-size: 13px; }
+.atty-td-muted { color: var(--brand-text-xlt); font-size: 13px; white-space: nowrap; }
+.atty-td-arrow { text-align: right; color: var(--brand-gold); font-weight: 600; }
+
+.atty-row-link {
+  color: var(--brand-navy-md);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 0.15s;
+}
+.atty-row-link:hover { color: var(--brand-gold); }
+
+.atty-client-link {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 600;
+  color: var(--brand-navy-md);
+  cursor: pointer;
+  text-align: left;
+  transition: color 0.15s;
+}
+.atty-client-link:hover { color: var(--brand-gold); text-decoration: underline; text-underline-offset: 2px; }
+
+.atty-clock { font-weight: 600; font-size: 13px; white-space: nowrap; }
+.atty-clock-ok { color: var(--brand-text-lt); }
+.atty-clock-urgent { color: #c8960a; }
+.atty-clock-overdue { color: #c44444; font-weight: 700; }
+
+.atty-status-open { background: #e8f5e9; color: #2d7a4f; }
+.atty-status-closed { background: #f0f0f0; color: #666; }
+.atty-status-referred { background: #e3f2fd; color: #1565c0; }
+.atty-status-archived { background: #f0f0f0; color: #999; }
+
+/* ── Attorney client chat transcript ── */
+.atty-chat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+.atty-chat-msg {
+  padding: 10px 14px;
+  border-radius: 12px;
+  max-width: 82%;
+  font-size: 13.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.atty-chat-user {
+  align-self: flex-end;
+  background: var(--brand-navy);
+  color: var(--brand-cream-text);
+  border-bottom-right-radius: 3px;
+}
+.atty-chat-assistant {
+  align-self: flex-start;
+  background: var(--brand-cream);
+  color: var(--brand-text-dk);
+  border: 0.5px solid var(--brand-border);
+  border-bottom-left-radius: 3px;
+}
+.atty-chat-role {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.6;
+  margin-bottom: 4px;
+}
+.atty-chat-time { font-weight: 400; opacity: 0.7; margin-left: 6px; letter-spacing: 0; }
+
 /* Attorney review page */
 .atty-review-loading, .atty-review-error {
   display: flex; align-items: center; justify-content: center;
