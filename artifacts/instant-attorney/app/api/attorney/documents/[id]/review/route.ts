@@ -118,7 +118,10 @@ export async function POST(
       });
     }
 
-    const child = await upsertCriticalReviewChild(db, doc as Document, reviewReport);
+    // The child review document is owned by the CLIENT (parent.user_id), so the
+    // insert must bypass RLS — write it with the service client now that the
+    // caller is verified as an attorney.
+    const child = await upsertCriticalReviewChild(createServiceClient(), doc as Document, reviewReport);
 
     const existingCj = (doc.content_json as Record<string, unknown>) ?? {};
     await db.from("documents").update({

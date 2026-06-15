@@ -226,7 +226,9 @@ export async function POST(
       throw new Error("Empty second draft response");
     }
 
-    const child = await upsertSecondDraftChild(db, parentDoc, secondDraftText);
+    // The second-draft child is owned by the CLIENT (parentDoc.user_id); write it
+    // with the service client to bypass RLS now that the caller is a verified attorney.
+    const child = await upsertSecondDraftChild(createServiceClient(), parentDoc, secondDraftText);
 
     const existingCj = (parentDoc.content_json as Record<string, unknown>) ?? {};
     await db.from("documents").update({

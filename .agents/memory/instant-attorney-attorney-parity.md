@@ -30,3 +30,25 @@ that fixing the API alone left GovFormInstruments hidden by a UI `!isAttorney` g
 **How to apply:** when adding any new section to the client file that an attorney
 should also see, check for a `!isAttorney` gate in ClientFileView AND confirm the
 section's API route has an attorney service-client bypass.
+
+# Attorney WRITES to client-owned rows must use the service client
+
+The `documents` INSERT RLS policy requires `user_id = auth.uid()`. Attorney review
+actions create child documents owned by the CLIENT (`parent.user_id`): the
+critical-review child (`doc_type: critical_review`) and the second-draft child
+(`doc_type: second_draft`). Inserting these with the attorney's RLS session fails
+with Postgres `42501` ("new row violates row-level security policy"). The route
+returns 200 with a null child id, so the UI silently shows nothing
+(e.g. "No review memo yet. Click Run Critical Review.").
+
+`upsertCriticalReviewChild` / `upsertSecondDraftChild` take the db client as their
+first arg — pass `createServiceClient()` (after the is_attorney check) so the child
+insert + parent sync bypass RLS. Parent-row UPDATEs (review_status etc.) succeed
+under the attorney UPDATE policy, so only the cross-owner INSERTs need the bypass.
+
+**Why:** found via production deploy logs after "Run Critical Review" produced
+nothing. The AI generation succeeded; only the save failed.
+
+**How to apply:** any attorney route that INSERTs a row whose `user_id` is the
+client's must use the service client for that write. Symptom to grep for in deploy
+logs: `42501` / `violates row-level security policy for table "documents"`.
