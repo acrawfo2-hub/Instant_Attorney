@@ -128,6 +128,27 @@ export interface FactItem {
   created_at: string;
 }
 
+// ── Government form instruments ──────────────────────────────────────────────
+// A government form detected in chat that the client needs to complete. These are
+// surfaced as "legal instruments to complete" and guided by the gov-form tool
+// (distinct from the document-generation wizard). See lib/government-forms.ts.
+export type GovFormStatus = "needed" | "in_progress" | "completed" | "dismissed";
+
+export interface GovFormInstrument {
+  id: string;
+  case_file_id: string;
+  user_id: string;
+  /** Stable key into the GOVERNMENT_FORMS registry. */
+  form_key: string;
+  status: GovFormStatus;
+  /** Plain-language reason this form was surfaced for this client. */
+  reason: string | null;
+  /** Field name → client-provided answer, filled in by the guided tool. */
+  answers: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface IntakeMessage {
   id: string;
   case_file_id: string;

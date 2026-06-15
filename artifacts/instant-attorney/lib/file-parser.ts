@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { WizardType, LegalStrategy } from "./types";
+import { isKnownFormKey } from "./government-forms.ts";
 
 // Extracts the draft text from a ---DRAFT READY--- block.
 // Resilient to truncation: if the closing ---END DRAFT--- marker is missing
@@ -38,7 +39,60 @@ export async function parseAndUpdateFile(
     parseLivingFile(db, caseFileId, userId, text),
     parseLegalStrategy(db, caseFileId, text),
     parseRequestedAttachments(db, caseFileId, userId, text),
+    parseGovernmentForms(db, caseFileId, userId, text),
   ]);
+}
+
+// ── ---GOVERNMENT FORMS--- block ─────────────────────────────────────────────
+// Each line: "form_key — plain-language reason this client needs it". Only keys
+// that exist in the registry are persisted, so the model can't invent a form.
+// Parsed out so it can be unit-tested without a DB.
+export interface ParsedGovForm {
+  form_key: string;
+  reason: string | null;
+}
+
+export function parseGovernmentFormsBlock(text: string): ParsedGovForm[] {
+  const match = text.match(/---GOVERNMENT FORMS---([\s\S]*?)---END FORMS---/);
+  if (!match) return [];
+
+  const seen = new Set<string>();
+  const out: ParsedGovForm[] = [];
+  for (const line of match[1].split("\n")) {
+    const cleaned = line.replace(/^[•\-*]\s*/, "").trim();
+    if (!cleaned) continue;
+    const [rawKey, ...reasonParts] = cleaned.split(" — ");
+    const form_key = rawKey.trim();
+    if (!isKnownFormKey(form_key) || seen.has(form_key)) continue;
+    seen.add(form_key);
+    out.push({ form_key, reason: reasonParts.join(" — ").trim() || null });
+  }
+  return out;
+}
+
+export async function parseGovernmentForms(
+  db: SupabaseClient,
+  caseFileId: string,
+  userId: string,
+  text: string
+): Promise<void> {
+  const detected = parseGovernmentFormsBlock(text);
+  if (!detected.length) return;
+
+  // Don't clobber forms the client has already started/completed; only insert
+  // newly-detected ones. The unique index (case_file_id, form_key) makes the
+  // upsert idempotent across turns.
+  const rows = detected.map((d) => ({
+    case_file_id: caseFileId,
+    user_id: userId,
+    form_key: d.form_key,
+    reason: d.reason,
+    status: "needed" as const,
+  }));
+
+  await db
+    .from("form_instruments")
+    .upsert(rows, { onConflict: "case_file_id,form_key", ignoreDuplicates: true });
 }
 
 // Parses ---REQUESTED ATTACHMENTS--- blocks from intake chat output.

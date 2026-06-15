@@ -1,5 +1,6 @@
 import type { CaseFile, FactItem, WizardType, Attachment, RequestedAttachment, Document } from "./types";
 import { WIZARD_LABELS, docTypeLabel } from "./types";
+import { formCatalogForPrompt } from "./government-forms";
 
 // ── Free chat (Phase I) ──────────────────────────────────────────────────────
 
@@ -221,6 +222,23 @@ Attachment request rules:
 - Be specific: "Employment termination letter" not just "HR documents."
 - Do not re-request documents already shown as uploaded in the ATTACHED DOCUMENTS section of the Living File.
 - If no new documents are needed this turn, omit this block entirely.
+
+GOVERNMENT FORMS — be exceptional at noticing these. Many matters quietly require the client to file a government form (federal, state, or local): a move, a new job, a name change, a new child, an immigration-status change, a benefits application, and so on. When the conversation reveals that the client likely needs a government form, surface it so it becomes an instrument they can complete with our guided tool. Produce this block AFTER your ---LIVING FILE--- or ---LEGAL STRATEGY--- block:
+
+---GOVERNMENT FORMS---
+• form_key — [plain-language reason this client needs it, including any deadline]
+• form_key — [plain-language reason this client needs it, including any deadline]
+---END FORMS---
+
+You may ONLY reference form_key values from this catalog of known forms — never invent a form number or key:
+${formCatalogForPrompt()}
+
+Government form rules:
+- Only surface a form when the conversation genuinely indicates the client needs it.
+- Some forms are state-specific (their jurisdiction depends on the client's state). If you don't yet know the client's state and a state-specific form may apply, ask for their state in your normal reply rather than guessing.
+- Keep the reason concrete and mention the deadline when there is one ("within 30 days of moving").
+- If no government form is implicated this turn, omit this block entirely.
+- This is form assistance, not legal advice — never tell the client what legal position to take.
 
 Output rules:
 - Never produce walls of text. Be precise and direct.
