@@ -7,7 +7,37 @@
 // module is deterministic so it can be unit-tested without the model or DB.
 
 import { getGovernmentForm } from "./government-forms.ts";
-import type { GovFormField, GovernmentForm } from "./government-forms.ts";
+import type { GovFormField, GovFormFieldType, GovernmentForm } from "./government-forms.ts";
+import type { GovFormDefinition } from "./types.ts";
+
+const FIELD_TYPES = new Set<GovFormFieldType>([
+  "string", "ssn", "date", "number", "boolean", "enum", "address",
+]);
+
+/** Coerce a stored dynamic form definition (field.type is a loose string) into a
+ * GovernmentForm the guide logic can operate on. */
+export function normalizeFormDef(def: GovFormDefinition): GovernmentForm {
+  return {
+    ...def,
+    fields: def.fields.map((f) => ({
+      ...f,
+      type: (FIELD_TYPES.has(f.type as GovFormFieldType) ? f.type : "string") as GovFormFieldType,
+    })),
+  };
+}
+
+/** Resolve an instrument to its effective form definition: the curated registry
+ * entry for "registry" forms, or the looked-up definition for "dynamic" forms. */
+export function resolveForm(instrument: {
+  form_key: string;
+  source?: string;
+  form_def?: GovFormDefinition | null;
+}): GovernmentForm | null {
+  const registry = getGovernmentForm(instrument.form_key);
+  if (registry) return registry;
+  if (instrument.form_def) return normalizeFormDef(instrument.form_def);
+  return null;
+}
 
 export interface FieldValidation {
   ok: boolean;

@@ -5287,3 +5287,25 @@ mark.atty-placeholder {
 .gf-mistakes h3, .gf-checklist h3 { font-size: 1rem; margin: 0 0 0.5rem; }
 .gf-official { display: inline-block; margin-top: 0.75rem; font-weight: 600; }
 .gf-disclaimer { margin-top: 2rem; font-size: 0.78rem; opacity: 0.65; }
+
+/* ── Dynamic (unverified) government forms ────────────────────────────────── */
+.gf-badge-unverified {
+  display: inline-block;
+  background: #fff4d6;
+  color: #8a6100;
+  border: 1px solid #e6c869;
+  border-radius: 999px;
+  padding: 0.05rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  margin: 0 0.4rem 0 0;
+  white-space: nowrap;
+}
+.gf-unverified-note {
+  background: #fff9ec;
+  border: 1px solid #e6c869;
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.85rem;
+  margin: 0.5rem 0 0.75rem;
+}

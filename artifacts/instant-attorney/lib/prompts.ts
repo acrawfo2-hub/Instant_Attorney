@@ -227,14 +227,17 @@ GOVERNMENT FORMS — be exceptional at noticing these. Many matters quietly requ
 
 ---GOVERNMENT FORMS---
 • form_key — [plain-language reason this client needs it, including any deadline]
-• form_key — [plain-language reason this client needs it, including any deadline]
+• new: Form name | Agency | Jurisdiction | official .gov URL (or "unknown") — [reason this client needs it]
 ---END FORMS---
 
-You may ONLY reference form_key values from this catalog of known forms — never invent a form number or key:
+There are two kinds of line:
+1. A known form from this catalog — use its exact form_key (never invent a key):
 ${formCatalogForPrompt()}
+2. A form NOT in the catalog above that the client clearly needs — use a "new:" line with the form's name, responsible agency, jurisdiction (Federal / a U.S. state / a locality), and the official government URL if you know it (else "unknown"). We will verify it against its official source before guiding the client; do not fabricate a form that does not exist.
 
 Government form rules:
 - Only surface a form when the conversation genuinely indicates the client needs it.
+- Prefer a catalog form_key when one fits; use "new:" only for a real form that isn't in the catalog.
 - Some forms are state-specific (their jurisdiction depends on the client's state). If you don't yet know the client's state and a state-specific form may apply, ask for their state in your normal reply rather than guessing.
 - Keep the reason concrete and mention the deadline when there is one ("within 30 days of moving").
 - If no government form is implicated this turn, omit this block entirely.

@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { BYPASS_USER_ID } from "@/lib/types";
 import type { GovFormInstrument } from "@/lib/types";
-import { getGovernmentForm } from "@/lib/government-forms";
-import { computeProgress } from "@/lib/gov-form-guide";
+import { resolveForm, computeProgress } from "@/lib/gov-form-guide";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
@@ -39,10 +38,13 @@ export async function GET(req: NextRequest) {
     .order("created_at", { ascending: true });
 
   const instruments = ((rows ?? []) as GovFormInstrument[]).flatMap((row) => {
-    const form = getGovernmentForm(row.form_key);
-    if (!form) return []; // skip keys no longer in the registry
+    const form = resolveForm(row);
+    if (!form) return []; // unresolvable (e.g. registry key removed)
     return [{
       ...row,
+      // Dynamic forms are never source-verified; the client always sees them as
+      // "confirm against the official source".
+      verified: row.source === "registry",
       form: {
         form_number: form.form_number,
         title: form.title,
@@ -50,6 +52,7 @@ export async function GET(req: NextRequest) {
         jurisdiction: form.jurisdiction,
         official_url: form.official_url,
         deadline: form.deadline,
+        field_count: form.fields.length,
       },
       progress: computeProgress(form, row.answers ?? {}),
     }];

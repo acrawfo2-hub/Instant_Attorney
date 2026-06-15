@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { WizardType, LegalStrategy } from "./types";
 import { isKnownFormKey } from "./government-forms.ts";
+import { provisionalFormDef, slugifyFormKey } from "./gov-form-lookup.ts";
+import type { DynamicCandidate } from "./gov-form-lookup.ts";
 
 // Extracts the draft text from a ---DRAFT READY--- block.
 // Resilient to truncation: if the closing ---END DRAFT--- marker is missing
@@ -52,20 +54,62 @@ export interface ParsedGovForm {
   reason: string | null;
 }
 
-export function parseGovernmentFormsBlock(text: string): ParsedGovForm[] {
+function govFormsBlockLines(text: string): string[] | null {
   const match = text.match(/---GOVERNMENT FORMS---([\s\S]*?)---END FORMS---/);
-  if (!match) return [];
+  if (!match) return null;
+  return match[1]
+    .split("\n")
+    .map((l) => l.replace(/^[•\-*]\s*/, "").trim())
+    .filter(Boolean);
+}
+
+// Seeded (registry) forms: lines of "form_key — reason". Unknown keys are
+// dropped so the model can't invent a registry form. `new:` lines (dynamic
+// candidates) are handled by parseDynamicFormCandidates instead.
+export function parseGovernmentFormsBlock(text: string): ParsedGovForm[] {
+  const lines = govFormsBlockLines(text);
+  if (!lines) return [];
 
   const seen = new Set<string>();
   const out: ParsedGovForm[] = [];
-  for (const line of match[1].split("\n")) {
-    const cleaned = line.replace(/^[•\-*]\s*/, "").trim();
-    if (!cleaned) continue;
-    const [rawKey, ...reasonParts] = cleaned.split(" — ");
+  for (const line of lines) {
+    if (/^new\s*:/i.test(line)) continue; // dynamic candidate, not a registry key
+    const [rawKey, ...reasonParts] = line.split(" — ");
     const form_key = rawKey.trim();
     if (!isKnownFormKey(form_key) || seen.has(form_key)) continue;
     seen.add(form_key);
     out.push({ form_key, reason: reasonParts.join(" — ").trim() || null });
+  }
+  return out;
+}
+
+// Dynamic candidates: forms not in the registry, marked by the assistant with a
+// `new:` prefix and a pipe-delimited descriptor so we can ground a lookup:
+//   "new: Form name | Agency | Jurisdiction | official_url(optional) — reason"
+export function parseDynamicFormCandidates(text: string): DynamicCandidate[] {
+  const lines = govFormsBlockLines(text);
+  if (!lines) return [];
+
+  const seen = new Set<string>();
+  const out: DynamicCandidate[] = [];
+  for (const line of lines) {
+    if (!/^new\s*:/i.test(line)) continue;
+    const body = line.replace(/^new\s*:/i, "").trim();
+    const [descriptor, ...reasonParts] = body.split(" — ");
+    const parts = descriptor.split("|").map((p) => p.trim());
+    const name = parts[0];
+    if (!name) continue;
+    const key = slugifyFormKey(name);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const maybeUrl = parts[3];
+    out.push({
+      name,
+      agency: parts[1] || "Unknown agency",
+      jurisdiction: parts[2] || "Unknown",
+      official_url: maybeUrl && maybeUrl.toLowerCase() !== "unknown" ? maybeUrl : undefined,
+      reason: reasonParts.join(" — ").trim() || undefined,
+    });
   }
   return out;
 }
@@ -76,20 +120,40 @@ export async function parseGovernmentForms(
   userId: string,
   text: string
 ): Promise<void> {
-  const detected = parseGovernmentFormsBlock(text);
-  if (!detected.length) return;
+  const seeded = parseGovernmentFormsBlock(text);
+  const dynamic = parseDynamicFormCandidates(text);
+  if (!seeded.length && !dynamic.length) return;
 
-  // Don't clobber forms the client has already started/completed; only insert
-  // newly-detected ones. The unique index (case_file_id, form_key) makes the
-  // upsert idempotent across turns.
-  const rows = detected.map((d) => ({
+  // Registry forms: trusted definition lives in the registry, read by key.
+  const seededRows = seeded.map((d) => ({
     case_file_id: caseFileId,
     user_id: userId,
     form_key: d.form_key,
     reason: d.reason,
     status: "needed" as const,
+    source: "registry" as const,
   }));
 
+  // Dynamic forms: store a provisional definition immediately (no invented
+  // fields) and mark the grounded lookup pending — the chat route kicks off the
+  // web lookup which fills in fields + flips lookup_status.
+  const dynamicRows = dynamic.map((c) => {
+    const def = provisionalFormDef(c);
+    return {
+      case_file_id: caseFileId,
+      user_id: userId,
+      form_key: def.key,
+      reason: c.reason ?? null,
+      status: "needed" as const,
+      source: "dynamic" as const,
+      form_def: def,
+      lookup_status: "pending" as const,
+    };
+  });
+
+  const rows = [...seededRows, ...dynamicRows];
+  // Don't clobber forms the client already started/completed. The unique index
+  // (case_file_id, form_key) makes the upsert idempotent across turns.
   await db
     .from("form_instruments")
     .upsert(rows, { onConflict: "case_file_id,form_key", ignoreDuplicates: true });

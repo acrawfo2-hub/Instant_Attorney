@@ -14,6 +14,20 @@ create table if not exists form_instruments (
     check (status in ('needed', 'in_progress', 'completed', 'dismissed')),
   reason        text,
   answers       jsonb not null default '{}',
+  -- 'registry': a curated, source-verified form (definition lives in
+  --   lib/government-forms.ts, trusted). 'dynamic': a form detected in chat that
+  --   wasn't seeded; its definition is looked up from the official .gov page and
+  --   stored in form_def, always shown to the client as "unverified — confirm
+  --   against the official source".
+  source        text not null default 'registry'
+    check (source in ('registry', 'dynamic')),
+  -- For dynamic forms: the grounded form definition (fields, deadline, official
+  -- URL, etc.). Null for registry forms (read from the static registry instead).
+  form_def      jsonb,
+  -- Dynamic-form lookup lifecycle: pending → ready (grounded def available) or
+  -- failed (degrade to link-only guidance). Null for registry forms.
+  lookup_status text
+    check (lookup_status is null or lookup_status in ('pending', 'ready', 'failed')),
   created_at    timestamptz default now() not null,
   updated_at    timestamptz default now() not null
 );

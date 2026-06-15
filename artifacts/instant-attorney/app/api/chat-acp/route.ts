@@ -7,6 +7,7 @@ import { ACP_CHAT_SYSTEM_PROMPT, buildFileContext } from "@/lib/prompts";
 import { parseAndUpdateFile } from "@/lib/file-parser";
 import { pickFirstValidWizard } from "@/lib/document-utils";
 import { triggerPreWarm } from "@/lib/pre-warm";
+import { triggerPendingLookups } from "@/lib/gov-form-lookup";
 import { generateCaseTitle } from "@/lib/title-generator";
 import { toAnthropicBlock, processAttachment } from "@/lib/attachment-processor";
 import { recordAiFromMessage, recordStorageUpload } from "@/lib/usage-tracker";
@@ -215,10 +216,19 @@ export async function POST(req: NextRequest) {
           const hasLivingFile = fullResponse.includes("---LIVING FILE---");
           const hasStrategy = fullResponse.includes("---LEGAL STRATEGY---");
           const hasRequestedAttachments = fullResponse.includes("---REQUESTED ATTACHMENTS---");
+          const hasGovForms = fullResponse.includes("---GOVERNMENT FORMS---");
 
-          if (hasLivingFile || hasStrategy || hasRequestedAttachments) {
+          if (hasLivingFile || hasStrategy || hasRequestedAttachments || hasGovForms) {
             try {
               await parseAndUpdateFile(db, resolvedCaseFileId, userId, fullResponse);
+
+              // Kick off grounded web lookups for any newly-detected forms that
+              // aren't in the curated registry (fire-and-forget, like pre-warm).
+              if (hasGovForms) {
+                triggerPendingLookups(anthropic, db, resolvedCaseFileId, userId).catch(
+                  (err) => console.error("[chat-acp] gov-form lookup trigger error:", err)
+                );
+              }
 
               // Generate a title after the first living file update if one isn't set yet
               if (hasLivingFile && caseFile && !caseFile.title) {

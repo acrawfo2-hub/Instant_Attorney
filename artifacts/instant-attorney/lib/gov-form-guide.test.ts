@@ -7,8 +7,11 @@ import {
   nextUnansweredField,
   computeProgress,
   guideState,
+  resolveForm,
+  normalizeFormDef,
 } from "./gov-form-guide.ts";
 import type { GovFormField } from "./government-forms.ts";
+import type { GovFormDefinition } from "./types.ts";
 
 const ssn: GovFormField = { name: "ssn", label: "SSN", type: "ssn" };
 const dob: GovFormField = { name: "dob", label: "DOB", type: "date" };
@@ -80,4 +83,35 @@ test("guideState returns null for unknown form, full state for known", () => {
   const state = guideState("irs-w4", {});
   assert.ok(state);
   assert.ok(state!.checklist.some((line) => line.includes("irs.gov")));
+});
+
+test("resolveForm prefers the registry, falls back to a dynamic form_def", () => {
+  // Registry instrument resolves to the curated form.
+  const reg = resolveForm({ form_key: "irs-w4", source: "registry", form_def: null });
+  assert.equal(reg?.form_number, "Form W-4");
+
+  // Dynamic instrument resolves to its stored definition.
+  const def: GovFormDefinition = {
+    key: "dyn-x", form_number: "X-1", title: "X", agency: "A", jurisdiction: "CA",
+    state_specific: false, official_url: "https://dmv.ca.gov", revision: "unverified",
+    purpose: "", who_needs_it: "", deadline: "", fee: "", submit_to: "",
+    fields: [{ name: "a", label: "A", type: "weird" }], common_mistakes: [], triggers: [],
+  };
+  const dyn = resolveForm({ form_key: "dyn-x", source: "dynamic", form_def: def });
+  assert.equal(dyn?.form_number, "X-1");
+  // Loose field type is normalized to a valid GovFormFieldType.
+  assert.equal(dyn?.fields[0].type, "string");
+
+  // Unknown key with no def → null.
+  assert.equal(resolveForm({ form_key: "dyn-missing", source: "dynamic", form_def: null }), null);
+});
+
+test("normalizeFormDef keeps valid field types", () => {
+  const def: GovFormDefinition = {
+    key: "dyn-y", form_number: "Y", title: "Y", agency: "A", jurisdiction: "CA",
+    state_specific: false, official_url: "https://x.gov", revision: "u",
+    purpose: "", who_needs_it: "", deadline: "", fee: "", submit_to: "",
+    fields: [{ name: "d", label: "Date", type: "date" }], common_mistakes: [], triggers: [],
+  };
+  assert.equal(normalizeFormDef(def).fields[0].type, "date");
 });

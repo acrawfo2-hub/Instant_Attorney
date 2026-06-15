@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { BYPASS_USER_ID } from "@/lib/types";
 import type { GovFormInstrument, GovFormStatus } from "@/lib/types";
-import { getGovernmentForm } from "@/lib/government-forms";
-import { applyAnswers, computeProgress, buildSubmissionChecklist } from "@/lib/gov-form-guide";
+import { resolveForm, applyAnswers, computeProgress, buildSubmissionChecklist } from "@/lib/gov-form-guide";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
@@ -17,11 +16,12 @@ async function authed(): Promise<{ db: any; userId: string } | null> {
 }
 
 function enrich(row: GovFormInstrument) {
-  const form = getGovernmentForm(row.form_key);
+  const form = resolveForm(row);
   if (!form) return null;
   return {
     instrument: row,
     form,
+    verified: row.source === "registry",
     progress: computeProgress(form, row.answers ?? {}),
     checklist: buildSubmissionChecklist(form),
   };
@@ -76,7 +76,7 @@ export async function PATCH(
   if (!row) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const instrument = row as GovFormInstrument;
-  const form = getGovernmentForm(instrument.form_key);
+  const form = resolveForm(instrument);
   if (!form) return NextResponse.json({ error: "Unknown form" }, { status: 404 });
 
   let errors: Record<string, string> = {};

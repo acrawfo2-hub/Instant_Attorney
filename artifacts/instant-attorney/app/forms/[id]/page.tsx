@@ -16,6 +16,7 @@ interface Progress {
 interface GuideState {
   instrument: GovFormInstrument;
   form: GovernmentForm;
+  verified: boolean;
   progress: Progress;
   checklist: string[];
   errors?: Record<string, string>;
@@ -78,6 +79,33 @@ export default function GovFormGuidePage({ params }: { params: Promise<{ id: str
   if (!state) return <main className="gf-wrap"><p>Loading…</p></main>;
 
   const { form, progress } = state;
+  const looking = state.instrument.source === "dynamic" && state.instrument.lookup_status === "pending";
+  const noFields = form.fields.length === 0;
+
+  // Dynamic form whose grounded lookup hasn't produced a field schema yet.
+  if (noFields) {
+    return (
+      <main className="gf-wrap">
+        <Link href="/dashboard" className="gf-back">← Back to your file</Link>
+        <header className="gf-header">
+          <h1>{form.form_number} — {form.title}</h1>
+          <p className="gf-meta">{form.agency} · {form.jurisdiction}</p>
+          {!state.verified && <span className="gf-badge-unverified">Unverified — confirm against the official source</span>}
+        </header>
+        {looking ? (
+          <p>We&apos;re looking this form up from its official source. Check back in a moment.</p>
+        ) : (
+          <p>We couldn&apos;t automatically build a step-by-step guide for this form. Use the official source below to complete it.</p>
+        )}
+        {form.official_url && (
+          <a href={form.official_url} target="_blank" rel="noopener" className="gf-official">
+            Open the official form ↗
+          </a>
+        )}
+        <p className="gf-disclaimer">Instant Attorney helps you find and complete government forms — this is form assistance, not legal advice.</p>
+      </main>
+    );
+  }
 
   return (
     <main className="gf-wrap">
@@ -86,6 +114,13 @@ export default function GovFormGuidePage({ params }: { params: Promise<{ id: str
       <header className="gf-header">
         <h1>{form.form_number} — {form.title}</h1>
         <p className="gf-meta">{form.agency} · {form.jurisdiction}</p>
+        {!state.verified && (
+          <p className="gf-unverified-note">
+            <span className="gf-badge-unverified">Unverified</span> We looked this form up from its
+            official source but haven&apos;t hand-verified it. Double-check every detail against the
+            official form before submitting.
+          </p>
+        )}
         <p className="gf-purpose">{form.purpose}</p>
         <div className="gf-facts">
           <span>⏱ <strong>Deadline:</strong> {form.deadline}</span>
