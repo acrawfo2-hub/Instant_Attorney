@@ -13,7 +13,7 @@ import {
   ensureChecklistNeeds,
   buildBundledMessage,
 } from "@/lib/wizard-parsing";
-import type { ParsedDrafter } from "@/lib/wizard-parsing";
+import type { ParsedDrafter, NeededItem } from "@/lib/wizard-parsing";
 
 // Keep just under the server route's maxDuration (300s) so a long but legitimate
 // draft finishes server-side instead of being aborted by the client. If the
@@ -67,6 +67,20 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   const [justUpdated, setJustUpdated] = useState(false);
   const [truncatedDraft, setTruncatedDraft] = useState(false);
 
+  // Pre-draft "starter questions": surfaced immediately while the first draft is
+  // still being generated (a pre-warm running in the background, or a fresh
+  // generation in progress) so the client can answer during the 1–4 min wait.
+  // Their answers are saved as facts right away and folded into the draft once it
+  // lands — this NEVER interrupts the in-flight document build.
+  const [starterItems, setStarterItems] = useState<NeededItem[]>([]);
+  const [starterSaved, setStarterSaved] = useState(false);
+  const [waiting, setWaiting] = useState(false);
+  // Staged bundled answer message to fold in once the first draft is ready.
+  const pendingFoldRef = useRef<string>("");
+  // Freshest assistant draft text — used to build the fold refine-pass history
+  // without depending on async `messages` state.
+  const lastAssistantRef = useRef<string>("");
+
   const [elapsed, setElapsed] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -79,10 +93,10 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
 
   // Elapsed-seconds ticker while streaming
   useEffect(() => {
-    if (!streaming) { setElapsed(0); return; }
+    if (!streaming && !waiting) { setElapsed(0); return; }
     const id = setInterval(() => setElapsed(s => s + 1), 1000);
     return () => clearInterval(id);
-  }, [streaming]);
+  }, [streaming, waiting]);
 
   useEffect(() => {
     // Synchronous ref guard (not state): React strict mode double-invokes this
@@ -110,6 +124,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
     if (!p.draftText) p.draftText = doc.draft_text;
     setParsed(p);
     setMessages([{ role: "assistant", content: fakeResponse }]);
+    lastAssistantRef.current = fakeResponse;
     setDocumentId(doc.id);
     docIdRef.current = doc.id;
     if (doc.status === "pending_review") {
@@ -119,23 +134,29 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   }
 
   async function initializeDraft() {
-    // If we have a pre-warmed doc, load it from the server and show immediately
+    // 1) A specific pre-warmed doc id was passed in (from the dashboard link).
     if (preWarmedDocId) {
       try {
         const res = await fetch(`/api/documents/${preWarmedDocId}`);
         if (res.ok) {
           const doc = await res.json();
           if (doc.draft_text) {
+            // Best case: the pre-warm already finished and saved — show instantly.
             loadExistingDraft(doc);
             return;
           }
+          // Row exists but the draft is still being generated in the background.
+          // Surface starter questions and wait for the draft (don't re-generate).
+          showStarterQuestions();
+          await waitForDraft(preWarmedDocId);
+          return;
         }
       } catch {
         // Fall through to lookup / fresh generation
       }
     }
 
-    // Reuse an existing pre-warmed or in-progress draft (avoids duplicate rows)
+    // 2) Look up an existing pre-warmed / in-progress draft for this case + type.
     if (caseFileId) {
       try {
         const res = await fetch(
@@ -147,14 +168,107 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
             loadExistingDraft(doc);
             return;
           }
+          // A pre-warm is in flight — wait for it instead of starting a duplicate
+          // generation that would race the background build on the same row.
+          if (doc.id && doc.status === "pre_warmed") {
+            showStarterQuestions();
+            await waitForDraft(doc.id);
+            return;
+          }
         }
       } catch {
         // Fall through to fresh generation
       }
     }
 
-    // Fresh generation
+    // 3) Nothing pre-warming — generate fresh now, and surface starter questions
+    // immediately so the client isn't staring at a blank loader during the wait.
+    showStarterQuestions();
     await runDrafter([], true);
+    await maybeFoldStarterAnswers();
+  }
+
+  // Build ~3–5 starter questions from the document template (no AI call needed),
+  // so the client sees them within a moment of arriving while the real draft is
+  // still being composed.
+  function showStarterQuestions() {
+    const template = buildFallbackTemplate(label, wizardType);
+    const derived = deriveQuestionsFromTemplate(template);
+    const items = buildNeededItems({
+      draftText: template,
+      missingFacts: { blocking: derived.blocking, nonBlocking: [] },
+      questions: derived.questions,
+      readyForReview: false,
+    }).slice(0, 5);
+    setStarterItems(items);
+  }
+
+  // Poll a pre-warm row (read-only) until its draft_text lands, then load it. We
+  // poll instead of starting a second generation so we NEVER disturb the draft
+  // the server is already building in the background.
+  async function waitForDraft(docId: string) {
+    setWaiting(true);
+    const started = Date.now();
+    try {
+      while (Date.now() - started < WIZARD_TIMEOUT_MS) {
+        await new Promise((r) => setTimeout(r, 4000));
+        try {
+          const res = await fetch(`/api/documents/${docId}`);
+          // Pre-warm failed and removed its placeholder — stop waiting and
+          // generate fresh below.
+          if (res.status === 404) break;
+          if (!res.ok) continue;
+          const doc = await res.json();
+          if (doc?.draft_text) {
+            setWaiting(false);
+            loadExistingDraft(doc);
+            await maybeFoldStarterAnswers();
+            return;
+          }
+        } catch {
+          // Transient network error — keep polling.
+        }
+      }
+      // Pre-warm didn't finish (or was removed) within the window — fall back to a
+      // fresh generation so the client is never left without a draft.
+      setWaiting(false);
+      await runDrafter([], true);
+      await maybeFoldStarterAnswers();
+    } finally {
+      setWaiting(false);
+    }
+  }
+
+  // After the first draft lands, fold the client's saved starter answers into it
+  // with ONE refine pass. Runs only once a draft already exists, so it can never
+  // interrupt the original build.
+  async function maybeFoldStarterAnswers() {
+    const msg = pendingFoldRef.current;
+    pendingFoldRef.current = "";
+    if (!msg) return;
+    await runDrafter(
+      [
+        { role: "assistant", content: lastAssistantRef.current },
+        { role: "user", content: msg },
+      ],
+      false
+    );
+  }
+
+  // Save starter answers as confirmed facts immediately (independent of the
+  // in-flight draft) and stage them to be folded in once the draft is ready.
+  // This only writes facts — it does NOT trigger generation, so it can't disrupt
+  // the document currently being built.
+  async function handleSaveStarter() {
+    if (!starterItems.length) return;
+    const saved = await persistAnswers(starterItems);
+    if (!saved) {
+      setError("We couldn't save your answers just now — they're still here. Please tap Save again in a moment.");
+      return;
+    }
+    pendingFoldRef.current = buildBundledMessage(starterItems, answers, extraNote) ?? "";
+    setStarterSaved(true);
+    setError("");
   }
 
   async function runDrafter(history: Message[], isInit = false): Promise<boolean> {
@@ -209,6 +323,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
         next[next.length - 1] = { role: "assistant", content: fullText };
         return next;
       });
+      lastAssistantRef.current = fullText;
 
       // If Claude returned something but without proper markers, use the whole response as draft
       let p = parseDrafterResponse(fullText);
@@ -352,11 +467,13 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   }
 
   const currentDraft = parsed?.draftText ?? null;
-  const isStreamingDraft = streaming && !currentDraft;
+  const isStreamingDraft = (streaming || waiting) && !currentDraft;
   const neededItems = parsed ? buildNeededItems(parsed) : [];
   const blockingCount = neededItems.filter((it) => it.severity === "blocking").length;
   const filledCount = neededItems.filter((it) => answers[it.id]?.trim()).length;
   const hasAnyInput = filledCount > 0 || extraNote.trim().length > 0;
+  const starterFilledCount = starterItems.filter((it) => answers[it.id]?.trim()).length;
+  const hasStarterInput = starterFilledCount > 0 || extraNote.trim().length > 0;
 
   return (
     <div className="wiz-shell wiz-shell-v2">
@@ -454,6 +571,76 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
             </div>
           ) : (
             <>
+              {/* Starter questions — surfaced while the first draft is still being
+                  prepared so the client can answer during the wait. Saving only
+                  writes facts; the answers are folded into the draft once ready. */}
+              {!currentDraft && starterItems.length > 0 && (
+                <div className="wiz-checklist">
+                  <div className="wiz-checklist-head">
+                    <h3 className="wiz-checklist-title">A few quick questions while we prepare your {label}</h3>
+                    <p className="wiz-checklist-sub">
+                      Your draft is being prepared right now. Answer what you can in
+                      the meantime — we&apos;ll fold these straight into the document
+                      the moment it&apos;s ready. It&apos;s fine to leave anything blank.
+                    </p>
+                  </div>
+
+                  <div className="wiz-field-list">
+                    {starterItems.map((it) => (
+                      <div key={it.id} className="wiz-field">
+                        <label className="wiz-field-label" htmlFor={`starter-${it.id}`}>
+                          <span className="wiz-qa-dot wiz-qa-dot-amber" />
+                          {it.label}
+                        </label>
+                        {it.hint && <p className="wiz-field-hint">{it.hint}</p>}
+                        <input
+                          id={`starter-${it.id}`}
+                          className="wiz-field-input"
+                          type="text"
+                          value={answers[it.id] ?? ""}
+                          placeholder="Type your answer…"
+                          onChange={(e) => {
+                            setStarterSaved(false);
+                            setAnswers((prev) => ({ ...prev, [it.id]: e.target.value }));
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="wiz-field wiz-field-note">
+                    <label className="wiz-field-label" htmlFor="starter-extra">
+                      Anything else the attorney should know? (optional)
+                    </label>
+                    <textarea
+                      id="starter-extra"
+                      className="wiz-input"
+                      rows={3}
+                      value={extraNote}
+                      placeholder="Add any extra context, special requests, or clarifications…"
+                      onChange={(e) => {
+                        setStarterSaved(false);
+                        setExtraNote(e.target.value);
+                      }}
+                    />
+                  </div>
+
+                  {starterSaved && (
+                    <div className="wiz-updated-confirm">
+                      Saved ✓ — we&apos;ll include these as soon as your draft is ready
+                    </div>
+                  )}
+
+                  <button
+                    className="wiz-send"
+                    onClick={handleSaveStarter}
+                    disabled={!hasStarterInput || starterSaved}
+                  >
+                    {starterSaved ? "Saved ✓" : "Save my answers"}
+                  </button>
+                </div>
+              )}
+
               {/* Persistent reassurance — blanks never block your draft */}
               {currentDraft && (
                 <div className="wiz-reassure" role="note">

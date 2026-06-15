@@ -41,5 +41,7 @@ externalPort = 3000
 [userenv.shared]
 NEXT_PUBLIC_SUPABASE_URL = "https://vgovrxtzcmofkoifxkvw.supabase.co"
 
+[userenv.development]
+
 [nix]
 channel = "stable-25_05"

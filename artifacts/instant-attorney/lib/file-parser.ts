@@ -154,9 +154,14 @@ export async function parseGovernmentForms(
   const rows = [...seededRows, ...dynamicRows];
   // Don't clobber forms the client already started/completed. The unique index
   // (case_file_id, form_key) makes the upsert idempotent across turns.
-  await db
+  const { error } = await db
     .from("form_instruments")
     .upsert(rows, { onConflict: "case_file_id,form_key", ignoreDuplicates: true });
+  if (error) {
+    // Surface persistence failures (e.g. missing form_instruments table /
+    // PGRST205) instead of swallowing them — otherwise forms are silently lost.
+    console.error("[file-parser] form_instruments upsert failed:", error.message);
+  }
 }
 
 // Parses ---REQUESTED ATTACHMENTS--- blocks from intake chat output.

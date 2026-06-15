@@ -18,6 +18,7 @@ paths = [
   "/api/wizard",
   "/api/attachments",
   "/api/documents",
+  "/api/gov-forms",
   "/api/auth",
   "/api/subscriptions",
   "/api/agreements",
