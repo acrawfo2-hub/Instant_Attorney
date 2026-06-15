@@ -47,10 +47,15 @@ normalized title so client progress survives, (b) keeps an existing plan if a la
 block omits it, and (c) carries forward `lead_key_override`/`lead_override`.
 Preserve all three when touching that function.
 
-# Known follow-up
-`ClientFileView.tsx` still renders the "Suggested Instruments" / wizard grid off
-the legacy engine list and does NOT pass `planKey`. Documents started from those
-buttons won't be plan-keyed. Migrate that surface to `document_plan` next.
+# The client "legal instruments" list IS the plan
+
+`ClientFileView.tsx` renders the ranked plan (`buildDocumentPlan`) as the
+client's "Your Documents, In Order" list — priority order, lead marked "Start
+here", each row links into the wizard via `planWizardHref` (carries planKey +
+instrument + engine + docId/pre-warm). This replaced the old engine-keyed wizard
+grid. The legacy free-form "Suggested Instruments" interactive list now only
+shows as a fallback when there is NO plan (`plan.length === 0`), or read-only for
+attorneys. Keep these in sync with `next-step.ts`'s `planItemHref`.
 
 # Never ask the same thing twice (cross-document fact reuse)
 

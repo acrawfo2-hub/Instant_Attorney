@@ -4,8 +4,26 @@ import AttachmentPanel from "@/components/AttachmentPanel";
 import NextStepGuide from "@/components/NextStepGuide";
 import ReviewSlaClock from "@/components/ReviewSlaClock";
 import type { CaseFile, FactItem, Document, Profile, WizardType, ConsultRequest } from "@/lib/types";
-import { isValidWizardType } from "@/lib/document-utils";
-import { WIZARD_LABELS, docTypeLabel } from "@/lib/types";
+import { docTypeLabel } from "@/lib/types";
+import { buildDocumentPlan } from "@/lib/next-step";
+import type { PlanItem } from "@/lib/next-step";
+
+// Build the wizard link for a planned document, carrying its stable plan key
+// (+ instrument title + engine) so distinct documents never collide. Pre-warm
+// only applies to legacy engine-keyed items (key === wizard).
+function planWizardHref(
+  caseFileId: string,
+  item: PlanItem,
+  preWarmedByType: Record<string, string>,
+): string {
+  const params = new URLSearchParams({ caseFileId });
+  const preWarm = item.key === item.wizard ? preWarmedByType[item.wizard] : undefined;
+  const docId = item.docId ?? preWarm;
+  if (docId) params.set("docId", docId);
+  if (item.instrument) params.set("instrument", item.instrument);
+  params.set("planKey", item.key);
+  return `/wizard/${item.wizard}?${params.toString()}`;
+}
 
 // ── Document status display ──────────────────────────────────────────────────
 
@@ -62,43 +80,6 @@ function DocStatusLine({ doc }: { doc: Document }) {
   }
 
   return <span className={`lf-doc-status ${cls}`}>{label}</span>;
-}
-
-// ── Wizard card (client mode only) ──────────────────────────────────────────
-
-const WIZARD_ICONS: Record<WizardType, string> = {
-  demand_letter: "✉️",
-  complaint_letter: "📣",
-  draft_contract: "📝",
-  draft_waiver: "🤝",
-  wills_trusts: "⚖️",
-  doc_review: "🔍",
-  general_document: "📄",
-};
-
-function WizardCard({
-  wizardType,
-  caseFileId,
-  preWarmedDocId,
-}: {
-  wizardType: WizardType;
-  caseFileId: string;
-  preWarmedDocId?: string;
-}) {
-  const label = WIZARD_LABELS[wizardType] ?? wizardType;
-  const href = preWarmedDocId
-    ? `/wizard/${wizardType}?caseFileId=${caseFileId}&docId=${preWarmedDocId}`
-    : `/wizard/${wizardType}?caseFileId=${caseFileId}`;
-
-  return (
-    <Link href={href} className={`lf-wizard-card ${preWarmedDocId ? "lf-wizard-card-ready" : ""}`}>
-      <span className="lf-wizard-icon">{WIZARD_ICONS[wizardType] ?? "📄"}</span>
-      <div className="lf-wizard-card-body">
-        <span className="lf-wizard-label">{label}</span>
-        {preWarmedDocId && <span className="lf-wizard-ready-badge">Draft ready</span>}
-      </div>
-    </Link>
-  );
 }
 
 // ── Instrument → wizard type heuristic ──────────────────────────────────────
@@ -208,8 +189,10 @@ export default function ClientFileView({
   const confirmed = facts.filter((f) => f.status === "confirmed");
   const gaps = facts.filter((f) => f.status === "gap");
   const strategy = caseFile.legal_strategy ?? null;
-  const recommendedWizards = strategy?.recommended_wizards ?? [];
   const isAttorney = mode === "attorney";
+  // The file's ranked document plan (priority order, lead first). This is the
+  // legal-instruments list and the path into the document wizard.
+  const plan = buildDocumentPlan(caseFile, documents);
 
   return (
     <div className="lf-grid">
@@ -396,7 +379,10 @@ export default function ClientFileView({
             )}
           </div>
 
-          {strategy.instruments?.length > 0 && (
+          {/* Legacy free-form instruments: attorney reference, or client fallback
+              when there's no ranked plan yet. The ranked plan list below is the
+              primary instruments → wizard path. */}
+          {strategy.instruments?.length > 0 && (isAttorney || plan.length === 0) && (
             <div className="lf-instruments">
               <div className="lf-strategy-sub">
                 Suggested Instruments
@@ -478,28 +464,58 @@ export default function ClientFileView({
         )}
       </div>
 
-      {/* Document Wizards — client mode only */}
+      {/* Legal instruments — client mode only. The ranked document plan IS the
+          instruments list: priority order, lead first, each row enters the
+          document wizard. */}
       {!isAttorney && (
         <div className="lf-card lf-card-full lf-wizard-spotlight">
           <div className="lf-wizard-spotlight-header">
-            <div className="lf-wizard-spotlight-eyebrow">⚡ Your Next Step</div>
-            <div className="lf-card-label">Start Your Documents</div>
+            <div className="lf-wizard-spotlight-eyebrow">⚡ Your Legal Documents</div>
+            <div className="lf-card-label">Your Documents, In Order</div>
           </div>
-          {recommendedWizards.length > 0 ? (
+          {plan.length > 0 ? (
             <>
               <p className="lf-wizard-hint">
-                Click a document below to start drafting — the AI will compose a complete first draft from your Living File in under 2 minutes.
+                These are the documents your file needs, in priority order. Start with
+                your most important one — we&apos;ll compose a complete first draft from
+                your Living File in under 2 minutes.
               </p>
-              <div className="lf-wizard-grid">
-                {recommendedWizards.filter(isValidWizardType).map((wType) => (
-                  <WizardCard
-                    key={wType}
-                    wizardType={wType}
-                    caseFileId={caseFile.id}
-                    preWarmedDocId={preWarmedByType[wType]}
-                  />
-                ))}
-              </div>
+              <ol className="lf-plan-doc-list">
+                {plan.map((item) => {
+                  let action: React.ReactNode;
+                  if (item.status === "sent") {
+                    action = <span className="lf-inst-pending">Awaiting 48hr Review</span>;
+                  } else if (item.status === "approved") {
+                    action = <span className="lf-inst-done">✓ Completed</span>;
+                  } else {
+                    const href = planWizardHref(caseFile.id, item, preWarmedByType);
+                    const label =
+                      item.status === "changes_requested"
+                        ? "Revisions Needed →"
+                        : item.status === "in_progress"
+                          ? "Continue Draft →"
+                          : "Start Document →";
+                    action = (
+                      <Link href={href} className="lf-inst-start-btn">
+                        {label}
+                      </Link>
+                    );
+                  }
+                  return (
+                    <li
+                      key={item.key}
+                      className={`lf-plan-doc-row${item.isLead ? " lf-plan-doc-row-lead" : ""}`}
+                    >
+                      <span className="lf-plan-doc-num">{item.priority}</span>
+                      <span className="lf-plan-doc-text">
+                        {item.label}
+                        {item.isLead && <span className="lf-plan-doc-lead">Start here</span>}
+                      </span>
+                      {action}
+                    </li>
+                  );
+                })}
+              </ol>
             </>
           ) : (
             <>
