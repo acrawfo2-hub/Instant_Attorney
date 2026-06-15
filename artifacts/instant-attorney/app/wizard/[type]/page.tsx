@@ -59,7 +59,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [initialized, setInitialized] = useState(false);
+  const didInitRef = useRef(false);
 
   // Guided checklist: per-field answers + "anything else" note + update feedback
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -85,10 +85,14 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   }, [streaming]);
 
   useEffect(() => {
-    if (!initialized) {
-      setInitialized(true);
-      initializeDraft();
-    }
+    // Synchronous ref guard (not state): React strict mode double-invokes this
+    // effect in dev before a state update would be visible, which previously ran
+    // initializeDraft() twice. The second runDrafter() aborts the first's fetch,
+    // surfacing a spurious "Drafting took too long" error on mount. A ref is set
+    // synchronously and persists across the simulated remount, so init runs once.
+    if (didInitRef.current) return;
+    didInitRef.current = true;
+    initializeDraft();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

@@ -85,6 +85,15 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // All persistence below goes through the service client. RLS on `documents`
+  // in this project's live database blocks the anon/user-scoped client from
+  // INSERTing even the caller's own rows, which silently stranded every
+  // generated draft (text returned, but documentId null → the client could
+  // never submit it for attorney review, and the documents table stayed empty).
+  // We've already authenticated the user and verified case ownership above, so
+  // a service-role write is safe and is the same client bypass mode uses.
+  const writeDb = BYPASS_AUTH ? db : createServiceClient();
+
   // Load current file state — refreshed on every call so answers update the context
   const [{ data: caseFileRow }, { data: factRows }, { data: attachmentRows }, { data: requestedRows }] =
     await Promise.all([
@@ -192,11 +201,30 @@ export async function POST(req: NextRequest) {
     const now = new Date().toISOString();
 
     if (!savedDocId) {
-      const existing = await findReusableDocument(db, caseFileId, wizardType, userId);
+      const existing = await findReusableDocument(writeDb, caseFileId, wizardType, userId);
       savedDocId = existing?.id;
     }
 
+    // `writeDb` is the service client and bypasses RLS, so every existing-document
+    // read/write below MUST be scoped to this caller. `savedDocId` can come from
+    // the caller-supplied `documentId`, so without `user_id`/`case_file_id`
+    // predicates a client could target — and overwrite — another user's document
+    // (IDOR). If a supplied id isn't this caller's (or no longer exists), we drop
+    // it and create a fresh document instead of mutating a foreign row.
+    let existingDoc: { status: string | null; content_json: unknown } | null = null;
     if (savedDocId) {
+      const { data } = await writeDb
+        .from("documents")
+        .select("status, content_json")
+        .eq("id", savedDocId)
+        .eq("user_id", userId)
+        .eq("case_file_id", caseFileId)
+        .maybeSingle();
+      existingDoc = data ?? null;
+      if (!existingDoc) savedDocId = undefined;
+    }
+
+    if (savedDocId && existingDoc) {
       // Preserve where the document already is in its lifecycle. Once a client
       // has sent a draft for review (pending_review) — or the attorney has asked
       // for changes (changes_requested), or finalized it (approved/delivered) —
@@ -204,12 +232,7 @@ export async function POST(req: NextRequest) {
       // Doing so would drop it out of the attorney's queue and make the client's
       // progress disappear. Only a brand-new or still-"pre_warmed" suggestion
       // gets promoted to "draft".
-      const { data: existingDoc } = await db
-        .from("documents")
-        .select("status, content_json")
-        .eq("id", savedDocId)
-        .single();
-      const curStatus = existingDoc?.status as string | undefined;
+      const curStatus = existingDoc.status as string | undefined;
       const nextStatus = curStatus && curStatus !== "pre_warmed" ? curStatus : "draft";
 
       const update: Record<string, unknown> = {
@@ -219,12 +242,20 @@ export async function POST(req: NextRequest) {
       };
       // Merge truncated flag into existing content_json when re-generating
       if (truncated) {
-        const existingCj = (existingDoc?.content_json as Record<string, unknown>) ?? {};
+        const existingCj = (existingDoc.content_json as Record<string, unknown>) ?? {};
         update.content_json = { ...existingCj, truncated: true };
       }
-      await db.from("documents").update(update).eq("id", savedDocId);
+      const { error: updateErr } = await writeDb
+        .from("documents")
+        .update(update)
+        .eq("id", savedDocId)
+        .eq("user_id", userId);
+      if (updateErr) {
+        console.error("[wizard] document update failed:", updateErr.message);
+        savedDocId = undefined;
+      }
     } else {
-      const { data: inserted } = await db
+      const { data: inserted, error: insertErr } = await writeDb
         .from("documents")
         .insert({
           case_file_id: caseFileId,
@@ -239,7 +270,26 @@ export async function POST(req: NextRequest) {
         .select("id")
         .single();
 
+      if (insertErr) {
+        console.error("[wizard] document insert failed:", insertErr.message);
+      }
       savedDocId = inserted?.id;
+    }
+
+    // We generated a draft but could not persist it. Fail loudly instead of
+    // returning HTTP 200 with documentId: null — that would strand the client
+    // with an on-screen draft they can never submit for attorney review (the
+    // exact "draft appears but nothing happens" symptom). The client surfaces
+    // this error and can retry. `text` is included so no work is lost on screen.
+    if (!savedDocId) {
+      return NextResponse.json(
+        {
+          error: "We generated your draft but couldn't save it. Please try again.",
+          text: fullResponse,
+          truncated,
+        },
+        { status: 500 }
+      );
     }
   }
 
@@ -251,7 +301,7 @@ export async function POST(req: NextRequest) {
   // Update the Living File if the drafter produced a FILE UPDATE block
   if (fullResponse.includes("---FILE UPDATE---")) {
     try {
-      await parseAndUpdateFile(db, caseFileId, userId, fullResponse);
+      await parseAndUpdateFile(writeDb, caseFileId, userId, fullResponse);
     } catch (parseErr) {
       console.error("[wizard] file parser error:", parseErr);
     }
