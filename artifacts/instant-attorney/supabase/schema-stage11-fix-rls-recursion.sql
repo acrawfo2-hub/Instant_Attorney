@@ -75,12 +75,6 @@ create policy "attorneys_manage_all_requested"
   on requested_attachments for all
   using (public.is_attorney());
 
--- ── consults (legacy) ────────────────────────────────────────────────────────
-drop policy if exists "attorneys_manage_all_consults" on consults;
-create policy "attorneys_manage_all_consults"
-  on consults for all
-  using (public.is_attorney());
-
 -- ── consult_requests (source of truth) ──────────────────────────────────────
 drop policy if exists "attorneys_all_consults" on consult_requests;
 create policy "attorneys_all_consults"
