@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect, useCallback, FormEvent, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { IntakeMessage } from "@/lib/types";
+import { IntakeMessage, WIZARD_LABELS, LegalStrategy } from "@/lib/types";
+import { createClient } from "@/lib/supabase/client";
 import QuickConsultModal from "@/components/QuickConsultModal";
 
 type Msg = Pick<IntakeMessage, "role" | "content">;
@@ -126,16 +127,49 @@ function AcpChatInner() {
   const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [showQcModal, setShowQcModal] = useState(false);
+  const [handoff, setHandoff] = useState<{ label: string; href: string } | null>(null);
+  const [keepChatting, setKeepChatting] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputAreaRef = useRef<HTMLDivElement>(null);
   const hasUserMessages = messages.some((m) => m.role === "user");
-  const userMessageCount = messages.filter((m) => m.role === "user").length;
-  const showFileCta = userMessageCount >= 2 && !loading && !!caseFileId;
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, streamingText]);
+  }, [messages, streamingText, handoff]);
+
+  // ── Ready signal ───────────────────────────────────────────────────────────
+  // The conversation reaches its handoff point once the attorney strategy has
+  // actually been established (a document is recommended) — NOT just a message
+  // count. We read the case file's legal_strategy directly (browser client) and
+  // name the recommended document so the next step is unmistakable. The strategy
+  // is written server-side just after a reply, so we retry briefly to win the race.
+  useEffect(() => {
+    if (isQuickConsult || !caseFileId || handoff || loading) return;
+    let cancelled = false;
+    (async () => {
+      const supabase = createClient();
+      for (let attempt = 0; attempt < 4 && !cancelled; attempt++) {
+        const { data } = await supabase
+          .from("case_files")
+          .select("legal_strategy")
+          .eq("id", caseFileId)
+          .single();
+        const strategy = data?.legal_strategy as LegalStrategy | null;
+        const wType = (strategy?.recommended_wizards ?? []).find((w) => Object.hasOwn(WIZARD_LABELS, w));
+        if (wType) {
+          if (!cancelled) {
+            setHandoff({ label: WIZARD_LABELS[wType], href: `/dashboard?caseFileId=${caseFileId}` });
+          }
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 1300));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [messages, loading, caseFileId, handoff, isQuickConsult]);
 
   function autoResize() {
     const el = textareaRef.current;
@@ -411,28 +445,61 @@ function AcpChatInner() {
           </div>
         )}
 
+        {/* CLOSING HANDOFF MESSAGE — appears once a strategy/document is recommended */}
+        {handoff && !loading && (
+          <div className="fc-msg-row fc-msg-row-ai">
+            <div className="fc-avatar">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              </svg>
+            </div>
+            <div className="fc-bubble fc-bubble-ai">
+              <div className="fc-handoff-card">
+                <span className="fc-handoff-eyebrow">✓ Your file is ready</span>
+                <p className="fc-handoff-headline">Here&apos;s what happens next</p>
+                <p>
+                  I&apos;ve built your Living File and mapped out your legal strategy. Your
+                  recommended next step is to create your <strong>{handoff.label}</strong>.
+                </p>
+                <p>
+                  Open your file to review everything and start the document — I&apos;ll draft it for
+                  you, and Andrew Crawford, Esq. will review it once you send it. You can come back
+                  and keep chatting here anytime.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div ref={messagesEndRef} />
       </main>
 
-      {/* GO TO FILE CTA — appears after 2+ user messages */}
-      {showFileCta && (
+      {/* HANDOFF ACTION / INPUT — at the "ready" point the composer is replaced by the
+          one obvious next step, with a small link back to chatting if needed. */}
+      {handoff && !keepChatting ? (
+        <div className="fc-handoff-actions">
+          <button className="fc-handoff-btn" onClick={() => router.push(handoff.href)}>
+            Open my file → Start my {handoff.label}
+          </button>
+          <button className="fc-handoff-keep" onClick={() => setKeepChatting(true)}>
+            Still have a question? Keep chatting
+          </button>
+        </div>
+      ) : (
+      <>
+      {handoff && keepChatting && (
         <div className="fc-file-cta">
           <div className="fc-file-cta-inner">
             <div className="fc-file-cta-text">
-              <span className="fc-file-cta-eyebrow">⚡ Your Living File is ready</span>
-              <span className="fc-file-cta-headline">Start drafting your legal documents now</span>
+              <span className="fc-file-cta-eyebrow">⚡ Your file is ready</span>
+              <span className="fc-file-cta-headline">Next step: create your {handoff.label}</span>
             </div>
-            <button
-              className="fc-file-cta-btn"
-              onClick={() => router.push(caseFileId ? `/dashboard?caseFileId=${caseFileId}` : "/dashboard")}
-            >
-              Go to File → Start Documents
+            <button className="fc-file-cta-btn" onClick={() => router.push(handoff.href)}>
+              Open my file →
             </button>
           </div>
         </div>
       )}
-
-      {/* INPUT */}
       <div
         ref={inputAreaRef}
         className={`fc-input-area${dragOver ? " fc-input-area-dragover" : ""}`}
@@ -487,6 +554,8 @@ function AcpChatInner() {
           </button>
         </p>
       </div>
+      </>
+      )}
     </div>
   );
 }

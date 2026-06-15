@@ -4975,6 +4975,66 @@ mark.atty-placeholder {
   .fc-file-cta-btn { text-align: center; }
 }
 
+/* ── Chat handoff (ready → next step) ─────────────────────────────────────── */
+.fc-handoff-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fc-handoff-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--brand-gold);
+}
+.fc-handoff-headline {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--brand-navy);
+  margin: 0;
+}
+.fc-handoff-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 16px 16px 20px;
+  border-top: 1px solid rgba(193,154,58,0.18);
+  background: var(--brand-cream, #fbf8f1);
+  animation: cta-appear 0.4s ease both;
+}
+.fc-handoff-btn {
+  width: 100%;
+  background: var(--brand-gold);
+  color: var(--brand-navy);
+  border: none;
+  border-radius: 10px;
+  padding: 16px 22px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
+  box-shadow: 0 4px 16px rgba(193,154,58,0.35);
+}
+.fc-handoff-btn:hover {
+  background: #e8b84b;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(193,154,58,0.45);
+}
+.fc-handoff-keep {
+  background: none;
+  border: none;
+  color: var(--brand-text-md, #5b6675);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 4px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.fc-handoff-keep:hover { color: var(--brand-navy); }
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Next-Step guidance layer (plain-language "what to do next")
    Additive layer on top of the Living File — never replaces the detail below.
