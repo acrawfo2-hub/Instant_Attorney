@@ -449,7 +449,7 @@ export default function ClientFileView({
       )}
 
       {/* Government forms detected in chat — surfaced as instruments to complete */}
-      {!isAttorney && <GovFormInstruments caseFileId={caseFile.id} />}
+      <GovFormInstruments caseFileId={caseFile.id} />
 
       {/* Confirmed Facts + Gaps */}
       <div className="lf-card lf-card-half">
@@ -576,12 +576,28 @@ export default function ClientFileView({
                 </div>
               );
 
-              // Draft docs link to wizard so client can submit; attorney links to review page
+              // Draft docs link to wizard so client can submit; attorney gets
+              // inline downloads plus a link through to the full review screen.
               if (isAttorney) {
                 return (
-                  <Link key={doc.id} href={`/attorney/review/${doc.id}`} className="lf-doc-item lf-doc-item-link">
+                  <div key={doc.id} className="lf-doc-item">
                     {docRow}
-                  </Link>
+                    <div className="lf-doc-downloads">
+                      {doc.draft_text && (
+                        <a href={`/api/documents/${doc.id}/download`} className="lf-doc-download-link">
+                          Download {secondDraft?.draft_text ? "original draft" : "document"} (.docx)
+                        </a>
+                      )}
+                      {secondDraft?.draft_text && (
+                        <a href={`/api/documents/${secondDraft.id}/download`} className="lf-doc-download-link">
+                          Download revised draft (.docx)
+                        </a>
+                      )}
+                      <Link href={`/attorney/review/${doc.id}`} className="lf-doc-download-link">
+                        Open review →
+                      </Link>
+                    </div>
+                  </div>
                 );
               }
               if (doc.status === "draft") {

@@ -199,6 +199,9 @@ export default async function ClientFilePage({
                     {cf.jurisdiction && ` · ${cf.jurisdiction}`}
                   </div>
                 </div>
+                <Link href={`/attorney/file/${cf.id}`} className="atty-row-link">
+                  Open full file →
+                </Link>
               </div>
 
               {cf.summary && (

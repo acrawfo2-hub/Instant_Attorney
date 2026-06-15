@@ -16,26 +16,38 @@ export async function GET(req: NextRequest) {
   }
 
   let userId: string;
+  let isAttorney = false;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let db: any;
 
   if (BYPASS_AUTH) {
     userId = BYPASS_USER_ID;
+    isAttorney = true;
     db = createServiceClient();
   } else {
     db = await createClient();
     const { data: { user }, error } = await db.auth.getUser();
     if (error || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     userId = user.id;
+    const { data: profile } = await db
+      .from("profiles")
+      .select("is_attorney")
+      .eq("id", userId)
+      .single();
+    isAttorney = profile?.is_attorney ?? false;
   }
 
-  const { data: rows } = await db
+  // Attorneys read any client's instruments (service client bypasses RLS);
+  // clients are scoped to their own rows.
+  const queryDb = isAttorney ? createServiceClient() : db;
+  const formQ = queryDb
     .from("form_instruments")
     .select("*")
     .eq("case_file_id", caseFileId)
-    .eq("user_id", userId) // belt-and-suspenders alongside RLS
     .neq("status", "dismissed")
     .order("created_at", { ascending: true });
+  if (!isAttorney) formQ.eq("user_id", userId);
+  const { data: rows } = await formQ;
 
   const instruments = ((rows ?? []) as GovFormInstrument[]).flatMap((row) => {
     const form = resolveForm(row);
