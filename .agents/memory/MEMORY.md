@@ -3,6 +3,7 @@
 - [Instant-Attorney routing & build isolation](instant-attorney-routing.md) — npm-isolated (excluded from pnpm workspace); api-server owns `/api`, so unlisted `/api/*` routes added to instant-attorney are silently shadowed.
 - [Anthropic "Streaming is required"](anthropic-streaming-required.md) — sync messages.create() with large max_tokens throws+502s; use messages.stream().finalMessage(), return JSON.
 - [Batch API never completes on Replit](instant-attorney-batch-cron.md) — messages.batches needs a cron poller that doesn't run here; stream inline instead. Don't own /api/batches (unauth route).
+- [Attorney AI review is manual-only](instant-attorney-manual-review.md) — no auto-review on submission; attorney clicks Run Critical Review on demand. Don't re-add auto-trigger.
 - [Attorney APIs must be in artifact.toml paths](instant-attorney-routing.md) — /api/attorney was unlisted → Express-shadowed → toggle/review/merge silently 404'd; list every /api/* prefix Next owns.
 - [Instant-Attorney fact_items writes](instant-attorney-fact-writes.md) — persist wizard answers before drafting; fact_items has no label/source col; RLS skips case ownership so check it app-side.
 - [Wizard push-forward flow](instant-attorney-wizard-flow.md) — answering wizard questions auto-sends draft to attorney; wizard route must NOT downgrade an elevated doc status to "draft" on edit.

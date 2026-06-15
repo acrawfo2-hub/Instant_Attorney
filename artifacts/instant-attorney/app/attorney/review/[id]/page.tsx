@@ -365,7 +365,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
                 <pre className="atty-review-preformatted">{stripReviewMarkers(reviewText)}</pre>
               ) : (
                 <p className="atty-ai-empty">
-                  No review memo yet. Turn on Auto Critical Review in your dashboard, or click Run Critical Review in the sidebar.
+                  No review memo yet. Click Run Critical Review in the sidebar to generate one.
                 </p>
               )}
             </section>
