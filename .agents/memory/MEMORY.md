@@ -4,4 +4,5 @@
 - [Anthropic "Streaming is required"](anthropic-streaming-required.md) — sync messages.create() with large max_tokens throws+502s; use messages.stream().finalMessage(), return JSON.
 - [Instant-Attorney fact_items writes](instant-attorney-fact-writes.md) — persist wizard answers before drafting; fact_items has no label/source col; RLS skips case ownership so check it app-side.
 - [Wizard push-forward flow](instant-attorney-wizard-flow.md) — answering wizard questions auto-sends draft to attorney; wizard route must NOT downgrade an elevated doc status to "draft" on edit.
+- [RLS recursion on profiles](instant-attorney-rls-recursion.md) — an attorney-check policy ON profiles that sub-selects profiles → 42P17 recursion, breaks all profile reads; use SECURITY DEFINER is_attorney().
 - [Supabase unapplied migrations](instant-attorney-supabase-migrations.md) — live DB missing stage9/stage10 tables (form_instruments etc); writes fail PGRST205 silently; user must run SQL. head:true select gives false "ok".

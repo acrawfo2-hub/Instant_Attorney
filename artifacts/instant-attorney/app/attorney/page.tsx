@@ -6,6 +6,7 @@ import type { Document, CaseFile, Profile } from "@/lib/types";
 import AutoReviewToggle from "@/components/AutoReviewToggle";
 import AttorneyFileLog from "@/components/AttorneyFileLog";
 import ConsultRequestQueue, { type ConsultRequestRow } from "@/components/ConsultRequestQueue";
+import LogoutButton from "@/components/LogoutButton";
 
 interface DocumentWithRelations extends Document {
   case_files: CaseFile;
@@ -94,6 +95,7 @@ export default async function AttorneyPage() {
           <div className="atty-header-right">
             <span className="atty-name">{profile.full_name ?? profile.email}</span>
             <AutoReviewToggle initial={profile.auto_document_review ?? true} />
+            <LogoutButton />
           </div>
         </div>
       </header>
