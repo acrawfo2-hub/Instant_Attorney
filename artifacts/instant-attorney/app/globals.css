@@ -3949,6 +3949,53 @@ mark.atty-placeholder {
 .atty-toggle-btn-on:hover { background: rgba(52,199,89,0.25); }
 .atty-toggle-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* Auto Critical Review switch */
+.atty-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: var(--font-dm-sans, "DM Sans"), sans-serif;
+}
+.atty-switch:disabled { opacity: 0.6; cursor: wait; }
+.atty-switch-track {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  transition: background 0.18s, border-color 0.18s;
+  flex-shrink: 0;
+}
+.atty-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  transition: transform 0.18s;
+}
+.atty-switch-on .atty-switch-track {
+  background: rgba(52, 199, 89, 0.9);
+  border-color: rgba(52, 199, 89, 0.9);
+}
+.atty-switch-on .atty-switch-thumb { transform: translateX(18px); }
+.atty-switch-state {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.6);
+  min-width: 22px;
+  text-align: left;
+}
+.atty-switch-on .atty-switch-state { color: #34c759; }
+
 /* ── Consult CTA banner (client file view) ───────────────────────────────── */
 .lf-consult-banner {
   border-left: 2.5px solid var(--brand-gold);

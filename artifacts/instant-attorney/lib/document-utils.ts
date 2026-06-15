@@ -3,7 +3,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { notifyAttorneyDocumentReady } from "./notify";
 import { DOC_REVIEW_SYSTEM_PROMPT, buildDocReviewUserMessage } from "./prompts";
 import { WIZARD_LABELS } from "./types";
-import { maxOutputTokensFor } from "./token-limits";
+import { maxOutputTokensFor, limitSignalMetadata } from "./token-limits";
+import { recordAiFromMessage } from "./usage-tracker";
+import { logTruncation } from "./truncation-logger";
 import type { WizardType, Document, CaseFile, Profile, FactItem, Attachment } from "./types";
 
 const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney, maxRetries: 4 });
@@ -247,41 +249,78 @@ async function autoTriggerReview(
   }).eq("id", docId);
 
   try {
-    const batch = await anthropic.messages.batches.create({
-      requests: [
+    // Generate the review synchronously and persist it directly. We deliberately do
+    // NOT use the Message Batches API: batch results must be fetched by a separate
+    // poll, and the only poller was a Vercel cron (vercel.json) that never runs in
+    // this (Replit) environment — so docs got stuck in review_status "reviewing"
+    // forever ("AI reviewing…" that never resolves). This mirrors the manual review
+    // route: stream server-side, assemble the final message, write the child memo.
+    // autoTriggerReview is always called fire-and-forget on the long-lived Next
+    // server, so awaiting the full generation here runs in the background.
+    const response = await anthropic.messages.stream({
+      model: "claude-sonnet-4-6",
+      max_tokens: maxOutputTokensFor("claude-sonnet-4-6"),
+      system: [
         {
-          custom_id: docId,
-          params: {
-            model: "claude-sonnet-4-6",
-            max_tokens: maxOutputTokensFor("claude-sonnet-4-6"),
-            system: [
-              {
-                type: "text" as const,
-                text: DOC_REVIEW_SYSTEM_PROMPT,
-                cache_control: { type: "ephemeral" as const },
-              },
-            ],
-            messages: [{ role: "user" as const, content: userMessage }],
-          },
+          type: "text" as const,
+          text: DOC_REVIEW_SYSTEM_PROMPT,
+          cache_control: { type: "ephemeral" as const },
         },
       ],
-    });
+      messages: [{ role: "user" as const, content: userMessage }],
+    }).finalMessage();
 
-    // Store batch ID in the document's content_json for the poll handler to pick up
+    const reviewReport = response.content
+      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .map((b) => b.text)
+      .join("");
+
+    const truncated = response.stop_reason === "max_tokens";
+    if (truncated) {
+      logTruncation({
+        endpoint: "document-utils/auto-review",
+        feature: "auto_critical_review",
+        documentId: docId,
+        caseFileId: doc.case_file_id,
+        userId: doc.user_id,
+        outputTokens: response.usage.output_tokens,
+      });
+    }
+
+    recordAiFromMessage(db, response, {
+      userId: doc.user_id,
+      actorId: null,
+      caseFileId: doc.case_file_id,
+      feature: "auto_critical_review",
+      metadata: {
+        document_id: docId,
+        ...limitSignalMetadata({
+          model: response.model,
+          outputTokens: response.usage.output_tokens,
+          priorLimit: 8000,
+          stopReason: response.stop_reason,
+        }),
+      },
+    }).catch((e) => console.error("[auto-review] usage record error:", e));
+
+    await upsertCriticalReviewChild(db, doc, reviewReport);
+
     const { data: current } = await db
       .from("documents")
       .select("content_json")
       .eq("id", docId)
       .single();
+    const existingCj = (current?.content_json as Record<string, unknown>) ?? {};
 
     await db.from("documents").update({
-      content_json: { ...(current?.content_json ?? {}), review_batch_job_id: batch.id },
+      review_status: "review_ready",
+      content_json: truncated ? { ...existingCj, truncated: true } : existingCj,
       updated_at: new Date().toISOString(),
     }).eq("id", docId);
 
-    console.log(`[auto-review] Batch submitted for doc ${docId} (batch: ${batch.id})`);
+    console.log(`[auto-review] Review ready for doc ${docId}${truncated ? " (truncated)" : ""}`);
   } catch (err) {
-    console.error("[document-utils] auto-review batch error:", err);
+    console.error("[document-utils] auto-review error:", err);
     await db.from("documents").update({
       review_status: null,
       updated_at: new Date().toISOString(),

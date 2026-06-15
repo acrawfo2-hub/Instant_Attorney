@@ -309,9 +309,9 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
             <button
               className={`atty-ai-btn${reviewText ? " atty-ai-btn-done" : ""}`}
               onClick={runManualReview}
-              disabled={isReviewing}
+              disabled={aiRunning}
             >
-              {isReviewing ? "Generating…" : reviewText ? "Re-run Critical Review" : "Run Critical Review"}
+              {aiRunning ? "Generating…" : reviewText ? "Re-run Critical Review" : "Run Critical Review"}
             </button>
             {aiError && <p className="atty-ai-error">{aiError}</p>}
           </div>
