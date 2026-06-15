@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { isValidWizardType } from "@/lib/document-utils";
 import { BYPASS_USER_ID } from "@/lib/types";
-import type { LegalStrategy } from "@/lib/types";
+import type { LegalStrategy, WizardType } from "@/lib/types";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
@@ -21,16 +21,27 @@ export async function POST(
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
+  // Two modes: plan-based files send { leadKey } (a PlanEntry.key); legacy files
+  // (no document_plan) send { lead } (a wizard type). null clears the override.
+  const hasLeadKey = "leadKey" in (body as Record<string, unknown>);
   const rawLead = (body as { lead?: unknown }).lead;
-  const lead =
-    rawLead === null || rawLead === undefined
-      ? null
-      : typeof rawLead === "string" && isValidWizardType(rawLead)
-        ? rawLead
-        : undefined;
+  const rawLeadKey = (body as { leadKey?: unknown }).leadKey;
 
-  if (lead === undefined) {
-    return NextResponse.json({ error: "Invalid lead document type" }, { status: 400 });
+  let lead: WizardType | null | undefined;
+  if (!hasLeadKey) {
+    lead =
+      rawLead === null || rawLead === undefined
+        ? null
+        : typeof rawLead === "string" && isValidWizardType(rawLead)
+          ? rawLead
+          : undefined;
+    if (lead === undefined) {
+      return NextResponse.json({ error: "Invalid lead document type" }, { status: 400 });
+    }
+  }
+
+  if (hasLeadKey && rawLeadKey !== null && typeof rawLeadKey !== "string") {
+    return NextResponse.json({ error: "Invalid lead key" }, { status: 400 });
   }
 
   const db = BYPASS_AUTH ? createServiceClient() : await createClient();
@@ -69,7 +80,16 @@ export async function POST(
     recommended_wizards: [],
   };
 
-  const updated: LegalStrategy = { ...existing, lead_override: lead };
+  let updated: LegalStrategy;
+  if (hasLeadKey) {
+    const leadKey = rawLeadKey as string | null;
+    if (leadKey !== null && !existing.document_plan?.some((e) => e.key === leadKey)) {
+      return NextResponse.json({ error: "Lead key not in this file's plan" }, { status: 400 });
+    }
+    updated = { ...existing, lead_key_override: leadKey };
+  } else {
+    updated = { ...existing, lead_override: lead ?? null };
+  }
 
   const { error: updateErr } = await db
     .from("case_files")
@@ -80,5 +100,5 @@ export async function POST(
     return NextResponse.json({ error: "Failed to update document plan" }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true, lead_override: lead });
+  return NextResponse.json({ success: true });
 }

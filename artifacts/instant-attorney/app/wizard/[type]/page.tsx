@@ -45,6 +45,9 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
 
   const wizardType = type as WizardType;
   const instrumentParam = searchParams.get("instrument") ?? "";
+  // Stable plan-entry key — identifies WHICH document in the file this is, so
+  // distinct general_document instruments don't collide on a shared engine.
+  const planKeyParam = searchParams.get("planKey") ?? "";
   // For general_document, use the specific instrument name as the display label
   const label = (wizardType === "general_document" && instrumentParam)
     ? instrumentParam
@@ -185,6 +188,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
           wizardType,
           documentId: documentId || undefined,
           instrument: instrumentParam || undefined,
+          planKey: planKeyParam || undefined,
         }),
         signal: abort.signal,
       });

@@ -118,7 +118,7 @@ export default function NextStepGuide({
               const isActive = item.priority === guide.activeDocPosition?.index;
               return (
                 <li
-                  key={`${item.wizard}-${item.priority}`}
+                  key={item.key}
                   className={`lf-roadmap-item lf-roadmap-item-${item.status}${isActive ? " lf-roadmap-item-active" : ""}`}
                 >
                   <span className="lf-roadmap-num">{item.priority}</span>

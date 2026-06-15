@@ -54,8 +54,14 @@ export type PlanStatus =
 
 /** One document in the file's overall strategy, with its current status. */
 export interface PlanItem {
+  /** Stable identity — the PlanEntry.key (or the wizard type on the legacy path). */
+  key: string;
+  /** Drafting engine — selects interview hints / formatting only. */
   wizard: WizardType;
+  /** Display name (the document's real title). */
   label: string;
+  /** Instrument name to pass to a general_document draft, if applicable. */
+  instrument?: string;
   /** 1-indexed priority — 1 is the lead (most important) document. */
   priority: number;
   status: PlanStatus;
@@ -85,12 +91,44 @@ function hasDraftText(d: Document): boolean {
   return !!d.draft_text && d.draft_text.trim().length > 0;
 }
 
-function wizardHref(caseFileId: string, wType: WizardType, docId?: string): string {
-  const base = `/wizard/${wType}?caseFileId=${caseFileId}`;
-  return docId ? `${base}&docId=${docId}` : base;
+function wizardHref(
+  caseFileId: string,
+  wType: WizardType,
+  opts: { docId?: string; instrument?: string; planKey?: string } = {},
+): string {
+  const params = new URLSearchParams({ caseFileId });
+  if (opts.docId) params.set("docId", opts.docId);
+  if (opts.instrument) params.set("instrument", opts.instrument);
+  if (opts.planKey) params.set("planKey", opts.planKey);
+  return `/wizard/${wType}?${params.toString()}`;
 }
 
-/** The effective lead document type: attorney override wins over the AI ranking. */
+/** Build the wizard link for a plan item. Pre-warm only applies to legacy
+ *  engine-keyed items (a pre-warmed draft has no plan key, so it can't be
+ *  safely attached to a specific named instrument). */
+function planItemHref(
+  caseFileId: string,
+  item: PlanItem,
+  preWarmedByType: Record<string, string>,
+): string {
+  const preWarm = item.key === item.wizard ? preWarmedByType[item.wizard] : undefined;
+  return wizardHref(caseFileId, item.wizard, {
+    docId: item.docId ?? preWarm,
+    instrument: item.instrument,
+    planKey: item.key,
+  });
+}
+
+/** The effective lead document key: attorney override wins over the AI ranking. */
+export function effectiveLeadKey(caseFile: CaseFile): string | null {
+  const plan = caseFile.legal_strategy?.document_plan;
+  if (!plan?.length) return null;
+  const override = caseFile.legal_strategy?.lead_key_override;
+  if (override && plan.some((e) => e.key === override)) return override;
+  return plan[0].key;
+}
+
+/** The effective lead document type (legacy, recommended_wizards path only). */
 export function effectiveLeadWizard(caseFile: CaseFile): WizardType | null {
   const recommended = (caseFile.legal_strategy?.recommended_wizards ?? []).filter(isValidWizardType);
   const override = caseFile.legal_strategy?.lead_override;
@@ -117,27 +155,69 @@ function planStatusForDoc(doc: Document | undefined): PlanStatus {
   }
 }
 
+/** The plan_key a document was stamped with, if any (lives in content_json). */
+function docPlanKey(doc: Document): string | undefined {
+  const k = (doc.content_json as Record<string, unknown> | null)?.plan_key;
+  return typeof k === "string" ? k : undefined;
+}
+
 /**
- * Build the file's ranked document plan from the attorney strategy. The lead
- * (attorney override, else AI's top pick) is always priority 1; the remaining
- * recommended wizards follow in their ranked order. Each item's status is
- * derived from its matching top-level document. Returns [] before any strategy
- * exists.
+ * Build the file's ranked document plan. Prefers the structured
+ * `document_plan` (each entry tracked by its stable key, so several custom
+ * documents that share the general_document engine stay distinct); falls back
+ * to the legacy recommended_wizards list for files created before the plan
+ * existed. The lead (attorney override, else AI's top pick) is always priority 1.
+ * Returns [] before any strategy exists.
  */
 export function buildDocumentPlan(caseFile: CaseFile, documents: Document[]): PlanItem[] {
+  const topLevel = documents.filter((d) => !d.parent_document_id);
+  const plan = caseFile.legal_strategy?.document_plan;
+
+  // ── Preferred path: structured document plan, tracked by stable key ──────────
+  if (plan?.length) {
+    const leadKey = effectiveLeadKey(caseFile);
+    const ordered = [...plan].sort((a, b) => {
+      if (a.key === leadKey) return -1;
+      if (b.key === leadKey) return 1;
+      return 0;
+    });
+
+    return ordered.map((entry, i) => {
+      // Match by stamped plan_key; fall back to a legacy doc of the same typed
+      // engine that was never stamped (best-effort for files mid-migration).
+      const doc =
+        topLevel.find((d) => docPlanKey(d) === entry.key) ??
+        (entry.engine !== "general_document"
+          ? topLevel.find((d) => d.doc_type === entry.engine && !docPlanKey(d))
+          : undefined);
+      return {
+        key: entry.key,
+        wizard: entry.engine,
+        label: entry.title,
+        instrument: entry.engine === "general_document" ? entry.title : undefined,
+        priority: i + 1,
+        status: planStatusForDoc(doc),
+        docId: doc?.id,
+        isLead: entry.key === leadKey,
+      };
+    });
+  }
+
+  // ── Legacy path: derive from the deprecated recommended_wizards list ─────────
   const recommended = (caseFile.legal_strategy?.recommended_wizards ?? []).filter(isValidWizardType);
   if (!recommended.length) return [];
 
   const lead = effectiveLeadWizard(caseFile);
-  const ordered: WizardType[] = [];
-  if (lead) ordered.push(lead);
+  const orderedWizards: WizardType[] = [];
+  if (lead) orderedWizards.push(lead);
   for (const w of recommended) {
-    if (!ordered.includes(w)) ordered.push(w);
+    if (!orderedWizards.includes(w)) orderedWizards.push(w);
   }
 
-  return ordered.map((wizard, i) => {
-    const doc = documents.find((d) => d.doc_type === wizard && !d.parent_document_id);
+  return orderedWizards.map((wizard, i) => {
+    const doc = topLevel.find((d) => d.doc_type === wizard);
     return {
+      key: wizard,
       wizard,
       label: WIZARD_LABELS[wizard],
       priority: i + 1,
@@ -213,13 +293,13 @@ export function computeNextStep(
       title = `Review your ${activeItem.label} and send it to your attorney`;
       body =
         "Your document is drafted and waiting. Look it over, fill in any blanks you can, then send it to Andrew. It's completely fine to leave blanks — he'll finish them for you.";
-      cta = { label: "Open my draft →", href: wizardHref(id, activeItem.wizard, activeItem.docId) };
+      cta = { label: "Open my draft →", href: planItemHref(id, activeItem, preWarmedByType) };
     } else if (s === "changes_requested") {
       activeStep = 3;
       title = `Your attorney suggested changes to your ${activeItem.label}`;
       body =
         "Andrew reviewed this document and asked for a few updates. Open it to see what he suggested and send it back when you're ready.";
-      cta = { label: "See the changes →", href: wizardHref(id, activeItem.wizard, activeItem.docId) };
+      cta = { label: "See the changes →", href: planItemHref(id, activeItem, preWarmedByType) };
     } else if (s === "sent") {
       activeStep = 4;
       tone = "waiting";
@@ -229,7 +309,7 @@ export function computeNextStep(
       if (nextToStart) {
         secondary = {
           label: `Get a head start on your ${nextToStart.label}`,
-          href: wizardHref(id, nextToStart.wizard, preWarmedByType[nextToStart.wizard]),
+          href: planItemHref(id, nextToStart, preWarmedByType),
         };
       }
     } else if (s === "approved") {
@@ -257,7 +337,7 @@ export function computeNextStep(
       }
       cta = {
         label: `Create my ${activeItem.label} →`,
-        href: wizardHref(id, activeItem.wizard, preWarmedByType[activeItem.wizard]),
+        href: planItemHref(id, activeItem, preWarmedByType),
       };
     }
 
@@ -316,20 +396,20 @@ export function computeNextStep(
     title = "Review your draft and send it to your attorney";
     body =
       "Your document is drafted and waiting. Look it over, fill in any blanks you can, then send it to Andrew. It's completely fine to leave blanks — he'll finish them for you.";
-    cta = { label: "Open my draft →", href: wizardHref(id, draftDoc.doc_type as WizardType, draftDoc.id) };
+    cta = { label: "Open my draft →", href: wizardHref(id, draftDoc.doc_type as WizardType, { docId: draftDoc.id }) };
   } else if (changesDoc) {
     activeStep = 3;
     title = "Your attorney suggested some changes";
     body =
       "Andrew reviewed your document and asked for a few updates. Open it to see what he suggested and send it back when you're ready.";
-    cta = { label: "See the changes →", href: wizardHref(id, changesDoc.doc_type as WizardType, changesDoc.id) };
+    cta = { label: "See the changes →", href: wizardHref(id, changesDoc.doc_type as WizardType, { docId: changesDoc.id }) };
   } else if (canCreate && !anyDocCreated) {
     const { wType, docId } = pickCreateTarget(caseFile, preWarmedByType);
     activeStep = 2;
     title = "Create your first document";
     body =
       "We have enough to start. Click below and we'll write a complete first draft for you in under two minutes — even if some details are still missing, we'll mark those spots so you (or Andrew) can fill them in later.";
-    cta = { label: "Create my document →", href: wizardHref(id, wType, docId) };
+    cta = { label: "Create my document →", href: wizardHref(id, wType, { docId }) };
   } else if (pendingDoc) {
     activeStep = 4;
     tone = "waiting";
@@ -339,7 +419,7 @@ export function computeNextStep(
     if (canCreate) {
       secondary = (() => {
         const { wType, docId } = pickCreateTarget(caseFile, preWarmedByType);
-        return { label: "Start another document", href: wizardHref(id, wType, docId) };
+        return { label: "Start another document", href: wizardHref(id, wType, { docId }) };
       })();
     }
   } else if (approvedDoc) {
@@ -355,7 +435,7 @@ export function computeNextStep(
     title = "Create your next document";
     body =
       "We'll write a complete first draft for you in under two minutes. Missing details are never a problem — we mark those spots and your attorney fills them in.";
-    cta = { label: "Create a document →", href: wizardHref(id, wType, docId) };
+    cta = { label: "Create a document →", href: wizardHref(id, wType, { docId }) };
   } else {
     activeStep = 1;
     title = "Tell us a little more about your situation";

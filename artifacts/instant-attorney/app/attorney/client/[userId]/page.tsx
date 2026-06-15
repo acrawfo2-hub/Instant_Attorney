@@ -211,11 +211,16 @@ export default async function ClientFilePage({
               {(() => {
                 const plan = buildDocumentPlan(cf, cf.documents);
                 if (plan.length === 0) return null;
+                const usesPlan = !!cf.legal_strategy?.document_plan?.length;
+                const overridden = usesPlan
+                  ? !!cf.legal_strategy?.lead_key_override
+                  : !!cf.legal_strategy?.lead_override;
                 return (
                   <DocumentPlanEditor
                     caseFileId={cf.id}
                     items={plan}
-                    leadOverride={cf.legal_strategy?.lead_override ?? null}
+                    usesPlan={usesPlan}
+                    overridden={overridden}
                     rationale={cf.legal_strategy?.lead_rationale}
                   />
                 );

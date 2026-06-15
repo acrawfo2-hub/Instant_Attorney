@@ -91,7 +91,14 @@ export function buildFileContext(
       lines.push("", "SUGGESTED INSTRUMENTS:");
       s.instruments.forEach((i) => lines.push(`• ${i}`));
     }
-    if (s.recommended_wizards?.length) {
+    if (s.document_plan?.length) {
+      // The file's planned documents, in priority order. Reuse these exact
+      // titles when regenerating the plan so client progress isn't lost.
+      lines.push("", "DOCUMENT PLAN (priority order — first is the lead document):");
+      s.document_plan.forEach((d, i) => {
+        lines.push(`${i + 1}. ${d.title} | ${d.engine}${d.rationale ? ` | ${d.rationale}` : ""}`);
+      });
+    } else if (s.recommended_wizards?.length) {
       lines.push("", "RECOMMENDED DOCUMENT WIZARDS:");
       s.recommended_wizards.forEach((w) => lines.push(`• ${w}`));
     }
@@ -195,13 +202,17 @@ RISKS:
 • [Risk or weakness]
 SUGGESTED INSTRUMENTS:
 • [Legal instrument or document type relevant to this matter]
-RECOMMENDED WIZARDS:
-• [wizard_type — one per line, from: demand_letter, complaint_letter, draft_contract, draft_waiver, wills_trusts, doc_review, general_document]
-LEAD RATIONALE: [one short sentence: why the FIRST recommended wizard above is the single most important document to complete first — e.g., a response deadline, statute of limitations, or that other documents depend on it]
+DOCUMENT PLAN:
+1. [Specific document name] | [engine] | [one short sentence: why this document matters / its priority]
+2. [Specific document name] | [engine] | [why]
 RECOMMEND_CONSULT: [true | false — true if the matter has significant legal complexity, tight deadlines, high financial or liberty stakes, active litigation, or facts that genuinely require attorney judgment before proceeding]
 ---END STRATEGY---
 
-IMPORTANT: List RECOMMENDED WIZARDS in PRIORITY ORDER — the single most important document first. Most files need more than one document; the first one is the client's lead document and everything else follows it.
+DOCUMENT PLAN rules:
+- List the documents in PRIORITY ORDER — the single most important document FIRST. It is the client's "lead" document; the client is guided to finish it before the others. Most files need more than one document.
+- Use the document's REAL, specific name as the title (e.g. "LLC Operating Agreement", "Demand Letter to Landlord", "Promissory Note") — not the generic engine name.
+- [engine] is the drafting engine, exactly one of: demand_letter, complaint_letter, draft_contract, draft_waiver, wills_trusts, doc_review, general_document. Pick the closest fit; use general_document for anything that doesn't match a specific engine. The engine only controls formatting/interview hints — the title is what identifies the document.
+- Keep document titles STABLE across updates: if a document already exists in the plan, reuse the same title wording so the client's progress isn't lost.
 
 Wizard recommendation rules:
 - Only suggest wizards that are genuinely useful for this specific matter.

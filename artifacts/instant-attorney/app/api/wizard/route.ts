@@ -21,7 +21,8 @@ export async function POST(req: NextRequest) {
   if (!body || typeof body !== "object") {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
-  const { messages, caseFileId, wizardType, documentId, instrument } = body;
+  const { messages, caseFileId, wizardType, documentId, instrument, planKey } = body;
+  const planKeyStr = typeof planKey === "string" && planKey.trim() ? planKey.trim() : undefined;
 
   if (!Array.isArray(messages) || messages.length === 0) {
     return NextResponse.json({ error: "Invalid messages" }, { status: 400 });
@@ -192,7 +193,7 @@ export async function POST(req: NextRequest) {
     const now = new Date().toISOString();
 
     if (!savedDocId) {
-      const existing = await findReusableDocument(db, caseFileId, wizardType, userId);
+      const existing = await findReusableDocument(db, caseFileId, wizardType, userId, planKeyStr);
       savedDocId = existing?.id;
     }
 
@@ -217,10 +218,14 @@ export async function POST(req: NextRequest) {
         status: nextStatus,
         updated_at: now,
       };
-      // Merge truncated flag into existing content_json when re-generating
-      if (truncated) {
-        const existingCj = (existingDoc?.content_json as Record<string, unknown>) ?? {};
-        update.content_json = { ...existingCj, truncated: true };
+      // Merge truncated flag / plan key into existing content_json when re-generating.
+      const existingCj = (existingDoc?.content_json as Record<string, unknown>) ?? {};
+      if (truncated || (planKeyStr && existingCj.plan_key !== planKeyStr)) {
+        update.content_json = {
+          ...existingCj,
+          ...(truncated ? { truncated: true } : {}),
+          ...(planKeyStr ? { plan_key: planKeyStr } : {}),
+        };
       }
       await db.from("documents").update(update).eq("id", savedDocId);
     } else {
@@ -231,7 +236,11 @@ export async function POST(req: NextRequest) {
           user_id: userId,
           doc_type: wizardType,
           title: `${documentLabel} — ${new Date().toLocaleDateString()}`,
-          content_json: { init_response: fullResponse, ...(truncated ? { truncated: true } : {}) },
+          content_json: {
+            init_response: fullResponse,
+            ...(truncated ? { truncated: true } : {}),
+            ...(planKeyStr ? { plan_key: planKeyStr } : {}),
+          },
           draft_text: draftText,
           status: "draft",
           updated_at: now,

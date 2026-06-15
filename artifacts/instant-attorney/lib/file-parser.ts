@@ -1,5 +1,18 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { WizardType, LegalStrategy } from "./types";
+import type { WizardType, LegalStrategy, PlanEntry } from "./types";
+
+// Valid drafting engines for a DOCUMENT PLAN entry. Kept inline (not imported
+// from ./types) so this module stays free of runtime imports the unit-test
+// runner can't resolve.
+const VALID_ENGINES = new Set<string>([
+  "demand_letter",
+  "complaint_letter",
+  "draft_contract",
+  "draft_waiver",
+  "wills_trusts",
+  "doc_review",
+  "general_document",
+]);
 
 // Extracts the draft text from a ---DRAFT READY--- block.
 // Resilient to truncation: if the closing ---END DRAFT--- marker is missing
@@ -151,37 +164,107 @@ async function parseLegalStrategy(
   if (!match) return;
 
   const block = match[1];
-  const summaryMatch = block.match(/SUMMARY:\s*([\s\S]*?)(?=\nSTRENGTHS:|\nRISKS:|\nSUGGESTED|\nRECOMMENDED|$)/i);
+  const summaryMatch = block.match(/SUMMARY:\s*([\s\S]*?)(?=\nSTRENGTHS:|\nRISKS:|\nSUGGESTED|\nRECOMMENDED|\nDOCUMENT PLAN:|$)/i);
 
   const consultMatch = block.match(/RECOMMEND_CONSULT:\s*(true|false)/i);
   const rationaleMatch = block.match(/LEAD RATIONALE:\s*([\s\S]*?)(?=\nRECOMMEND_CONSULT:|\n---|$)/i);
   const leadRationale = rationaleMatch?.[1]?.trim();
 
-  // Preserve any attorney lead override across strategy re-parses — a later chat
-  // turn that regenerates the strategy must not silently wipe the attorney's
-  // manual choice of the most-important document.
+  // Read the prior strategy so we can preserve identity that the model doesn't
+  // re-emit: document keys (so client progress survives re-parses) and the
+  // attorney's lead override.
   const { data: existing } = await db
     .from("case_files")
     .select("legal_strategy")
     .eq("id", caseFileId)
     .single();
-  const priorOverride = (existing?.legal_strategy as LegalStrategy | null)?.lead_override ?? null;
+  const priorStrategy = (existing?.legal_strategy as LegalStrategy | null) ?? null;
+  const priorPlan = priorStrategy?.document_plan ?? [];
+
+  // The new plan; if a strategy block omits it, keep the existing plan.
+  const parsedPlan = parseDocumentPlan(block, priorPlan);
+  const documentPlan = parsedPlan.length ? parsedPlan : priorPlan;
+
+  // Derive the (deprecated) wizard list from the plan engines for back-compat;
+  // fall back to legacy RECOMMENDED WIZARDS bullets when there's no plan.
+  const recommendedWizards: WizardType[] = documentPlan.length
+    ? [...new Set(documentPlan.map((e) => e.engine))]
+    : (extractBullets(block, "RECOMMENDED WIZARDS") as WizardType[]);
+
+  // Keep the attorney's key override only if it still points at a real entry.
+  const priorKeyOverride = priorStrategy?.lead_key_override ?? null;
+  const leadKeyOverride = documentPlan.some((e) => e.key === priorKeyOverride)
+    ? priorKeyOverride
+    : null;
 
   const strategy: LegalStrategy = {
     summary: summaryMatch?.[1]?.trim() ?? "",
     instruments: extractBullets(block, "SUGGESTED INSTRUMENTS"),
     strengths: extractBullets(block, "STRENGTHS"),
     risks: extractBullets(block, "RISKS"),
-    recommended_wizards: extractBullets(block, "RECOMMENDED WIZARDS") as WizardType[],
+    recommended_wizards: recommendedWizards,
     recommend_consult: consultMatch ? consultMatch[1].toLowerCase() === "true" : undefined,
-    lead_rationale: leadRationale || undefined,
-    lead_override: priorOverride,
+    document_plan: documentPlan.length ? documentPlan : undefined,
+    lead_rationale: (documentPlan[0]?.rationale ?? leadRationale) || undefined,
+    lead_key_override: leadKeyOverride,
+    lead_override: priorStrategy?.lead_override ?? null,
   };
 
   await db
     .from("case_files")
     .update({ legal_strategy: strategy, updated_at: new Date().toISOString() })
     .eq("id", caseFileId);
+}
+
+// Parse the ---LEGAL STRATEGY--- "DOCUMENT PLAN:" lines into ranked PlanEntries.
+// Each line: "1. Title | engine | rationale". The KEY is the document's stable
+// identity: we reuse a prior entry's key for the same (normalized) title so the
+// client's progress on a document survives strategy regenerations.
+export function parseDocumentPlan(block: string, prior: PlanEntry[] = []): PlanEntry[] {
+  const sec = block.match(/DOCUMENT PLAN:\s*([\s\S]*?)(?=\nRECOMMEND_CONSULT:|\n---|$)/i);
+  if (!sec) return [];
+
+  const priorByTitle = new Map(prior.map((e) => [normalizeTitle(e.title), e]));
+  const usedKeys = new Set<string>();
+  const entries: PlanEntry[] = [];
+
+  for (const rawLine of sec[1].split("\n")) {
+    const line = rawLine.replace(/^\s*\d+[.)]\s*/, "").replace(/^[•\-*]\s*/, "").trim();
+    if (!line) continue;
+
+    const parts = line.split("|").map((p) => p.trim());
+    const title = parts[0];
+    if (!title) continue;
+
+    const engineRaw = (parts[1] ?? "").toLowerCase().replace(/[^a-z_]/g, "");
+    const engine = (VALID_ENGINES.has(engineRaw) ? engineRaw : "general_document") as WizardType;
+    const rationale = parts[2] || undefined;
+
+    const priorEntry = priorByTitle.get(normalizeTitle(title));
+    const base = priorEntry?.key ?? slugifyTitle(title);
+    let key = base;
+    let n = 2;
+    while (usedKeys.has(key)) key = `${base}_${n++}`;
+    usedKeys.add(key);
+
+    entries.push({ key, title, engine, rationale });
+  }
+
+  return entries;
+}
+
+function slugifyTitle(title: string): string {
+  return (
+    title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 60) || "document"
+  );
+}
+
+function normalizeTitle(title: string): string {
+  return title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

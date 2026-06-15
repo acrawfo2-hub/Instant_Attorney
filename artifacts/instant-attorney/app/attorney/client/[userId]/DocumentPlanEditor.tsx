@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { WizardType } from "@/lib/types";
 import type { PlanItem, PlanStatus } from "@/lib/next-step";
 
 const STATUS_LABEL: Record<PlanStatus, string> = {
@@ -15,30 +14,36 @@ const STATUS_LABEL: Record<PlanStatus, string> = {
 
 // Attorney control over the file's document plan. The AI ranks the documents
 // (priority order); this lets the attorney override which one is the client's
-// lead (most-important) document, or revert to the AI's pick.
+// lead (most-important) document, or revert to the AI's pick. Plan-based files
+// override by stable key; legacy files override by wizard type.
 export default function DocumentPlanEditor({
   caseFileId,
   items,
-  leadOverride,
+  usesPlan,
+  overridden,
   rationale,
 }: {
   caseFileId: string;
   items: PlanItem[];
-  leadOverride: WizardType | null;
+  usesPlan: boolean;
+  overridden: boolean;
   rationale?: string;
 }) {
   const router = useRouter();
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState("");
 
-  async function setLead(lead: WizardType | null) {
-    setPending(lead ?? "__reset__");
+  async function setLead(item: PlanItem | null) {
+    setPending(item?.key ?? "__reset__");
     setError("");
     try {
+      const payload = usesPlan
+        ? { leadKey: item?.key ?? null }
+        : { lead: item?.wizard ?? null };
       const res = await fetch(`/api/attorney/case-files/${caseFileId}/document-plan`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lead }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -56,7 +61,7 @@ export default function DocumentPlanEditor({
     <div className="atty-case-subsection">
       <h3 className="atty-case-subtitle">
         Document plan ({items.length})
-        {leadOverride && <span className="atty-plan-override-tag">manual lead</span>}
+        {overridden && <span className="atty-plan-override-tag">manual lead</span>}
       </h3>
       <p className="atty-plan-help">
         The client is guided to finish the <strong>lead</strong> document first.
@@ -69,7 +74,7 @@ export default function DocumentPlanEditor({
       <ol className="atty-plan-list">
         {items.map((item) => (
           <li
-            key={`${item.wizard}-${item.priority}`}
+            key={item.key}
             className={`atty-plan-item${item.isLead ? " atty-plan-item-lead" : ""}`}
           >
             <span className="atty-plan-num">{item.priority}</span>
@@ -82,15 +87,15 @@ export default function DocumentPlanEditor({
               <button
                 className="atty-plan-btn"
                 disabled={pending !== null}
-                onClick={() => setLead(item.wizard)}
+                onClick={() => setLead(item)}
               >
-                {pending === item.wizard ? "Setting…" : "Make lead"}
+                {pending === item.key ? "Setting…" : "Make lead"}
               </button>
             )}
           </li>
         ))}
       </ol>
-      {leadOverride && (
+      {overridden && (
         <button
           className="atty-plan-reset"
           disabled={pending !== null}
