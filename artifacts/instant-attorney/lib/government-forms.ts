@@ -189,6 +189,37 @@ export const GOVERNMENT_FORMS: GovernmentForm[] = [
     ],
     triggers: ["moved", "relocated", "new address", "changed my name", "register to vote"],
   },
+  {
+    key: "hud-903",
+    form_number: "Form HUD-903 (Housing Discrimination Complaint)",
+    title: "Housing Discrimination Complaint",
+    agency: "U.S. Department of Housing and Urban Development (HUD), Office of Fair Housing and Equal Opportunity",
+    jurisdiction: "Federal",
+    state_specific: false,
+    official_url: "https://www.hud.gov/topics/housing_discrimination/online_complaint",
+    revision: "2024",
+    purpose:
+      "Files a complaint that a housing provider — including an HOA or property-owners' association — discriminated against you on the basis of a protected class (e.g., disability, race, religion, familial status), such as refusing a reasonable accommodation.",
+    who_needs_it:
+      "Anyone who believes an HOA, landlord, or other housing provider discriminated against them under the Fair Housing Act — commonly after a denied reasonable-accommodation request (service/support animal, accessibility modification).",
+    deadline: "File within one year of the last date the discriminatory act occurred.",
+    fee: "No fee.",
+    submit_to: "HUD (online portal, by phone, or by mail to the regional FHEO office).",
+    fields: [
+      { name: "full_name", label: "Your full name", type: "string" },
+      { name: "address", label: "Your address", type: "address" },
+      { name: "respondent", label: "Who discriminated against you (HOA / landlord / manager name and address)", type: "string" },
+      { name: "property_address", label: "Address of the housing involved", type: "address" },
+      { name: "protected_basis", label: "Basis of the discrimination", type: "enum", options: ["Disability", "Race", "Color", "National origin", "Religion", "Sex", "Familial status"], help: "The protected class you believe you were treated differently because of." },
+      { name: "what_happened", label: "What happened", type: "string", help: "Briefly: what was done, by whom, and how it harmed you (e.g., a denied accommodation request)." },
+      { name: "date_of_act", label: "Date of the most recent discriminatory act", type: "date", help: "The one-year filing deadline runs from this date." },
+    ],
+    common_mistakes: [
+      "Waiting past the one-year deadline from the last discriminatory act.",
+      "Describing the dispute generally instead of tying it to a specific protected class and a specific act.",
+    ],
+    triggers: ["housing discrimination", "denied reasonable accommodation", "service animal denied", "fair housing", "HOA discrimination", "disability accommodation"],
+  },
 ];
 
 const FORMS_BY_KEY: Record<string, GovernmentForm> = Object.fromEntries(

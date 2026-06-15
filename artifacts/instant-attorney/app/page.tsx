@@ -338,6 +338,23 @@ export default function LandingPage() {
             </div>
           </div>
 
+          <div className="lp-area-tile" onClick={() => go("/free-chat?area=hoa")}>
+            <div className="lp-area-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 21h18" />
+                <path d="M5 21V7l8-4v18" />
+                <path d="M19 21V11l-6-4" />
+                <line x1="9" y1="9" x2="9" y2="9.01" />
+                <line x1="9" y1="13" x2="9" y2="13.01" />
+                <line x1="9" y1="17" x2="9" y2="17.01" />
+              </svg>
+            </div>
+            <div className="lp-area-name">HOA Disputes</div>
+            <div className="lp-area-desc">
+              Violation notices, fines, records requests, liens, and selective enforcement.
+            </div>
+          </div>
+
           <div className="lp-area-tile" onClick={() => go("/free-chat?area=nda")}>
             <div className="lp-area-icon">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

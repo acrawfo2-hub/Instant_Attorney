@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { getPracticeArea } from "@/lib/practice-areas";
 
 type Role = "user" | "assistant";
 
@@ -81,6 +82,22 @@ export default function FreeChatPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamingText]);
+
+  // Tailor the opening message to the practice area the user arrived from
+  // (/free-chat?area=hoa, etc.). Read after mount so server and first client
+  // render match (no hydration mismatch), and only swap the untouched greeting.
+  useEffect(() => {
+    const slug = new URLSearchParams(window.location.search).get("area");
+    const area = getPracticeArea(slug);
+    if (!area) return;
+    setMessages((prev) =>
+      prev.length === 1 && prev[0].role === "assistant"
+        ? [{ role: "assistant", content: area.opener }]
+        : prev
+    );
+    if (area.starterPrompt) setInput(area.starterPrompt);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function autoResize() {
     const el = textareaRef.current;
