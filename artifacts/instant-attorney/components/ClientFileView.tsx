@@ -1,6 +1,7 @@
 import React from "react";
 import Link from "next/link";
 import AttachmentPanel from "@/components/AttachmentPanel";
+import GovFormInstruments from "@/components/GovFormInstruments";
 import NextStepGuide from "@/components/NextStepGuide";
 import ReviewSlaClock from "@/components/ReviewSlaClock";
 import type { CaseFile, FactItem, Document, Profile, WizardType, ConsultRequest } from "@/lib/types";
@@ -446,6 +447,9 @@ export default function ClientFileView({
           )}
         </div>
       )}
+
+      {/* Government forms detected in chat — surfaced as instruments to complete */}
+      {!isAttorney && <GovFormInstruments caseFileId={caseFile.id} />}
 
       {/* Confirmed Facts + Gaps */}
       <div className="lf-card lf-card-half">

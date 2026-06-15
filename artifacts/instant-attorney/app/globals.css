@@ -5206,3 +5206,106 @@ mark.atty-placeholder {
   flex-shrink: 0;
   margin-top: 1px;
 }
+
+/* ── Government form instruments + guided completion ──────────────────────── */
+.lf-card-full { grid-column: 1 / -1; }
+.lf-inst-sub {
+  display: block;
+  font-size: 0.78rem;
+  opacity: 0.7;
+  margin-top: 0.15rem;
+}
+.lf-inst-reason {
+  display: block;
+  font-size: 0.82rem;
+  margin-top: 0.2rem;
+}
+
+.gf-wrap {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 4rem;
+}
+.gf-back {
+  display: inline-block;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  text-decoration: none;
+  opacity: 0.8;
+}
+.gf-header h1 { font-size: 1.4rem; margin: 0 0 0.25rem; }
+.gf-meta { font-size: 0.85rem; opacity: 0.7; margin: 0 0 0.5rem; }
+.gf-purpose { margin: 0 0 0.75rem; }
+.gf-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  font-size: 0.85rem;
+  padding: 0.75rem;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+.gf-progress { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem; }
+.gf-progress-bar {
+  flex: 1;
+  height: 8px;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.gf-progress-bar > div { height: 100%; background: #2f6df6; transition: width 0.2s; }
+.gf-progress > span { font-size: 0.8rem; white-space: nowrap; opacity: 0.8; }
+
+.gf-field { margin-bottom: 1.1rem; }
+.gf-field label { display: block; font-weight: 600; font-size: 0.92rem; margin-bottom: 0.2rem; }
+.gf-optional { font-weight: 400; opacity: 0.6; }
+.gf-help { font-size: 0.82rem; opacity: 0.75; margin: 0 0 0.35rem; }
+.gf-field input,
+.gf-field select {
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  font-size: 0.95rem;
+}
+.gf-error { color: #c0392b; font-size: 0.82rem; margin: 0.3rem 0 0; }
+
+.gf-actions { display: flex; gap: 0.75rem; margin: 1.5rem 0; }
+.gf-actions button {
+  padding: 0.6rem 1.1rem;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  background: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+.gf-actions .gf-complete { background: #2f6df6; color: #fff; border-color: #2f6df6; }
+.gf-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.gf-mistakes, .gf-checklist { margin-top: 1.5rem; }
+.gf-mistakes h3, .gf-checklist h3 { font-size: 1rem; margin: 0 0 0.5rem; }
+.gf-official { display: inline-block; margin-top: 0.75rem; font-weight: 600; }
+.gf-disclaimer { margin-top: 2rem; font-size: 0.78rem; opacity: 0.65; }
+
+/* ── Dynamic (unverified) government forms ────────────────────────────────── */
+.gf-badge-unverified {
+  display: inline-block;
+  background: #fff4d6;
+  color: #8a6100;
+  border: 1px solid #e6c869;
+  border-radius: 999px;
+  padding: 0.05rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  margin: 0 0.4rem 0 0;
+  white-space: nowrap;
+}
+.gf-unverified-note {
+  background: #fff9ec;
+  border: 1px solid #e6c869;
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.85rem;
+  margin: 0.5rem 0 0.75rem;
+}
