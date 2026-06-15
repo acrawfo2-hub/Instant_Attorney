@@ -4,7 +4,7 @@ import { use, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { Attachment, Document } from "@/lib/types";
-import { docTypeLabel } from "@/lib/types";
+import { docTypeLabel, personDisplayName } from "@/lib/types";
 
 interface DocumentDetail {
   id: string;
@@ -265,7 +265,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
         <div className="atty-review-sidebar">
           <div className="atty-review-section">
             <h3>Client</h3>
-            <p>{doc.profiles.full_name ?? "—"}</p>
+            <p>{personDisplayName(doc.profiles, "—")}</p>
             <p>{doc.profiles.email}</p>
             {doc.profiles.phone && <p>{doc.profiles.phone}</p>}
           </div>

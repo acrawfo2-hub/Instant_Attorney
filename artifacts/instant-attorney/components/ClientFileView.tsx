@@ -6,7 +6,7 @@ import NextStepGuide from "@/components/NextStepGuide";
 import ReviewSlaClock from "@/components/ReviewSlaClock";
 import type { CaseFile, FactItem, Document, Profile, WizardType, ConsultRequest } from "@/lib/types";
 import { isValidWizardType } from "@/lib/document-utils";
-import { WIZARD_LABELS, docTypeLabel } from "@/lib/types";
+import { WIZARD_LABELS, docTypeLabel, personDisplayName } from "@/lib/types";
 
 // ── Document status display ──────────────────────────────────────────────────
 
@@ -231,7 +231,7 @@ export default function ClientFileView({
           <div className="lf-atty-banner-inner">
             <div>
               <div className="lf-atty-banner-client">
-                {clientProfile.full_name ?? clientProfile.email}
+                {personDisplayName(clientProfile)}
               </div>
               {clientProfile.email && clientProfile.full_name && (
                 <div className="lf-atty-banner-email">{clientProfile.email}</div>

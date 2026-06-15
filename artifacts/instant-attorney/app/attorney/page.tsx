@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { docTypeLabel } from "@/lib/types";
+import { docTypeLabel, personDisplayName } from "@/lib/types";
 import type { Document, CaseFile, Profile } from "@/lib/types";
 import AttorneyFileLog from "@/components/AttorneyFileLog";
 import ConsultRequestQueue, { type ConsultRequestRow } from "@/components/ConsultRequestQueue";
@@ -92,7 +92,7 @@ export default async function AttorneyPage() {
             <span>Attorney Dashboard</span>
           </div>
           <div className="atty-header-right">
-            <span className="atty-name">{profile.full_name ?? profile.email}</span>
+            <span className="atty-name">{personDisplayName(profile)}</span>
             <LogoutButton />
           </div>
         </div>
@@ -117,7 +117,7 @@ export default async function AttorneyPage() {
                 {pending.map((doc) => (
                   <tr key={doc.id} className="atty-tr-urgent">
                     <td className="atty-td-sla"><ReviewClock submittedAt={doc.submitted_at ?? null} /></td>
-                    <td>{doc.profiles?.full_name ?? doc.profiles?.email ?? "Unknown"}</td>
+                    <td>{personDisplayName(doc.profiles)}</td>
                     <td className="atty-td-doc">
                       {docTypeLabel(doc.doc_type)}: {doc.title}
                     </td>

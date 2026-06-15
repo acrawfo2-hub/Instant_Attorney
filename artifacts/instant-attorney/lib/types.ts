@@ -247,6 +247,23 @@ export function docTypeLabel(docType: string): string {
 }
 
 /**
+ * Resolve a person's display name. `full_name` is collected at registration, but
+ * legacy/seed accounts can have an empty string (not null), which the `??`
+ * operator does not treat as missing — that left the attorney views showing a
+ * blank Client column. Trim and fall back to email, then to `fallback`.
+ */
+export function personDisplayName(
+  profile: { full_name?: string | null; email?: string | null } | null | undefined,
+  fallback = "Unknown",
+): string {
+  const name = profile?.full_name?.trim();
+  if (name) return name;
+  const email = profile?.email?.trim();
+  if (email) return email;
+  return fallback;
+}
+
+/**
  * Normalize a possibly-annotated recommendation to a clean WizardType.
  * The model sometimes emits bullets like `draft_contract — ready to proceed`
  * or `RECOMMEND_CONSULT: true`; we take the leading identifier token and

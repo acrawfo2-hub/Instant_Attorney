@@ -1,7 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { docTypeLabel } from "@/lib/types";
+import { docTypeLabel, personDisplayName } from "@/lib/types";
 import type {
   CaseFile,
   Document,
@@ -141,11 +141,11 @@ export default async function ClientFilePage({
         {/* Client identity */}
         <div className="atty-client-card">
           <div className="atty-client-avatar">
-            {(client.full_name ?? client.email).charAt(0).toUpperCase()}
+            {personDisplayName(client).charAt(0).toUpperCase()}
           </div>
           <div className="atty-client-info">
             <div className="atty-client-name">
-              {client.full_name ?? client.email}
+              {personDisplayName(client)}
             </div>
             <div className="atty-client-email">{client.email}</div>
             {client.phone && (

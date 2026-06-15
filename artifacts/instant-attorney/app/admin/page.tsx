@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { personDisplayName } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -121,7 +122,7 @@ export default async function AdminPage() {
             <span>Token Limit Monitor</span>
           </div>
           <div className="admin-header-right">
-            <span className="admin-name">{profile.full_name ?? profile.email}</span>
+            <span className="admin-name">{personDisplayName(profile)}</span>
             <Link href="/attorney" className="admin-link">Attorney Dashboard →</Link>
           </div>
         </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { personDisplayName } from "@/lib/types";
 import type { ConsultRequest, CaseFile, Profile } from "@/lib/types";
 import ConsultActions from "@/components/ConsultActions";
 
@@ -22,7 +23,7 @@ function fmtCST(iso: string): string {
 }
 
 function clientName(row: ConsultRequestRow) {
-  return row.profiles?.full_name ?? row.profiles?.email ?? "Unknown client";
+  return personDisplayName(row.profiles, "Unknown client");
 }
 
 function matterLabel(cf: CaseFile | null | undefined) {
