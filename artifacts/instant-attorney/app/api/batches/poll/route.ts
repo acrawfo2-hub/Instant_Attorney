@@ -73,25 +73,27 @@ export async function GET(req: NextRequest) {
         }
 
         const draftText = extractDraftText(text);
-        if (draftText) {
-          await recordAiFromMessage(db, result.result.message, {
-            userId: doc.user_id,
-            caseFileId: doc.case_file_id,
-            feature: "pre_warm",
-            costMultiplier: BATCH_COST_MULTIPLIER,
-            metadata: {
-              document_id: doc.id,
-              batch_id: batchId,
-              wizard_type: doc.doc_type,
-              ...limitSignalMetadata({
-                model: result.result.message.model,
-                outputTokens: result.result.message.usage.output_tokens,
-                priorLimit: 8000,
-                stopReason: result.result.message.stop_reason,
-              }),
-            },
-          });
 
+        // Record usage for the batch result regardless of outcome — the API call was billed.
+        await recordAiFromMessage(db, result.result.message, {
+          userId: doc.user_id,
+          caseFileId: doc.case_file_id,
+          feature: "pre_warm",
+          costMultiplier: BATCH_COST_MULTIPLIER,
+          metadata: {
+            document_id: doc.id,
+            batch_id: batchId,
+            wizard_type: doc.doc_type,
+            ...limitSignalMetadata({
+              model: result.result.message.model,
+              outputTokens: result.result.message.usage.output_tokens,
+              priorLimit: 8000,
+              stopReason: result.result.message.stop_reason,
+            }),
+          },
+        });
+
+        if (draftText) {
           await db.from("documents").update({
             draft_text: draftText,
             content_json: { init_response: text, ...(truncated ? { truncated: true } : {}) },
@@ -100,9 +102,16 @@ export async function GET(req: NextRequest) {
           results.preWarm.completed++;
           console.log(`[batch-poll] Pre-warm complete for doc ${doc.id}${truncated ? " (truncated)" : ""}`);
         } else if (truncated) {
-          // Truncated before draft block was emitted — leave doc in pre_warmed state for retry
-          results.preWarm.errors++;
-          console.warn(`[batch-poll] Pre-warm truncated with no extractable draft for doc ${doc.id} — leaving for retry`);
+          // Truncated before the draft block was emitted. Treat truncation as a valid partial
+          // result: persist the best-effort output as the draft instead of deleting/retrying,
+          // so a long generation never loops or loses the user's work.
+          await db.from("documents").update({
+            draft_text: text,
+            content_json: { init_response: text, truncated: true },
+            updated_at: new Date().toISOString(),
+          }).eq("id", doc.id);
+          results.preWarm.completed++;
+          console.log(`[batch-poll] Pre-warm truncated with no draft block for doc ${doc.id} — saved partial output`);
         } else {
           results.preWarm.errors++;
           await db.from("documents").delete().eq("id", doc.id);

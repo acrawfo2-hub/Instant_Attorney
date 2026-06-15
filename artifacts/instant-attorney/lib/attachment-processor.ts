@@ -186,11 +186,16 @@ If no companion documents are needed, omit the REQUESTED ATTACHMENTS bullets ent
       { type: "text", text: `File: ${fileName}\n\n${analysisPrompt}` },
     ];
 
-    const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: maxOutputTokensFor("claude-sonnet-4-6"),
-      messages: [{ role: "user", content: messageContent }],
-    });
+    // Use streaming: a non-streaming create() at this max_tokens ceiling throws the SDK
+    // "Streaming is required…" error, which would fall through to the catch and delete the
+    // user's uploaded file. finalMessage() yields the same aggregated message shape.
+    const response = await anthropic.messages
+      .stream({
+        model: "claude-sonnet-4-6",
+        max_tokens: maxOutputTokensFor("claude-sonnet-4-6"),
+        messages: [{ role: "user", content: messageContent }],
+      })
+      .finalMessage();
 
     if (caseFile?.user_id) {
       await recordAiFromMessage(db, response, {
@@ -363,7 +368,17 @@ If no companion documents are needed, omit the REQUESTED ATTACHMENTS bullets ent
       }
     }
   } catch (err) {
-    console.error("[attachment-processor] error:", err);
-    await removeAttachment(db, attachmentId);
+    // Do NOT delete the attachment here: the user's uploaded file is valuable even if AI
+    // analysis fails (e.g. transient API errors). Keep the file and mark it ready without
+    // analysis so the upload is never silently lost. Only unreadable/unsupported files are
+    // removed (handled in the toAnthropicBlock conversion catch above).
+    console.error("[attachment-processor] analysis failed, keeping attachment:", err);
+    const { error: markErr } = await db
+      .from("attachments")
+      .update({ status: "ready", updated_at: new Date().toISOString() })
+      .eq("id", attachmentId);
+    if (markErr) {
+      console.error("[attachment-processor] failed to mark attachment ready after error:", markErr);
+    }
   }
 }
