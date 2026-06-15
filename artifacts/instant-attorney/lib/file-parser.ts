@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { WizardType, LegalStrategy } from "./types";
+import { coerceWizardType } from "./types";
 import { isKnownFormKey } from "./government-forms.ts";
 import { provisionalFormDef, slugifyFormKey } from "./gov-form-lookup.ts";
 import type { DynamicCandidate } from "./gov-form-lookup.ts";
@@ -283,7 +284,9 @@ async function parseLegalStrategy(
     instruments: extractBullets(block, "SUGGESTED INSTRUMENTS"),
     strengths: extractBullets(block, "STRENGTHS"),
     risks: extractBullets(block, "RISKS"),
-    recommended_wizards: extractBullets(block, "RECOMMENDED WIZARDS") as WizardType[],
+    recommended_wizards: extractBullets(block, "RECOMMENDED WIZARDS")
+      .map(coerceWizardType)
+      .filter((w): w is WizardType => w !== null),
     recommend_consult: consultMatch ? consultMatch[1].toLowerCase() === "true" : undefined,
   };
 

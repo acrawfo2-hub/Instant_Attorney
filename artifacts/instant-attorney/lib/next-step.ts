@@ -1,5 +1,5 @@
 import type { CaseFile, Document, FactItem, WizardType } from "@/lib/types";
-import { isValidWizardType } from "@/lib/document-utils";
+import { coerceWizardType } from "@/lib/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Next-Step engine
@@ -67,7 +67,9 @@ function pickCreateTarget(
   caseFile: CaseFile,
   preWarmedByType: Record<string, string>,
 ): { wType: WizardType; docId?: string } {
-  const recommended = (caseFile.legal_strategy?.recommended_wizards ?? []).filter(isValidWizardType);
+  const recommended = (caseFile.legal_strategy?.recommended_wizards ?? [])
+    .map(coerceWizardType)
+    .filter((w): w is WizardType => w !== null);
   const wType = recommended[0] ?? "general_document";
   return { wType, docId: preWarmedByType[wType] };
 }
@@ -91,7 +93,7 @@ export function computeNextStep(
   // ── Signals ────────────────────────────────────────────────────────────────
   const hasStory = facts.length > 0 || !!caseFile.legal_strategy;
   const canCreate =
-    (caseFile.legal_strategy?.recommended_wizards ?? []).some(isValidWizardType) ||
+    (caseFile.legal_strategy?.recommended_wizards ?? []).some((w) => coerceWizardType(w) !== null) ||
     (caseFile.legal_strategy?.instruments?.length ?? 0) > 0;
 
   const draftDoc = documents.find((d) => d.status === "draft" && hasDraftText(d));

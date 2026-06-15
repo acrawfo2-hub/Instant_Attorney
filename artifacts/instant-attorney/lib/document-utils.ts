@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { notifyAttorneyDocumentReady } from "./notify";
-import { WIZARD_LABELS } from "./types";
+import { WIZARD_LABELS, coerceWizardType } from "./types";
 import type { WizardType, Document, CaseFile, Profile } from "./types";
 
 export function isValidWizardType(type: string): type is WizardType {
@@ -11,7 +11,8 @@ export function isValidWizardType(type: string): type is WizardType {
 export function pickFirstValidWizard(wizards: string[] | undefined): WizardType | null {
   if (!wizards?.length) return null;
   for (const w of wizards) {
-    if (isValidWizardType(w)) return w;
+    const coerced = coerceWizardType(w);
+    if (coerced) return coerced;
   }
   return null;
 }

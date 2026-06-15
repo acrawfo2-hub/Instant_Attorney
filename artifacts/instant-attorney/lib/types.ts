@@ -246,6 +246,18 @@ export function docTypeLabel(docType: string): string {
   return docType.replace(/_/g, " ");
 }
 
+/**
+ * Normalize a possibly-annotated recommendation to a clean WizardType.
+ * The model sometimes emits bullets like `draft_contract — ready to proceed`
+ * or `RECOMMEND_CONSULT: true`; we take the leading identifier token and
+ * keep it only if it maps to a real wizard type. Returns null otherwise.
+ */
+export function coerceWizardType(raw: string | null | undefined): WizardType | null {
+  if (!raw) return null;
+  const token = raw.trim().split(/[^a-zA-Z_]/)[0]?.toLowerCase();
+  return token && token in WIZARD_LABELS ? (token as WizardType) : null;
+}
+
 export function isPrimaryDraft(doc: Pick<Document, "parent_document_id">): boolean {
   return !doc.parent_document_id;
 }
