@@ -1,5 +1,6 @@
 - [Screenshotting Vite previews](canvas-vite-preview-screenshots.md) — external_url shots of mockup-sandbox previews go blank/flaky; use app_preview instead.
 - [Instant-Attorney on Supabase](instant-attorney-supabase.md) — this app uses Supabase directly (not Drizzle); Anthropic key env is process.env.Claude_Instant_Attorney.
+- [Instant-Attorney routing & build isolation](instant-attorney-routing.md) — npm-isolated (excluded from pnpm workspace); api-server owns `/api`, so unlisted `/api/*` routes added to instant-attorney are silently shadowed.
 - [Anthropic "Streaming is required"](anthropic-streaming-required.md) — sync messages.create() with large max_tokens throws+502s; use messages.stream().finalMessage(), return JSON.
 - [Instant-Attorney fact_items writes](instant-attorney-fact-writes.md) — persist wizard answers before drafting; fact_items has no label/source col; RLS skips case ownership so check it app-side.
 - [Wizard push-forward flow](instant-attorney-wizard-flow.md) — answering wizard questions auto-sends draft to attorney; wizard route must NOT downgrade an elevated doc status to "draft" on edit.

@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # Daily smoke check against the deployed app at 12:00 UTC.
+    - cron: "0 12 * * *"
+
+jobs:
+  test:
+    name: Typecheck & unit tests
+    runs-on: ubuntu-latest
+    # instant-attorney is a standalone npm project (deliberately excluded from the
+    # pnpm workspace), so it is built and tested with npm from its own directory.
+    defaults:
+      run:
+        working-directory: artifacts/instant-attorney
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: artifacts/instant-attorney/package-lock.json
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+  smoke:
+    name: Smoke e2e (deployed app)
+    # Only on a schedule or manual trigger — never on every push — so it doesn't
+    # hammer the live app. It is AI-free, so it costs no Anthropic budget.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Run smoke checks
+        run: node artifacts/instant-attorney/scripts/e2e.mjs
+        env:
+          # Add these in GitHub: Settings -> Secrets and variables -> Actions.
+          BASE_URL: ${{ secrets.E2E_BASE_URL }}
+          E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
+          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
