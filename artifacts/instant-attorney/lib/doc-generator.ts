@@ -584,6 +584,47 @@ function stripWrappingEmphasis(text: string): string {
   return m ? m[2].trim() : t;
 }
 
+// ── Markdown table + blockquote helpers ──────────────────────────────────────
+// Drafting models sometimes emit Markdown tables (| a | b |) and blockquotes
+// (> …). Without conversion these render as literal pipes and angle brackets in
+// the .docx. Tables become real docx tables; blockquote markers are stripped.
+
+function isTableRow(line: string): boolean {
+  return (line.trim().match(/\|/g)?.length ?? 0) >= 2;
+}
+
+function parseTableCells(line: string): string[] {
+  return line.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+}
+
+function isTableSeparator(cells: string[]): boolean {
+  return cells.length > 0 && cells.every((c) => /^:?-{2,}:?$/.test(c) || c === "");
+}
+
+function buildTable(rows: string[][]): Table {
+  const colCount = Math.max(...rows.map((r) => r.length));
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: rows.map((cells, rowIdx) =>
+      new TableRow({
+        children: Array.from({ length: colCount }, (_, c) => {
+          const text = cells[c] ?? "";
+          return new TableCell({
+            children: [
+              new Paragraph({
+                children:
+                  rowIdx === 0
+                    ? [new TextRun({ text: text.replace(/\*\*/g, ""), bold: true })]
+                    : inlineRuns(text),
+              }),
+            ],
+          });
+        }),
+      })
+    ),
+  });
+}
+
 // ── Generate .docx from AI-formatted draft text ──────────────────────────────
 // Used by the Drafter agent — wraps near-final AI text in a proper .docx shell
 // with firm header, DRAFT watermark, and clean paragraph formatting.
@@ -595,7 +636,7 @@ export async function generateDocxFromText(
 ): Promise<Buffer> {
   const lines = draftText.split("\n");
 
-  const children: Paragraph[] = [
+  const children: (Paragraph | Table)[] = [
     ...firmHeader(),
     new Paragraph({
       children: [new TextRun({ text: title, bold: true, size: 26 })],
@@ -605,8 +646,28 @@ export async function generateDocxFromText(
     new Paragraph({ text: "" }),
   ];
 
-  for (const line of lines) {
-    const trimmed = line.trim();
+  for (let i = 0; i < lines.length; i++) {
+    let trimmed = lines[i].trim();
+    if (!trimmed) {
+      children.push(new Paragraph({ text: "" }));
+      continue;
+    }
+
+    // Markdown table block → real docx table (drop the |---| separator row)
+    if (isTableRow(trimmed)) {
+      const rows: string[][] = [];
+      while (i < lines.length && isTableRow(lines[i].trim())) {
+        const cells = parseTableCells(lines[i].trim());
+        if (!isTableSeparator(cells)) rows.push(cells);
+        i++;
+      }
+      i--; // for-loop will advance past the last consumed line
+      if (rows.length) children.push(buildTable(rows));
+      continue;
+    }
+
+    // Strip Markdown blockquote markers ("> ", "> > ") — render as normal text
+    trimmed = trimmed.replace(/^(?:>\s?)+/, "");
     if (!trimmed) {
       children.push(new Paragraph({ text: "" }));
       continue;
@@ -631,9 +692,9 @@ export async function generateDocxFromText(
       continue;
     }
 
-    // Section headings: ALL CAPS, "N. Heading", or a whole line wrapped in **bold**
+    // Section headings: ALL CAPS, "N." / "N.N" numbered, or a whole line in **bold**
     const unwrapped = stripWrappingEmphasis(trimmed);
-    const isNumberedHeading = /^\d+\.\s+\S/.test(unwrapped) && unwrapped.length < 80;
+    const isNumberedHeading = /^\d+(?:\.\d+)*\.?\s+\S/.test(unwrapped) && unwrapped.length < 80;
     const isAllCapsHeading =
       unwrapped === unwrapped.toUpperCase() && unwrapped.length < 80 && /[A-Z]{3,}/.test(unwrapped);
     const isWrappedHeading = unwrapped !== trimmed && unwrapped.length < 80;
