@@ -13,6 +13,28 @@ import {
 } from "docx";
 import type { CaseFile, FactItem, Profile, WizardType } from "./types";
 
+// Build a safe Content-Disposition value for a .docx download. HTTP headers must
+// be Latin-1, but document titles routinely contain em-dashes ("— Revised Draft")
+// and other non-ASCII characters that crash the Response constructor with a
+// ByteString error. We provide an ASCII-only `filename` fallback plus an RFC 5987
+// `filename*` so modern browsers still get the full Unicode name.
+export function docxContentDisposition(title: string): string {
+  const base = (title && title.trim().length ? title.trim() : "document").replace(/\.docx$/i, "");
+  const ascii = base
+    .replace(/[\u2010-\u2015\u2212]/g, "-") // various dashes → hyphen
+    .replace(/[\u2018\u2019]/g, "'") // curly single quotes
+    .replace(/[\u201C\u201D]/g, '"') // curly double quotes
+    .replace(/[^\x20-\x7E]/g, "") // drop any remaining non-ASCII
+    .replace(/["]/g, "") // strip quotes that break the header
+    .replace(/[\/\\:*?<>|]/g, "-") // path-reserved chars → hyphen (avoid filename/path hazards)
+    .replace(/\s+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "");
+  const asciiName = `${ascii.length ? ascii : "document"}.docx`;
+  const utf8Name = encodeURIComponent(`${base}.docx`).replace(/['()]/g, escape).replace(/\*/g, "%2A");
+  return `attachment; filename="${asciiName}"; filename*=UTF-8''${utf8Name}`;
+}
+
 export interface DocGenInput {
   docType: WizardType;
   wizardData: Record<string, unknown>;
@@ -562,7 +584,13 @@ function parseEmphasis(text: string): InlineToken[] {
 // their contents.
 function inlineRuns(text: string): TextRun[] {
   const runs: TextRun[] = [];
-  const parts = text.split(/(\[\[.*?\]\])/g);
+  // Emphasis that wraps a [[placeholder]] (e.g. "**[[X]]**") would otherwise be
+  // torn apart by the placeholder split below, leaving orphan ** markers. The
+  // placeholder run is already styled, so drop the wrapping markers first.
+  const normalized = text
+    .replace(/\*\*(\[\[[\s\S]*?\]\])\*\*/g, "$1")
+    .replace(/\*(\[\[[\s\S]*?\]\])\*/g, "$1");
+  const parts = normalized.split(/(\[\[.*?\]\])/g);
   for (const part of parts) {
     if (!part) continue;
     if (part.startsWith("[[") && part.endsWith("]]")) {
@@ -570,10 +598,20 @@ function inlineRuns(text: string): TextRun[] {
       continue;
     }
     for (const tok of parseEmphasis(part)) {
-      runs.push(new TextRun({ text: tok.text, bold: tok.bold, italics: tok.italics }));
+      // Safety net: a residual ** is always a broken bold marker, never literal
+      // text in these drafts — strip it so it never lands in the .docx.
+      const clean = tok.text.replace(/\*\*/g, "");
+      if (!clean) continue;
+      runs.push(new TextRun({ text: clean, bold: tok.bold, italics: tok.italics }));
     }
   }
   return runs.length ? runs : [new TextRun({ text })];
+}
+
+// Plain text of a line with all emphasis markers removed (used for headings,
+// which are rendered fully bold and must not show literal ** / * characters).
+function stripInlineMarkers(text: string): string {
+  return parseEmphasis(text).map((t) => t.text).join("").replace(/\*\*/g, "");
 }
 
 // If a whole line is wrapped in *…* or **…**, return the inner text (so a line
@@ -640,7 +678,7 @@ export async function generateDocxFromText(
 
     if (isNumberedHeading || isAllCapsHeading || isWrappedHeading) {
       children.push(new Paragraph({
-        children: [new TextRun({ text: unwrapped, bold: true })],
+        children: [new TextRun({ text: stripInlineMarkers(unwrapped), bold: true })],
         heading: HeadingLevel.HEADING_2,
         spacing: { before: 200, after: 80 },
       }));

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { generateDocument } from "@/lib/doc-generator";
+import { generateDocument, docxContentDisposition } from "@/lib/doc-generator";
 import { finalizeDocumentSubmission } from "@/lib/document-utils";
 import { BYPASS_USER_ID, WIZARD_LABELS } from "@/lib/types";
 import type { CaseFile, FactItem, Profile, WizardType } from "@/lib/types";
@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
   return new Response(new Uint8Array(buffer), {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "Content-Disposition": `attachment; filename="${docTitle.replace(/\s+/g, "_")}.docx"`,
+      "Content-Disposition": docxContentDisposition(docTitle),
       "X-Document-Id": docRecord.id,
     },
   });

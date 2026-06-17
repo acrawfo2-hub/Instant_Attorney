@@ -6,3 +6,21 @@ id = "PHKcwXmyqZ8_ljy09Ch0x"
 uri = "file://.local/vicky-second-draft.txt"
 type = "text"
 title = "Vicky — Revised 2nd Draft (Single Member Operating Agreement)"
+
+[[outputs]]
+id = "6nkrHrStyN9K4ogFcQrtt"
+uri = "file://artifacts/instant-attorney/.ia-tmp/first_draft.docx"
+type = "word_document"
+title = "First Draft — Operating Agreement (regenerated)"
+
+[[outputs]]
+id = "aevD6BH4iztzrCfoTGfnY"
+uri = "file://artifacts/instant-attorney/.ia-tmp/critical_review.docx"
+type = "word_document"
+title = "Critical Review (regenerated)"
+
+[[outputs]]
+id = "_1oU4dmUzHL7COUVt50LE"
+uri = "file://artifacts/instant-attorney/.ia-tmp/second_draft.docx"
+type = "word_document"
+title = "Second Draft — Revised (regenerated)"

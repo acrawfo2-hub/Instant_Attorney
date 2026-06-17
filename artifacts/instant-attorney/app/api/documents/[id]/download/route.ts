@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { generateDocxFromText } from "@/lib/doc-generator";
+import { generateDocxFromText, docxContentDisposition } from "@/lib/doc-generator";
 import { BYPASS_USER_ID } from "@/lib/types";
 import type { CaseFile } from "@/lib/types";
 
@@ -55,12 +55,10 @@ export async function GET(
     console.error("[documents/download] docx generation error:", err);
     return NextResponse.json({ error: "Could not build the document file" }, { status: 500 });
   }
-  const filename = `${doc.title.replace(/\s+/g, "_")}.docx`;
-
   return new Response(new Uint8Array(buffer), {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Disposition": docxContentDisposition(doc.title),
     },
   });
 }
