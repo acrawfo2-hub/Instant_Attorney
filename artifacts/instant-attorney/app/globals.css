@@ -5024,6 +5024,53 @@ mark.atty-placeholder {
 .lf-doc-download-link:hover { text-decoration: underline; }
 .lf-doc-download-link-muted { color: var(--brand-text-lt); font-weight: 500; }
 
+/* Client "Information needed" fill-in panel */
+.lf-info-needed {
+  margin-top: 12px;
+  border: 1px solid var(--brand-border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  background: rgba(0, 0, 0, 0.015);
+}
+.lf-info-needed-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 12px; }
+.lf-info-needed-title { font-size: 13px; font-weight: 700; color: var(--brand-navy); }
+.lf-info-needed-sub { font-size: 12px; color: var(--brand-text-lt); }
+.lf-info-group { margin-bottom: 12px; }
+.lf-info-group-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--brand-text-lt);
+  margin-bottom: 8px;
+}
+.lf-info-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.lf-info-label { font-size: 12px; font-weight: 600; color: var(--brand-text-dk); }
+.lf-info-hint { display: block; font-weight: 400; color: var(--brand-text-lt); margin-top: 1px; }
+.lf-info-input {
+  font-size: 13px;
+  padding: 8px 10px;
+  border: 1px solid var(--brand-border);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--brand-text-dk);
+}
+.lf-info-input:focus { outline: none; border-color: var(--brand-navy); }
+.lf-info-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.lf-info-save {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 7px;
+  background: var(--brand-navy);
+  color: #fff;
+  cursor: pointer;
+}
+.lf-info-save:disabled { opacity: 0.5; cursor: not-allowed; }
+.lf-info-msg { font-size: 12px; color: var(--brand-green, #1a7f4b); }
+.lf-info-error { font-size: 12px; color: #b00020; }
+
 /* ── Wizard spotlight (dashboard "Your Next Step") ──────────────────────────── */
 @keyframes wizard-glow {
   0%, 100% { box-shadow: 0 0 0 0 rgba(193, 154, 58, 0), 0 2px 12px rgba(0,0,0,0.06); }

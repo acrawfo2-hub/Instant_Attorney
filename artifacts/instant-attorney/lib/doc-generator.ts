@@ -12,7 +12,7 @@ import {
   WidthType,
 } from "docx";
 import type { CaseFile, FactItem, Profile, WizardType } from "./types";
-import { extractPlaceholders, humanizeLabel } from "./wizard-parsing";
+import { placeholderFields } from "./wizard-parsing";
 
 export interface DocGenInput {
   docType: WizardType;
@@ -755,25 +755,11 @@ export async function generateDocxFromText(
 // call — the same blanks that are highlighted in the draft, listed in one place.
 // A placeholder is treated as required unless its descriptor says NON-BLOCKING.
 
-export function neededInfoItems(draftText: string): { label: string; hint: string; required: boolean }[] {
-  return extractPlaceholders(draftText).map(({ raw }) => {
-    const upper = raw.toUpperCase();
-    const required = !upper.includes("NON-BLOCKING");
-    // Split "LABEL — descriptor" into a clean label and a why/what hint.
-    const dashIdx = raw.search(/\s[—-]\s/);
-    const labelRaw = dashIdx >= 0 ? raw.slice(0, dashIdx) : raw;
-    let hint = dashIdx >= 0 ? raw.slice(dashIdx).replace(/^\s*[—-]\s*/, "") : "";
-    // Drop the internal BLOCKING/NON-BLOCKING bookkeeping from the client-facing hint.
-    hint = hint.replace(/\b(NON-)?BLOCKING\b[:\s]*/gi, "").replace(/\s*[—-]\s*$/, "").trim();
-    return { label: humanizeLabel(labelRaw.trim()), hint, required };
-  });
-}
-
 export async function generateNeededInfoDocx(
   documentTitle: string,
   draftText: string
 ): Promise<Buffer> {
-  const items = neededInfoItems(draftText);
+  const items = placeholderFields(draftText);
   const required = items.filter((i) => i.required);
   const optional = items.filter((i) => !i.required);
 
