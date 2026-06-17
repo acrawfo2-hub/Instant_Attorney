@@ -107,154 +107,191 @@ export async function POST(
     updated_at: new Date().toISOString(),
   }).eq("id", id);
 
-  try {
-    // Stream and assemble — non-streaming calls at our token ceilings are rejected
-    // by the SDK ("Streaming is required…") before they reach the API.
-    const fitnessResponse = await anthropic.messages.stream({
-      model: FITNESS_MODEL,
-      max_tokens: maxOutputTokensFor(FITNESS_MODEL),
-      system: [
-        {
-          type: "text" as const,
-          text: DOCUMENT_TYPE_FITNESS_SYSTEM_PROMPT,
-          cache_control: { type: "ephemeral" as const },
-        },
-      ],
-      messages: [{
-        role: "user",
-        content: buildDocumentTypeFitnessUserMessage(parentDoc, caseFile, facts, attachments),
-      }],
-    }).finalMessage();
+  // Generation runs two model calls (Haiku fitness + Opus second draft) and can
+  // take minutes. We previously awaited everything before returning a single JSON
+  // response, which left the client↔server connection idle the whole time — an
+  // intermediate proxy then dropped it and the browser showed "Network error".
+  // Instead we stream NDJSON: periodic heartbeats keep the connection alive while
+  // the models run, and the final line carries the result. See client handler in
+  // app/attorney/review/[id]/page.tsx.
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      let closed = false;
+      const send = (obj: unknown) => {
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
+        } catch {
+          /* controller already closed */
+        }
+      };
+      const heartbeat = setInterval(() => send({ type: "heartbeat" }), 10000);
+      // Emit one heartbeat immediately so the proxy sees bytes right away.
+      send({ type: "heartbeat" });
 
-    const fitnessText = fitnessResponse.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("");
+      try {
+        // Stream and assemble — non-streaming calls at our token ceilings are rejected
+        // by the SDK ("Streaming is required…") before they reach the API.
+        const fitnessResponse = await anthropic.messages.stream({
+          model: FITNESS_MODEL,
+          max_tokens: maxOutputTokensFor(FITNESS_MODEL),
+          system: [
+            {
+              type: "text" as const,
+              text: DOCUMENT_TYPE_FITNESS_SYSTEM_PROMPT,
+              cache_control: { type: "ephemeral" as const },
+            },
+          ],
+          messages: [{
+            role: "user",
+            content: buildDocumentTypeFitnessUserMessage(parentDoc, caseFile, facts, attachments),
+          }],
+        }).finalMessage();
 
-    await recordAiFromMessage(db, fitnessResponse, {
-      userId: parentDoc.user_id,
-      actorId: userId,
-      caseFileId: parentDoc.case_file_id,
-      feature: "attorney_second_draft_fitness",
-      metadata: {
-        document_id: id,
-        ...limitSignalMetadata({
-          model: fitnessResponse.model,
-          outputTokens: fitnessResponse.usage.output_tokens,
-          priorLimit: 600,
-          stopReason: fitnessResponse.stop_reason,
-        }),
-      },
-    });
+        const fitnessText = fitnessResponse.content
+          .filter((b): b is Anthropic.TextBlock => b.type === "text")
+          .map((b) => b.text)
+          .join("");
 
-    const fitness = parseDocumentTypeFitness(fitnessText);
+        await recordAiFromMessage(db, fitnessResponse, {
+          userId: parentDoc.user_id,
+          actorId: userId,
+          caseFileId: parentDoc.case_file_id,
+          feature: "attorney_second_draft_fitness",
+          metadata: {
+            document_id: id,
+            ...limitSignalMetadata({
+              model: fitnessResponse.model,
+              outputTokens: fitnessResponse.usage.output_tokens,
+              priorLimit: 600,
+              stopReason: fitnessResponse.stop_reason,
+            }),
+          },
+        });
 
-    if (!fitness.fit) {
-      await db.from("documents").update({
-        review_status: "review_ready",
-        updated_at: new Date().toISOString(),
-      }).eq("id", id);
+        const fitness = parseDocumentTypeFitness(fitnessText);
 
-      return NextResponse.json(
-        {
-          error: "Document type may not be appropriate for this matter",
+        if (!fitness.fit) {
+          await db.from("documents").update({
+            review_status: "review_ready",
+            updated_at: new Date().toISOString(),
+          }).eq("id", id);
+
+          send({
+            type: "fitness_reject",
+            error: "Document type may not be appropriate for this matter",
+            fitness,
+            document_type: docTypeLabel(parentDoc.doc_type),
+          });
+          return;
+        }
+
+        const draftResponse = await anthropic.messages.stream({
+          model: SECOND_DRAFT_MODEL,
+          max_tokens: maxOutputTokensFor(SECOND_DRAFT_MODEL),
+          system: [
+            {
+              type: "text" as const,
+              text: SECOND_DRAFT_SYSTEM_PROMPT,
+              cache_control: { type: "ephemeral" as const },
+            },
+          ],
+          messages: [{
+            role: "user",
+            content: buildSecondDraftUserMessage(
+              parentDoc,
+              criticalReviewText,
+              attorneyInstructions,
+              caseFile,
+              facts,
+              attachments
+            ),
+          }],
+        }).finalMessage();
+
+        const rawDraftOutput = draftResponse.content
+          .filter((b): b is Anthropic.TextBlock => b.type === "text")
+          .map((b) => b.text)
+          .join("")
+          .trim();
+
+        // Split the client-facing document from the attorney-only changelog.
+        const { draftText: secondDraftText, changes: secondDraftChanges } = parseSecondDraft(rawDraftOutput);
+
+        await recordAiFromMessage(db, draftResponse, {
+          userId: parentDoc.user_id,
+          actorId: userId,
+          caseFileId: parentDoc.case_file_id,
+          feature: "attorney_second_draft",
+          metadata: {
+            document_id: id,
+            ...limitSignalMetadata({
+              model: draftResponse.model,
+              outputTokens: draftResponse.usage.output_tokens,
+              priorLimit: 8000,
+              stopReason: draftResponse.stop_reason,
+            }),
+          },
+        });
+
+        const truncated = draftResponse.stop_reason === "max_tokens";
+        if (truncated) {
+          logTruncation({
+            endpoint: "attorney/second-draft",
+            feature: "attorney_second_draft",
+            documentId: id,
+            caseFileId: parentDoc.case_file_id,
+            userId: parentDoc.user_id,
+            outputTokens: draftResponse.usage.output_tokens,
+          });
+        }
+
+        // Only throw on a truly empty (non-truncated) response — truncated partial output is valid
+        if (!secondDraftText && !truncated) {
+          throw new Error("Empty second draft response");
+        }
+
+        // The second-draft child is owned by the CLIENT (parentDoc.user_id); write it
+        // with the service client to bypass RLS now that the caller is a verified attorney.
+        const child = await upsertSecondDraftChild(createServiceClient(), parentDoc, secondDraftText, secondDraftChanges);
+
+        const existingCj = (parentDoc.content_json as Record<string, unknown>) ?? {};
+        await db.from("documents").update({
+          review_status: "merged",
+          content_json: truncated ? { ...existingCj, truncated: true } : existingCj,
+          updated_at: new Date().toISOString(),
+        }).eq("id", id);
+
+        send({
+          type: "result",
+          success: true,
           fitness,
-          document_type: docTypeLabel(parentDoc.doc_type),
-        },
-        { status: 422 }
-      );
-    }
+          second_draft_document_id: child?.id ?? null,
+          improved_draft_text: secondDraftText,
+          changes: secondDraftChanges,
+          truncated,
+        });
+      } catch (err) {
+        console.error("[attorney/second-draft] error:", err);
+        await db.from("documents").update({
+          review_status: "review_ready",
+          updated_at: new Date().toISOString(),
+        }).eq("id", id);
+        send({ type: "error", error: "Second draft generation failed" });
+      } finally {
+        clearInterval(heartbeat);
+        closed = true;
+        try { controller.close(); } catch { /* already closed */ }
+      }
+    },
+  });
 
-    const draftResponse = await anthropic.messages.stream({
-      model: SECOND_DRAFT_MODEL,
-      max_tokens: maxOutputTokensFor(SECOND_DRAFT_MODEL),
-      system: [
-        {
-          type: "text" as const,
-          text: SECOND_DRAFT_SYSTEM_PROMPT,
-          cache_control: { type: "ephemeral" as const },
-        },
-      ],
-      messages: [{
-        role: "user",
-        content: buildSecondDraftUserMessage(
-          parentDoc,
-          criticalReviewText,
-          attorneyInstructions,
-          caseFile,
-          facts,
-          attachments
-        ),
-      }],
-    }).finalMessage();
-
-    const rawDraftOutput = draftResponse.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("")
-      .trim();
-
-    // Split the client-facing document from the attorney-only changelog.
-    const { draftText: secondDraftText, changes: secondDraftChanges } = parseSecondDraft(rawDraftOutput);
-
-    await recordAiFromMessage(db, draftResponse, {
-      userId: parentDoc.user_id,
-      actorId: userId,
-      caseFileId: parentDoc.case_file_id,
-      feature: "attorney_second_draft",
-      metadata: {
-        document_id: id,
-        ...limitSignalMetadata({
-          model: draftResponse.model,
-          outputTokens: draftResponse.usage.output_tokens,
-          priorLimit: 8000,
-          stopReason: draftResponse.stop_reason,
-        }),
-      },
-    });
-
-    const truncated = draftResponse.stop_reason === "max_tokens";
-    if (truncated) {
-      logTruncation({
-        endpoint: "attorney/second-draft",
-        feature: "attorney_second_draft",
-        documentId: id,
-        caseFileId: parentDoc.case_file_id,
-        userId: parentDoc.user_id,
-        outputTokens: draftResponse.usage.output_tokens,
-      });
-    }
-
-    // Only throw on a truly empty (non-truncated) response — truncated partial output is valid
-    if (!secondDraftText && !truncated) {
-      throw new Error("Empty second draft response");
-    }
-
-    // The second-draft child is owned by the CLIENT (parentDoc.user_id); write it
-    // with the service client to bypass RLS now that the caller is a verified attorney.
-    const child = await upsertSecondDraftChild(createServiceClient(), parentDoc, secondDraftText, secondDraftChanges);
-
-    const existingCj = (parentDoc.content_json as Record<string, unknown>) ?? {};
-    await db.from("documents").update({
-      review_status: "merged",
-      content_json: truncated ? { ...existingCj, truncated: true } : existingCj,
-      updated_at: new Date().toISOString(),
-    }).eq("id", id);
-
-    return NextResponse.json({
-      success: true,
-      fitness,
-      second_draft_document_id: child?.id ?? null,
-      improved_draft_text: secondDraftText,
-      changes: secondDraftChanges,
-      truncated,
-    });
-  } catch (err) {
-    console.error("[attorney/second-draft] error:", err);
-    await db.from("documents").update({
-      review_status: "review_ready",
-      updated_at: new Date().toISOString(),
-    }).eq("id", id);
-    return NextResponse.json({ error: "Second draft generation failed" }, { status: 500 });
-  }
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "application/x-ndjson; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      "X-Accel-Buffering": "no",
+    },
+  });
 }

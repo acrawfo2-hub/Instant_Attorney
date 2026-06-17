@@ -1,7 +1,10 @@
 - [Screenshotting Vite previews](canvas-vite-preview-screenshots.md) — external_url shots of mockup-sandbox previews go blank/flaky; use app_preview instead.
+- [Bash background process reaping](replit-bash-background-process-reaping.md) — long detached bash jobs get SIGKILLed silently; run long one-shots as a managed workflow.
+- [AI model pricing coupling](instant-attorney-model-pricing.md) — every model used by a route must have a usage-tracker pricing entry or cost silently falls back to Sonnet's.
 - [Instant-Attorney on Supabase](instant-attorney-supabase.md) — this app uses Supabase directly (not Drizzle); Anthropic key env is process.env.Claude_Instant_Attorney.
 - [Instant-Attorney routing & build isolation](instant-attorney-routing.md) — npm-isolated (excluded from pnpm workspace); api-server owns `/api`, so unlisted `/api/*` routes added to instant-attorney are silently shadowed.
 - [Anthropic "Streaming is required"](anthropic-streaming-required.md) — sync messages.create() with large max_tokens throws+502s; use messages.stream().finalMessage(), return JSON.
+- [Long AI gens need client keep-alive](instant-attorney-longgen-keepalive.md) — multi-minute routes (Opus 2nd draft) must stream NDJSON heartbeats to the browser or the idle proxy drops it → "Network error".
 - [Batch API never completes on Replit](instant-attorney-batch-cron.md) — messages.batches needs a cron poller that doesn't run here; stream inline instead. Don't own /api/batches (unauth route).
 - [Attorney AI review is manual-only](instant-attorney-manual-review.md) — no auto-review on submission; attorney clicks Run Critical Review on demand. Don't re-add auto-trigger.
 - [Attorney APIs must be in artifact.toml paths](instant-attorney-routing.md) — /api/attorney was unlisted → Express-shadowed → toggle/review/merge silently 404'd; list every /api/* prefix Next owns.

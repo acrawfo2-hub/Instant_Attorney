@@ -37,6 +37,54 @@ interface DocumentDetail {
   child_documents?: Document[];
 }
 
+// Reads the NDJSON stream from the second-draft endpoint, ignoring heartbeat
+// lines, and returns the final outcome object (result / fitness_reject / error).
+async function readFinalNdjson(
+  res: Response
+): Promise<Record<string, unknown> | null> {
+  if (!res.body) return null;
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let last: Record<string, unknown> | null = null;
+
+  const consume = (chunk: string) => {
+    buffer += chunk;
+    let nl: number;
+    while ((nl = buffer.indexOf("\n")) >= 0) {
+      const line = buffer.slice(0, nl).trim();
+      buffer = buffer.slice(nl + 1);
+      if (!line) continue;
+      try {
+        const obj = JSON.parse(line) as Record<string, unknown>;
+        if (obj.type !== "heartbeat") last = obj;
+      } catch {
+        /* ignore partial/malformed line */
+      }
+    }
+  };
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    consume(decoder.decode(value, { stream: true }));
+  }
+  consume(decoder.decode());
+
+  // Parse any trailing data that arrived without a final newline so a complete
+  // last line is never dropped.
+  const tail = buffer.trim();
+  if (tail) {
+    try {
+      const obj = JSON.parse(tail) as Record<string, unknown>;
+      if (obj.type !== "heartbeat") last = obj;
+    } catch {
+      /* incomplete/truncated final line — leave `last` as the prior value */
+    }
+  }
+  return last;
+}
+
 function renderDocumentText(text: string) {
   return text.split("\n\n").map((para, i) => (
     <p key={i}
@@ -178,25 +226,43 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: secondDraftPrompt }),
       });
-      const data = await res.json();
 
-      if (res.status === 422 && data.fitness) {
-        setFitnessWarning({
-          rationale: data.fitness.rationale,
-          recommendedType: data.fitness.recommendedType ?? data.fitness.recommended_type ?? null,
-        });
-        setSecondDraftMessage(data.error ?? "Document type may not be appropriate for this matter.");
-        setGeneratingSecondDraft(false);
-        return;
-      }
-
+      // Pre-generation validation failures (auth, missing review, etc.) come back
+      // as a normal JSON error response. Generation itself streams NDJSON:
+      // heartbeats keep the long Opus call alive, and the final line is the result.
       if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
         setSecondDraftMessage(data.error ?? "Second draft generation failed.");
         setGeneratingSecondDraft(false);
         return;
       }
 
-      setSecondDraftMessage("Second draft generated successfully.");
+      const outcome = await readFinalNdjson(res);
+
+      if (outcome?.type === "fitness_reject" && outcome.fitness) {
+        const f = outcome.fitness as Record<string, unknown>;
+        setFitnessWarning({
+          rationale: String(f.rationale ?? ""),
+          recommendedType: (f.recommendedType ?? f.recommended_type ?? null) as string | null,
+        });
+        setSecondDraftMessage(
+          (outcome.error as string) ?? "Document type may not be appropriate for this matter."
+        );
+        setGeneratingSecondDraft(false);
+        return;
+      }
+
+      if (!outcome || outcome.type === "error" || !outcome.success) {
+        setSecondDraftMessage((outcome?.error as string) ?? "Second draft generation failed.");
+        setGeneratingSecondDraft(false);
+        return;
+      }
+
+      setSecondDraftMessage(
+        outcome.truncated
+          ? "Second draft generated (output was long and may be truncated)."
+          : "Second draft generated successfully."
+      );
       await load();
     } catch {
       setSecondDraftMessage("Network error — please try again.");
