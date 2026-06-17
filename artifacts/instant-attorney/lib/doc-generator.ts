@@ -12,6 +12,7 @@ import {
   WidthType,
 } from "docx";
 import type { CaseFile, FactItem, Profile, WizardType } from "./types";
+import { extractPlaceholders, humanizeLabel } from "./wizard-parsing";
 
 export interface DocGenInput {
   docType: WizardType;
@@ -746,4 +747,110 @@ export async function generateDocxFromText(
 
   const doc = new Document({ sections: [{ children }] });
   return pack(doc);
+}
+
+// ── "Information Still Needed" one-page report ────────────────────────────────
+// Deterministically pulls the [[placeholders]] out of a draft (first or second)
+// and renders a short client-facing checklist of what is still required. No model
+// call — the same blanks that are highlighted in the draft, listed in one place.
+// A placeholder is treated as required unless its descriptor says NON-BLOCKING.
+
+export function neededInfoItems(draftText: string): { label: string; hint: string; required: boolean }[] {
+  return extractPlaceholders(draftText).map(({ raw }) => {
+    const upper = raw.toUpperCase();
+    const required = !upper.includes("NON-BLOCKING");
+    // Split "LABEL — descriptor" into a clean label and a why/what hint.
+    const dashIdx = raw.search(/\s[—-]\s/);
+    const labelRaw = dashIdx >= 0 ? raw.slice(0, dashIdx) : raw;
+    let hint = dashIdx >= 0 ? raw.slice(dashIdx).replace(/^\s*[—-]\s*/, "") : "";
+    // Drop the internal BLOCKING/NON-BLOCKING bookkeeping from the client-facing hint.
+    hint = hint.replace(/\b(NON-)?BLOCKING\b[:\s]*/gi, "").replace(/\s*[—-]\s*$/, "").trim();
+    return { label: humanizeLabel(labelRaw.trim()), hint, required };
+  });
+}
+
+export async function generateNeededInfoDocx(
+  documentTitle: string,
+  draftText: string
+): Promise<Buffer> {
+  const items = neededInfoItems(draftText);
+  const required = items.filter((i) => i.required);
+  const optional = items.filter((i) => !i.required);
+
+  const children: Paragraph[] = [
+    ...firmHeader(),
+    new Paragraph({
+      children: [new TextRun({ text: "INFORMATION STILL NEEDED", bold: true, size: 26 })],
+      alignment: AlignmentType.CENTER,
+      heading: HeadingLevel.HEADING_1,
+    }),
+    new Paragraph({
+      children: [new TextRun({ text: documentTitle, italics: true, size: 22 })],
+      alignment: AlignmentType.CENTER,
+    }),
+    spacer(),
+  ];
+
+  if (!items.length) {
+    children.push(
+      body("This draft has no remaining blanks. Everything we need has been provided."),
+    );
+  } else {
+    children.push(
+      body(
+        "To finalize your document we still need the items below. Each one appears highlighted in the draft itself. Reply with whatever you can; anything you are unsure of can wait."
+      ),
+      spacer(),
+    );
+
+    if (required.length) {
+      children.push(heading("Required to finalize"));
+      required.forEach((it, i) =>
+        children.push(
+          new Paragraph({
+            children: [
+              new TextRun({ text: `${i + 1}. ${it.label}`, bold: true }),
+              ...(it.hint ? [new TextRun({ text: ` — ${it.hint}` })] : []),
+            ],
+          })
+        )
+      );
+      children.push(spacer());
+    }
+
+    if (optional.length) {
+      children.push(heading("Helpful, but can be added at signing"));
+      optional.forEach((it, i) =>
+        children.push(
+          new Paragraph({
+            children: [
+              new TextRun({ text: `${i + 1}. ${it.label}`, bold: true }),
+              ...(it.hint ? [new TextRun({ text: ` — ${it.hint}` })] : []),
+            ],
+          })
+        )
+      );
+      children.push(spacer());
+    }
+  }
+
+  children.push(
+    new Paragraph({
+      border: { top: { style: BorderStyle.SINGLE, size: 1 } },
+      text: "",
+    }),
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: `Crawford Law PLLC · ${new Date().toLocaleDateString()} · Attorney-Client Privileged & Confidential`,
+          italics: true,
+          size: 16,
+          color: "888888",
+        }),
+      ],
+      alignment: AlignmentType.CENTER,
+    })
+  );
+
+  return pack(new Document({ sections: [{ children }] }));
 }

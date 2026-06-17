@@ -108,7 +108,11 @@ export async function upsertCriticalReviewChild(
 export async function upsertSecondDraftChild(
   db: SupabaseClient,
   parent: Document,
-  draftText: string
+  draftText: string,
+  // Attorney-only changelog of what changed from the first draft. Stored in
+  // content_json (never rendered into the client-facing document) so the review
+  // page can show it alongside the revised draft.
+  changes?: string | null
 ): Promise<Document | null> {
   await db
     .from("documents")
@@ -126,7 +130,7 @@ export async function upsertSecondDraftChild(
       title: `${parent.title} — Revised Draft`,
       status: "draft",
       draft_text: draftText,
-      content_json: {},
+      content_json: changes ? { changes } : {},
     })
     .select("*")
     .single();

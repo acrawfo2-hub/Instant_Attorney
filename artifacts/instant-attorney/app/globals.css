@@ -4934,6 +4934,21 @@ mark.atty-placeholder {
 }
 .atty-standalone-doc-header h2 { font-size: 15px; margin: 0; }
 .atty-standalone-doc-sub { font-size: 12px; color: var(--brand-text-lt); margin: 4px 0 0 0; }
+.atty-doc-downloads { display: flex; gap: 8px; flex-shrink: 0; }
+.atty-changes-panel {
+  margin: 12px 0 4px 0;
+  border: 1px solid var(--brand-border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.02);
+}
+.atty-changes-panel > summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--brand-text-lt);
+}
+.atty-changes-panel > .atty-review-preformatted { margin-top: 10px; }
 .atty-living-file-link {
   font-size: 13px;
   font-weight: 600;

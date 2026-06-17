@@ -167,7 +167,7 @@ CASE RELEVANCE:
 KEY SECTIONS:
 • [Section name or key finding — keep each to one line]
 EXTRACTED FACTS:
-• [Specific identifiable facts from this document: legal names, EIN/tax ID numbers, addresses, key dates, dollar amounts, party roles, license numbers — one fact per bullet. Or "None identified"]
+• [Specific identifiable facts from this document, captured COMPLETELY so a drafter can use them verbatim instead of leaving a blank. Include: full legal names; complete mailing/street addresses (street number, city, state, ZIP — never abbreviate to just a city or ZIP); EIN/tax ID numbers; all key dates; dollar amounts; party roles; account, license, or registration numbers; registered agent. One fact per bullet, each stated in full. Or "None identified"]
 URGENT FINDINGS:
 [Time-sensitive items, deadlines, rights, waiver risks, or critical facts — or "None identified"]
 CONTRADICTIONS WITH LIVING FILE:

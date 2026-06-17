@@ -7,6 +7,7 @@ import {
   buildDocumentTypeFitnessUserMessage,
   buildSecondDraftUserMessage,
   parseDocumentTypeFitness,
+  parseSecondDraft,
 } from "@/lib/prompts";
 import { getChildDocuments, upsertSecondDraftChild } from "@/lib/document-utils";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
@@ -187,11 +188,14 @@ export async function POST(
       }],
     }).finalMessage();
 
-    const secondDraftText = draftResponse.content
+    const rawDraftOutput = draftResponse.content
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
       .map((b) => b.text)
       .join("")
       .trim();
+
+    // Split the client-facing document from the attorney-only changelog.
+    const { draftText: secondDraftText, changes: secondDraftChanges } = parseSecondDraft(rawDraftOutput);
 
     await recordAiFromMessage(db, draftResponse, {
       userId: parentDoc.user_id,
@@ -228,7 +232,7 @@ export async function POST(
 
     // The second-draft child is owned by the CLIENT (parentDoc.user_id); write it
     // with the service client to bypass RLS now that the caller is a verified attorney.
-    const child = await upsertSecondDraftChild(createServiceClient(), parentDoc, secondDraftText);
+    const child = await upsertSecondDraftChild(createServiceClient(), parentDoc, secondDraftText, secondDraftChanges);
 
     const existingCj = (parentDoc.content_json as Record<string, unknown>) ?? {};
     await db.from("documents").update({
@@ -242,6 +246,7 @@ export async function POST(
       fitness,
       second_draft_document_id: child?.id ?? null,
       improved_draft_text: secondDraftText,
+      changes: secondDraftChanges,
       truncated,
     });
   } catch (err) {

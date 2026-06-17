@@ -326,9 +326,14 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
                   <p className="atty-standalone-doc-sub">{docTypeLabel(doc.doc_type)} · original wizard output</p>
                 </div>
                 {doc.draft_text && (
-                  <a href={`/api/documents/${id}/download`} download className="atty-btn atty-btn-download">
-                    Download .docx
-                  </a>
+                  <div className="atty-doc-downloads">
+                    <a href={`/api/documents/${id}/download`} download className="atty-btn atty-btn-download">
+                      Download .docx
+                    </a>
+                    <a href={`/api/documents/${id}/needed-info`} download className="atty-btn atty-btn-download">
+                      Info needed
+                    </a>
+                  </div>
                 )}
               </div>
               {Boolean(doc.content_json?.truncated) && (
@@ -386,10 +391,24 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
                   <h2>Document 3 — Revised Draft</h2>
                   <p className="atty-standalone-doc-sub">Generated second draft (approve this version to send to client)</p>
                 </div>
-                <a href={`/api/documents/${secondDraft.id}/download`} download className="atty-btn atty-btn-download">
-                  Download .docx
-                </a>
+                <div className="atty-doc-downloads">
+                  <a href={`/api/documents/${secondDraft.id}/download`} download className="atty-btn atty-btn-download">
+                    Download .docx
+                  </a>
+                  <a href={`/api/documents/${secondDraft.id}/needed-info`} download className="atty-btn atty-btn-download">
+                    Info needed
+                  </a>
+                </div>
               </div>
+              {(() => {
+                const changes = (secondDraft.content_json as Record<string, unknown> | null)?.changes;
+                return typeof changes === "string" && changes.trim() ? (
+                  <details className="atty-changes-panel" open>
+                    <summary>Key changes from first draft (attorney only — not shown to client)</summary>
+                    <pre className="atty-review-preformatted">{changes.trim()}</pre>
+                  </details>
+                ) : null;
+              })()}
               <div className="atty-review-draft">{renderDocumentText(secondDraft.draft_text)}</div>
             </section>
           )}

@@ -116,6 +116,11 @@ export function buildFileContext(
         lines.push(`• [${a.attachment_type.toUpperCase()}] ${a.file_name}`);
         lines.push(`  Summary: ${a.ai_summary}`);
         if (a.case_relevance) lines.push(`  Relevance: ${a.case_relevance}`);
+        // Key sections often carry the literal names/addresses/dates a draft needs —
+        // surface them so the drafter can fill values instead of placeholdering.
+        if (a.key_sections?.length) {
+          lines.push(`  Key details: ${a.key_sections.join("; ")}`);
+        }
         if (a.urgent_findings && a.urgent_findings !== "None identified") {
           lines.push(`  [URGENT] ${a.urgent_findings}`);
         }
@@ -463,6 +468,7 @@ Core operating principles:
 - Draft as though the output will be reviewed by a sophisticated attorney at a high-end firm.
 - Use correct legal structure: defined terms, recitals, operative clauses, representations, conditions, signatures, acknowledgments, exhibits where appropriate to the instrument — but only those the instrument actually needs.
 - Include only provisions that fit the facts and serve a goal. Do not pad with irrelevant boilerplate.
+- Before using a placeholder for any party's name, address, date, dollar amount, or identifier, search the CONFIRMED FACTS and the attached-document details in the Living File and use any value found there. Only placeholder a fact that genuinely appears nowhere in the file.
 - Use [[DOUBLE BRACKETS]] for every unresolved fact in the document body. Never leave ambiguity hidden in prose.
 - Mark each placeholder as BLOCKING (cannot finalize without it) or NON-BLOCKING (can cure at execution or later).
 - If multiple instruments are needed, identify the primary and note companions.
@@ -709,7 +715,9 @@ YOUR JOB
 Produce a materially better document than the first draft — not a light edit. Conciseness and clarity are the two highest priorities. A reader comparing the two drafts must be able to see at a glance that this one is tighter, clearer, and better organized.
 
 WHAT "BETTER" MEANS (do all of these)
-- Cut every redundant, hedging, or filler phrase. When meaning is preserved, shorter wins.
+- Serve the client's goals first. The goals are in the active file; assume they are valid if lawful and plausible, and make the document accomplish them cleanly and enforceably.
+- Cut clauses that serve no client goal and are not a protection a senior attorney would insist on. Adding length to look thorough is a defect. A provision that does not earn its place comes out.
+- Cut every redundant, hedging, or filler phrase. State each rule once and cross-reference it; never restate the same protection in multiple places. When meaning is preserved, shorter wins.
 - Prefer plain, precise language over legalese. One idea per sentence.
 - Restructure freely: reorder sections, merge or split clauses, add or drop headings so the logic flows. Do not feel bound to the original's structure when a better one exists.
 - Resolve the critical review's Priority Edit List in full — treat it as the MINIMUM, not the ceiling. Also fix anything else a senior attorney would fix on sight.
@@ -731,10 +739,19 @@ FORMATTING (this text is rendered straight into a .docx)
 - Put each heading on its own line in plain text (e.g. "1. SERVICES" or "GOVERNING LAW").
 - Use real numbered sections and consistent defined terms.
 
-OUTPUT
-Output ONLY the final document text — no explanations, commentary, summaries, attorney notes, or any reference to AI, the review, or the drafting process.
+OUTPUT — two parts, in this exact order:
 
-BEFORE YOU FINISH, confirm: the draft is shorter and clearer than the original; every review item is resolved; no hallucinated facts or law; every genuine gap marked with a [[placeholder]]; structure is logical and consistent; no stray Markdown symbols.`;
+First, the final document text inside these markers:
+---SECOND DRAFT---
+[the complete revised document — no commentary, no reference to AI, the review, or the drafting process]
+---END SECOND DRAFT---
+
+Then a short changelog for the attorney only (the client never sees it) inside these markers:
+---CHANGES---
+• [One line per substantive change from the first draft: what changed and why, keyed to a section. Group cuts and additions. Keep to the changes that matter — typically 5 to 12 bullets. If something material was deliberately left unresolved, say so.]
+---END CHANGES---
+
+BEFORE YOU FINISH, confirm: the draft is shorter and clearer than the original; every review item is resolved; no clause survives that serves no goal; no hallucinated facts or law; every genuine gap marked with a [[placeholder]]; structure is logical and consistent; no stray Markdown symbols; the CHANGES list reflects what you actually did.`;
 
 const WIZARD_TYPE_OPTIONS = Object.keys(WIZARD_LABELS).join(", ");
 
@@ -781,6 +798,28 @@ export function parseDocumentTypeFitness(text: string): {
     recommendedRaw && recommendedRaw.toLowerCase() !== "none" ? recommendedRaw : null;
 
   return { fit, rationale, recommendedType };
+}
+
+// Split the second-draft model output into the client-facing document and the
+// attorney-only changelog. Resilient to a model that omits the markers: prefers
+// the ---SECOND DRAFT--- block, falls back to "everything before ---CHANGES---",
+// and finally to the whole text. Changes are never shown to the client.
+export function parseSecondDraft(text: string): { draftText: string; changes: string | null } {
+  const trimmed = text.trim();
+
+  const changesMatch = trimmed.match(/---CHANGES---([\s\S]*?)(?:---END CHANGES---|$)/);
+  const changes = changesMatch?.[1]?.trim() || null;
+
+  const draftMatch = trimmed.match(/---SECOND DRAFT---([\s\S]*?)(?:---END SECOND DRAFT---|---CHANGES---|$)/);
+  let draftText: string;
+  if (draftMatch) {
+    draftText = draftMatch[1].trim();
+  } else {
+    // No document markers — strip a trailing CHANGES block if present.
+    draftText = trimmed.split(/---CHANGES---/)[0].trim();
+  }
+
+  return { draftText, changes };
 }
 
 export function buildSecondDraftUserMessage(
