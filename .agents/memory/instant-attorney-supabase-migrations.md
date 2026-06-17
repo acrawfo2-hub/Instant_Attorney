@@ -1,31 +1,36 @@
 ---
-name: Instant-Attorney live Supabase has unapplied migrations
-description: Live Supabase DB is missing later-stage tables; writes fail PGRST205 and are silently swallowed. How to detect and what the user must run.
+name: Instant-Attorney Supabase schema & publish checklist
+description: Schema/migration state of the live Supabase DB and what to set before publishing
 ---
 
-The live Supabase project for Instant-Attorney does NOT have all `supabase/schema-stage*.sql`
-migrations applied. Confirmed missing (as of testing): `usage_events`, `usage_period_totals`
-(stage 9) and `form_instruments` (stage 10). `consults` (stage 7) is also absent but that is
-EXPECTED — it is legacy, superseded by `consult_requests`, which exists.
+# Supabase schema state & publish checklist
 
-**Symptom:** feature code that writes to a missing table fails with PostgREST error
-`PGRST205 "Could not find the table 'public.<t>' in the schema cache"`. Most write paths
-(e.g. `parseGovernmentForms` upsert in `lib/file-parser.ts`, usage recording) destructure
-only `{ data }` and ignore `error`, so the failure is silent — the feature appears to "work"
-(AI emits the detection block) but nothing is persisted, and reads return `[]`.
+The schema lives as staged SQL files in `artifacts/instant-attorney/supabase/`
+(`schema.sql`, `schema-stage2..12`). There is no automated migration runner — they are
+applied by hand in the Supabase SQL editor.
 
-**Detection gotcha:** a `select("*", { count: "exact", head: true })` HEAD request returns a
-FALSE "ok" for a missing table (no error surfaced). To reliably detect existence, use a real
-row select: `db.from(t).select("*").limit(1)` and check `error`.
+## Schema state (verified 2026-06-17)
+The live DB is fully migrated. All tables exist: profiles, case_files, fact_items,
+attachments, requested_attachments, documents, intake_messages, consult_requests,
+usage_events, usage_period_totals (stage9), form_instruments (stage10). The
+`is_attorney()` SECURITY DEFINER function (stage11) + attorney RLS (stage11/12) are applied,
+and the private storage bucket `case-attachments` exists.
+(Earlier this file warned stage9/stage10 were missing — that is no longer true.)
+**Verify, don't assume:** a fast head-select per table via the service client returns
+PGRST205 when a table is missing, so writes can fail silently — probe before claiming a gap.
 
-**Why I can't fix it from tooling:** no Supabase DB connection string / DB password is
-available (the service-role key is a JWT, not a DB password; `DATABASE_URL` points at Replit's
-own Postgres, not Supabase). supabase-js REST cannot run DDL. So missing tables must be created
-by the USER running the SQL files in the Supabase SQL editor.
+## Publish gotcha — Auth URL configuration (the real blocker)
+Auth = email/password with email confirmation. `app/register/page.tsx` signs up with
+`emailRedirectTo: ${location.origin}/api/auth/callback?next=/onboarding`, and
+`app/api/auth/callback/route.ts` does `exchangeCodeForSession`. Supabase rejects redirect
+targets not on its allow-list, so before publishing set, in Supabase → Authentication →
+URL Configuration:
+- Site URL = production domain (e.g. https://<app>.replit.app)
+- Redirect URLs += https://<app>.replit.app/** (keep dev URL too)
+Otherwise confirmation links break in production.
 
-**Remediation to give the user:** run `supabase/schema-stage9.sql` then
-`supabase/schema-stage10.sql` in the Supabase SQL editor (stage 10 says run after stage 9).
-Skip stage 7's `consults` (legacy). After applying, gov-forms persistence and usage tracking work.
-
-**Why:** these stage migrations were authored in-repo but never applied to the live project;
-there is no automatic migration runner for this Supabase-direct app.
+## Other publish must-dos (deployment env, not Supabase)
+- `BYPASS_AUTH` must NOT be "true" in prod (it disables auth and impersonates BYPASS_USER_ID).
+- Prod needs: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  SUPABASE_SERVICE_ROLE_KEY, Claude_Instant_Attorney, RESEND_API_KEY, SESSION_SECRET.
+- Supabase default email sender is rate-limited; configure custom SMTP for real volume.
