@@ -632,7 +632,10 @@ function buildTable(rows: string[][]): Table {
 export async function generateDocxFromText(
   title: string,
   draftText: string,
-  caseFile: { matter_subtype?: string | null; jurisdiction?: string | null }
+  // Nullable on purpose: the attorney download path reads the document under the
+  // attorney's session, and RLS on case_files can return null for a client's row
+  // even when the document row comes back. A null here must never crash the build.
+  caseFile: { matter_subtype?: string | null; jurisdiction?: string | null } | null
 ): Promise<Buffer> {
   const lines = draftText.split("\n");
 
@@ -731,7 +734,7 @@ export async function generateDocxFromText(
     new Paragraph({
       children: [
         new TextRun({
-          text: `DRAFT — FOR ATTORNEY REVIEW ONLY · Crawford Law PLLC · ${new Date().toLocaleDateString()} · ${caseFile.jurisdiction ?? "TX"} · Not for distribution`,
+          text: `DRAFT — FOR ATTORNEY REVIEW ONLY · Crawford Law PLLC · ${new Date().toLocaleDateString()} · ${caseFile?.jurisdiction ?? "TX"} · Not for distribution`,
           italics: true,
           size: 16,
           color: "888888",
