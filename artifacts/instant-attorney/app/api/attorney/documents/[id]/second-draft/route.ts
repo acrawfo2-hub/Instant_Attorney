@@ -22,7 +22,7 @@ const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney, maxRetries: 4 });
 
 const FITNESS_MODEL = "claude-haiku-4-5-20251001";
-const SECOND_DRAFT_MODEL = "claude-opus-4-6";
+const SECOND_DRAFT_MODEL = "claude-opus-4-8";
 
 export async function POST(
   req: NextRequest,

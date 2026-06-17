@@ -527,6 +527,63 @@ async function generateDocReview({ wizardData }: DocGenInput): Promise<Buffer> {
   return pack(doc);
 }
 
+// ── Inline Markdown → docx runs ──────────────────────────────────────────────
+// The drafting models emit lightweight Markdown (**bold**, *italic*, # headings,
+// [[placeholders]]). Word has no concept of Markdown, so without this pass the
+// literal asterisks and hashes land in the .docx. We convert them to real runs.
+// NOTE: underscores are intentionally NOT treated as emphasis — legal drafts are
+// full of signature rules ("_________________") that would be mangled.
+
+interface InlineToken {
+  text: string;
+  bold?: boolean;
+  italics?: boolean;
+}
+
+// Split a run of text on **bold** / *italic* markers. Bold is matched first so
+// "**x**" is never mistaken for two italics.
+function parseEmphasis(text: string): InlineToken[] {
+  const out: InlineToken[] = [];
+  const re = /(\*\*)(.+?)\*\*|(\*)([^*]+?)\*/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) out.push({ text: text.slice(last, m.index) });
+    if (m[1]) out.push({ text: m[2], bold: true });
+    else out.push({ text: m[4], italics: true });
+    last = re.lastIndex;
+  }
+  if (last < text.length) out.push({ text: text.slice(last) });
+  return out.filter((t) => t.text.length > 0);
+}
+
+// Convert one line of inline Markdown into TextRuns. [[placeholders]] are pulled
+// out first (and rendered red/highlighted) so emphasis parsing never touches
+// their contents.
+function inlineRuns(text: string): TextRun[] {
+  const runs: TextRun[] = [];
+  const parts = text.split(/(\[\[.*?\]\])/g);
+  for (const part of parts) {
+    if (!part) continue;
+    if (part.startsWith("[[") && part.endsWith("]]")) {
+      runs.push(new TextRun({ text: part, bold: true, color: "CC0000", highlight: "yellow" }));
+      continue;
+    }
+    for (const tok of parseEmphasis(part)) {
+      runs.push(new TextRun({ text: tok.text, bold: tok.bold, italics: tok.italics }));
+    }
+  }
+  return runs.length ? runs : [new TextRun({ text })];
+}
+
+// If a whole line is wrapped in *…* or **…**, return the inner text (so a line
+// like "**1. SERVICES**" can be recognized as a heading). Otherwise unchanged.
+function stripWrappingEmphasis(text: string): string {
+  const t = text.trim();
+  const m = t.match(/^(\*\*|\*)([\s\S]+?)\1$/);
+  return m ? m[2].trim() : t;
+}
+
 // ── Generate .docx from AI-formatted draft text ──────────────────────────────
 // Used by the Drafter agent — wraps near-final AI text in a proper .docx shell
 // with firm header, DRAFT watermark, and clean paragraph formatting.
@@ -555,49 +612,52 @@ export async function generateDocxFromText(
       continue;
     }
 
-    // Section headings: lines that are ALL CAPS or match "N. Heading" pattern
-    const isNumberedHeading = /^\d+\.\s+[A-Z]/.test(trimmed) && trimmed.length < 80;
-    const isAllCapsHeading = trimmed === trimmed.toUpperCase() && trimmed.length < 80 && /[A-Z]{3,}/.test(trimmed);
+    // Markdown horizontal rule (---, ***, ___) → blank line
+    if (/^([-*_])\1{2,}$/.test(trimmed)) {
+      children.push(new Paragraph({ text: "" }));
+      continue;
+    }
 
-    if (isNumberedHeading || isAllCapsHeading) {
+    // Markdown ATX heading (#, ##, ###) → mapped heading levels
+    const atx = trimmed.match(/^(#{1,6})\s+(.*\S)\s*#*$/);
+    if (atx) {
+      const level = atx[1].length;
       children.push(new Paragraph({
-        children: [new TextRun({ text: trimmed, bold: true })],
+        children: inlineRuns(stripWrappingEmphasis(atx[2])),
+        heading:
+          level <= 1 ? HeadingLevel.HEADING_1 : level === 2 ? HeadingLevel.HEADING_2 : HeadingLevel.HEADING_3,
+        spacing: { before: 200, after: 80 },
+      }));
+      continue;
+    }
+
+    // Section headings: ALL CAPS, "N. Heading", or a whole line wrapped in **bold**
+    const unwrapped = stripWrappingEmphasis(trimmed);
+    const isNumberedHeading = /^\d+\.\s+\S/.test(unwrapped) && unwrapped.length < 80;
+    const isAllCapsHeading =
+      unwrapped === unwrapped.toUpperCase() && unwrapped.length < 80 && /[A-Z]{3,}/.test(unwrapped);
+    const isWrappedHeading = unwrapped !== trimmed && unwrapped.length < 80;
+
+    if (isNumberedHeading || isAllCapsHeading || isWrappedHeading) {
+      children.push(new Paragraph({
+        children: [new TextRun({ text: unwrapped, bold: true })],
         heading: HeadingLevel.HEADING_2,
         spacing: { before: 200, after: 80 },
       }));
       continue;
     }
 
-    // Placeholders: [[TEXT — descriptor]] highlighted in the doc
-    const hasPlaceholder = trimmed.includes("[[");
-    if (hasPlaceholder) {
-      const parts = trimmed.split(/(\[\[.*?\]\])/);
-      const runs = parts.map((part) => {
-        if (part.startsWith("[[") && part.endsWith("]]")) {
-          return new TextRun({
-            text: part,
-            bold: true,
-            color: "CC0000",    // red for placeholders
-            highlight: "yellow",
-          });
-        }
-        return new TextRun({ text: part });
-      });
-      children.push(new Paragraph({ children: runs }));
-      continue;
-    }
-
-    // Bullet/list items
-    if (/^[•\-*]\s/.test(trimmed)) {
+    // Bullet/list items (Markdown -, *, or literal •) — keep inline formatting
+    if (/^[•]\s/.test(trimmed) || /^[-*]\s/.test(trimmed)) {
       children.push(new Paragraph({
-        children: [new TextRun({ text: trimmed.replace(/^[•\-*]\s+/, "") })],
+        children: inlineRuns(trimmed.replace(/^[•\-*]\s+/, "")),
         bullet: { level: 0 },
       }));
       continue;
     }
 
-    // Default: body paragraph
-    children.push(new Paragraph({ children: [new TextRun({ text: trimmed })] }));
+    // Default body paragraph — inline parser handles **bold**, *italic*, [[placeholders]]
+    children.push(new Paragraph({ children: inlineRuns(trimmed) }));
   }
 
   // Footer

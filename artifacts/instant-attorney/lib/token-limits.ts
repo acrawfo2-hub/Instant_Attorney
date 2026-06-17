@@ -12,6 +12,7 @@
 /** Max output tokens supported per model (Claude 4.x generation). */
 export const MODEL_MAX_OUTPUT_TOKENS: Record<string, number> = {
   "claude-sonnet-4-6": 64000,
+  "claude-opus-4-8": 64000,
   "claude-opus-4-6": 32000,
   "claude-haiku-4-5-20251001": 64000,
 };
