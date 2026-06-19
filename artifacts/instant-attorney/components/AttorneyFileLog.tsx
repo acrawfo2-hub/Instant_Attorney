@@ -86,7 +86,8 @@ export default function AttorneyFileLog({ files }: { files: FileRow[] }) {
         </div>
       ) : (
         <div className="atty-log-hint">
-          Sorted by most recent edit. Click a client to see all of their files.
+          Sorted by most recent edit. Click a row to open its full file — or click a
+          client&apos;s name to see all their files.
         </div>
       )}
 
@@ -106,7 +107,7 @@ export default function AttorneyFileLog({ files }: { files: FileRow[] }) {
             <tr
               key={f.id}
               className="atty-tr-link"
-              onClick={() => router.push(`/attorney/client/${f.user_id}`)}
+              onClick={() => router.push(`/attorney/file/${f.id}`)}
             >
               <td>
                 <button

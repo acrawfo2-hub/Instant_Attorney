@@ -344,8 +344,8 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
 
           <div className="atty-review-section">
             <h3>Living File</h3>
-            <Link href={`/attorney/client/${doc.user_id}`} className="atty-living-file-link">
-              View full client file →
+            <Link href={`/attorney/file/${doc.case_files.id}`} className="atty-living-file-link">
+              View full file →
             </Link>
           </div>
 
