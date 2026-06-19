@@ -446,6 +446,134 @@ export function ensureChecklistNeeds(p: ParsedDrafter): ParsedDrafter {
   return p;
 }
 
+// ── Parallel "starter questions" ─────────────────────────────────────────────
+// While the real draft is being composed, the wizard shows a few document-type
+// aware questions the client can answer during the wait. These are curated per
+// wizard type (names, addresses, timelines, governing law, etc.) so they ask for
+// the exact "legal-ready" facts the attorney needs — and they require NO AI call,
+// so they appear instantly. Their answers are saved as facts immediately and
+// folded into the draft once it lands.
+export const WIZARD_STARTER_FIELDS: Record<string, { label: string; hint: string }[]> = {
+  demand_letter: [
+    { label: "Your full legal name", hint: "The sender — exactly as it should appear." },
+    { label: "Your mailing address", hint: "Where the recipient should respond." },
+    { label: "Recipient's full name", hint: "The person or business you're sending this to." },
+    { label: "Recipient's mailing address", hint: "Where the letter will be sent." },
+    { label: "Amount or specific action demanded", hint: "e.g. $5,000 owed, return of property, stop a behavior." },
+    { label: "Response deadline", hint: "How many days they have to respond (often 10–30)." },
+  ],
+  complaint_letter: [
+    { label: "Your full name and contact info", hint: "The complainant." },
+    { label: "Agency or company receiving the complaint", hint: "Who you're filing with." },
+    { label: "Name of the person or business complained about", hint: "The respondent." },
+    { label: "Dates the events happened", hint: "A short timeline helps." },
+    { label: "What outcome you want", hint: "The relief or resolution you're asking for." },
+  ],
+  draft_contract: [
+    { label: "Full legal name of each party", hint: "Everyone signing — people or business entities." },
+    { label: "Each party's address", hint: "Used in the parties / notice section." },
+    { label: "Effective date and term", hint: "When it starts and how long it lasts." },
+    { label: "Payment or consideration", hint: "Amount, schedule, or what each side gives." },
+    { label: "Governing state", hint: "Which state's law applies." },
+  ],
+  draft_waiver: [
+    { label: "Full name of the person giving up rights", hint: "The releasor." },
+    { label: "Full name of the person or business protected", hint: "The releasee." },
+    { label: "Activity or event covered", hint: "What the waiver applies to." },
+    { label: "What the releasor receives", hint: "The consideration — payment, access, etc." },
+    { label: "Governing state", hint: "Which state's law applies." },
+  ],
+  wills_trusts: [
+    { label: "Your full legal name and date of birth", hint: "The testator / grantor." },
+    { label: "State of residence", hint: "Determines execution formalities." },
+    { label: "Executor or trustee and an alternate", hint: "Who administers the estate, plus a backup." },
+    { label: "Beneficiaries and their shares", hint: "Who receives what." },
+    { label: "Any specific gifts", hint: "Particular assets to particular people." },
+  ],
+  doc_review: [
+    { label: "Type of document being reviewed", hint: "e.g. lease, NDA, settlement agreement." },
+    { label: "Parties to the document", hint: "Who is involved." },
+    { label: "What you want from the review", hint: "Risks, red flags, or specific clauses to check." },
+  ],
+  general_document: [
+    { label: "Full legal name of each party", hint: "Everyone involved — people or business entities (include a registered agent if it's a company)." },
+    { label: "Each party's address", hint: "Used wherever the document identifies the parties." },
+    { label: "Key dates or timeline", hint: "When the relevant events happened or will happen." },
+    { label: "Governing state", hint: "Which state's law applies." },
+    { label: "Main purpose of the document", hint: "In one or two sentences, what it needs to accomplish." },
+  ],
+};
+
+function slugify(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+}
+
+// Build the document-type-aware starter checklist (no AI call). Falls back to the
+// general_document set for any unrecognized type so the pane is never empty.
+export function buildStarterItems(wizardType: string): NeededItem[] {
+  const fields = WIZARD_STARTER_FIELDS[wizardType] ?? WIZARD_STARTER_FIELDS.general_document;
+  return fields.slice(0, 6).map((f, i) => ({
+    id: `starter-${slugify(f.label)}-${i}`,
+    label: f.label,
+    hint: f.hint,
+    severity: "helpful" as const,
+  }));
+}
+
+export interface LabeledAnswer {
+  label: string;
+  value: string;
+}
+
+// Decide which saved starter answers can be filled DETERMINISTICALLY into the
+// just-arrived draft, and which must go to a model refine pass.
+//
+// We only know the draft's real [[placeholders]] after it lands, and a starter
+// answer's label is generic (e.g. "Your mailing address") while the draft may
+// contain several address placeholders. So we fill an answer in place ONLY when
+// it matches EXACTLY ONE specific placeholder — never an ambiguous or generic
+// single-word one. Anything ambiguous (or unmatched, or a free-form note) is left
+// for the AI pass, which has full context to place it correctly. This makes the
+// deterministic path safe: it can never mis-place an answer, and at worst it
+// degrades to the single AI refine pass that already existed.
+//
+// `byKey` is keyed by each matched placeholder's normalized full text — exactly
+// the shape `applyPlaceholderAnswers` / the fill-info endpoint expect.
+export function mapAnswersToPlaceholders(
+  draftText: string,
+  filled: LabeledAnswer[],
+): { byKey: Record<string, string>; leftover: LabeledAnswer[] } {
+  const placeholders = extractPlaceholders(draftText);
+  const byKey: Record<string, string> = {};
+  const leftover: LabeledAnswer[] = [];
+  const used = new Set<string>();
+
+  // A placeholder descriptor is "specific" (safe to match loosely) when it is
+  // multi-word or reasonably long — generic tokens like "address"/"name"/"date"
+  // are excluded because they routinely repeat across a document.
+  const isSpecific = (key: string) => key.includes(" ") || key.length >= 7;
+
+  for (const ans of filled) {
+    const label = ans.label.replace(/\s+/g, " ").trim().toLowerCase();
+    const candidates = placeholders.filter((p) => {
+      if (used.has(p.dedupeKey)) return false;
+      if (label === p.dedupeKey || label === p.matchKey) return true;
+      if (isSpecific(p.matchKey) && (label.includes(p.matchKey) || p.matchKey.includes(label))) return true;
+      return false;
+    });
+    // Unambiguous (exactly one target) → fill deterministically. Otherwise defer
+    // to the model pass so nothing is placed in the wrong blank.
+    if (candidates.length === 1) {
+      byKey[candidates[0].dedupeKey] = ans.value;
+      used.add(candidates[0].dedupeKey);
+    } else {
+      leftover.push(ans);
+    }
+  }
+
+  return { byKey, leftover };
+}
+
 // Bundle every filled checklist field (plus any free-form note) into a single
 // labeled update so the model knows exactly what each answer is for. Returns
 // null when there is nothing to send.

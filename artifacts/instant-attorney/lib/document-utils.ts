@@ -17,7 +17,7 @@ export function pickFirstValidWizard(wizards: string[] | undefined): WizardType 
   return null;
 }
 
-/** Reuse an in-progress or pre-warmed primary draft (never child documents). */
+/** Reuse an in-progress primary draft (never child documents). */
 export async function findReusableDocument(
   db: SupabaseClient,
   caseFileId: string,
@@ -30,7 +30,7 @@ export async function findReusableDocument(
     .eq("case_file_id", caseFileId)
     .eq("doc_type", wizardType)
     .is("parent_document_id", null)
-    .in("status", ["pre_warmed", "draft", "changes_requested"])
+    .in("status", ["draft", "changes_requested"])
     .order("updated_at", { ascending: false })
     .limit(1);
 

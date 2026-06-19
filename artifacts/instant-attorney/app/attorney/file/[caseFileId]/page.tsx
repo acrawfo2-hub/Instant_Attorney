@@ -58,12 +58,6 @@ export default async function AttorneyFilePage({
     ]);
 
   const allDocs = (documents ?? []) as Document[];
-  const preWarmedByType: Record<string, string> = {};
-  for (const doc of allDocs) {
-    if (doc.status === "pre_warmed" && !preWarmedByType[doc.doc_type]) {
-      preWarmedByType[doc.doc_type] = doc.id;
-    }
-  }
   const topDocuments = allDocs.filter(
     (d) => d.status !== "pre_warmed" && !d.parent_document_id,
   );
@@ -107,7 +101,6 @@ export default async function AttorneyFilePage({
           facts={(facts ?? []) as FactItem[]}
           documents={topDocuments}
           childDocuments={childDocuments}
-          preWarmedByType={preWarmedByType}
           mode="attorney"
           clientProfile={client}
         />

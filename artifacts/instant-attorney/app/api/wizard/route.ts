@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { DRAFTER_SYSTEM_PROMPT, WIZARD_FIELD_HINTS, buildFileContext } from "@/lib/prompts";
-import { parseAndUpdateFile, extractDraftText } from "@/lib/file-parser";
+import { parseAndUpdateFile, extractDraftText, syncDraftGapsToLivingFile } from "@/lib/file-parser";
 import { findReusableDocument } from "@/lib/document-utils";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
 import { BYPASS_USER_ID, WIZARD_LABELS } from "@/lib/types";
@@ -304,6 +304,17 @@ export async function POST(req: NextRequest) {
       await parseAndUpdateFile(writeDb, caseFileId, userId, fullResponse);
     } catch (parseErr) {
       console.error("[wizard] file parser error:", parseErr);
+    }
+  }
+
+  // Record whatever the draft still needs as Living File gaps, so an imperfect
+  // document can be sent and the file (and attorney) still tracks exactly what's
+  // outstanding. Best-effort — never block the response on it.
+  if (draftText) {
+    try {
+      await syncDraftGapsToLivingFile(writeDb, caseFileId, userId, draftText);
+    } catch (gapErr) {
+      console.error("[wizard] gap sync error:", gapErr);
     }
   }
 

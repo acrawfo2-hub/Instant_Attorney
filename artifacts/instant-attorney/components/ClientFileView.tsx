@@ -81,23 +81,18 @@ const WIZARD_ICONS: Record<WizardType, string> = {
 function WizardCard({
   wizardType,
   caseFileId,
-  preWarmedDocId,
 }: {
   wizardType: WizardType;
   caseFileId: string;
-  preWarmedDocId?: string;
 }) {
   const label = WIZARD_LABELS[wizardType] ?? wizardType;
-  const href = preWarmedDocId
-    ? `/wizard/${wizardType}?caseFileId=${caseFileId}&docId=${preWarmedDocId}`
-    : `/wizard/${wizardType}?caseFileId=${caseFileId}`;
+  const href = `/wizard/${wizardType}?caseFileId=${caseFileId}`;
 
   return (
-    <Link href={href} className={`lf-wizard-card ${preWarmedDocId ? "lf-wizard-card-ready" : ""}`}>
+    <Link href={href} className="lf-wizard-card">
       <span className="lf-wizard-icon">{WIZARD_ICONS[wizardType] ?? "📄"}</span>
       <div className="lf-wizard-card-body">
         <span className="lf-wizard-label">{label}</span>
-        {preWarmedDocId && <span className="lf-wizard-ready-badge">Draft ready</span>}
       </div>
     </Link>
   );
@@ -184,7 +179,6 @@ interface ClientFileViewProps {
   facts: FactItem[];
   documents: Document[];
   childDocuments?: Document[];
-  preWarmedByType: Record<string, string>;
   mode: "client" | "attorney";
   clientProfile?: Profile;
   consultRequest?: ConsultRequest | null;
@@ -196,7 +190,6 @@ export default function ClientFileView({
   facts,
   documents,
   childDocuments = [],
-  preWarmedByType,
   mode,
   clientProfile,
   consultRequest,
@@ -222,7 +215,6 @@ export default function ClientFileView({
           caseFile={caseFile}
           documents={documents}
           facts={facts}
-          preWarmedByType={preWarmedByType}
         />
       )}
 
@@ -410,7 +402,6 @@ export default function ClientFileView({
 
                   const wizardType = guessWizardType(inst);
                   const doc = documents.find((d) => d.doc_type === wizardType);
-                  const preWarmedId = preWarmedByType[wizardType];
 
                   // Build the wizard URL — pass instrument name for general_document so the AI knows what to draft
                   const instrumentParam = wizardType === "general_document"
@@ -430,9 +421,7 @@ export default function ClientFileView({
                       </Link>
                     );
                   } else {
-                    const href = preWarmedId
-                      ? `/wizard/${wizardType}?caseFileId=${caseFile.id}&docId=${preWarmedId}${instrumentParam}`
-                      : `/wizard/${wizardType}?caseFileId=${caseFile.id}${instrumentParam}`;
+                    const href = `/wizard/${wizardType}?caseFileId=${caseFile.id}${instrumentParam}`;
                     action = <Link href={href} className="lf-inst-start-btn">Start Document →</Link>;
                   }
 
@@ -501,7 +490,6 @@ export default function ClientFileView({
                     key={wType}
                     wizardType={wType}
                     caseFileId={caseFile.id}
-                    preWarmedDocId={preWarmedByType[wType]}
                   />
                 ))}
               </div>

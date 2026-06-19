@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { applyPlaceholderAnswers, extractPlaceholders, placeholderFields } from "@/lib/wizard-parsing";
+import { syncDraftGapsToLivingFile } from "@/lib/file-parser";
 import { BYPASS_USER_ID } from "@/lib/types";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
@@ -109,6 +110,11 @@ export async function POST(
         await writeDb.from("fact_items").insert(newFacts);
       }
     }
+
+    // Reconcile Living File gaps against the freshly-filled draft: filled blanks
+    // (now confirmed facts) drop off the outstanding list, and any still-unfilled
+    // placeholders remain tracked.
+    await syncDraftGapsToLivingFile(writeDb, doc.case_file_id, doc.user_id, text);
   } catch (e) {
     // Fact-sync is best-effort: the document was already updated successfully, so
     // never fail the request over a Living File write.
