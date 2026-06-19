@@ -5660,3 +5660,83 @@ mark.atty-placeholder {
   font-size: 0.85rem;
   margin: 0.5rem 0 0.75rem;
 }
+
+/* ── On-device voice input (talk-to-text) ─────────────────────────────────── */
+.voice-input {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+.voice-mic-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--brand-gold);
+  border: 1px solid rgba(200, 169, 110, 0.5);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, border-color 0.2s, opacity 0.2s;
+  flex-shrink: 0;
+}
+.voice-mic-btn:hover:not(:disabled) { background: rgba(200, 169, 110, 0.14); }
+.voice-mic-btn:disabled { opacity: 0.4; cursor: default; }
+.voice-mic-btn.voice-mic-recording {
+  background: #c0392b;
+  border-color: #c0392b;
+  color: #fff;
+  animation: voice-pulse 1.3s ease-in-out infinite;
+}
+.voice-mic-btn.voice-mic-working { opacity: 0.7; }
+@keyframes voice-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(192, 57, 43, 0.45); }
+  50% { box-shadow: 0 0 0 6px rgba(192, 57, 43, 0); }
+}
+
+/* Compact inline variant beside a single short field. */
+.voice-input-compact .voice-mic-btn { width: 34px; height: 34px; border-radius: 8px; }
+
+/* Status text floats above the button so it never shifts the form layout. */
+.voice-status {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  white-space: nowrap;
+  font-size: 0.72rem;
+  line-height: 1.2;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  background: var(--brand-navy);
+  color: var(--brand-cream-text);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  z-index: 5;
+}
+.voice-status-rec { background: #c0392b; color: #fff; }
+.voice-status-err {
+  position: static;
+  white-space: normal;
+  box-shadow: none;
+  background: transparent;
+  color: #c0392b;
+  padding: 0.2rem 0;
+}
+
+.voice-unsupported-note {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--brand-text-lt);
+  margin-top: 0.4rem;
+  max-width: 740px;
+}
+
+/* Wizard field + inline mic row. */
+.wiz-field-input-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.wiz-field-input-row .wiz-field-input { flex: 1; }

@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, use } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import ReviewSlaClock from "@/components/ReviewSlaClock";
+import VoiceInputButton from "@/components/VoiceInputButton";
 import { WIZARD_LABELS } from "@/lib/types";
 import type { WizardType } from "@/lib/types";
 import {
@@ -26,6 +27,13 @@ const WIZARD_TIMEOUT_MS = 290_000; // ~4.8 min — legal docs can be long
 interface Message {
   role: "user" | "assistant";
   content: string;
+}
+
+// Append dictated text to whatever the client has already typed in a field, so
+// voice is purely additive (and they can still edit before sending).
+function appendDictation(existing: string | undefined, dictated: string): string {
+  const base = existing?.trim() ?? "";
+  return base ? `${base} ${dictated}` : dictated;
 }
 
 function renderDraftWithHighlights(text: string): string {
@@ -607,17 +615,26 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
                           {it.label}
                         </label>
                         {it.hint && <p className="wiz-field-hint">{it.hint}</p>}
-                        <input
-                          id={`starter-${it.id}`}
-                          className="wiz-field-input"
-                          type="text"
-                          value={answers[it.id] ?? ""}
-                          placeholder="Type your answer…"
-                          onChange={(e) => {
-                            setStarterSaved(false);
-                            setAnswers((prev) => ({ ...prev, [it.id]: e.target.value }));
-                          }}
-                        />
+                        <div className="wiz-field-input-row">
+                          <input
+                            id={`starter-${it.id}`}
+                            className="wiz-field-input"
+                            type="text"
+                            value={answers[it.id] ?? ""}
+                            placeholder="Type your answer…"
+                            onChange={(e) => {
+                              setStarterSaved(false);
+                              setAnswers((prev) => ({ ...prev, [it.id]: e.target.value }));
+                            }}
+                          />
+                          <VoiceInputButton
+                            compact
+                            onTranscript={(t) => {
+                              setStarterSaved(false);
+                              setAnswers((prev) => ({ ...prev, [it.id]: appendDictation(prev[it.id], t) }));
+                            }}
+                          />
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -635,6 +652,12 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
                       onChange={(e) => {
                         setStarterSaved(false);
                         setExtraNote(e.target.value);
+                      }}
+                    />
+                    <VoiceInputButton
+                      onTranscript={(t) => {
+                        setStarterSaved(false);
+                        setExtraNote((v) => appendDictation(v, t));
                       }}
                     />
                   </div>
@@ -720,17 +743,26 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
                           {it.severity === "blocking" && <span className="wiz-field-tag">required</span>}
                         </label>
                         {it.hint && <p className="wiz-field-hint">{it.hint}</p>}
-                        <input
-                          id={`fld-${it.id}`}
-                          className="wiz-field-input"
-                          type="text"
-                          value={answers[it.id] ?? ""}
-                          disabled={streaming}
-                          placeholder="Type your answer…"
-                          onChange={(e) =>
-                            setAnswers((prev) => ({ ...prev, [it.id]: e.target.value }))
-                          }
-                        />
+                        <div className="wiz-field-input-row">
+                          <input
+                            id={`fld-${it.id}`}
+                            className="wiz-field-input"
+                            type="text"
+                            value={answers[it.id] ?? ""}
+                            disabled={streaming}
+                            placeholder="Type your answer…"
+                            onChange={(e) =>
+                              setAnswers((prev) => ({ ...prev, [it.id]: e.target.value }))
+                            }
+                          />
+                          <VoiceInputButton
+                            compact
+                            disabled={streaming}
+                            onTranscript={(t) =>
+                              setAnswers((prev) => ({ ...prev, [it.id]: appendDictation(prev[it.id], t) }))
+                            }
+                          />
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -748,6 +780,10 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
                       disabled={streaming}
                       placeholder="Add any extra context, special requests, or clarifications…"
                       onChange={(e) => setExtraNote(e.target.value)}
+                    />
+                    <VoiceInputButton
+                      disabled={streaming}
+                      onTranscript={(t) => setExtraNote((v) => appendDictation(v, t))}
                     />
                   </div>
 
