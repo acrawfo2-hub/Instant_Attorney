@@ -3,9 +3,10 @@ import Link from "next/link";
 import AttachmentPanel from "@/components/AttachmentPanel";
 import DocumentInfoNeeded from "@/components/DocumentInfoNeeded";
 import GovFormInstruments from "@/components/GovFormInstruments";
-import NextStepGuide from "@/components/NextStepGuide";
+import MissionControlBoard from "@/components/MissionControlBoard";
 import ReviewSlaClock from "@/components/ReviewSlaClock";
-import type { CaseFile, FactItem, Document, Profile, WizardType, ConsultRequest } from "@/lib/types";
+import { computeMissionControl } from "@/lib/mission-control";
+import type { CaseFile, FactItem, Document, Profile, WizardType, ConsultRequest, RequestedAttachment, GovFormInstrument } from "@/lib/types";
 import { isValidWizardType } from "@/lib/document-utils";
 import { WIZARD_LABELS, docTypeLabel, personDisplayName } from "@/lib/types";
 
@@ -179,6 +180,8 @@ interface ClientFileViewProps {
   facts: FactItem[];
   documents: Document[];
   childDocuments?: Document[];
+  requestedAttachments?: RequestedAttachment[];
+  govForms?: GovFormInstrument[];
   mode: "client" | "attorney";
   clientProfile?: Profile;
   consultRequest?: ConsultRequest | null;
@@ -190,6 +193,8 @@ export default function ClientFileView({
   facts,
   documents,
   childDocuments = [],
+  requestedAttachments = [],
+  govForms = [],
   mode,
   clientProfile,
   consultRequest,
@@ -206,17 +211,23 @@ export default function ClientFileView({
   const recommendedWizards = strategy?.recommended_wizards ?? [];
   const isAttorney = mode === "attorney";
 
+  const missionBoard = computeMissionControl({
+    caseFile,
+    documents,
+    facts,
+    requestedAttachments,
+    govForms,
+    mode,
+  });
+
   return (
     <div className="lf-grid">
-      {/* Plain-language guidance layer — always shows the one obvious next step.
-          Client mode only; sits on top of the detailed Living File below. */}
-      {!isAttorney && (
-        <NextStepGuide
-          caseFile={caseFile}
-          documents={documents}
-          facts={facts}
-        />
-      )}
+      {/* Mission Control — ranked actions + hero next step; strategy & instruments remain below */}
+      <MissionControlBoard
+        board={missionBoard}
+        caseFileId={caseFile.id}
+        mode={mode}
+      />
 
       {/* Attorney banner */}
       {isAttorney && clientProfile && (
@@ -364,7 +375,7 @@ export default function ClientFileView({
 
       {/* Legal Strategy */}
       {strategy && (
-        <div className="lf-card lf-card-full lf-card-strategy">
+        <div className="lf-card lf-card-full lf-card-strategy" id="legal-strategy">
           <div className="lf-card-label">
             Legal Strategy
             {!isAttorney && <span className="lf-plain-caption">Your game plan, in plain terms</span>}
@@ -439,7 +450,9 @@ export default function ClientFileView({
       )}
 
       {/* Government forms detected in chat — surfaced as instruments to complete */}
-      <GovFormInstruments caseFileId={caseFile.id} />
+      <div id="gov-forms">
+        <GovFormInstruments caseFileId={caseFile.id} />
+      </div>
 
       {/* Confirmed Facts + Gaps */}
       <div className="lf-card lf-card-half">
@@ -457,7 +470,7 @@ export default function ClientFileView({
         )}
       </div>
 
-      <div className="lf-card lf-card-half">
+      <div className="lf-card lf-card-half" id="fact-gaps">
         <div className="lf-card-label">
           Open Fact Gaps
           {gaps.length > 0 && <span className="lf-count lf-count-gap">{gaps.length}</span>}
@@ -465,7 +478,7 @@ export default function ClientFileView({
         </div>
         {gaps.length > 0 ? (
           <ul className="lf-list lf-list-gap">
-            {gaps.map((f) => <li key={f.id}>{f.description}</li>)}
+            {gaps.map((f) => <li key={f.id} id={`gap-${f.id}`}>{f.description}</li>)}
           </ul>
         ) : (
           <p className="lf-empty-field">Missing facts to track will appear here.</p>
@@ -628,7 +641,7 @@ export default function ClientFileView({
       </div>
 
       {/* Attachments */}
-      <div className="lf-card lf-card-full">
+      <div className="lf-card lf-card-full" id="attachments">
         <div className="lf-card-label">Documents &amp; Attachments</div>
         <AttachmentPanel caseFileId={caseFile.id} />
       </div>

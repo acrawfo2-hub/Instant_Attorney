@@ -2,7 +2,7 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import ClientFileView from "@/components/ClientFileView";
-import type { CaseFile, FactItem, Document, Profile } from "@/lib/types";
+import type { CaseFile, FactItem, Document, Profile, RequestedAttachment, GovFormInstrument } from "@/lib/types";
 
 // Attorney view of a single client case file. Renders the exact same Living
 // File the client sees (legal strategy, instruments, fact cards, gov forms,
@@ -42,7 +42,7 @@ export default async function AttorneyFilePage({
   if (!caseFileRow) notFound();
   const caseFile = caseFileRow as CaseFile;
 
-  const [{ data: clientProfile }, { data: facts }, { data: documents }] =
+  const [{ data: clientProfile }, { data: facts }, { data: documents }, { data: requestedRows }, { data: formRows }] =
     await Promise.all([
       db.from("profiles").select("*").eq("id", caseFile.user_id).single(),
       db
@@ -55,6 +55,17 @@ export default async function AttorneyFilePage({
         .select("*")
         .eq("case_file_id", caseFileId)
         .order("created_at", { ascending: false }),
+      db
+        .from("requested_attachments")
+        .select("*")
+        .eq("case_file_id", caseFileId)
+        .order("created_at", { ascending: true }),
+      db
+        .from("form_instruments")
+        .select("*")
+        .eq("case_file_id", caseFileId)
+        .neq("status", "dismissed")
+        .order("created_at", { ascending: true }),
     ]);
 
   const allDocs = (documents ?? []) as Document[];
@@ -101,6 +112,8 @@ export default async function AttorneyFilePage({
           facts={(facts ?? []) as FactItem[]}
           documents={topDocuments}
           childDocuments={childDocuments}
+          requestedAttachments={(requestedRows ?? []) as RequestedAttachment[]}
+          govForms={(formRows ?? []) as GovFormInstrument[]}
           mode="attorney"
           clientProfile={client}
         />

@@ -5516,6 +5516,144 @@ mark.atty-placeholder {
   .lf-step-dot { width: 26px; height: 26px; }
 }
 
+/* ── Mission Control action queue (extends Next-Step layer) ───────────────── */
+.mc-board .lf-nextstep-hero {
+  background: linear-gradient(135deg, var(--brand-navy) 0%, #1a3358 100%);
+  border-radius: var(--brand-r-lg);
+  padding: 1.25rem 1.35rem;
+  color: #fff;
+}
+.mc-queue {
+  background: var(--brand-white);
+  border: 1px solid var(--brand-border);
+  border-radius: var(--brand-r-lg);
+  padding: 1rem 1.15rem;
+}
+.mc-queue-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 0.75rem;
+}
+.mc-queue-title {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--brand-navy);
+}
+.mc-queue-meta {
+  font-size: 12px;
+  color: var(--brand-text-lt);
+}
+.mc-action-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mc-action {
+  border: 1px solid var(--brand-border);
+  border-radius: var(--brand-r-md);
+  background: #fafbfd;
+  overflow: hidden;
+}
+.mc-action-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+}
+.mc-action-icon {
+  flex-shrink: 0;
+  width: 18px;
+  text-align: center;
+  color: var(--brand-gold);
+  font-weight: 700;
+  line-height: 1.4;
+}
+.mc-action-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mc-action-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--brand-navy);
+  line-height: 1.35;
+}
+.mc-action-reason {
+  font-size: 12px;
+  color: var(--brand-text-lt);
+  line-height: 1.4;
+}
+.mc-action-btn {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(200, 169, 110, 0.55);
+  background: #fff;
+  color: var(--brand-navy);
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  font-family: inherit;
+}
+.mc-action-btn:hover {
+  background: var(--brand-gold);
+  border-color: var(--brand-gold);
+  color: var(--brand-navy);
+}
+.mc-gap-form {
+  padding: 0 12px 12px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mc-gap-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--brand-border);
+  border-radius: var(--brand-r-sm);
+  font-size: 14px;
+  font-family: inherit;
+}
+.mc-gap-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.mc-action-link-btn {
+  background: none;
+  border: none;
+  font-size: 12px;
+  color: var(--brand-text-lt);
+  cursor: pointer;
+  font-family: inherit;
+  text-decoration: underline;
+}
+.mc-action-error {
+  font-size: 12px;
+  color: #b42318;
+}
+.mc-queue-foot {
+  margin: 0.85rem 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--brand-text-lt);
+  font-style: italic;
+}
+
 /* ── Plain-language captions (additive, next to existing legal labels) ────── */
 .lf-plain-caption {
   text-transform: none;
