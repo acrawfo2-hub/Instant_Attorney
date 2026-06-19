@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { WizardType, LegalStrategy } from "./types";
-import { coerceWizardType } from "./types";
+import { coerceWizardType } from "./types.ts";
 import { isKnownFormKey } from "./government-forms.ts";
 import { provisionalFormDef, slugifyFormKey } from "./gov-form-lookup.ts";
 import type { DynamicCandidate } from "./gov-form-lookup.ts";

@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { notifyAttorneyDocumentReady } from "./notify";
-import { WIZARD_LABELS, coerceWizardType } from "./types";
+import { notifyAttorneyDocumentReady } from "./notify.ts";
+import { WIZARD_LABELS, coerceWizardType } from "./types.ts";
 import type { WizardType, Document, CaseFile, Profile } from "./types";
 
 export function isValidWizardType(type: string): type is WizardType {

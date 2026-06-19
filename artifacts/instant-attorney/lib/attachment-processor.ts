@@ -2,10 +2,10 @@ import Anthropic from "@anthropic-ai/sdk";
 import mammoth from "mammoth";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CaseFile, FactItem } from "./types";
-import { buildFileContext } from "./prompts";
-import { recordAiFromMessage } from "./usage-tracker";
-import { logTruncation } from "./truncation-logger";
-import { maxOutputTokensFor, limitSignalMetadata } from "./token-limits";
+import { buildFileContext } from "./prompts.ts";
+import { recordAiFromMessage } from "./usage-tracker.ts";
+import { logTruncation } from "./truncation-logger.ts";
+import { maxOutputTokensFor, limitSignalMetadata } from "./token-limits.ts";
 
 const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney, maxRetries: 4 });
 
