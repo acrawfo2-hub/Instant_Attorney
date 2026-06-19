@@ -1,6 +1,6 @@
 import { Resend } from "resend";
 import type { Document, CaseFile, Profile, ConsultRequest } from "./types";
-import { docTypeLabel } from "./types";
+import { docTypeLabel } from "./types.ts";
 
 let _resend: Resend | null = null;
 function getResend(): Resend {

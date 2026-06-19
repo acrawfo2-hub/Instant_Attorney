@@ -1,6 +1,6 @@
 import type { CaseFile, FactItem, WizardType, Attachment, RequestedAttachment, Document } from "./types";
-import { WIZARD_LABELS, docTypeLabel } from "./types";
-import { formCatalogForPrompt } from "./government-forms";
+import { WIZARD_LABELS, docTypeLabel } from "./types.ts";
+import { formCatalogForPrompt } from "./government-forms.ts";
 
 // ── Free chat (Phase I) ──────────────────────────────────────────────────────
 

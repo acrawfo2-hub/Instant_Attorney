@@ -1,12 +1,12 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { DRAFTER_SYSTEM_PROMPT, WIZARD_FIELD_HINTS, buildFileContext } from "./prompts";
-import { isValidWizardType } from "./document-utils";
-import { extractDraftText } from "./file-parser";
-import { recordAiFromMessage } from "./usage-tracker";
-import { logTruncation } from "./truncation-logger";
-import { WIZARD_LABELS } from "./types";
-import { maxOutputTokensFor, limitSignalMetadata } from "./token-limits";
+import { DRAFTER_SYSTEM_PROMPT, WIZARD_FIELD_HINTS, buildFileContext } from "./prompts.ts";
+import { isValidWizardType } from "./document-utils.ts";
+import { extractDraftText } from "./file-parser.ts";
+import { recordAiFromMessage } from "./usage-tracker.ts";
+import { logTruncation } from "./truncation-logger.ts";
+import { WIZARD_LABELS } from "./types.ts";
+import { maxOutputTokensFor, limitSignalMetadata } from "./token-limits.ts";
 import type { CaseFile, FactItem, WizardType, Attachment, RequestedAttachment } from "./types";
 
 const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney, maxRetries: 4 });
