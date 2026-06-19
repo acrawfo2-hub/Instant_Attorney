@@ -54,19 +54,14 @@ async function getData(caseFileId: string) {
   if (!caseFile) return null;
 
   const allDocs = (documents ?? []) as Document[];
-  const preWarmedByType: Record<string, string> = {};
-  for (const doc of allDocs) {
-    if (doc.status === "pre_warmed" && !preWarmedByType[doc.doc_type]) {
-      preWarmedByType[doc.doc_type] = doc.id;
-    }
-  }
 
   return {
     caseFile: caseFile as CaseFile,
     facts: (facts ?? []) as FactItem[],
+    // Defensively exclude any legacy "pre_warmed" rows (the feature was retired);
+    // a one-time migration promotes/cleans them, this guards stragglers.
     documents: allDocs.filter((d) => d.status !== "pre_warmed" && !d.parent_document_id),
     childDocuments: allDocs.filter((d) => !!d.parent_document_id),
-    preWarmedByType,
     userId,
     consultRequest: (consultRow as ConsultRequest | null) ?? null,
     hasConsultSub: subRow?.plan === "consult" && ["active", "bypass"].includes(subRow?.status ?? ""),
@@ -85,7 +80,7 @@ export default async function FileDetailPage({
   const result = await getData(id);
   if (!result) notFound();
 
-  const { caseFile, facts, documents, childDocuments, preWarmedByType, consultRequest, hasConsultSub } = result;
+  const { caseFile, facts, documents, childDocuments, consultRequest, hasConsultSub } = result;
 
   const title = caseFile.title
     || (caseFile.matter_subtype ? caseFile.matter_subtype.replace(/_/g, " ") : null)
@@ -127,7 +122,6 @@ export default async function FileDetailPage({
           facts={facts}
           documents={documents}
           childDocuments={childDocuments}
-          preWarmedByType={preWarmedByType}
           mode="client"
           consultRequest={consultRequest}
           hasConsultSub={hasConsultSub}

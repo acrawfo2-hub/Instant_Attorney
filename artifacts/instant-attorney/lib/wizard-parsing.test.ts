@@ -7,6 +7,8 @@ import {
   deriveQuestionsFromTemplate,
   ensureChecklistNeeds,
   buildBundledMessage,
+  buildStarterItems,
+  mapAnswersToPlaceholders,
   type ParsedDrafter,
 } from "./wizard-parsing.ts";
 
@@ -254,6 +256,77 @@ for (const wizardType of ["demand_letter", "draft_contract", "draft_waiver", "ge
     assert.ok(derived.blocking.length > 0, `${wizardType} must derive at least one blocking need`);
   });
 }
+
+// ── Starter questions (parallel "punch 1") ───────────────────────────────────
+// While the real draft composes, the wizard shows document-type-aware starter
+// questions instantly (no AI). They must be relevant per type and have stable ids.
+
+test("buildStarterItems returns document-type-aware questions with stable ids", () => {
+  const demand = buildStarterItems("demand_letter");
+  assert.ok(demand.length >= 3 && demand.length <= 6);
+  // All ids unique and stable (slugged from the label).
+  const ids = demand.map((i) => i.id);
+  assert.equal(new Set(ids).size, ids.length);
+  assert.ok(ids.every((id) => id.startsWith("starter-")));
+  // Demand-letter specific: asks about a response deadline.
+  assert.ok(demand.some((i) => /deadline/i.test(i.label)));
+
+  const contract = buildStarterItems("draft_contract");
+  assert.ok(contract.some((i) => /party/i.test(i.label)));
+  // Different types ask different things.
+  assert.notDeepEqual(demand.map((i) => i.label), contract.map((i) => i.label));
+});
+
+test("buildStarterItems falls back to the general set for an unknown type", () => {
+  const items = buildStarterItems("totally_made_up_type");
+  assert.ok(items.length > 0, "must never be empty so the pane always has questions");
+  assert.deepEqual(items.map((i) => i.label), buildStarterItems("general_document").map((i) => i.label));
+});
+
+// ── Deterministic fold mapping (B2) ──────────────────────────────────────────
+// An answer is filled deterministically ONLY when it maps to exactly one specific
+// placeholder. Ambiguous / generic / unmatched answers are left for the AI pass.
+
+test("mapAnswersToPlaceholders fills a unique, specific placeholder deterministically", () => {
+  const draft = "Governed by the laws of [[GOVERNING STATE]]. Respond within [[RESPONSE DEADLINE — days]].";
+  const { byKey, leftover } = mapAnswersToPlaceholders(draft, [
+    { label: "Governing state", value: "Texas" },
+    { label: "Response deadline", value: "14 days" },
+  ]);
+  assert.equal(byKey["governing state"], "Texas");
+  assert.equal(byKey["response deadline — days"], "14 days");
+  assert.equal(leftover.length, 0);
+});
+
+test("mapAnswersToPlaceholders leaves an ambiguous match for the AI pass", () => {
+  // Two address placeholders — a generic "address" answer must NOT be guessed into one.
+  const draft = "Sender: [[ADDRESS — Party A]]. Recipient: [[ADDRESS — Party B]].";
+  const { byKey, leftover } = mapAnswersToPlaceholders(draft, [
+    { label: "Your mailing address", value: "1 Main St" },
+  ]);
+  assert.deepEqual(byKey, {}, "ambiguous answers are never placed deterministically");
+  assert.equal(leftover.length, 1);
+  assert.equal(leftover[0].value, "1 Main St");
+});
+
+test("mapAnswersToPlaceholders defers a generic single-word placeholder", () => {
+  // A lone generic "[[AMOUNT]]" is not specific enough to match loosely.
+  const draft = "Pay $[[AMOUNT]] to the claimant.";
+  const { byKey, leftover } = mapAnswersToPlaceholders(draft, [
+    { label: "Amount or specific action demanded", value: "$5,000" },
+  ]);
+  assert.deepEqual(byKey, {});
+  assert.equal(leftover.length, 1);
+});
+
+test("mapAnswersToPlaceholders puts unmatched answers in leftover", () => {
+  const draft = "Agreement governed by [[GOVERNING STATE]].";
+  const { byKey, leftover } = mapAnswersToPlaceholders(draft, [
+    { label: "Main purpose of the document", value: "Sell a car" },
+  ]);
+  assert.deepEqual(byKey, {});
+  assert.deepEqual(leftover, [{ label: "Main purpose of the document", value: "Sell a car" }]);
+});
 
 test("each wizard type yields a distinct, type-appropriate template", () => {
   const demand = buildFallbackTemplate("X", "demand_letter");

@@ -16,7 +16,6 @@ interface NextStepGuideProps {
   caseFile: CaseFile;
   documents: Document[];
   facts: FactItem[];
-  preWarmedByType?: Record<string, string>;
 }
 
 function StepDot({ state, number }: { state: "done" | "current" | "upcoming"; number: number }) {
@@ -37,9 +36,8 @@ export default function NextStepGuide({
   caseFile,
   documents,
   facts,
-  preWarmedByType = {},
 }: NextStepGuideProps) {
-  const guide = computeNextStep(caseFile, documents, facts, preWarmedByType);
+  const guide = computeNextStep(caseFile, documents, facts);
 
   return (
     <section className={`lf-nextstep lf-nextstep-${guide.tone}`} aria-label="What to do next">
