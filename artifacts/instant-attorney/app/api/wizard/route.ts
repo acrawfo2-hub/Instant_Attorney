@@ -233,8 +233,30 @@ export async function POST(req: NextRequest) {
     if (!savedDocId) {
       const primary = await findPrimaryDocument(writeDb, caseFileId, wizardType, userId);
       if (primary) {
-        savedDocId = primary.id;
-        existingDoc = { status: primary.status, content_json: primary.content_json };
+        const isEditable =
+          primary.status === "draft" ||
+          primary.status === "changes_requested" ||
+          primary.status === "pre_warmed" ||
+          primary.status == null;
+        if (isEditable) {
+          // Safe to adopt and update in place — still an editable draft.
+          savedDocId = primary.id;
+          existingDoc = { status: primary.status, content_json: primary.content_json };
+        } else {
+          // The case already has a FINALIZED / in-review primary document
+          // (pending_review, approved, delivered, ...). We must neither INSERT a
+          // duplicate top-level row NOR overwrite the canonical finalized content
+          // with this regeneration. Resolve the client to the existing document
+          // (return its real saved draft, not the throw-away regeneration) and let
+          // them see/continue from it instead of silently re-drafting.
+          return NextResponse.json({
+            text: primary.draft_text ?? fullResponse,
+            documentId: primary.id,
+            truncated: false,
+            alreadyFinalized: true,
+            status: primary.status,
+          });
+        }
       }
     }
 

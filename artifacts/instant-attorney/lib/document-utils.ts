@@ -52,10 +52,10 @@ export async function findPrimaryDocument(
   caseFileId: string,
   wizardType: string,
   userId?: string
-): Promise<{ id: string; status: string | null; content_json: unknown } | null> {
+): Promise<{ id: string; status: string | null; content_json: unknown; draft_text: string | null } | null> {
   let query = db
     .from("documents")
-    .select("id, status, content_json")
+    .select("id, status, content_json, draft_text")
     .eq("case_file_id", caseFileId)
     .eq("doc_type", wizardType)
     .is("parent_document_id", null)

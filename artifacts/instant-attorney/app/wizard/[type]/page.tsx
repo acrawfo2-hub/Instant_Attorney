@@ -346,7 +346,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
         throw new Error(body?.error || `Server error ${res.status}`);
       }
 
-      const data = await res.json() as { text: string; documentId: string | null; truncated?: boolean; gapSyncWarning?: boolean };
+      const data = await res.json() as { text: string; documentId: string | null; truncated?: boolean; gapSyncWarning?: boolean; alreadyFinalized?: boolean; status?: string | null };
       const fullText = data.text ?? "";
 
       if (data.documentId) {
@@ -355,6 +355,13 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
       }
       if (data.truncated) setTruncatedDraft(true);
       setGapSyncWarning(Boolean(data.gapSyncWarning));
+
+      // The server resolved us to an already-finalized / in-review primary document
+      // instead of overwriting it. Reflect that state so the client sees their real
+      // submitted document rather than an editable re-draft.
+      if (data.alreadyFinalized && data.status === "pending_review") {
+        setSubmittedForReview(true);
+      }
 
       setMessages((prev) => {
         const next = [...prev];
