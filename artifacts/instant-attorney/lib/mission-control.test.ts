@@ -1,0 +1,107 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { computeMissionControl } from "./mission-control.ts";
+import type { CaseFile, Document, FactItem, RequestedAttachment } from "./types.ts";
+
+const baseFile: CaseFile = {
+  id: "file-1",
+  user_id: "user-1",
+  title: null,
+  summary: "Test case",
+  goals: [],
+  matter_type: "reactive",
+  matter_subtype: "employment",
+  status: "open",
+  file_type: "standard",
+  archive_at: null,
+  legal_strategy: {
+    summary: "Strategy",
+    instruments: ["Demand Letter"],
+    strengths: [],
+    risks: [],
+    recommended_wizards: ["demand_letter"],
+  },
+  attorney_assessment: null,
+  next_action: null,
+  jurisdiction: null,
+  opened_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+};
+
+function pendingDoc(): Document {
+  return {
+    id: "d1",
+    case_file_id: "file-1",
+    user_id: "u",
+    parent_document_id: null,
+    doc_type: "demand_letter",
+    title: "Demand",
+    status: "pending_review",
+    content_json: {},
+    draft_text: "Draft body",
+    file_path: null,
+    submitted_at: new Date().toISOString(),
+    review_status: null,
+    created_at: "",
+    updated_at: "",
+  };
+}
+
+test("puts create document in hero when strategy exists and no doc yet", () => {
+  const board = computeMissionControl({
+    caseFile: baseFile,
+    documents: [],
+    facts: [{ id: "f1", case_file_id: "file-1", user_id: "u", description: "x", status: "confirmed", created_at: "" }],
+  });
+  assert.equal(board.hero.activeStep, 2);
+  assert.match(board.hero.cta?.href ?? "", /\/wizard\/demand_letter/);
+});
+
+test("surfaces fact gaps in the action queue", () => {
+  const gaps: FactItem[] = [
+    { id: "g1", case_file_id: "file-1", user_id: "u", description: "Employer name", status: "gap", created_at: "" },
+  ];
+  const board = computeMissionControl({
+    caseFile: baseFile,
+    documents: [],
+    facts: gaps,
+  });
+  assert.ok(board.actions.some((a) => a.kind === "gap" && a.factId === "g1"));
+});
+
+test("uses while-you-wait framing when doc is pending review", () => {
+  const board = computeMissionControl({ caseFile: baseFile, documents: [pendingDoc()], facts: [] });
+  assert.equal(board.hero.tone, "waiting");
+  assert.equal(board.hero.eyebrow, "While you wait");
+});
+
+test("includes pending uploads for clients", () => {
+  const uploads: RequestedAttachment[] = [{
+    id: "a1",
+    case_file_id: "file-1",
+    user_id: "u",
+    description: "Signed contract",
+    reason: "Needed for draft",
+    status: "requested",
+    fulfilled_by: null,
+    source: "ai",
+    created_at: "",
+  }];
+  const board = computeMissionControl({
+    caseFile: baseFile,
+    documents: [],
+    facts: [],
+    requestedAttachments: uploads,
+  });
+  assert.ok(board.actions.some((a) => a.kind === "upload"));
+});
+
+test("shows attorney review link when doc pending", () => {
+  const board = computeMissionControl({
+    caseFile: baseFile,
+    documents: [pendingDoc()],
+    facts: [],
+    mode: "attorney",
+  });
+  assert.match(board.actions[0]?.cta?.href ?? "", /\/attorney\/review\/d1/);
+});
