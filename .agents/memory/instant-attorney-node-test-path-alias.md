@@ -3,21 +3,28 @@ name: Instant-Attorney node:test path-alias limitation
 description: Why some lib tests fail to load and how to write loadable tests in this artifact
 ---
 
-The instant-attorney test runner is plain `node --test 'lib/**/*.test.ts'` (no
-bundler, no ts-path resolution). It can only load modules whose import graph uses
-**relative** specifiers (`./foo.ts`).
+The instant-attorney `test` script now registers an ESM resolve hook
+(`lib/test-support/register.mjs` → `alias-loader.mjs`) plus
+`--experimental-test-module-mocks`, so `@/lib/*` alias imports DO load under
+`node --test`. This is what un-broke `lib/mission-control.test.ts` (it no longer
+fails on `@/lib`) and lets route handlers (e.g. `app/api/wizard/route.ts`) be
+imported and tested directly.
 
-**Rule:** A `lib/*.test.ts` file — and every lib module it transitively imports —
-must import via relative paths, not the `@/lib/*` TS path alias. A test that
-imports a module which itself does `import ... from "@/lib/..."` fails at load with
-`ERR_MODULE_NOT_FOUND: Cannot find package '@/lib'`.
+**How to test a Next route handler here:**
+- Import the route via `import(pathToFileURL(<root>/app/api/.../route.ts).href)`.
+- Mock externals/IO with `mock.module(...)` BEFORE the dynamic import: bare pkgs
+  by specifier (`@anthropic-ai/sdk` via `defaultExport`); `@/lib/*` mocks keyed by
+  `pathToFileURL(<root>/lib/x.ts).href` (NOT the `@/` string — the route and test
+  must resolve to the same URL for the mock to apply).
+- `next/server` does NOT resolve under plain Node (Next bundler export
+  conditions). The loader maps it to `lib/test-support/next-server-stub.mjs`
+  (NextResponse.json / NextRequest). Do not try to `mock.module("next/server")` —
+  mock.module can't resolve it.
+- Set `process.env.BYPASS_AUTH="true"` before importing the route to skip
+  auth/subscription/ownership and focus on the handler's own wiring.
+- Supabase query builders are thenable: a mock builder needs `.then` (awaited list
+  reads + the status-preserving UPDATE await the builder directly) AND
+  `.single`/`.maybeSingle`.
 
-**Why:** node's ESM loader has no knowledge of tsconfig `paths`; `@/lib` resolves
-as a real package name and isn't found.
-
-**How to apply:** When adding tests, import the unit under test relatively. If the
-unit currently uses `@/lib` imports, it can't be unit-tested as-is — either it's
-only reachable via Next (route/page code, where `@/` works) or the lib module
-needs its imports switched to relative. `lib/mission-control.test.ts` is a known
-pre-existing failure for exactly this reason (mission-control.ts imports `@/lib`);
-it is unrelated to any new test work.
+**Why the hook (not relative imports):** node's ESM loader has no tsconfig
+`paths`; the resolve hook rewrites `@/x` → `<cwd>/x` with extension probing.
