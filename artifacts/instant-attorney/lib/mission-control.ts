@@ -5,9 +5,9 @@ import type {
   GovFormInstrument,
   RequestedAttachment,
   WizardType,
-} from "@/lib/types";
-import { WIZARD_LABELS, coerceWizardType } from "@/lib/types";
-import { computeNextStep, type NextStepGuide } from "@/lib/next-step";
+} from "./types.ts";
+import { WIZARD_LABELS, coerceWizardType } from "./types.ts";
+import { computeNextStep, type NextStepGuide } from "./next-step.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mission Control — ranked open actions on top of the Living File.
