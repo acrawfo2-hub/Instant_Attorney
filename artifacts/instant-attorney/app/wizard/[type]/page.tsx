@@ -16,6 +16,7 @@ import {
   mapAnswersToPlaceholders,
 } from "@/lib/wizard-parsing";
 import type { ParsedDrafter, NeededItem, LabeledAnswer } from "@/lib/wizard-parsing";
+import { mergeStagedStarter, drainStagedStarter } from "@/lib/starter-fold";
 
 // Keep just under the server route's maxDuration (300s) so a long but legitimate
 // draft finishes server-side instead of being aborted by the client. If the
@@ -215,17 +216,10 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   // refine pass. Runs only once a draft already exists, so it never interrupts the
   // original build — and unanswered questions simply remain as placeholders.
   async function maybeFoldStarterAnswers() {
-    // Loop so any answers staged WHILE an earlier fold was awaiting async work
-    // (deterministic fill + AI refine pass) are still folded in, instead of being
-    // stranded in the ref. Bounded to avoid an unlikely runaway loop.
-    for (let pass = 0; pass < 5; pass++) {
-      const staged = pendingStarterRef.current;
-      pendingStarterRef.current = null;
-      if (!staged || (!staged.filled.length && !staged.note)) return;
-      await foldStagedStarterAnswers(staged);
-      // If nothing new was staged during the fold above, we're done.
-      if (!pendingStarterRef.current) return;
-    }
+    // Drains the ref across passes so any answers staged WHILE an earlier fold was
+    // awaiting async work (deterministic fill + AI refine pass) are still folded
+    // in, instead of being stranded in the ref. Bounded to avoid a runaway loop.
+    await drainStagedStarter(pendingStarterRef, foldStagedStarterAnswers);
   }
 
   async function foldStagedStarterAnswers(staged: { filled: LabeledAnswer[]; note: string }) {
@@ -295,15 +289,11 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
     // client can save more than once — including while an earlier fold is still
     // awaiting — so a plain overwrite would silently drop the earlier batch.
     // Dedupe by label, latest value wins.
-    const prev = pendingStarterRef.current;
-    const mergedByLabel = new Map<string, string>();
-    for (const a of prev?.filled ?? []) mergedByLabel.set(a.label, a.value);
-    for (const a of filled) mergedByLabel.set(a.label, a.value);
-    const mergedNote = [prev?.note, extraNote.trim()].filter(Boolean).join("\n");
-    pendingStarterRef.current = {
-      filled: Array.from(mergedByLabel, ([label, value]) => ({ label, value })),
-      note: mergedNote,
-    };
+    pendingStarterRef.current = mergeStagedStarter(
+      pendingStarterRef.current,
+      filled,
+      extraNote.trim()
+    );
     setStarterSaved(true);
     setError("");
   }

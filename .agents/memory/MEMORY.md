@@ -17,3 +17,4 @@
 - [Ad-hoc scripts](instant-attorney-adhoc-scripts.md) — run inside artifact dir; service key only in .env.local; tsx=CJS no top-level await; long AI runs need a managed workflow + sentinel poll.
 - [Attorney full-file parity](instant-attorney-attorney-parity.md) — attorney sees everything only if BOTH the `!isAttorney` UI gate is removed in ClientFileView AND the section's API route has a service-client attorney bypass.
 - [recommended_wizards must be clean tokens](instant-attorney-recommended-wizards.md) — junk like "draft_contract — ready to proceed" passes coerceWizardType but fails exact-match isValidWizardType/Object.hasOwn → wizard cards + chat handoff silently break.
+- [node:test path-alias limitation](instant-attorney-node-test-path-alias.md) — lib tests + their imports must use relative paths; any `@/lib` import in the graph fails to load (mission-control.test.ts is a known pre-existing failure).

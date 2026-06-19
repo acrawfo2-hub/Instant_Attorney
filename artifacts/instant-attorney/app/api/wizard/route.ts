@@ -2,8 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { DRAFTER_SYSTEM_PROMPT, WIZARD_FIELD_HINTS, buildFileContext } from "@/lib/prompts";
-import { parseAndUpdateFile, extractDraftText, syncDraftGapsToLivingFile } from "@/lib/file-parser";
-import { findReusableDocument, findPrimaryDocument } from "@/lib/document-utils";
+import { parseAndUpdateFile, extractDraftText, syncDraftGapsToLivingFile, isCompleteFileUpdate } from "@/lib/file-parser";
+import { resolveWizardDocumentTarget } from "@/lib/document-utils";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
 import { BYPASS_USER_ID, WIZARD_LABELS } from "@/lib/types";
 import type { WizardType, CaseFile, FactItem, Attachment, RequestedAttachment } from "@/lib/types";
@@ -200,67 +200,35 @@ export async function POST(req: NextRequest) {
   if (draftText) {
     const now = new Date().toISOString();
 
-    if (!savedDocId) {
-      const existing = await findReusableDocument(writeDb, caseFileId, wizardType, userId);
-      savedDocId = existing?.id;
+    // Resolve which document this draft lands on (selection precedence + IDOR /
+    // duplicate-primary guards). `writeDb` is the service client used for the
+    // reads/writes below, so the resolver scopes every candidate to this caller.
+    const target = await resolveWizardDocumentTarget(writeDb, {
+      caseFileId,
+      wizardType,
+      userId,
+      suppliedDocumentId: savedDocId,
+    });
+
+    // The case already has a FINALIZED / in-review primary document
+    // (pending_review, approved, delivered, ...). We must neither INSERT a
+    // duplicate top-level row NOR overwrite the canonical finalized content with
+    // this regeneration. Resolve the client to the existing document (return its
+    // real saved draft, not the throw-away regeneration) and let them see/continue
+    // from it instead of silently re-drafting.
+    if (target.action === "already_finalized") {
+      return NextResponse.json({
+        text: target.document.draft_text ?? fullResponse,
+        documentId: target.document.id,
+        truncated: false,
+        alreadyFinalized: true,
+        status: target.document.status,
+      });
     }
 
-    // `writeDb` is the service client and bypasses RLS, so every existing-document
-    // read/write below MUST be scoped to this caller. `savedDocId` can come from
-    // the caller-supplied `documentId`, so without `user_id`/`case_file_id`
-    // predicates a client could target — and overwrite — another user's document
-    // (IDOR). If a supplied id isn't this caller's (or no longer exists), we drop
-    // it and create a fresh document instead of mutating a foreign row.
-    let existingDoc: { status: string | null; content_json: unknown } | null = null;
-    if (savedDocId) {
-      const { data } = await writeDb
-        .from("documents")
-        .select("status, content_json")
-        .eq("id", savedDocId)
-        .eq("user_id", userId)
-        .eq("case_file_id", caseFileId)
-        .maybeSingle();
-      existingDoc = data ?? null;
-      if (!existingDoc) savedDocId = undefined;
-    }
-
-    // Last-resort dedupe: if we still have no target document — no caller id, the
-    // supplied id failed the ownership check above, or no in-progress draft was
-    // found — fall back to the case's latest PRIMARY document of this type, in any
-    // lifecycle state, and update it in place. Without this, a fresh generation
-    // for a case that already has a finalized / in-review primary document would
-    // INSERT a second top-level row, duplicating the client's document.
-    if (!savedDocId) {
-      const primary = await findPrimaryDocument(writeDb, caseFileId, wizardType, userId);
-      if (primary) {
-        const isEditable =
-          primary.status === "draft" ||
-          primary.status === "changes_requested" ||
-          primary.status === "pre_warmed" ||
-          primary.status == null;
-        if (isEditable) {
-          // Safe to adopt and update in place — still an editable draft.
-          savedDocId = primary.id;
-          existingDoc = { status: primary.status, content_json: primary.content_json };
-        } else {
-          // The case already has a FINALIZED / in-review primary document
-          // (pending_review, approved, delivered, ...). We must neither INSERT a
-          // duplicate top-level row NOR overwrite the canonical finalized content
-          // with this regeneration. Resolve the client to the existing document
-          // (return its real saved draft, not the throw-away regeneration) and let
-          // them see/continue from it instead of silently re-drafting.
-          return NextResponse.json({
-            text: primary.draft_text ?? fullResponse,
-            documentId: primary.id,
-            truncated: false,
-            alreadyFinalized: true,
-            status: primary.status,
-          });
-        }
-      }
-    }
-
-    if (savedDocId && existingDoc) {
+    if (target.action === "update") {
+      savedDocId = target.documentId;
+      const existingDoc = target.existing;
       // Preserve where the document already is in its lifecycle. Once a client
       // has sent a draft for review (pending_review) — or the attorney has asked
       // for changes (changes_requested), or finalized it (approved/delivered) —
@@ -340,10 +308,7 @@ export async function POST(req: NextRequest) {
   // sub-sections would otherwise be parsed and PARTIALLY applied to the file,
   // corrupting facts / legal strategy. Requiring the closing marker makes a
   // partial application impossible; the saved draft text is unaffected.
-  if (
-    fullResponse.includes("---FILE UPDATE---") &&
-    fullResponse.includes("---END FILE UPDATE---")
-  ) {
+  if (isCompleteFileUpdate(fullResponse)) {
     try {
       await parseAndUpdateFile(writeDb, caseFileId, userId, fullResponse);
     } catch (parseErr) {
