@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { DRAFTER_SYSTEM_PROMPT, WIZARD_FIELD_HINTS, buildFileContext } from "@/lib/prompts";
 import { parseAndUpdateFile, extractDraftText, syncDraftGapsToLivingFile } from "@/lib/file-parser";
-import { findReusableDocument } from "@/lib/document-utils";
+import { findReusableDocument, findPrimaryDocument } from "@/lib/document-utils";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
 import { BYPASS_USER_ID, WIZARD_LABELS } from "@/lib/types";
 import type { WizardType, CaseFile, FactItem, Attachment, RequestedAttachment } from "@/lib/types";
@@ -224,6 +224,20 @@ export async function POST(req: NextRequest) {
       if (!existingDoc) savedDocId = undefined;
     }
 
+    // Last-resort dedupe: if we still have no target document — no caller id, the
+    // supplied id failed the ownership check above, or no in-progress draft was
+    // found — fall back to the case's latest PRIMARY document of this type, in any
+    // lifecycle state, and update it in place. Without this, a fresh generation
+    // for a case that already has a finalized / in-review primary document would
+    // INSERT a second top-level row, duplicating the client's document.
+    if (!savedDocId) {
+      const primary = await findPrimaryDocument(writeDb, caseFileId, wizardType, userId);
+      if (primary) {
+        savedDocId = primary.id;
+        existingDoc = { status: primary.status, content_json: primary.content_json };
+      }
+    }
+
     if (savedDocId && existingDoc) {
       // Preserve where the document already is in its lifecycle. Once a client
       // has sent a draft for review (pending_review) — or the attorney has asked
@@ -298,8 +312,16 @@ export async function POST(req: NextRequest) {
     logTruncation({ endpoint: "wizard/doc-saved", documentId: savedDocId });
   }
 
-  // Update the Living File if the drafter produced a FILE UPDATE block
-  if (fullResponse.includes("---FILE UPDATE---")) {
+  // Update the Living File only when the drafter produced a COMPLETE FILE UPDATE
+  // block — both the opening AND closing markers present. A truncated response
+  // (stop_reason "max_tokens") can leave a half-written block whose structured
+  // sub-sections would otherwise be parsed and PARTIALLY applied to the file,
+  // corrupting facts / legal strategy. Requiring the closing marker makes a
+  // partial application impossible; the saved draft text is unaffected.
+  if (
+    fullResponse.includes("---FILE UPDATE---") &&
+    fullResponse.includes("---END FILE UPDATE---")
+  ) {
     try {
       await parseAndUpdateFile(writeDb, caseFileId, userId, fullResponse);
     } catch (parseErr) {
@@ -310,10 +332,15 @@ export async function POST(req: NextRequest) {
   // Record whatever the draft still needs as Living File gaps, so an imperfect
   // document can be sent and the file (and attorney) still tracks exactly what's
   // outstanding. Best-effort — never block the response on it.
+  let gapSyncWarning = false;
   if (draftText) {
     try {
       await syncDraftGapsToLivingFile(writeDb, caseFileId, userId, draftText);
     } catch (gapErr) {
+      // Non-fatal, but no longer silent: flag it so the client can show a soft
+      // notice, and keep the server log. The draft itself is already saved, so
+      // only the dashboard "outstanding items" view may briefly lag.
+      gapSyncWarning = true;
       console.error("[wizard] gap sync error:", gapErr);
     }
   }
@@ -322,5 +349,6 @@ export async function POST(req: NextRequest) {
     text: fullResponse,
     documentId: savedDocId ?? null,
     truncated,
+    gapSyncWarning,
   });
 }

@@ -42,6 +42,34 @@ export async function findReusableDocument(
   return data;
 }
 
+/** Latest top-level (primary) document for this case + type, in ANY status,
+ *  scoped to the owner. Unlike findReusableDocument (which only matches
+ *  in-progress drafts), this also returns finalized / in-review documents — used
+ *  to avoid inserting a duplicate primary document for a case that already has
+ *  one. Returns enough to drive an in-place, status-preserving update. */
+export async function findPrimaryDocument(
+  db: SupabaseClient,
+  caseFileId: string,
+  wizardType: string,
+  userId?: string
+): Promise<{ id: string; status: string | null; content_json: unknown } | null> {
+  let query = db
+    .from("documents")
+    .select("id, status, content_json")
+    .eq("case_file_id", caseFileId)
+    .eq("doc_type", wizardType)
+    .is("parent_document_id", null)
+    .order("updated_at", { ascending: false })
+    .limit(1);
+
+  if (userId) {
+    query = query.eq("user_id", userId);
+  }
+
+  const { data } = await query.maybeSingle();
+  return data ?? null;
+}
+
 export async function getChildDocuments(
   db: SupabaseClient,
   parentId: string
