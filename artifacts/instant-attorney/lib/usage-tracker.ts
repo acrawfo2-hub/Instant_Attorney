@@ -10,7 +10,6 @@ export type UsageFeature =
   | "pre_warm"
   | "title_generator"
   | "attachment_analysis"
-  | "auto_critical_review"
   | "attorney_review"
   | "attorney_second_draft_fitness"
   | "attorney_second_draft"

@@ -74,7 +74,6 @@ export interface Profile {
   full_name: string | null;
   phone: string | null;
   is_attorney: boolean;
-  auto_document_review: boolean;
   created_at: string;
   updated_at: string;
 }
