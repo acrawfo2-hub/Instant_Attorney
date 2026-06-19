@@ -1,7 +1,20 @@
 ---
-name: Anthropic batch API never completes on Replit
-description: Why background AI work (auto-review, pre-warm) must stream inline rather than use messages.batches.
+name: Anthropic batch API never completes on Replit; pre-warm is retired
+description: Why background AI work must stream inline rather than use messages.batches, and why pre-warm must never be re-added.
 ---
+
+**Pre-warm (background pre-generation of a draft before the client opens the
+wizard) is permanently retired — do NOT re-add it.** It was brittle on an
+ephemeral server (severed background jobs left `documents` rows stranded at
+status `pre_warmed` with null `draft_text`) and the live "compose on open +
+answer starter questions in parallel" flow makes it unnecessary. The cleanup
+migration is `supabase/schema-stage13-retire-prewarm.sql`. The `pre_warmed`
+DocumentStatus is intentionally kept ONLY for backward-compat with legacy rows.
+If a future plan/session note asks to "re-add pre-warm" or "fix pre-warm to
+save," treat it as stale and skip it.
+
+**Why:** retiring it was a deliberate decision; resurrecting it reintroduces the
+stranded-row bug and contradicts the on-demand draft flow.
 
 Any Anthropic `messages.batches.create` work in Instant-Attorney gets stuck forever.
 
