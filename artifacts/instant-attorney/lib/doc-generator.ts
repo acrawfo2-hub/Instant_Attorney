@@ -12,6 +12,7 @@ import {
   WidthType,
 } from "docx";
 import type { CaseFile, FactItem, Profile, WizardType } from "./types";
+import { placeholderFields } from "./wizard-parsing";
 
 // Build a safe Content-Disposition value for a .docx download. HTTP headers must
 // be Latin-1, but document titles routinely contain em-dashes ("— Revised Draft")
@@ -622,6 +623,47 @@ function stripWrappingEmphasis(text: string): string {
   return m ? m[2].trim() : t;
 }
 
+// ── Markdown table + blockquote helpers ──────────────────────────────────────
+// Drafting models sometimes emit Markdown tables (| a | b |) and blockquotes
+// (> …). Without conversion these render as literal pipes and angle brackets in
+// the .docx. Tables become real docx tables; blockquote markers are stripped.
+
+function isTableRow(line: string): boolean {
+  return (line.trim().match(/\|/g)?.length ?? 0) >= 2;
+}
+
+function parseTableCells(line: string): string[] {
+  return line.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+}
+
+function isTableSeparator(cells: string[]): boolean {
+  return cells.length > 0 && cells.every((c) => /^:?-{2,}:?$/.test(c) || c === "");
+}
+
+function buildTable(rows: string[][]): Table {
+  const colCount = Math.max(...rows.map((r) => r.length));
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: rows.map((cells, rowIdx) =>
+      new TableRow({
+        children: Array.from({ length: colCount }, (_, c) => {
+          const text = cells[c] ?? "";
+          return new TableCell({
+            children: [
+              new Paragraph({
+                children:
+                  rowIdx === 0
+                    ? [new TextRun({ text: text.replace(/\*\*/g, ""), bold: true })]
+                    : inlineRuns(text),
+              }),
+            ],
+          });
+        }),
+      })
+    ),
+  });
+}
+
 // ── Generate .docx from AI-formatted draft text ──────────────────────────────
 // Used by the Drafter agent — wraps near-final AI text in a proper .docx shell
 // with firm header, DRAFT watermark, and clean paragraph formatting.
@@ -629,11 +671,14 @@ function stripWrappingEmphasis(text: string): string {
 export async function generateDocxFromText(
   title: string,
   draftText: string,
-  caseFile: { matter_subtype?: string | null; jurisdiction?: string | null }
+  // Nullable on purpose: the attorney download path reads the document under the
+  // attorney's session, and RLS on case_files can return null for a client's row
+  // even when the document row comes back. A null here must never crash the build.
+  caseFile: { matter_subtype?: string | null; jurisdiction?: string | null } | null
 ): Promise<Buffer> {
   const lines = draftText.split("\n");
 
-  const children: Paragraph[] = [
+  const children: (Paragraph | Table)[] = [
     ...firmHeader(),
     new Paragraph({
       children: [new TextRun({ text: title, bold: true, size: 26 })],
@@ -643,8 +688,28 @@ export async function generateDocxFromText(
     new Paragraph({ text: "" }),
   ];
 
-  for (const line of lines) {
-    const trimmed = line.trim();
+  for (let i = 0; i < lines.length; i++) {
+    let trimmed = lines[i].trim();
+    if (!trimmed) {
+      children.push(new Paragraph({ text: "" }));
+      continue;
+    }
+
+    // Markdown table block → real docx table (drop the |---| separator row)
+    if (isTableRow(trimmed)) {
+      const rows: string[][] = [];
+      while (i < lines.length && isTableRow(lines[i].trim())) {
+        const cells = parseTableCells(lines[i].trim());
+        if (!isTableSeparator(cells)) rows.push(cells);
+        i++;
+      }
+      i--; // for-loop will advance past the last consumed line
+      if (rows.length) children.push(buildTable(rows));
+      continue;
+    }
+
+    // Strip Markdown blockquote markers ("> ", "> > ") — render as normal text
+    trimmed = trimmed.replace(/^(?:>\s?)+/, "");
     if (!trimmed) {
       children.push(new Paragraph({ text: "" }));
       continue;
@@ -669,9 +734,9 @@ export async function generateDocxFromText(
       continue;
     }
 
-    // Section headings: ALL CAPS, "N. Heading", or a whole line wrapped in **bold**
+    // Section headings: ALL CAPS, "N." / "N.N" numbered, or a whole line in **bold**
     const unwrapped = stripWrappingEmphasis(trimmed);
-    const isNumberedHeading = /^\d+\.\s+\S/.test(unwrapped) && unwrapped.length < 80;
+    const isNumberedHeading = /^\d+(?:\.\d+)*\.?\s+\S/.test(unwrapped) && unwrapped.length < 80;
     const isAllCapsHeading =
       unwrapped === unwrapped.toUpperCase() && unwrapped.length < 80 && /[A-Z]{3,}/.test(unwrapped);
     const isWrappedHeading = unwrapped !== trimmed && unwrapped.length < 80;
@@ -708,7 +773,7 @@ export async function generateDocxFromText(
     new Paragraph({
       children: [
         new TextRun({
-          text: `DRAFT — FOR ATTORNEY REVIEW ONLY · Crawford Law PLLC · ${new Date().toLocaleDateString()} · ${caseFile.jurisdiction ?? "TX"} · Not for distribution`,
+          text: `DRAFT — FOR ATTORNEY REVIEW ONLY · Crawford Law PLLC · ${new Date().toLocaleDateString()} · ${caseFile?.jurisdiction ?? "TX"} · Not for distribution`,
           italics: true,
           size: 16,
           color: "888888",
@@ -720,4 +785,96 @@ export async function generateDocxFromText(
 
   const doc = new Document({ sections: [{ children }] });
   return pack(doc);
+}
+
+// ── "Information Still Needed" one-page report ────────────────────────────────
+// Deterministically pulls the [[placeholders]] out of a draft (first or second)
+// and renders a short client-facing checklist of what is still required. No model
+// call — the same blanks that are highlighted in the draft, listed in one place.
+// A placeholder is treated as required unless its descriptor says NON-BLOCKING.
+
+export async function generateNeededInfoDocx(
+  documentTitle: string,
+  draftText: string
+): Promise<Buffer> {
+  const items = placeholderFields(draftText);
+  const required = items.filter((i) => i.required);
+  const optional = items.filter((i) => !i.required);
+
+  const children: Paragraph[] = [
+    ...firmHeader(),
+    new Paragraph({
+      children: [new TextRun({ text: "INFORMATION STILL NEEDED", bold: true, size: 26 })],
+      alignment: AlignmentType.CENTER,
+      heading: HeadingLevel.HEADING_1,
+    }),
+    new Paragraph({
+      children: [new TextRun({ text: documentTitle, italics: true, size: 22 })],
+      alignment: AlignmentType.CENTER,
+    }),
+    spacer(),
+  ];
+
+  if (!items.length) {
+    children.push(
+      body("This draft has no remaining blanks. Everything we need has been provided."),
+    );
+  } else {
+    children.push(
+      body(
+        "To finalize your document we still need the items below. Each one appears highlighted in the draft itself. Reply with whatever you can; anything you are unsure of can wait."
+      ),
+      spacer(),
+    );
+
+    if (required.length) {
+      children.push(heading("Required to finalize"));
+      required.forEach((it, i) =>
+        children.push(
+          new Paragraph({
+            children: [
+              new TextRun({ text: `${i + 1}. ${it.label}`, bold: true }),
+              ...(it.hint ? [new TextRun({ text: ` — ${it.hint}` })] : []),
+            ],
+          })
+        )
+      );
+      children.push(spacer());
+    }
+
+    if (optional.length) {
+      children.push(heading("Helpful, but can be added at signing"));
+      optional.forEach((it, i) =>
+        children.push(
+          new Paragraph({
+            children: [
+              new TextRun({ text: `${i + 1}. ${it.label}`, bold: true }),
+              ...(it.hint ? [new TextRun({ text: ` — ${it.hint}` })] : []),
+            ],
+          })
+        )
+      );
+      children.push(spacer());
+    }
+  }
+
+  children.push(
+    new Paragraph({
+      border: { top: { style: BorderStyle.SINGLE, size: 1 } },
+      text: "",
+    }),
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: `Crawford Law PLLC · ${new Date().toLocaleDateString()} · Attorney-Client Privileged & Confidential`,
+          italics: true,
+          size: 16,
+          color: "888888",
+        }),
+      ],
+      alignment: AlignmentType.CENTER,
+    })
+  );
+
+  return pack(new Document({ sections: [{ children }] }));
 }

@@ -1,6 +1,7 @@
 import React from "react";
 import Link from "next/link";
 import AttachmentPanel from "@/components/AttachmentPanel";
+import DocumentInfoNeeded from "@/components/DocumentInfoNeeded";
 import GovFormInstruments from "@/components/GovFormInstruments";
 import NextStepGuide from "@/components/NextStepGuide";
 import ReviewSlaClock from "@/components/ReviewSlaClock";
@@ -611,9 +612,20 @@ export default function ClientFileView({
                   </Link>
                 );
               }
+              // Non-draft client docs are viewed inline. If the version the client
+              // will use still has [[blanks]], offer an easy fill-in panel that
+              // writes the answers straight into the document (and the Living File).
+              const fillTarget = secondDraft?.draft_text ? secondDraft : (doc.draft_text ? doc : null);
               return (
                 <div key={doc.id} className="lf-doc-item">
                   {docRow}
+                  {fillTarget?.draft_text && (
+                    <DocumentInfoNeeded
+                      documentId={fillTarget.id}
+                      draftText={fillTarget.draft_text}
+                      documentTitle={doc.title}
+                    />
+                  )}
                 </div>
               );
             })}

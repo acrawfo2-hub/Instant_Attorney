@@ -73,7 +73,17 @@ export function parseDrafterResponse(text: string): ParsedDrafter {
 export function humanizeLabel(raw: string): string {
   const cleaned = raw
     .split(" ")
-    .map((w) => (/^[A-Z][A-Z0-9./-]+$/.test(w) ? w.charAt(0) + w.slice(1).toLowerCase() : w))
+    .map((w) => {
+      // Separate trailing punctuation (comma, period, etc.) so "ADDRESS," still
+      // lowercases to "Address," instead of staying all-caps.
+      const m = w.match(/^(.*?)([.,;:)\]]*)$/);
+      const core = m ? m[1] : w;
+      const punct = m ? m[2] : "";
+      const titled = /^[A-Z][A-Z0-9./-]+$/.test(core)
+        ? core.charAt(0) + core.slice(1).toLowerCase()
+        : core;
+      return titled + punct;
+    })
     .join(" ");
   return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
 }
@@ -159,6 +169,52 @@ export function buildNeededItems(parsed: ParsedDrafter): NeededItem[] {
     ...items.filter((it) => it.severity === "blocking"),
     ...items.filter((it) => it.severity === "helpful"),
   ];
+}
+
+// A fillable blank derived from a [[placeholder]]: a stable key (matches
+// applyPlaceholderAnswers), a clean human label, an optional hint, and whether it
+// is required (a NON-BLOCKING descriptor marks it optional).
+export interface PlaceholderField {
+  key: string;
+  label: string;
+  hint: string;
+  required: boolean;
+}
+
+export function placeholderFields(draftText: string): PlaceholderField[] {
+  return extractPlaceholders(draftText).map(({ raw, dedupeKey }) => {
+    const required = !raw.toUpperCase().includes("NON-BLOCKING");
+    // Split "LABEL — descriptor" into a clean label and a why/what hint.
+    const dashIdx = raw.search(/\s[—-]\s/);
+    const labelRaw = dashIdx >= 0 ? raw.slice(0, dashIdx) : raw;
+    let hint = dashIdx >= 0 ? raw.slice(dashIdx).replace(/^\s*[—-]\s*/, "") : "";
+    // Drop the internal BLOCKING/NON-BLOCKING bookkeeping from the client-facing hint.
+    hint = hint.replace(/\b(NON-)?BLOCKING\b[:\s]*/gi, "").replace(/\s*[—-]\s*$/, "").trim();
+    return { key: dedupeKey, label: humanizeLabel(labelRaw.trim()), hint, required };
+  });
+}
+
+// Deterministically fill [[placeholders]] in a draft with client-supplied values.
+// `answers` is keyed by the placeholder's dedupeKey (the normalized full text from
+// extractPlaceholders). Every [[…]] whose normalized inner text matches a provided,
+// non-empty answer is replaced with that value — every occurrence, in one pass.
+// Nothing else in the document is touched, so attorney-approved language is safe.
+// Returns the new text plus how many placeholders were filled.
+export function applyPlaceholderAnswers(
+  draft: string,
+  answers: Record<string, string>,
+): { text: string; filled: number } {
+  let filled = 0;
+  const text = draft.replace(/\[\[([^\]]+)\]\]/g, (whole, inner: string) => {
+    const key = inner.trim().replace(/\s+/g, " ").toLowerCase();
+    const value = answers[key];
+    if (value && value.trim()) {
+      filled++;
+      return value.trim();
+    }
+    return whole;
+  });
+  return { text, filled };
 }
 
 // Guarantee a usable first draft even when the AI call fails or returns nothing.
