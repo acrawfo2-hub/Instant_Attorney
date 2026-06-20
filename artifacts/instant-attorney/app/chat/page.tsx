@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { IntakeMessage, WIZARD_LABELS, LegalStrategy } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
 import QuickConsultModal from "@/components/QuickConsultModal";
+import VoiceInputButton, { VoiceUnsupportedNote } from "@/components/VoiceInputButton";
 
 type Msg = Pick<IntakeMessage, "role" | "content">;
 
@@ -532,6 +533,13 @@ function AcpChatInner() {
             rows={1}
             disabled={loading}
           />
+          <VoiceInputButton
+            disabled={loading}
+            onTranscript={(t) => {
+              setInput((v) => (v.trim() ? `${v.trim()} ${t}` : t));
+              requestAnimationFrame(autoResize);
+            }}
+          />
           <button
             type="submit"
             className="fc-send-btn"
@@ -553,6 +561,7 @@ function AcpChatInner() {
             View Living File
           </button>
         </p>
+        <VoiceUnsupportedNote />
       </div>
       </>
       )}
