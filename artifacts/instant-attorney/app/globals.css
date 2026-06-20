@@ -3618,6 +3618,19 @@ mark.atty-placeholder {
 }
 .fc-attachment-clear:hover { color: #c0392b; }
 
+/* Screenshot rendered inside a sent user message bubble */
+.fc-bubble-image {
+  display: block;
+  max-width: 260px;
+  max-height: 360px;
+  width: auto;
+  height: auto;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.18);
+  margin-bottom: 6px;
+}
+.fc-bubble-image:last-child { margin-bottom: 0; }
+
 /* Attorney review: attachment list */
 .atty-att-item { padding: 8px 0; border-bottom: 1px solid var(--brand-border); }
 .atty-att-item:last-child { border-bottom: none; }

@@ -7,7 +7,11 @@ import { createClient } from "@/lib/supabase/client";
 import QuickConsultModal from "@/components/QuickConsultModal";
 import VoiceInputButton, { VoiceUnsupportedNote } from "@/components/VoiceInputButton";
 
-type Msg = Pick<IntakeMessage, "role" | "content">;
+type Msg = Pick<IntakeMessage, "role" | "content"> & {
+  // Local-only: object URL for a screenshot the user attached to this turn, so the
+  // image stays visible in the chat history instead of collapsing to a [filename] tag.
+  imageUrl?: string;
+};
 
 interface PendingAttachment {
   data: string;    // base64
@@ -225,19 +229,26 @@ function AcpChatInner() {
     const text = input.trim();
     if ((!text && !pendingAttachment) || loading) return;
 
-    const displayContent = pendingAttachment
-      ? text ? `[${pendingAttachment.fileName}] ${text}` : `[${pendingAttachment.fileName}]`
+    const attachment = pendingAttachment;
+
+    const displayContent = attachment
+      ? text ? `[${attachment.fileName}] ${text}` : `[${attachment.fileName}]`
       : text;
 
-    const userMsg: Msg = { role: "user", content: displayContent };
+    const userMsg: Msg = {
+      role: "user",
+      content: displayContent,
+      ...(attachment ? { imageUrl: attachment.previewUrl } : {}),
+    };
     const nextMessages = [...messages, userMsg];
     setMessages(nextMessages);
     setInput("");
     setLoading(true);
     setStreamingText("");
 
-    const attachment = pendingAttachment;
-    clearAttachment();
+    // Hand the object URL off to the sent message so it stays visible in history.
+    // Do NOT revoke it here (clearAttachment would) — the message bubble now owns it.
+    setPendingAttachment(null);
 
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
@@ -405,7 +416,20 @@ function AcpChatInner() {
               </div>
             )}
             <div className={msg.role === "user" ? "fc-bubble fc-bubble-user" : "fc-bubble fc-bubble-ai"}>
-              {msg.role === "assistant" ? renderContent(msg.content) : <p>{msg.content}</p>}
+              {msg.role === "assistant" ? (
+                renderContent(msg.content)
+              ) : msg.imageUrl ? (
+                <>
+                  <img src={msg.imageUrl} alt="attached screenshot" className="fc-bubble-image" />
+                  {(() => {
+                    // Image is shown, so drop the redundant leading [filename] tag.
+                    const caption = msg.content.replace(/^\[[^\]]*\]\s*/, "");
+                    return caption ? <p>{caption}</p> : null;
+                  })()}
+                </>
+              ) : (
+                <p>{msg.content}</p>
+              )}
             </div>
           </div>
         ))}
