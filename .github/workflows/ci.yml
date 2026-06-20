@@ -27,7 +27,20 @@ jobs:
           cache: npm
           cache-dependency-path: artifacts/instant-attorney/package-lock.json
 
-      - run: npm ci
+      # @huggingface/transformers pulls a large tree with optional native deps
+      # (onnxruntime-node, sharp, @emnapi). The npm bundled with Node 24 crashes
+      # installing it with "Exit handler never called!". Upgrading npm and
+      # retrying after a cache clean works around that npm bug.
+      - name: Upgrade npm
+        run: npm install -g npm@latest
+
+      - name: Install dependencies
+        run: |
+          npm ci --no-audit --no-fund || {
+            echo "::warning::npm ci failed once; cleaning cache and retrying"
+            npm cache clean --force
+            npm ci --no-audit --no-fund
+          }
 
       - name: Typecheck
         run: npm run typecheck
