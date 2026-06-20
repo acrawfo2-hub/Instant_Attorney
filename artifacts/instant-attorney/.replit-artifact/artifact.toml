@@ -24,6 +24,8 @@ paths = [
   "/api/subscriptions",
   "/api/agreements",
   "/api/consult",
+  "/api/case-files",
+  "/api/usage",
   "/consult",
 ]
 localPort = 21203

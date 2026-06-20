@@ -17,6 +17,7 @@ import {
   mapAnswersToPlaceholders,
 } from "@/lib/wizard-parsing";
 import type { ParsedDrafter, NeededItem, LabeledAnswer } from "@/lib/wizard-parsing";
+import { mergeStagedStarter, drainStagedStarter } from "@/lib/starter-fold";
 
 // Keep just under the server route's maxDuration (300s) so a long but legitimate
 // draft finishes server-side instead of being aborted by the client. If the
@@ -79,6 +80,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   const [extraNote, setExtraNote] = useState("");
   const [justUpdated, setJustUpdated] = useState(false);
   const [truncatedDraft, setTruncatedDraft] = useState(false);
+  const [gapSyncWarning, setGapSyncWarning] = useState(false);
 
   // Pre-draft "starter questions": surfaced immediately while the first draft is
   // generated live in the background, so the client can answer during the wait.
@@ -222,10 +224,13 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   // refine pass. Runs only once a draft already exists, so it never interrupts the
   // original build — and unanswered questions simply remain as placeholders.
   async function maybeFoldStarterAnswers() {
-    const staged = pendingStarterRef.current;
-    pendingStarterRef.current = null;
-    if (!staged || (!staged.filled.length && !staged.note)) return;
+    // Drains the ref across passes so any answers staged WHILE an earlier fold was
+    // awaiting async work (deterministic fill + AI refine pass) are still folded
+    // in, instead of being stranded in the ref. Bounded to avoid a runaway loop.
+    await drainStagedStarter(pendingStarterRef, foldStagedStarterAnswers);
+  }
 
+  async function foldStagedStarterAnswers(staged: { filled: LabeledAnswer[]; note: string }) {
     const draftText =
       parseDrafterResponse(lastAssistantRef.current).draftText ?? lastAssistantRef.current.trim();
     const docId = docIdRef.current || documentId;
@@ -288,7 +293,15 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
     const filled: LabeledAnswer[] = starterItems
       .filter((it) => answers[it.id]?.trim())
       .map((it) => ({ label: it.label, value: answers[it.id].trim() }));
-    pendingStarterRef.current = { filled, note: extraNote.trim() };
+    // Merge into any previously-staged answers rather than overwriting. The
+    // client can save more than once — including while an earlier fold is still
+    // awaiting — so a plain overwrite would silently drop the earlier batch.
+    // Dedupe by label, latest value wins.
+    pendingStarterRef.current = mergeStagedStarter(
+      pendingStarterRef.current,
+      filled,
+      extraNote.trim()
+    );
     setStarterSaved(true);
     setError("");
   }
@@ -331,7 +344,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
         throw new Error(body?.error || `Server error ${res.status}`);
       }
 
-      const data = await res.json() as { text: string; documentId: string | null; truncated?: boolean };
+      const data = await res.json() as { text: string; documentId: string | null; truncated?: boolean; gapSyncWarning?: boolean; alreadyFinalized?: boolean; status?: string | null };
       const fullText = data.text ?? "";
 
       if (data.documentId) {
@@ -339,6 +352,14 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
         docIdRef.current = data.documentId;
       }
       if (data.truncated) setTruncatedDraft(true);
+      setGapSyncWarning(Boolean(data.gapSyncWarning));
+
+      // The server resolved us to an already-finalized / in-review primary document
+      // instead of overwriting it. Reflect that state so the client sees their real
+      // submitted document rather than an editable re-draft.
+      if (data.alreadyFinalized && data.status === "pending_review") {
+        setSubmittedForReview(true);
+      }
 
       setMessages((prev) => {
         const next = [...prev];
@@ -697,11 +718,40 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
                   <span>
                     The AI draft may have been cut short on a very long document. Review the
                     draft carefully for any abrupt endings, then fill in the fields below and
-                    click <strong>Update Draft</strong> — or send to the attorney as-is.
+                    click <strong>Update Draft</strong>, send to the attorney as-is, or
+                    regenerate it from scratch.
                   </span>
+                  <button
+                    className="wiz-retry-btn"
+                    onClick={() => { setTruncatedDraft(false); runDrafter([], true); }}
+                    disabled={streaming}
+                  >
+                    Regenerate
+                  </button>
                   <button
                     className="wiz-truncation-dismiss"
                     onClick={() => setTruncatedDraft(false)}
+                    aria-label="Dismiss notice"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {/* Living File sync warning — soft, never blocks the checklist. The
+                  draft is already saved; only the dashboard's outstanding-items
+                  list may briefly lag. */}
+              {gapSyncWarning && currentDraft && (
+                <div className="wiz-truncation-notice" role="status">
+                  <span className="wiz-truncation-icon">⚠</span>
+                  <span>
+                    Your draft is saved, but we couldn&apos;t refresh your file&apos;s
+                    outstanding-items list just now. Nothing is lost — this only affects the
+                    checklist on your dashboard, and the attorney still sees the full draft.
+                  </span>
+                  <button
+                    className="wiz-truncation-dismiss"
+                    onClick={() => setGapSyncWarning(false)}
                     aria-label="Dismiss notice"
                   >
                     ✕

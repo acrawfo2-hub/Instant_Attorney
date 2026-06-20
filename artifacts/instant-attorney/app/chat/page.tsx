@@ -160,7 +160,7 @@ function AcpChatInner() {
         const wType = (strategy?.recommended_wizards ?? []).find((w) => Object.hasOwn(WIZARD_LABELS, w));
         if (wType) {
           if (!cancelled) {
-            setHandoff({ label: WIZARD_LABELS[wType], href: `/dashboard?caseFileId=${caseFileId}` });
+            setHandoff({ label: WIZARD_LABELS[wType], href: `/dashboard/${caseFileId}` });
           }
           return;
         }

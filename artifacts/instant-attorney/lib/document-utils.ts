@@ -42,6 +42,123 @@ export async function findReusableDocument(
   return data;
 }
 
+/** Latest top-level (primary) document for this case + type, in ANY status,
+ *  scoped to the owner. Unlike findReusableDocument (which only matches
+ *  in-progress drafts), this also returns finalized / in-review documents — used
+ *  to avoid inserting a duplicate primary document for a case that already has
+ *  one. Returns enough to drive an in-place, status-preserving update. */
+export async function findPrimaryDocument(
+  db: SupabaseClient,
+  caseFileId: string,
+  wizardType: string,
+  userId?: string
+): Promise<{ id: string; status: string | null; content_json: unknown; draft_text: string | null } | null> {
+  let query = db
+    .from("documents")
+    .select("id, status, content_json, draft_text")
+    .eq("case_file_id", caseFileId)
+    .eq("doc_type", wizardType)
+    .is("parent_document_id", null)
+    .order("updated_at", { ascending: false })
+    .limit(1);
+
+  if (userId) {
+    query = query.eq("user_id", userId);
+  }
+
+  const { data } = await query.maybeSingle();
+  return data ?? null;
+}
+
+/** Result of resolving which document a fresh wizard generation should write to. */
+export type WizardDocumentTarget =
+  | {
+      action: "update";
+      documentId: string;
+      existing: { status: string | null; content_json: unknown };
+    }
+  | { action: "insert" }
+  | {
+      action: "already_finalized";
+      document: { id: string; status: string | null; content_json: unknown; draft_text: string | null };
+    };
+
+/**
+ * Decide which document a fresh wizard draft should land on, enforcing the
+ * selection precedence the wizard route relies on:
+ *   1. a caller-supplied documentId — but ONLY if it belongs to this caller
+ *      (same user_id + case_file_id), else it's dropped to prevent IDOR;
+ *   2. otherwise, a reusable in-progress primary draft for this case + type;
+ *   3. otherwise, the case's latest primary document of this type in ANY status:
+ *      - if it's still editable (draft / changes_requested / pre_warmed / null),
+ *        update it in place (never insert a duplicate primary);
+ *      - if it's already finalized / in review, neither insert nor overwrite —
+ *        signal "already_finalized" so the caller returns the existing document;
+ *   4. otherwise, insert a brand-new document.
+ *
+ * Note: a reusable draft is only looked up when NO documentId was supplied — a
+ * supplied-but-foreign id is dropped straight to the primary-document fallback,
+ * matching the route's original control flow exactly. `db` must be the same
+ * client the route uses for these reads/writes (the service client).
+ */
+export async function resolveWizardDocumentTarget(
+  db: SupabaseClient,
+  params: {
+    caseFileId: string;
+    wizardType: string;
+    userId: string;
+    suppliedDocumentId?: string;
+  }
+): Promise<WizardDocumentTarget> {
+  const { caseFileId, wizardType, userId, suppliedDocumentId } = params;
+  let savedDocId: string | undefined = suppliedDocumentId;
+
+  if (!savedDocId) {
+    const reusable = await findReusableDocument(db, caseFileId, wizardType, userId);
+    savedDocId = reusable?.id;
+  }
+
+  // Ownership check. `db` (service client) bypasses RLS, so any candidate id —
+  // including a caller-supplied one — must be scoped to this caller. A foreign or
+  // stale id returns nothing and is dropped, falling through to the fallback.
+  let existingDoc: { status: string | null; content_json: unknown } | null = null;
+  if (savedDocId) {
+    const { data } = await db
+      .from("documents")
+      .select("status, content_json")
+      .eq("id", savedDocId)
+      .eq("user_id", userId)
+      .eq("case_file_id", caseFileId)
+      .maybeSingle();
+    existingDoc = (data as { status: string | null; content_json: unknown } | null) ?? null;
+    if (!existingDoc) savedDocId = undefined;
+  }
+
+  if (!savedDocId) {
+    const primary = await findPrimaryDocument(db, caseFileId, wizardType, userId);
+    if (primary) {
+      const isEditable =
+        primary.status === "draft" ||
+        primary.status === "changes_requested" ||
+        primary.status === "pre_warmed" ||
+        primary.status == null;
+      if (isEditable) {
+        return {
+          action: "update",
+          documentId: primary.id,
+          existing: { status: primary.status, content_json: primary.content_json },
+        };
+      }
+      return { action: "already_finalized", document: primary };
+    }
+  }
+
+  if (savedDocId && existingDoc) {
+    return { action: "update", documentId: savedDocId, existing: existingDoc };
+  }
+  return { action: "insert" };
+}
+
 export async function getChildDocuments(
   db: SupabaseClient,
   parentId: string

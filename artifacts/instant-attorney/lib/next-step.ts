@@ -1,5 +1,5 @@
-import type { CaseFile, Document, FactItem, WizardType } from "@/lib/types";
-import { coerceWizardType } from "@/lib/types";
+import type { CaseFile, Document, FactItem, WizardType } from "./types.ts";
+import { coerceWizardType } from "./types.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Next-Step engine

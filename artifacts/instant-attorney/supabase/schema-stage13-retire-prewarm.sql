@@ -24,3 +24,9 @@ delete from documents
 -- Note: the status CHECK constraint is intentionally left permissive (it still
 -- allows 'pre_warmed') so this migration is safe to re-run and so any in-flight
 -- legacy code does not error. The application no longer writes that status.
+
+-- 3) Verification — after applying, this MUST return 0. If it returns > 0, the
+--    migration did not run against this database; re-run steps 1) and 2) above.
+--    select count(*) as remaining_pre_warmed from documents where status = 'pre_warmed';
+--
+-- Verified on the live database 2026-06-19: remaining_pre_warmed = 0.

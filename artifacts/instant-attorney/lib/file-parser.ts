@@ -24,6 +24,16 @@ export function extractDraftText(text: string): string | null {
   return null;
 }
 
+// Returns true only when the drafter produced a COMPLETE ---FILE UPDATE--- block
+// — both the opening AND closing markers present. A truncated response (e.g. the
+// model hit its token limit mid-block) leaves the closing ---END FILE UPDATE---
+// marker missing; applying such a half-written block would partially write
+// structured sub-sections (facts / legal strategy) and corrupt the Living File.
+// The route must gate parseAndUpdateFile on this so a partial apply is impossible.
+export function isCompleteFileUpdate(text: string): boolean {
+  return text.includes("---FILE UPDATE---") && text.includes("---END FILE UPDATE---");
+}
+
 // Returns true when the drafter signals the draft is ready for attorney review.
 export function isDraftReadyForReview(text: string): boolean {
   const match = text.match(/---FILE UPDATE---([\s\S]*?)---END FILE UPDATE---/);
