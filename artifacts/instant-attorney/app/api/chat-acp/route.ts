@@ -137,18 +137,26 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Save the last user message text (save text content only)
+  // Save the last user message text (save text content only). Capture its id so an
+  // inline screenshot uploaded below can be linked back to this exact message and
+  // reattached to the right bubble when the conversation is reloaded.
+  let userMessageId: string | null = null;
   const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
   if (lastUserMsg) {
     const textToSave = pendingAttachment
       ? `[${pendingAttachment.fileName}]\n${lastUserMsg.content}`
       : lastUserMsg.content;
-    await db.from("intake_messages").insert({
-      case_file_id: resolvedCaseFileId,
-      user_id: userId,
-      role: "user",
-      content: textToSave,
-    });
+    const { data: insertedMsg } = await db
+      .from("intake_messages")
+      .insert({
+        case_file_id: resolvedCaseFileId,
+        user_id: userId,
+        role: "user",
+        content: textToSave,
+      })
+      .select("id")
+      .single();
+    userMessageId = insertedMsg?.id ?? null;
   }
 
   // Stream from Anthropic
@@ -279,6 +287,7 @@ export async function POST(req: NextRequest) {
                   .insert({
                     case_file_id: resolvedCaseFileId,
                     user_id: userId,
+                    message_id: userMessageId,
                     file_name: pendingAttachment.fileName,
                     file_type: pendingAttachment.mimeType,
                     file_size: buffer.length,
