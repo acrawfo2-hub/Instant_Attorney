@@ -283,6 +283,8 @@ export interface Attachment {
   id: string;
   case_file_id: string;
   user_id: string;
+  // Set when the attachment is an inline chat screenshot; null for dashboard uploads.
+  message_id: string | null;
   file_name: string;
   file_type: string;
   file_size: number;

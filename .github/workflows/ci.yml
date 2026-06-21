@@ -27,7 +27,18 @@ jobs:
           cache: npm
           cache-dependency-path: artifacts/instant-attorney/package-lock.json
 
-      - run: npm ci
+      # The committed lockfile is the source of truth for the Replit publish/deploy
+      # build, so we don't modify it. But it pins tarball URLs to Replit's
+      # package-firewall proxy (unreachable from GitHub runners) and omits some
+      # optional peer deps (@emnapi) that this npm expects, so a strict `npm ci`
+      # can't run here. For CI only: rewrite the resolved URLs to the public npm
+      # registry (integrity hashes are content-based, so they stay valid), then use
+      # `npm install`, which tolerates the optional-dep gap. Neither change is
+      # committed, so the deploy build is unaffected.
+      - name: Point lockfile at public registry for CI install
+        run: sed -i 's#http://package-firewall.replit.local/npm/#https://registry.npmjs.org/#g' package-lock.json
+
+      - run: npm install --no-audit --no-fund
 
       - name: Typecheck
         run: npm run typecheck

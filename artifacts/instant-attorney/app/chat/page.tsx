@@ -7,7 +7,11 @@ import { createClient } from "@/lib/supabase/client";
 import QuickConsultModal from "@/components/QuickConsultModal";
 import VoiceInputButton, { VoiceUnsupportedNote } from "@/components/VoiceInputButton";
 
-type Msg = Pick<IntakeMessage, "role" | "content">;
+type Msg = Pick<IntakeMessage, "role" | "content"> & {
+  // Local-only: object URL for a screenshot the user attached to this turn, so the
+  // image stays visible in the chat history instead of collapsing to a [filename] tag.
+  imageUrl?: string;
+};
 
 interface PendingAttachment {
   data: string;    // base64
@@ -133,11 +137,59 @@ function AcpChatInner() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputAreaRef = useRef<HTMLDivElement>(null);
+  const hydratedRef = useRef(false);
   const hasUserMessages = messages.some((m) => m.role === "user");
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamingText, handoff]);
+
+  // ── Resume an existing conversation ─────────────────────────────────────────
+  // When the page is opened with ?caseFileId=… (returning to an existing file),
+  // rehydrate the saved messages so a reload restores the chat instead of starting
+  // blank. Inline screenshots are reattached to their original bubble via the
+  // attachment→message link, using the durable /api/attachments/[id] URL (which
+  // 302-redirects to a signed storage URL) so they survive the session. New chats
+  // (no URL param) never hydrate, so a freshly-sent conversation is never clobbered.
+  useEffect(() => {
+    if (hydratedRef.current || !urlCaseFileId) return;
+    hydratedRef.current = true;
+    let cancelled = false;
+    (async () => {
+      const supabase = createClient();
+      const [{ data: msgs }, { data: atts }] = await Promise.all([
+        supabase
+          .from("intake_messages")
+          .select("id, role, content, created_at")
+          .eq("case_file_id", urlCaseFileId)
+          .order("created_at", { ascending: true }),
+        supabase
+          .from("attachments")
+          .select("id, message_id")
+          .eq("case_file_id", urlCaseFileId)
+          .eq("attachment_type", "screenshot")
+          .not("message_id", "is", null),
+      ]);
+      if (cancelled || !msgs?.length) return;
+
+      const imageByMessage = new Map<string, string>();
+      (atts ?? []).forEach((a: { id: string; message_id: string | null }) => {
+        if (a.message_id && !imageByMessage.has(a.message_id)) {
+          imageByMessage.set(a.message_id, `/api/attachments/${a.id}`);
+        }
+      });
+
+      const restored: Msg[] = msgs.map((m: { id: string; role: string; content: string }) => ({
+        role: m.role as Msg["role"],
+        content: m.content,
+        ...(imageByMessage.has(m.id) ? { imageUrl: imageByMessage.get(m.id) } : {}),
+      }));
+      setMessages([INITIAL_MESSAGE, ...restored]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [urlCaseFileId]);
 
   // ── Ready signal ───────────────────────────────────────────────────────────
   // The conversation reaches its handoff point once the attorney strategy has
@@ -225,19 +277,26 @@ function AcpChatInner() {
     const text = input.trim();
     if ((!text && !pendingAttachment) || loading) return;
 
-    const displayContent = pendingAttachment
-      ? text ? `[${pendingAttachment.fileName}] ${text}` : `[${pendingAttachment.fileName}]`
+    const attachment = pendingAttachment;
+
+    const displayContent = attachment
+      ? text ? `[${attachment.fileName}] ${text}` : `[${attachment.fileName}]`
       : text;
 
-    const userMsg: Msg = { role: "user", content: displayContent };
+    const userMsg: Msg = {
+      role: "user",
+      content: displayContent,
+      ...(attachment ? { imageUrl: attachment.previewUrl } : {}),
+    };
     const nextMessages = [...messages, userMsg];
     setMessages(nextMessages);
     setInput("");
     setLoading(true);
     setStreamingText("");
 
-    const attachment = pendingAttachment;
-    clearAttachment();
+    // Hand the object URL off to the sent message so it stays visible in history.
+    // Do NOT revoke it here (clearAttachment would) — the message bubble now owns it.
+    setPendingAttachment(null);
 
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
@@ -275,7 +334,18 @@ function AcpChatInner() {
           const end = chunk.indexOf("\x00", 1);
           if (end !== -1) {
             const id = chunk.slice(1, end);
-            if (id) setCaseFileId(id);
+            if (id) {
+              setCaseFileId(id);
+              // Put the new file's id in the URL so a reload mid-session resumes
+              // this conversation. Mark it already-hydrated so the resume effect
+              // never overwrites the live in-memory chat from the DB.
+              if (!urlCaseFileId) {
+                hydratedRef.current = true;
+                const params = new URLSearchParams(window.location.search);
+                params.set("caseFileId", id);
+                window.history.replaceState(null, "", `?${params.toString()}`);
+              }
+            }
             full += chunk.slice(end + 1);
           } else {
             full += chunk;
@@ -405,7 +475,20 @@ function AcpChatInner() {
               </div>
             )}
             <div className={msg.role === "user" ? "fc-bubble fc-bubble-user" : "fc-bubble fc-bubble-ai"}>
-              {msg.role === "assistant" ? renderContent(msg.content) : <p>{msg.content}</p>}
+              {msg.role === "assistant" ? (
+                renderContent(msg.content)
+              ) : msg.imageUrl ? (
+                <>
+                  <img src={msg.imageUrl} alt="attached screenshot" className="fc-bubble-image" />
+                  {(() => {
+                    // Image is shown, so drop the redundant leading [filename] tag.
+                    const caption = msg.content.replace(/^\[[^\]]*\]\s*/, "");
+                    return caption ? <p>{caption}</p> : null;
+                  })()}
+                </>
+              ) : (
+                <p>{msg.content}</p>
+              )}
             </div>
           </div>
         ))}
