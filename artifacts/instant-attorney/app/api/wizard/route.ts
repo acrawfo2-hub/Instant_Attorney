@@ -2,8 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { DRAFTER_SYSTEM_PROMPT, WIZARD_FIELD_HINTS, buildFileContext } from "@/lib/prompts";
-import { parseAndUpdateFile, extractDraftText } from "@/lib/file-parser";
-import { findReusableDocument } from "@/lib/document-utils";
+import { parseAndUpdateFile, extractDraftText, syncDraftGapsToLivingFile, isCompleteFileUpdate } from "@/lib/file-parser";
+import { resolveWizardDocumentTarget } from "@/lib/document-utils";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
 import { BYPASS_USER_ID, WIZARD_LABELS } from "@/lib/types";
 import type { WizardType, CaseFile, FactItem, Attachment, RequestedAttachment } from "@/lib/types";
@@ -200,31 +200,35 @@ export async function POST(req: NextRequest) {
   if (draftText) {
     const now = new Date().toISOString();
 
-    if (!savedDocId) {
-      const existing = await findReusableDocument(writeDb, caseFileId, wizardType, userId);
-      savedDocId = existing?.id;
+    // Resolve which document this draft lands on (selection precedence + IDOR /
+    // duplicate-primary guards). `writeDb` is the service client used for the
+    // reads/writes below, so the resolver scopes every candidate to this caller.
+    const target = await resolveWizardDocumentTarget(writeDb, {
+      caseFileId,
+      wizardType,
+      userId,
+      suppliedDocumentId: savedDocId,
+    });
+
+    // The case already has a FINALIZED / in-review primary document
+    // (pending_review, approved, delivered, ...). We must neither INSERT a
+    // duplicate top-level row NOR overwrite the canonical finalized content with
+    // this regeneration. Resolve the client to the existing document (return its
+    // real saved draft, not the throw-away regeneration) and let them see/continue
+    // from it instead of silently re-drafting.
+    if (target.action === "already_finalized") {
+      return NextResponse.json({
+        text: target.document.draft_text ?? fullResponse,
+        documentId: target.document.id,
+        truncated: false,
+        alreadyFinalized: true,
+        status: target.document.status,
+      });
     }
 
-    // `writeDb` is the service client and bypasses RLS, so every existing-document
-    // read/write below MUST be scoped to this caller. `savedDocId` can come from
-    // the caller-supplied `documentId`, so without `user_id`/`case_file_id`
-    // predicates a client could target — and overwrite — another user's document
-    // (IDOR). If a supplied id isn't this caller's (or no longer exists), we drop
-    // it and create a fresh document instead of mutating a foreign row.
-    let existingDoc: { status: string | null; content_json: unknown } | null = null;
-    if (savedDocId) {
-      const { data } = await writeDb
-        .from("documents")
-        .select("status, content_json")
-        .eq("id", savedDocId)
-        .eq("user_id", userId)
-        .eq("case_file_id", caseFileId)
-        .maybeSingle();
-      existingDoc = data ?? null;
-      if (!existingDoc) savedDocId = undefined;
-    }
-
-    if (savedDocId && existingDoc) {
+    if (target.action === "update") {
+      savedDocId = target.documentId;
+      const existingDoc = target.existing;
       // Preserve where the document already is in its lifecycle. Once a client
       // has sent a draft for review (pending_review) — or the attorney has asked
       // for changes (changes_requested), or finalized it (approved/delivered) —
@@ -298,8 +302,13 @@ export async function POST(req: NextRequest) {
     logTruncation({ endpoint: "wizard/doc-saved", documentId: savedDocId });
   }
 
-  // Update the Living File if the drafter produced a FILE UPDATE block
-  if (fullResponse.includes("---FILE UPDATE---")) {
+  // Update the Living File only when the drafter produced a COMPLETE FILE UPDATE
+  // block — both the opening AND closing markers present. A truncated response
+  // (stop_reason "max_tokens") can leave a half-written block whose structured
+  // sub-sections would otherwise be parsed and PARTIALLY applied to the file,
+  // corrupting facts / legal strategy. Requiring the closing marker makes a
+  // partial application impossible; the saved draft text is unaffected.
+  if (isCompleteFileUpdate(fullResponse)) {
     try {
       await parseAndUpdateFile(writeDb, caseFileId, userId, fullResponse);
     } catch (parseErr) {
@@ -307,9 +316,26 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Record whatever the draft still needs as Living File gaps, so an imperfect
+  // document can be sent and the file (and attorney) still tracks exactly what's
+  // outstanding. Best-effort — never block the response on it.
+  let gapSyncWarning = false;
+  if (draftText) {
+    try {
+      await syncDraftGapsToLivingFile(writeDb, caseFileId, userId, draftText);
+    } catch (gapErr) {
+      // Non-fatal, but no longer silent: flag it so the client can show a soft
+      // notice, and keep the server log. The draft itself is already saved, so
+      // only the dashboard "outstanding items" view may briefly lag.
+      gapSyncWarning = true;
+      console.error("[wizard] gap sync error:", gapErr);
+    }
+  }
+
   return NextResponse.json({
     text: fullResponse,
     documentId: savedDocId ?? null,
     truncated,
+    gapSyncWarning,
   });
 }

@@ -2,10 +2,10 @@ import Anthropic from "@anthropic-ai/sdk";
 import mammoth from "mammoth";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CaseFile, FactItem } from "./types";
-import { buildFileContext } from "./prompts";
-import { recordAiFromMessage } from "./usage-tracker";
-import { logTruncation } from "./truncation-logger";
-import { maxOutputTokensFor, limitSignalMetadata } from "./token-limits";
+import { buildFileContext } from "./prompts.ts";
+import { recordAiFromMessage } from "./usage-tracker.ts";
+import { logTruncation } from "./truncation-logger.ts";
+import { maxOutputTokensFor, limitSignalMetadata } from "./token-limits.ts";
 
 const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney, maxRetries: 4 });
 
@@ -126,6 +126,72 @@ export async function toAnthropicBlock(
   throw new Error(`Unsupported file type: ${mimeType} (${fileName})`);
 }
 
+// Standard structured-analysis prompt for documents (PDFs, Word, text, etc.).
+function buildDocumentPrompt(fileContext: string): string {
+  return `You are analyzing a file attached to an ACP-protected legal case file at Crawford Law PLLC. Produce a concise structured analysis that will be added to the client's Living File.
+
+${fileContext ? `${fileContext}\n\n` : ""}Produce your analysis in EXACTLY this format:
+
+---ATTACHMENT ANALYSIS---
+SUMMARY:
+[3–5 sentences describing what this document is and its key content]
+CASE RELEVANCE:
+[How this attachment relates to the current matter and should inform legal strategy — or "General background" if not directly relevant]
+KEY SECTIONS:
+• [Section name or key finding — keep each to one line]
+EXTRACTED FACTS:
+• [Specific identifiable facts from this document, captured COMPLETELY so a drafter can use them verbatim instead of leaving a blank. Include: full legal names; complete mailing/street addresses (street number, city, state, ZIP — never abbreviate to just a city or ZIP); EIN/tax ID numbers; all key dates; dollar amounts; party roles; account, license, or registration numbers; registered agent. One fact per bullet, each stated in full. Or "None identified"]
+URGENT FINDINGS:
+[Time-sensitive items, deadlines, rights, waiver risks, or critical facts — or "None identified"]
+CONTRADICTIONS WITH LIVING FILE:
+[Any facts in this document that directly conflict with confirmed facts or stated goals already in the Living File above. Be specific: quote the conflicting claim and the confirmed fact. Or "None identified"]
+CLARIFYING QUESTIONS:
+• [A focused question to resolve a specific contradiction — one concept per question, max 3 questions. Only include this section if CONTRADICTIONS identifies real conflicts.]
+REQUESTED ATTACHMENTS:
+• [Companion document description] — [Why it matters to the case]
+---END ANALYSIS---
+
+Only include CLARIFYING QUESTIONS if CONTRADICTIONS WITH LIVING FILE contains actual conflicts.
+If no companion documents are needed, omit the REQUESTED ATTACHMENTS bullets entirely.
+
+If this is an HOA / property-owners'-association governing document (Declaration / CC&Rs, bylaws, rules & regulations, plat, or a violation / fine / assessment / lien / foreclosure notice), be especially precise in KEY SECTIONS and EXTRACTED FACTS: pull out the enforcement and fine provisions, the notice / cure / hearing rights, the architectural-control (ACC) approval procedure, the assessment and lien provisions, the amendment procedure, and — importantly — any attorney-fee / prevailing-party clause (note it under URGENT FINDINGS because it drives the cost-benefit of any dispute). Capture any deadlines a homeowner must meet (hearing request, cure period, records-request response, foreclosure cure) under URGENT FINDINGS.`;
+}
+
+// Screenshot/image prompt. For images — especially captures of text-message, email, or
+// chat exchanges — the legally operative content is the EXACT wording and who said what,
+// when. So we instruct a faithful, attributed transcription rather than a loose summary,
+// and route each quoted message into EXTRACTED FACTS so it lands in the Living File verbatim.
+// Section headers are identical to the document prompt so the existing parser is unchanged.
+function buildScreenshotPrompt(fileContext: string): string {
+  return `You are analyzing a SCREENSHOT (an image) attached to an ACP-protected legal case file at Crawford Law PLLC. Clients use screenshots to bring in key evidence — most often a text-message (SMS/iMessage), email, or chat exchange, but sometimes a photo of a document, a portal, or a notice. The evidentiary value is the EXACT wording, who wrote it, and when. Transcribe faithfully; do not paraphrase, soften, correct, or invent text. Transcribe every visible message, including profanity or threats, verbatim. If a word is cut off or illegible, mark it [illegible].
+
+${fileContext ? `${fileContext}\n\n` : ""}First read the image carefully. Identify the medium (e.g. iMessage thread, SMS, Gmail, WhatsApp), the participants, and any visible dates/timestamps. For a message thread, infer the sender of each bubble from layout (right/blue = the person who took the screenshot unless context says otherwise; left/grey = the other party) and state your attribution assumption in SUMMARY.
+
+Produce your analysis in EXACTLY this format:
+
+---ATTACHMENT ANALYSIS---
+SUMMARY:
+[2–4 sentences: what the screenshot shows, the medium, who the participants appear to be, the date range, and your assumption about which side is the client. Note any ambiguity in sender attribution.]
+CASE RELEVANCE:
+[How this exchange relates to the current matter and should inform legal strategy — or "General background" if not directly relevant]
+KEY SECTIONS:
+• [The single most significant statement(s) in the exchange — e.g. an admission, threat, agreement, or deadline — kept to one line each]
+EXTRACTED FACTS:
+• [VERBATIM TRANSCRIPT — one bullet per message, in chronological order, formatted exactly as: On [date/time if visible, else "undated"], [Sender] wrote: "[exact text]". Preserve original spelling and punctuation inside the quotes. If the screenshot is NOT a conversation (e.g. a photo of a document or notice), instead extract identifiable facts completely — full legal names, complete street addresses, dates, dollar amounts, account/case numbers. Or "None identified"]
+URGENT FINDINGS:
+[Time-sensitive items, deadlines, explicit threats, admissions against interest, or statements that waive/assert rights — or "None identified"]
+CONTRADICTIONS WITH LIVING FILE:
+[Any statement here that directly conflicts with confirmed facts or stated goals already in the Living File above. Be specific: quote the conflicting message and the confirmed fact. Or "None identified"]
+CLARIFYING QUESTIONS:
+• [A focused question to resolve a specific contradiction or an attribution ambiguity — one concept per question, max 3 questions. Only include this section if there is a real conflict or unclear sender.]
+REQUESTED ATTACHMENTS:
+• [Companion evidence that would corroborate this exchange] — [Why it matters to the case]
+---END ANALYSIS---
+
+Only include CLARIFYING QUESTIONS if CONTRADICTIONS WITH LIVING FILE contains actual conflicts or sender attribution is genuinely unclear.
+If no companion evidence is needed, omit the REQUESTED ATTACHMENTS bullets entirely.`;
+}
+
 // Run after upload: analyze the attachment, update the DB record, parse requested attachments.
 export async function processAttachment(
   db: SupabaseClient,
@@ -155,33 +221,10 @@ export async function processAttachment(
       return;
     }
 
-    const analysisPrompt = `You are analyzing a file attached to an ACP-protected legal case file at Crawford Law PLLC. Produce a concise structured analysis that will be added to the client's Living File.
-
-${fileContext ? `${fileContext}\n\n` : ""}Produce your analysis in EXACTLY this format:
-
----ATTACHMENT ANALYSIS---
-SUMMARY:
-[3–5 sentences describing what this document is and its key content]
-CASE RELEVANCE:
-[How this attachment relates to the current matter and should inform legal strategy — or "General background" if not directly relevant]
-KEY SECTIONS:
-• [Section name or key finding — keep each to one line]
-EXTRACTED FACTS:
-• [Specific identifiable facts from this document: legal names, EIN/tax ID numbers, addresses, key dates, dollar amounts, party roles, license numbers — one fact per bullet. Or "None identified"]
-URGENT FINDINGS:
-[Time-sensitive items, deadlines, rights, waiver risks, or critical facts — or "None identified"]
-CONTRADICTIONS WITH LIVING FILE:
-[Any facts in this document that directly conflict with confirmed facts or stated goals already in the Living File above. Be specific: quote the conflicting claim and the confirmed fact. Or "None identified"]
-CLARIFYING QUESTIONS:
-• [A focused question to resolve a specific contradiction — one concept per question, max 3 questions. Only include this section if CONTRADICTIONS identifies real conflicts.]
-REQUESTED ATTACHMENTS:
-• [Companion document description] — [Why it matters to the case]
----END ANALYSIS---
-
-Only include CLARIFYING QUESTIONS if CONTRADICTIONS WITH LIVING FILE contains actual conflicts.
-If no companion documents are needed, omit the REQUESTED ATTACHMENTS bullets entirely.
-
-If this is an HOA / property-owners'-association governing document (Declaration / CC&Rs, bylaws, rules & regulations, plat, or a violation / fine / assessment / lien / foreclosure notice), be especially precise in KEY SECTIONS and EXTRACTED FACTS: pull out the enforcement and fine provisions, the notice / cure / hearing rights, the architectural-control (ACC) approval procedure, the assessment and lien provisions, the amendment procedure, and — importantly — any attorney-fee / prevailing-party clause (note it under URGENT FINDINGS because it drives the cost-benefit of any dispute). Capture any deadlines a homeowner must meet (hearing request, cure period, records-request response, foreclosure cure) under URGENT FINDINGS.`;
+    const isScreenshot = mimeType.startsWith("image/");
+    const analysisPrompt = isScreenshot
+      ? buildScreenshotPrompt(fileContext)
+      : buildDocumentPrompt(fileContext);
 
     const messageContent: Anthropic.MessageParam["content"] = [
       ...contentBlocks as (Anthropic.ImageBlockParam | Anthropic.DocumentBlockParam | Anthropic.TextBlockParam)[],

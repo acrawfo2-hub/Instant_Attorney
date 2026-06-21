@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { CaseFile, FactItem, BYPASS_USER_ID } from "@/lib/types";
-import type { Document, ConsultRequest } from "@/lib/types";
+import type { Document, ConsultRequest, RequestedAttachment, GovFormInstrument } from "@/lib/types";
 import ClientFileView from "@/components/ClientFileView";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
@@ -23,7 +23,7 @@ async function getData(caseFileId: string) {
     userId = user.id;
   }
 
-  const [{ data: caseFile }, { data: facts }, { data: documents }, { data: consultRow }, { data: subRow }] = await Promise.all([
+  const [{ data: caseFile }, { data: facts }, { data: documents }, { data: consultRow }, { data: subRow }, { data: requestedRows }, { data: formRows }] = await Promise.all([
     db.from("case_files")
       .select("*")
       .eq("id", caseFileId)
@@ -49,27 +49,35 @@ async function getData(caseFileId: string) {
       .select("status, plan")
       .eq("user_id", userId)
       .maybeSingle(),
+    db
+      .from("requested_attachments")
+      .select("*")
+      .eq("case_file_id", caseFileId)
+      .order("created_at", { ascending: true }),
+    db
+      .from("form_instruments")
+      .select("*")
+      .eq("case_file_id", caseFileId)
+      .neq("status", "dismissed")
+      .order("created_at", { ascending: true }),
   ]);
 
   if (!caseFile) return null;
 
   const allDocs = (documents ?? []) as Document[];
-  const preWarmedByType: Record<string, string> = {};
-  for (const doc of allDocs) {
-    if (doc.status === "pre_warmed" && !preWarmedByType[doc.doc_type]) {
-      preWarmedByType[doc.doc_type] = doc.id;
-    }
-  }
 
   return {
     caseFile: caseFile as CaseFile,
     facts: (facts ?? []) as FactItem[],
+    // Defensively exclude any legacy "pre_warmed" rows (the feature was retired);
+    // a one-time migration promotes/cleans them, this guards stragglers.
     documents: allDocs.filter((d) => d.status !== "pre_warmed" && !d.parent_document_id),
     childDocuments: allDocs.filter((d) => !!d.parent_document_id),
-    preWarmedByType,
     userId,
     consultRequest: (consultRow as ConsultRequest | null) ?? null,
     hasConsultSub: subRow?.plan === "consult" && ["active", "bypass"].includes(subRow?.status ?? ""),
+    requestedAttachments: (requestedRows ?? []) as RequestedAttachment[],
+    govForms: (formRows ?? []) as GovFormInstrument[],
   };
 }
 
@@ -85,7 +93,7 @@ export default async function FileDetailPage({
   const result = await getData(id);
   if (!result) notFound();
 
-  const { caseFile, facts, documents, childDocuments, preWarmedByType, consultRequest, hasConsultSub } = result;
+  const { caseFile, facts, documents, childDocuments, consultRequest, hasConsultSub, requestedAttachments, govForms } = result;
 
   const title = caseFile.title
     || (caseFile.matter_subtype ? caseFile.matter_subtype.replace(/_/g, " ") : null)
@@ -127,7 +135,8 @@ export default async function FileDetailPage({
           facts={facts}
           documents={documents}
           childDocuments={childDocuments}
-          preWarmedByType={preWarmedByType}
+          requestedAttachments={requestedAttachments}
+          govForms={govForms}
           mode="client"
           consultRequest={consultRequest}
           hasConsultSub={hasConsultSub}

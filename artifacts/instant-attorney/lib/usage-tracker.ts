@@ -7,7 +7,6 @@ export type UsageFeature =
   | "free_chat"
   | "chat_acp"
   | "wizard"
-  | "pre_warm"
   | "title_generator"
   | "attachment_analysis"
   | "auto_critical_review"
@@ -25,6 +24,7 @@ const MODEL_PRICING_USD_PER_M: Record<string, { input: number; output: number }>
   "claude-sonnet-4-6": { input: 3, output: 15 },
   "claude-haiku-4-5-20251001": { input: 0.8, output: 4 },
   "claude-opus-4-6": { input: 15, output: 75 },
+  "claude-opus-4-8": { input: 15, output: 75 },
 };
 
 const DEFAULT_MODEL_PRICING = MODEL_PRICING_USD_PER_M["claude-sonnet-4-6"];

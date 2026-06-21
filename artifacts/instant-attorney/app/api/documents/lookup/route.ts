@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
     .eq("case_file_id", caseFileId)
     .eq("doc_type", docType)
     .eq("user_id", userId)
-    .in("status", ["pre_warmed", "draft"])
+    .in("status", ["draft"])
     .order("updated_at", { ascending: false })
     .limit(1)
     .maybeSingle();

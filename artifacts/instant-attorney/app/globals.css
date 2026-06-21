@@ -2485,6 +2485,163 @@ body {
 .atty-file-action { font-size: 12px; color: var(--brand-text-xlt); }
 .atty-file-footer { display: flex; justify-content: space-between; font-size: 11px; color: var(--brand-text-xlt); margin-top: 4px; }
 
+/* ── Attorney dashboard tables & file log ── */
+.atty-section-hint {
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--brand-text-xlt);
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: 8px;
+}
+
+.atty-log { display: block; }
+.atty-log-hint {
+  font-size: 12px;
+  color: var(--brand-text-xlt);
+  margin-bottom: 12px;
+}
+.atty-log-filter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--brand-text-md);
+  margin-bottom: 12px;
+}
+.atty-log-filter strong { color: var(--brand-text-dk); }
+.atty-chip-clear {
+  background: var(--brand-cream-dk);
+  border: 0.5px solid var(--brand-border);
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 12px;
+  color: var(--brand-text-md);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s;
+}
+.atty-chip-clear:hover { background: #ddd8cf; color: var(--brand-text-dk); }
+
+.atty-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--brand-white);
+  border: 0.5px solid var(--brand-border);
+  border-radius: var(--brand-r-md);
+  overflow: hidden;
+  font-size: 14px;
+  color: var(--brand-text-dk);
+}
+.atty-table thead th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--brand-text-lt);
+  padding: 12px 16px;
+  background: var(--brand-cream);
+  border-bottom: 0.5px solid var(--brand-border);
+  white-space: nowrap;
+}
+.atty-table tbody td {
+  padding: 13px 16px;
+  color: var(--brand-text-dk);
+  border-bottom: 0.5px solid var(--brand-border);
+  vertical-align: middle;
+}
+.atty-table tbody tr:last-child td { border-bottom: none; }
+
+.atty-th-sort { cursor: pointer; user-select: none; transition: color 0.15s; }
+.atty-th-sort:hover { color: var(--brand-text-dk); }
+.atty-th-arrow { margin-left: 4px; color: var(--brand-gold); }
+
+.atty-tr-link { cursor: pointer; transition: background 0.15s; }
+.atty-tr-link:hover { background: var(--brand-cream); }
+.atty-tr-urgent { transition: background 0.15s; }
+.atty-tr-urgent:hover { background: var(--brand-cream); }
+
+.atty-td-sla { white-space: nowrap; }
+.atty-td-doc { font-weight: 600; color: var(--brand-text-dk); }
+.atty-td-matter { color: var(--brand-text-md); font-size: 13px; }
+.atty-td-muted { color: var(--brand-text-xlt); font-size: 13px; white-space: nowrap; }
+.atty-td-arrow { text-align: right; color: var(--brand-gold); font-weight: 600; }
+
+.atty-row-link {
+  color: var(--brand-navy-md);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 0.15s;
+}
+.atty-row-link:hover { color: var(--brand-gold); }
+
+.atty-client-link {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 600;
+  color: var(--brand-navy-md);
+  cursor: pointer;
+  text-align: left;
+  transition: color 0.15s;
+}
+.atty-client-link:hover { color: var(--brand-gold); text-decoration: underline; text-underline-offset: 2px; }
+
+.atty-clock { font-weight: 600; font-size: 13px; white-space: nowrap; }
+.atty-clock-ok { color: var(--brand-text-lt); }
+.atty-clock-urgent { color: #c8960a; }
+.atty-clock-overdue { color: #c44444; font-weight: 700; }
+
+.atty-status-open { background: #e8f5e9; color: #2d7a4f; }
+.atty-status-closed { background: #f0f0f0; color: #666; }
+.atty-status-referred { background: #e3f2fd; color: #1565c0; }
+.atty-status-archived { background: #f0f0f0; color: #999; }
+
+/* ── Attorney client chat transcript ── */
+.atty-chat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+.atty-chat-msg {
+  padding: 10px 14px;
+  border-radius: 12px;
+  max-width: 82%;
+  font-size: 13.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.atty-chat-user {
+  align-self: flex-end;
+  background: var(--brand-navy);
+  color: var(--brand-cream-text);
+  border-bottom-right-radius: 3px;
+}
+.atty-chat-assistant {
+  align-self: flex-start;
+  background: var(--brand-cream);
+  color: var(--brand-text-dk);
+  border: 0.5px solid var(--brand-border);
+  border-bottom-left-radius: 3px;
+}
+.atty-chat-role {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.6;
+  margin-bottom: 4px;
+}
+.atty-chat-time { font-weight: 400; opacity: 0.7; margin-left: 6px; letter-spacing: 0; }
+
 /* Attorney review page */
 .atty-review-loading, .atty-review-error {
   display: flex; align-items: center; justify-content: center;
@@ -3385,6 +3542,31 @@ mark.atty-placeholder {
 .att-upload-btn:disabled { opacity: 0.5; pointer-events: none; }
 .att-upload-hint { font-size: 11px; color: #bbb; }
 .att-upload-error { font-size: 12px; color: #c0392b; margin: 0; }
+.att-upload-zone-icon { color: #b9b3a6; display: flex; }
+.att-upload-zone-over .att-upload-zone-icon { color: var(--brand-gold); }
+
+/* Post-add confirm: analyze with AI or just store */
+.att-confirm-card {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 16px;
+  border: 1.5px solid var(--brand-gold);
+  border-radius: var(--brand-r-lg);
+  background: #fdfbf6;
+}
+.att-confirm-file { display: flex; align-items: center; gap: 10px; }
+.att-confirm-file-icon { flex-shrink: 0; color: var(--brand-gold); display: flex; }
+.att-confirm-file-meta { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.att-confirm-file-name { font-size: 13px; font-weight: 600; color: var(--brand-text-dk); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.att-confirm-file-size { font-size: 11px; color: var(--brand-text-lt); }
+.att-confirm-remove {
+  flex-shrink: 0; border: none; background: none; cursor: pointer;
+  font-size: 20px; line-height: 1; color: #b9b3a6; padding: 0 4px;
+}
+.att-confirm-remove:hover { color: var(--brand-text-dk); }
+.att-confirm-q { font-size: 13px; font-weight: 600; color: var(--brand-text-dk); }
+.att-confirm-note { font-size: 11.5px; color: var(--brand-text-lt); line-height: 1.5; margin: 0; }
+.att-confirm-note-warn { color: #b6772a; font-weight: 500; }
+.att-confirm-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 /* Attachment list */
 .att-list { display: flex; flex-direction: column; gap: 8px; }
@@ -3435,6 +3617,19 @@ mark.atty-placeholder {
   display: flex; align-items: center; justify-content: center;
 }
 .fc-attachment-clear:hover { color: #c0392b; }
+
+/* Screenshot rendered inside a sent user message bubble */
+.fc-bubble-image {
+  display: block;
+  max-width: 260px;
+  max-height: 360px;
+  width: auto;
+  height: auto;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.18);
+  margin-bottom: 6px;
+}
+.fc-bubble-image:last-child { margin-bottom: 0; }
 
 /* Attorney review: attachment list */
 .atty-att-item { padding: 8px 0; border-bottom: 1px solid var(--brand-border); }
@@ -3948,6 +4143,53 @@ mark.atty-placeholder {
 .atty-toggle-btn-on { background: rgba(52,199,89,0.15); border-color: rgba(52,199,89,0.4); color: #34c759; }
 .atty-toggle-btn-on:hover { background: rgba(52,199,89,0.25); }
 .atty-toggle-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Auto Critical Review switch */
+.atty-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: var(--font-dm-sans, "DM Sans"), sans-serif;
+}
+.atty-switch:disabled { opacity: 0.6; cursor: wait; }
+.atty-switch-track {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  transition: background 0.18s, border-color 0.18s;
+  flex-shrink: 0;
+}
+.atty-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  transition: transform 0.18s;
+}
+.atty-switch-on .atty-switch-track {
+  background: rgba(52, 199, 89, 0.9);
+  border-color: rgba(52, 199, 89, 0.9);
+}
+.atty-switch-on .atty-switch-thumb { transform: translateX(18px); }
+.atty-switch-state {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.6);
+  min-width: 22px;
+  text-align: left;
+}
+.atty-switch-on .atty-switch-state { color: #34c759; }
 
 /* ── Consult CTA banner (client file view) ───────────────────────────────── */
 .lf-consult-banner {
@@ -4705,6 +4947,21 @@ mark.atty-placeholder {
 }
 .atty-standalone-doc-header h2 { font-size: 15px; margin: 0; }
 .atty-standalone-doc-sub { font-size: 12px; color: var(--brand-text-lt); margin: 4px 0 0 0; }
+.atty-doc-downloads { display: flex; gap: 8px; flex-shrink: 0; }
+.atty-changes-panel {
+  margin: 12px 0 4px 0;
+  border: 1px solid var(--brand-border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.02);
+}
+.atty-changes-panel > summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--brand-text-lt);
+}
+.atty-changes-panel > .atty-review-preformatted { margin-top: 10px; }
 .atty-living-file-link {
   font-size: 13px;
   font-weight: 600;
@@ -4779,6 +5036,53 @@ mark.atty-placeholder {
 }
 .lf-doc-download-link:hover { text-decoration: underline; }
 .lf-doc-download-link-muted { color: var(--brand-text-lt); font-weight: 500; }
+
+/* Client "Information needed" fill-in panel */
+.lf-info-needed {
+  margin-top: 12px;
+  border: 1px solid var(--brand-border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  background: rgba(0, 0, 0, 0.015);
+}
+.lf-info-needed-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 12px; }
+.lf-info-needed-title { font-size: 13px; font-weight: 700; color: var(--brand-navy); }
+.lf-info-needed-sub { font-size: 12px; color: var(--brand-text-lt); }
+.lf-info-group { margin-bottom: 12px; }
+.lf-info-group-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--brand-text-lt);
+  margin-bottom: 8px;
+}
+.lf-info-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.lf-info-label { font-size: 12px; font-weight: 600; color: var(--brand-text-dk); }
+.lf-info-hint { display: block; font-weight: 400; color: var(--brand-text-lt); margin-top: 1px; }
+.lf-info-input {
+  font-size: 13px;
+  padding: 8px 10px;
+  border: 1px solid var(--brand-border);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--brand-text-dk);
+}
+.lf-info-input:focus { outline: none; border-color: var(--brand-navy); }
+.lf-info-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.lf-info-save {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 7px;
+  background: var(--brand-navy);
+  color: #fff;
+  cursor: pointer;
+}
+.lf-info-save:disabled { opacity: 0.5; cursor: not-allowed; }
+.lf-info-msg { font-size: 12px; color: var(--brand-green, #1a7f4b); }
+.lf-info-error { font-size: 12px; color: #b00020; }
 
 /* ── Wizard spotlight (dashboard "Your Next Step") ──────────────────────────── */
 @keyframes wizard-glow {
@@ -4975,6 +5279,66 @@ mark.atty-placeholder {
   .fc-file-cta-btn { text-align: center; }
 }
 
+/* ── Chat handoff (ready → next step) ─────────────────────────────────────── */
+.fc-handoff-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fc-handoff-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--brand-gold);
+}
+.fc-handoff-headline {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--brand-navy);
+  margin: 0;
+}
+.fc-handoff-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 16px 16px 20px;
+  border-top: 1px solid rgba(193,154,58,0.18);
+  background: var(--brand-cream, #fbf8f1);
+  animation: cta-appear 0.4s ease both;
+}
+.fc-handoff-btn {
+  width: 100%;
+  background: var(--brand-gold);
+  color: var(--brand-navy);
+  border: none;
+  border-radius: 10px;
+  padding: 16px 22px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
+  box-shadow: 0 4px 16px rgba(193,154,58,0.35);
+}
+.fc-handoff-btn:hover {
+  background: #e8b84b;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(193,154,58,0.45);
+}
+.fc-handoff-keep {
+  background: none;
+  border: none;
+  color: var(--brand-text-md, #5b6675);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 4px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.fc-handoff-keep:hover { color: var(--brand-navy); }
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Next-Step guidance layer (plain-language "what to do next")
    Additive layer on top of the Living File — never replaces the detail below.
@@ -5165,6 +5529,144 @@ mark.atty-placeholder {
   .lf-step-dot { width: 26px; height: 26px; }
 }
 
+/* ── Mission Control action queue (extends Next-Step layer) ───────────────── */
+.mc-board .lf-nextstep-hero {
+  background: linear-gradient(135deg, var(--brand-navy) 0%, #1a3358 100%);
+  border-radius: var(--brand-r-lg);
+  padding: 1.25rem 1.35rem;
+  color: #fff;
+}
+.mc-queue {
+  background: var(--brand-white);
+  border: 1px solid var(--brand-border);
+  border-radius: var(--brand-r-lg);
+  padding: 1rem 1.15rem;
+}
+.mc-queue-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 0.75rem;
+}
+.mc-queue-title {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--brand-navy);
+}
+.mc-queue-meta {
+  font-size: 12px;
+  color: var(--brand-text-lt);
+}
+.mc-action-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mc-action {
+  border: 1px solid var(--brand-border);
+  border-radius: var(--brand-r-md);
+  background: #fafbfd;
+  overflow: hidden;
+}
+.mc-action-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+}
+.mc-action-icon {
+  flex-shrink: 0;
+  width: 18px;
+  text-align: center;
+  color: var(--brand-gold);
+  font-weight: 700;
+  line-height: 1.4;
+}
+.mc-action-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mc-action-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--brand-navy);
+  line-height: 1.35;
+}
+.mc-action-reason {
+  font-size: 12px;
+  color: var(--brand-text-lt);
+  line-height: 1.4;
+}
+.mc-action-btn {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(200, 169, 110, 0.55);
+  background: #fff;
+  color: var(--brand-navy);
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  font-family: inherit;
+}
+.mc-action-btn:hover {
+  background: var(--brand-gold);
+  border-color: var(--brand-gold);
+  color: var(--brand-navy);
+}
+.mc-gap-form {
+  padding: 0 12px 12px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mc-gap-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--brand-border);
+  border-radius: var(--brand-r-sm);
+  font-size: 14px;
+  font-family: inherit;
+}
+.mc-gap-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.mc-action-link-btn {
+  background: none;
+  border: none;
+  font-size: 12px;
+  color: var(--brand-text-lt);
+  cursor: pointer;
+  font-family: inherit;
+  text-decoration: underline;
+}
+.mc-action-error {
+  font-size: 12px;
+  color: #b42318;
+}
+.mc-queue-foot {
+  margin: 0.85rem 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--brand-text-lt);
+  font-style: italic;
+}
+
 /* ── Plain-language captions (additive, next to existing legal labels) ────── */
 .lf-plain-caption {
   text-transform: none;
@@ -5309,3 +5811,83 @@ mark.atty-placeholder {
   font-size: 0.85rem;
   margin: 0.5rem 0 0.75rem;
 }
+
+/* ── On-device voice input (talk-to-text) ─────────────────────────────────── */
+.voice-input {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+.voice-mic-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--brand-gold);
+  border: 1px solid rgba(200, 169, 110, 0.5);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, border-color 0.2s, opacity 0.2s;
+  flex-shrink: 0;
+}
+.voice-mic-btn:hover:not(:disabled) { background: rgba(200, 169, 110, 0.14); }
+.voice-mic-btn:disabled { opacity: 0.4; cursor: default; }
+.voice-mic-btn.voice-mic-recording {
+  background: #c0392b;
+  border-color: #c0392b;
+  color: #fff;
+  animation: voice-pulse 1.3s ease-in-out infinite;
+}
+.voice-mic-btn.voice-mic-working { opacity: 0.7; }
+@keyframes voice-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(192, 57, 43, 0.45); }
+  50% { box-shadow: 0 0 0 6px rgba(192, 57, 43, 0); }
+}
+
+/* Compact inline variant beside a single short field. */
+.voice-input-compact .voice-mic-btn { width: 34px; height: 34px; border-radius: 8px; }
+
+/* Status text floats above the button so it never shifts the form layout. */
+.voice-status {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  white-space: nowrap;
+  font-size: 0.72rem;
+  line-height: 1.2;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  background: var(--brand-navy);
+  color: var(--brand-cream-text);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  z-index: 5;
+}
+.voice-status-rec { background: #c0392b; color: #fff; }
+.voice-status-err {
+  position: static;
+  white-space: normal;
+  box-shadow: none;
+  background: transparent;
+  color: #c0392b;
+  padding: 0.2rem 0;
+}
+
+.voice-unsupported-note {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--brand-text-lt);
+  margin-top: 0.4rem;
+  max-width: 740px;
+}
+
+/* Wizard field + inline mic row. */
+.wiz-field-input-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.wiz-field-input-row .wiz-field-input { flex: 1; }

@@ -1,8 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { WizardType, LegalStrategy } from "./types";
+import { coerceWizardType } from "./types.ts";
 import { isKnownFormKey } from "./government-forms.ts";
 import { provisionalFormDef, slugifyFormKey } from "./gov-form-lookup.ts";
 import type { DynamicCandidate } from "./gov-form-lookup.ts";
+import { placeholderFields } from "./wizard-parsing.ts";
 
 // Extracts the draft text from a ---DRAFT READY--- block.
 // Resilient to truncation: if the closing ---END DRAFT--- marker is missing
@@ -20,6 +22,16 @@ export function extractDraftText(text: string): string | null {
     return trimmed.length ? trimmed : null;
   }
   return null;
+}
+
+// Returns true only when the drafter produced a COMPLETE ---FILE UPDATE--- block
+// — both the opening AND closing markers present. A truncated response (e.g. the
+// model hit its token limit mid-block) leaves the closing ---END FILE UPDATE---
+// marker missing; applying such a half-written block would partially write
+// structured sub-sections (facts / legal strategy) and corrupt the Living File.
+// The route must gate parseAndUpdateFile on this so a partial apply is impossible.
+export function isCompleteFileUpdate(text: string): boolean {
+  return text.includes("---FILE UPDATE---") && text.includes("---END FILE UPDATE---");
 }
 
 // Returns true when the drafter signals the draft is ready for attorney review.
@@ -209,6 +221,56 @@ export async function parseRequestedAttachments(
   }
 }
 
+// ── Draft placeholders → Living File gaps ────────────────────────────────────
+// Keep the Living File honest about what a generated document still needs. Every
+// unfilled [[placeholder]] in the latest draft becomes a "gap" fact, so a client
+// can send an imperfect document and the file (and the attorney) still knows
+// exactly what's outstanding. Additive + self-reconciling:
+//   • a placeholder not yet tracked (and not already answered) is added as a gap;
+//   • a gap that has since been answered — a confirmed "Label: value" fact exists —
+//     is cleared, so filling a blank removes it from the outstanding list.
+// Unrelated gaps surfaced during chat intake are left untouched unless answered.
+export async function syncDraftGapsToLivingFile(
+  db: SupabaseClient,
+  caseFileId: string,
+  userId: string,
+  draftText: string
+): Promise<void> {
+  const labels = placeholderFields(draftText).map((f) => f.label);
+
+  const [{ data: confirmedRows }, { data: gapRows }] = await Promise.all([
+    db.from("fact_items").select("description").eq("case_file_id", caseFileId).eq("status", "confirmed"),
+    db.from("fact_items").select("id, description").eq("case_file_id", caseFileId).eq("status", "gap"),
+  ]);
+
+  const confirmed = (confirmedRows ?? []) as { description: string }[];
+  const gaps = (gapRows ?? []) as { id: string; description: string }[];
+
+  // The "name" half of each confirmed "Label: value" fact, used to tell whether a
+  // placeholder/gap has already been answered.
+  const answered = new Set(confirmed.map((f) => f.description.toLowerCase().split(":")[0].trim()));
+  const existingGapDescs = new Set(gaps.map((g) => g.description.toLowerCase()));
+
+  const toInsert = labels
+    .filter((l) => {
+      const lower = l.toLowerCase();
+      return !existingGapDescs.has(lower) && !answered.has(lower);
+    })
+    .map((description) => ({
+      case_file_id: caseFileId,
+      user_id: userId,
+      description,
+      status: "gap" as const,
+    }));
+  if (toInsert.length) await db.from("fact_items").insert(toInsert);
+
+  // Clear any gap that has now been answered.
+  const staleIds = gaps
+    .filter((g) => answered.has(g.description.toLowerCase()))
+    .map((g) => g.id);
+  if (staleIds.length) await db.from("fact_items").delete().in("id", staleIds);
+}
+
 // ── ---LIVING FILE--- block ──────────────────────────────────────────────────
 
 async function parseLivingFile(
@@ -283,7 +345,9 @@ async function parseLegalStrategy(
     instruments: extractBullets(block, "SUGGESTED INSTRUMENTS"),
     strengths: extractBullets(block, "STRENGTHS"),
     risks: extractBullets(block, "RISKS"),
-    recommended_wizards: extractBullets(block, "RECOMMENDED WIZARDS") as WizardType[],
+    recommended_wizards: extractBullets(block, "RECOMMENDED WIZARDS")
+      .map(coerceWizardType)
+      .filter((w): w is WizardType => w !== null),
     recommend_consult: consultMatch ? consultMatch[1].toLowerCase() === "true" : undefined,
   };
 

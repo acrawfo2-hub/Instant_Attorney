@@ -6,6 +6,7 @@ import { BYPASS_USER_ID } from "@/lib/types";
 import type { CaseFile, ConsultRequest } from "@/lib/types";
 import CaseFileCard from "@/components/CaseFileCard";
 import ConsultStatusCard from "@/components/ConsultStatusCard";
+import LogoutButton from "@/components/LogoutButton";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 const MAX_ACTIVE_FILES = 10;
@@ -88,6 +89,7 @@ export default async function DashboardPage() {
         </div>
         <div className="lf-header-right">
           {isBypass && <span className="ob-bypass-badge">Test Mode</span>}
+          <LogoutButton />
         </div>
       </header>
 

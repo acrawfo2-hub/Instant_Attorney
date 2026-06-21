@@ -5,15 +5,13 @@ import { logTruncation } from "@/lib/truncation-logger";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { ACP_CHAT_SYSTEM_PROMPT, buildFileContext } from "@/lib/prompts";
 import { parseAndUpdateFile } from "@/lib/file-parser";
-import { pickFirstValidWizard } from "@/lib/document-utils";
-import { triggerPreWarm } from "@/lib/pre-warm";
 import { triggerPendingLookups } from "@/lib/gov-form-lookup";
 import { generateCaseTitle } from "@/lib/title-generator";
 import { toAnthropicBlock, processAttachment } from "@/lib/attachment-processor";
 import { recordAiFromMessage, recordStorageUpload } from "@/lib/usage-tracker";
 import { maxOutputTokensFor, limitSignalMetadata } from "@/lib/token-limits";
 import { BYPASS_USER_ID } from "@/lib/types";
-import type { CaseFile, FactItem, LegalStrategy, Attachment, RequestedAttachment } from "@/lib/types";
+import type { CaseFile, FactItem, Attachment, RequestedAttachment } from "@/lib/types";
 
 const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney, maxRetries: 4 });
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
@@ -139,18 +137,26 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Save the last user message text (save text content only)
+  // Save the last user message text (save text content only). Capture its id so an
+  // inline screenshot uploaded below can be linked back to this exact message and
+  // reattached to the right bubble when the conversation is reloaded.
+  let userMessageId: string | null = null;
   const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
   if (lastUserMsg) {
     const textToSave = pendingAttachment
       ? `[${pendingAttachment.fileName}]\n${lastUserMsg.content}`
       : lastUserMsg.content;
-    await db.from("intake_messages").insert({
-      case_file_id: resolvedCaseFileId,
-      user_id: userId,
-      role: "user",
-      content: textToSave,
-    });
+    const { data: insertedMsg } = await db
+      .from("intake_messages")
+      .insert({
+        case_file_id: resolvedCaseFileId,
+        user_id: userId,
+        role: "user",
+        content: textToSave,
+      })
+      .select("id")
+      .single();
+    userMessageId = insertedMsg?.id ?? null;
   }
 
   // Stream from Anthropic
@@ -223,7 +229,7 @@ export async function POST(req: NextRequest) {
               await parseAndUpdateFile(db, resolvedCaseFileId, userId, fullResponse);
 
               // Kick off grounded web lookups for any newly-detected forms that
-              // aren't in the curated registry (fire-and-forget, like pre-warm).
+              // aren't in the curated registry (fire-and-forget, non-blocking).
               if (hasGovForms) {
                 triggerPendingLookups(anthropic, db, resolvedCaseFileId, userId).catch(
                   (err) => console.error("[chat-acp] gov-form lookup trigger error:", err)
@@ -248,27 +254,6 @@ export async function POST(req: NextRequest) {
               }
             } catch (parseErr) {
               console.error("[chat-acp] file parser error:", parseErr);
-            }
-          }
-
-          // Pre-warm the top recommended wizard when strategy is first established
-          if (hasStrategy) {
-            try {
-              const { data: freshFile } = await db
-                .from("case_files")
-                .select("legal_strategy")
-                .eq("id", resolvedCaseFileId)
-                .single();
-
-              const strategy = freshFile?.legal_strategy as LegalStrategy | null;
-              const preWarmWizard = pickFirstValidWizard(strategy?.recommended_wizards);
-              if (preWarmWizard) {
-                triggerPreWarm(db, resolvedCaseFileId, userId, preWarmWizard).catch(
-                  (err) => console.error("[chat-acp] pre-warm error:", err)
-                );
-              }
-            } catch (err) {
-              console.error("[chat-acp] pre-warm trigger error:", err);
             }
           }
 
@@ -302,6 +287,7 @@ export async function POST(req: NextRequest) {
                   .insert({
                     case_file_id: resolvedCaseFileId,
                     user_id: userId,
+                    message_id: userMessageId,
                     file_name: pendingAttachment.fileName,
                     file_type: pendingAttachment.mimeType,
                     file_size: buffer.length,

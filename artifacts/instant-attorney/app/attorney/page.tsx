@@ -1,11 +1,11 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { docTypeLabel } from "@/lib/types";
+import { docTypeLabel, personDisplayName } from "@/lib/types";
 import type { Document, CaseFile, Profile } from "@/lib/types";
-import AutoReviewToggle from "@/components/AutoReviewToggle";
 import AttorneyFileLog from "@/components/AttorneyFileLog";
 import ConsultRequestQueue, { type ConsultRequestRow } from "@/components/ConsultRequestQueue";
+import LogoutButton from "@/components/LogoutButton";
 
 interface DocumentWithRelations extends Document {
   case_files: CaseFile;
@@ -92,8 +92,8 @@ export default async function AttorneyPage() {
             <span>Attorney Dashboard</span>
           </div>
           <div className="atty-header-right">
-            <span className="atty-name">{profile.full_name ?? profile.email}</span>
-            <AutoReviewToggle initial={profile.auto_document_review ?? true} />
+            <span className="atty-name">{personDisplayName(profile)}</span>
+            <LogoutButton />
           </div>
         </div>
       </header>
@@ -117,15 +117,9 @@ export default async function AttorneyPage() {
                 {pending.map((doc) => (
                   <tr key={doc.id} className="atty-tr-urgent">
                     <td className="atty-td-sla"><ReviewClock submittedAt={doc.submitted_at ?? null} /></td>
-                    <td>{doc.profiles?.full_name ?? doc.profiles?.email ?? "Unknown"}</td>
+                    <td>{personDisplayName(doc.profiles)}</td>
                     <td className="atty-td-doc">
                       {docTypeLabel(doc.doc_type)}: {doc.title}
-                      {doc.review_status === "reviewing" && (
-                        <span className="atty-inline-badge">AI reviewing…</span>
-                      )}
-                      {doc.review_status === "review_ready" && (
-                        <span className="atty-inline-badge atty-inline-badge-ready">Review memo ready</span>
-                      )}
                     </td>
                     <td className="atty-td-matter">{matterLabel(doc.case_files)}</td>
                     <td className="atty-td-muted">

@@ -1,5 +1,5 @@
-import type { CaseFile, Document, FactItem, WizardType } from "@/lib/types";
-import { isValidWizardType } from "@/lib/document-utils";
+import type { CaseFile, Document, FactItem, WizardType } from "./types.ts";
+import { coerceWizardType } from "./types.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Next-Step engine
@@ -63,35 +63,32 @@ function wizardHref(caseFileId: string, wType: WizardType, docId?: string): stri
  * Prefers the attorney-recommended wizard; otherwise falls back to a general
  * legal document so the path is NEVER blocked.
  */
-function pickCreateTarget(
-  caseFile: CaseFile,
-  preWarmedByType: Record<string, string>,
-): { wType: WizardType; docId?: string } {
-  const recommended = (caseFile.legal_strategy?.recommended_wizards ?? []).filter(isValidWizardType);
+function pickCreateTarget(caseFile: CaseFile): { wType: WizardType } {
+  const recommended = (caseFile.legal_strategy?.recommended_wizards ?? [])
+    .map(coerceWizardType)
+    .filter((w): w is WizardType => w !== null);
   const wType = recommended[0] ?? "general_document";
-  return { wType, docId: preWarmedByType[wType] };
+  return { wType };
 }
 
 /**
  * Compute the single most useful "next step" for a case file, in plain language.
  *
  * @param caseFile          the file
- * @param documents         top-level (non pre-warmed, non-child) documents
+ * @param documents         top-level (non-child) documents
  * @param facts             fact items for the file
- * @param preWarmedByType   map of wizardType -> pre-warmed document id
  */
 export function computeNextStep(
   caseFile: CaseFile,
   documents: Document[],
   facts: FactItem[],
-  preWarmedByType: Record<string, string> = {},
 ): NextStepGuide {
   const id = caseFile.id;
 
   // ── Signals ────────────────────────────────────────────────────────────────
   const hasStory = facts.length > 0 || !!caseFile.legal_strategy;
   const canCreate =
-    (caseFile.legal_strategy?.recommended_wizards ?? []).some(isValidWizardType) ||
+    (caseFile.legal_strategy?.recommended_wizards ?? []).some((w) => coerceWizardType(w) !== null) ||
     (caseFile.legal_strategy?.instruments?.length ?? 0) > 0;
 
   const draftDoc = documents.find((d) => d.status === "draft" && hasDraftText(d));
@@ -132,12 +129,12 @@ export function computeNextStep(
       "Andrew reviewed your document and asked for a few updates. Open it to see what he suggested and send it back when you're ready.";
     cta = { label: "See the changes →", href: wizardHref(id, changesDoc.doc_type as WizardType, changesDoc.id) };
   } else if (canCreate && !anyDocCreated) {
-    const { wType, docId } = pickCreateTarget(caseFile, preWarmedByType);
+    const { wType } = pickCreateTarget(caseFile);
     activeStep = 2;
     title = "Create your first document";
     body =
       "We have enough to start. Click below and we'll write a complete first draft for you in under two minutes — even if some details are still missing, we'll mark those spots so you (or Andrew) can fill them in later.";
-    cta = { label: "Create my document →", href: wizardHref(id, wType, docId) };
+    cta = { label: "Create my document →", href: wizardHref(id, wType) };
   } else if (pendingDoc) {
     activeStep = 4;
     tone = "waiting";
@@ -146,8 +143,8 @@ export function computeNextStep(
       "Nice work — you've sent your document to Andrew Crawford, Esq. He'll review it within 48 hours and you'll get an email when it's ready. There's nothing you need to do right now.";
     if (canCreate) {
       secondary = (() => {
-        const { wType, docId } = pickCreateTarget(caseFile, preWarmedByType);
-        return { label: "Start another document", href: wizardHref(id, wType, docId) };
+        const { wType } = pickCreateTarget(caseFile);
+        return { label: "Start another document", href: wizardHref(id, wType) };
       })();
     }
   } else if (approvedDoc) {
@@ -158,12 +155,12 @@ export function computeNextStep(
       "Andrew has reviewed and approved your document. You can download it below, ready to use. Need something else? You can always start a new document or ask a question.";
     cta = { label: "Get my document →", href: "#documents" };
   } else if (canCreate) {
-    const { wType, docId } = pickCreateTarget(caseFile, preWarmedByType);
+    const { wType } = pickCreateTarget(caseFile);
     activeStep = 2;
     title = "Create your next document";
     body =
       "We'll write a complete first draft for you in under two minutes. Missing details are never a problem — we mark those spots and your attorney fills them in.";
-    cta = { label: "Create a document →", href: wizardHref(id, wType, docId) };
+    cta = { label: "Create a document →", href: wizardHref(id, wType) };
   } else {
     // No strategy yet — but NEVER a dead end. Keep talking OR jump straight to a draft.
     activeStep = 1;

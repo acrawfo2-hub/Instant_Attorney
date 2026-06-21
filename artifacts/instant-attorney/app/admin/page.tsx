@@ -1,13 +1,13 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { personDisplayName } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 /** Human labels for the usage_events.feature values that carry token telemetry. */
 const FEATURE_LABELS: Record<string, string> = {
   wizard: "Client draft (wizard)",
-  pre_warm: "Pre-warmed draft",
   auto_critical_review: "Auto critical review",
   attorney_review: "Attorney review",
   attorney_second_draft_fitness: "Second draft — fitness check",
@@ -121,7 +121,7 @@ export default async function AdminPage() {
             <span>Token Limit Monitor</span>
           </div>
           <div className="admin-header-right">
-            <span className="admin-name">{profile.full_name ?? profile.email}</span>
+            <span className="admin-name">{personDisplayName(profile)}</span>
             <Link href="/attorney" className="admin-link">Attorney Dashboard →</Link>
           </div>
         </div>

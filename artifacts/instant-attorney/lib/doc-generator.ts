@@ -12,6 +12,29 @@ import {
   WidthType,
 } from "docx";
 import type { CaseFile, FactItem, Profile, WizardType } from "./types";
+import { placeholderFields } from "./wizard-parsing";
+
+// Build a safe Content-Disposition value for a .docx download. HTTP headers must
+// be Latin-1, but document titles routinely contain em-dashes ("— Revised Draft")
+// and other non-ASCII characters that crash the Response constructor with a
+// ByteString error. We provide an ASCII-only `filename` fallback plus an RFC 5987
+// `filename*` so modern browsers still get the full Unicode name.
+export function docxContentDisposition(title: string): string {
+  const base = (title && title.trim().length ? title.trim() : "document").replace(/\.docx$/i, "");
+  const ascii = base
+    .replace(/[\u2010-\u2015\u2212]/g, "-") // various dashes → hyphen
+    .replace(/[\u2018\u2019]/g, "'") // curly single quotes
+    .replace(/[\u201C\u201D]/g, '"') // curly double quotes
+    .replace(/[^\x20-\x7E]/g, "") // drop any remaining non-ASCII
+    .replace(/["]/g, "") // strip quotes that break the header
+    .replace(/[\/\\:*?<>|]/g, "-") // path-reserved chars → hyphen (avoid filename/path hazards)
+    .replace(/\s+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "");
+  const asciiName = `${ascii.length ? ascii : "document"}.docx`;
+  const utf8Name = encodeURIComponent(`${base}.docx`).replace(/['()]/g, escape).replace(/\*/g, "%2A");
+  return `attachment; filename="${asciiName}"; filename*=UTF-8''${utf8Name}`;
+}
 
 export interface DocGenInput {
   docType: WizardType;
@@ -527,6 +550,120 @@ async function generateDocReview({ wizardData }: DocGenInput): Promise<Buffer> {
   return pack(doc);
 }
 
+// ── Inline Markdown → docx runs ──────────────────────────────────────────────
+// The drafting models emit lightweight Markdown (**bold**, *italic*, # headings,
+// [[placeholders]]). Word has no concept of Markdown, so without this pass the
+// literal asterisks and hashes land in the .docx. We convert them to real runs.
+// NOTE: underscores are intentionally NOT treated as emphasis — legal drafts are
+// full of signature rules ("_________________") that would be mangled.
+
+interface InlineToken {
+  text: string;
+  bold?: boolean;
+  italics?: boolean;
+}
+
+// Split a run of text on **bold** / *italic* markers. Bold is matched first so
+// "**x**" is never mistaken for two italics.
+function parseEmphasis(text: string): InlineToken[] {
+  const out: InlineToken[] = [];
+  const re = /(\*\*)(.+?)\*\*|(\*)([^*]+?)\*/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) out.push({ text: text.slice(last, m.index) });
+    if (m[1]) out.push({ text: m[2], bold: true });
+    else out.push({ text: m[4], italics: true });
+    last = re.lastIndex;
+  }
+  if (last < text.length) out.push({ text: text.slice(last) });
+  return out.filter((t) => t.text.length > 0);
+}
+
+// Convert one line of inline Markdown into TextRuns. [[placeholders]] are pulled
+// out first (and rendered red/highlighted) so emphasis parsing never touches
+// their contents.
+function inlineRuns(text: string): TextRun[] {
+  const runs: TextRun[] = [];
+  // Emphasis that wraps a [[placeholder]] (e.g. "**[[X]]**") would otherwise be
+  // torn apart by the placeholder split below, leaving orphan ** markers. The
+  // placeholder run is already styled, so drop the wrapping markers first.
+  const normalized = text
+    .replace(/\*\*(\[\[[\s\S]*?\]\])\*\*/g, "$1")
+    .replace(/\*(\[\[[\s\S]*?\]\])\*/g, "$1");
+  const parts = normalized.split(/(\[\[.*?\]\])/g);
+  for (const part of parts) {
+    if (!part) continue;
+    if (part.startsWith("[[") && part.endsWith("]]")) {
+      runs.push(new TextRun({ text: part, bold: true, color: "CC0000", highlight: "yellow" }));
+      continue;
+    }
+    for (const tok of parseEmphasis(part)) {
+      // Safety net: a residual ** is always a broken bold marker, never literal
+      // text in these drafts — strip it so it never lands in the .docx.
+      const clean = tok.text.replace(/\*\*/g, "");
+      if (!clean) continue;
+      runs.push(new TextRun({ text: clean, bold: tok.bold, italics: tok.italics }));
+    }
+  }
+  return runs.length ? runs : [new TextRun({ text })];
+}
+
+// Plain text of a line with all emphasis markers removed (used for headings,
+// which are rendered fully bold and must not show literal ** / * characters).
+function stripInlineMarkers(text: string): string {
+  return parseEmphasis(text).map((t) => t.text).join("").replace(/\*\*/g, "");
+}
+
+// If a whole line is wrapped in *…* or **…**, return the inner text (so a line
+// like "**1. SERVICES**" can be recognized as a heading). Otherwise unchanged.
+function stripWrappingEmphasis(text: string): string {
+  const t = text.trim();
+  const m = t.match(/^(\*\*|\*)([\s\S]+?)\1$/);
+  return m ? m[2].trim() : t;
+}
+
+// ── Markdown table + blockquote helpers ──────────────────────────────────────
+// Drafting models sometimes emit Markdown tables (| a | b |) and blockquotes
+// (> …). Without conversion these render as literal pipes and angle brackets in
+// the .docx. Tables become real docx tables; blockquote markers are stripped.
+
+function isTableRow(line: string): boolean {
+  return (line.trim().match(/\|/g)?.length ?? 0) >= 2;
+}
+
+function parseTableCells(line: string): string[] {
+  return line.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+}
+
+function isTableSeparator(cells: string[]): boolean {
+  return cells.length > 0 && cells.every((c) => /^:?-{2,}:?$/.test(c) || c === "");
+}
+
+function buildTable(rows: string[][]): Table {
+  const colCount = Math.max(...rows.map((r) => r.length));
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: rows.map((cells, rowIdx) =>
+      new TableRow({
+        children: Array.from({ length: colCount }, (_, c) => {
+          const text = cells[c] ?? "";
+          return new TableCell({
+            children: [
+              new Paragraph({
+                children:
+                  rowIdx === 0
+                    ? [new TextRun({ text: text.replace(/\*\*/g, ""), bold: true })]
+                    : inlineRuns(text),
+              }),
+            ],
+          });
+        }),
+      })
+    ),
+  });
+}
+
 // ── Generate .docx from AI-formatted draft text ──────────────────────────────
 // Used by the Drafter agent — wraps near-final AI text in a proper .docx shell
 // with firm header, DRAFT watermark, and clean paragraph formatting.
@@ -534,11 +671,14 @@ async function generateDocReview({ wizardData }: DocGenInput): Promise<Buffer> {
 export async function generateDocxFromText(
   title: string,
   draftText: string,
-  caseFile: { matter_subtype?: string | null; jurisdiction?: string | null }
+  // Nullable on purpose: the attorney download path reads the document under the
+  // attorney's session, and RLS on case_files can return null for a client's row
+  // even when the document row comes back. A null here must never crash the build.
+  caseFile: { matter_subtype?: string | null; jurisdiction?: string | null } | null
 ): Promise<Buffer> {
   const lines = draftText.split("\n");
 
-  const children: Paragraph[] = [
+  const children: (Paragraph | Table)[] = [
     ...firmHeader(),
     new Paragraph({
       children: [new TextRun({ text: title, bold: true, size: 26 })],
@@ -548,56 +688,79 @@ export async function generateDocxFromText(
     new Paragraph({ text: "" }),
   ];
 
-  for (const line of lines) {
-    const trimmed = line.trim();
+  for (let i = 0; i < lines.length; i++) {
+    let trimmed = lines[i].trim();
     if (!trimmed) {
       children.push(new Paragraph({ text: "" }));
       continue;
     }
 
-    // Section headings: lines that are ALL CAPS or match "N. Heading" pattern
-    const isNumberedHeading = /^\d+\.\s+[A-Z]/.test(trimmed) && trimmed.length < 80;
-    const isAllCapsHeading = trimmed === trimmed.toUpperCase() && trimmed.length < 80 && /[A-Z]{3,}/.test(trimmed);
+    // Markdown table block → real docx table (drop the |---| separator row)
+    if (isTableRow(trimmed)) {
+      const rows: string[][] = [];
+      while (i < lines.length && isTableRow(lines[i].trim())) {
+        const cells = parseTableCells(lines[i].trim());
+        if (!isTableSeparator(cells)) rows.push(cells);
+        i++;
+      }
+      i--; // for-loop will advance past the last consumed line
+      if (rows.length) children.push(buildTable(rows));
+      continue;
+    }
 
-    if (isNumberedHeading || isAllCapsHeading) {
+    // Strip Markdown blockquote markers ("> ", "> > ") — render as normal text
+    trimmed = trimmed.replace(/^(?:>\s?)+/, "");
+    if (!trimmed) {
+      children.push(new Paragraph({ text: "" }));
+      continue;
+    }
+
+    // Markdown horizontal rule (---, ***, ___) → blank line
+    if (/^([-*_])\1{2,}$/.test(trimmed)) {
+      children.push(new Paragraph({ text: "" }));
+      continue;
+    }
+
+    // Markdown ATX heading (#, ##, ###) → mapped heading levels
+    const atx = trimmed.match(/^(#{1,6})\s+(.*\S)\s*#*$/);
+    if (atx) {
+      const level = atx[1].length;
       children.push(new Paragraph({
-        children: [new TextRun({ text: trimmed, bold: true })],
+        children: inlineRuns(stripWrappingEmphasis(atx[2])),
+        heading:
+          level <= 1 ? HeadingLevel.HEADING_1 : level === 2 ? HeadingLevel.HEADING_2 : HeadingLevel.HEADING_3,
+        spacing: { before: 200, after: 80 },
+      }));
+      continue;
+    }
+
+    // Section headings: ALL CAPS, "N." / "N.N" numbered, or a whole line in **bold**
+    const unwrapped = stripWrappingEmphasis(trimmed);
+    const isNumberedHeading = /^\d+(?:\.\d+)*\.?\s+\S/.test(unwrapped) && unwrapped.length < 80;
+    const isAllCapsHeading =
+      unwrapped === unwrapped.toUpperCase() && unwrapped.length < 80 && /[A-Z]{3,}/.test(unwrapped);
+    const isWrappedHeading = unwrapped !== trimmed && unwrapped.length < 80;
+
+    if (isNumberedHeading || isAllCapsHeading || isWrappedHeading) {
+      children.push(new Paragraph({
+        children: [new TextRun({ text: stripInlineMarkers(unwrapped), bold: true })],
         heading: HeadingLevel.HEADING_2,
         spacing: { before: 200, after: 80 },
       }));
       continue;
     }
 
-    // Placeholders: [[TEXT — descriptor]] highlighted in the doc
-    const hasPlaceholder = trimmed.includes("[[");
-    if (hasPlaceholder) {
-      const parts = trimmed.split(/(\[\[.*?\]\])/);
-      const runs = parts.map((part) => {
-        if (part.startsWith("[[") && part.endsWith("]]")) {
-          return new TextRun({
-            text: part,
-            bold: true,
-            color: "CC0000",    // red for placeholders
-            highlight: "yellow",
-          });
-        }
-        return new TextRun({ text: part });
-      });
-      children.push(new Paragraph({ children: runs }));
-      continue;
-    }
-
-    // Bullet/list items
-    if (/^[•\-*]\s/.test(trimmed)) {
+    // Bullet/list items (Markdown -, *, or literal •) — keep inline formatting
+    if (/^[•]\s/.test(trimmed) || /^[-*]\s/.test(trimmed)) {
       children.push(new Paragraph({
-        children: [new TextRun({ text: trimmed.replace(/^[•\-*]\s+/, "") })],
+        children: inlineRuns(trimmed.replace(/^[•\-*]\s+/, "")),
         bullet: { level: 0 },
       }));
       continue;
     }
 
-    // Default: body paragraph
-    children.push(new Paragraph({ children: [new TextRun({ text: trimmed })] }));
+    // Default body paragraph — inline parser handles **bold**, *italic*, [[placeholders]]
+    children.push(new Paragraph({ children: inlineRuns(trimmed) }));
   }
 
   // Footer
@@ -610,7 +773,7 @@ export async function generateDocxFromText(
     new Paragraph({
       children: [
         new TextRun({
-          text: `DRAFT — FOR ATTORNEY REVIEW ONLY · Crawford Law PLLC · ${new Date().toLocaleDateString()} · ${caseFile.jurisdiction ?? "TX"} · Not for distribution`,
+          text: `DRAFT — FOR ATTORNEY REVIEW ONLY · Crawford Law PLLC · ${new Date().toLocaleDateString()} · ${caseFile?.jurisdiction ?? "TX"} · Not for distribution`,
           italics: true,
           size: 16,
           color: "888888",
@@ -622,4 +785,96 @@ export async function generateDocxFromText(
 
   const doc = new Document({ sections: [{ children }] });
   return pack(doc);
+}
+
+// ── "Information Still Needed" one-page report ────────────────────────────────
+// Deterministically pulls the [[placeholders]] out of a draft (first or second)
+// and renders a short client-facing checklist of what is still required. No model
+// call — the same blanks that are highlighted in the draft, listed in one place.
+// A placeholder is treated as required unless its descriptor says NON-BLOCKING.
+
+export async function generateNeededInfoDocx(
+  documentTitle: string,
+  draftText: string
+): Promise<Buffer> {
+  const items = placeholderFields(draftText);
+  const required = items.filter((i) => i.required);
+  const optional = items.filter((i) => !i.required);
+
+  const children: Paragraph[] = [
+    ...firmHeader(),
+    new Paragraph({
+      children: [new TextRun({ text: "INFORMATION STILL NEEDED", bold: true, size: 26 })],
+      alignment: AlignmentType.CENTER,
+      heading: HeadingLevel.HEADING_1,
+    }),
+    new Paragraph({
+      children: [new TextRun({ text: documentTitle, italics: true, size: 22 })],
+      alignment: AlignmentType.CENTER,
+    }),
+    spacer(),
+  ];
+
+  if (!items.length) {
+    children.push(
+      body("This draft has no remaining blanks. Everything we need has been provided."),
+    );
+  } else {
+    children.push(
+      body(
+        "To finalize your document we still need the items below. Each one appears highlighted in the draft itself. Reply with whatever you can; anything you are unsure of can wait."
+      ),
+      spacer(),
+    );
+
+    if (required.length) {
+      children.push(heading("Required to finalize"));
+      required.forEach((it, i) =>
+        children.push(
+          new Paragraph({
+            children: [
+              new TextRun({ text: `${i + 1}. ${it.label}`, bold: true }),
+              ...(it.hint ? [new TextRun({ text: ` — ${it.hint}` })] : []),
+            ],
+          })
+        )
+      );
+      children.push(spacer());
+    }
+
+    if (optional.length) {
+      children.push(heading("Helpful, but can be added at signing"));
+      optional.forEach((it, i) =>
+        children.push(
+          new Paragraph({
+            children: [
+              new TextRun({ text: `${i + 1}. ${it.label}`, bold: true }),
+              ...(it.hint ? [new TextRun({ text: ` — ${it.hint}` })] : []),
+            ],
+          })
+        )
+      );
+      children.push(spacer());
+    }
+  }
+
+  children.push(
+    new Paragraph({
+      border: { top: { style: BorderStyle.SINGLE, size: 1 } },
+      text: "",
+    }),
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: `Crawford Law PLLC · ${new Date().toLocaleDateString()} · Attorney-Client Privileged & Confidential`,
+          italics: true,
+          size: 16,
+          color: "888888",
+        }),
+      ],
+      alignment: AlignmentType.CENTER,
+    })
+  );
+
+  return pack(new Document({ sections: [{ children }] }));
 }

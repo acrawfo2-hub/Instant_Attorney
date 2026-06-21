@@ -4,7 +4,7 @@ import { use, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { Attachment, Document } from "@/lib/types";
-import { docTypeLabel } from "@/lib/types";
+import { docTypeLabel, personDisplayName } from "@/lib/types";
 
 interface DocumentDetail {
   id: string;
@@ -35,6 +35,54 @@ interface DocumentDetail {
     phone: string | null;
   };
   child_documents?: Document[];
+}
+
+// Reads the NDJSON stream from the second-draft endpoint, ignoring heartbeat
+// lines, and returns the final outcome object (result / fitness_reject / error).
+async function readFinalNdjson(
+  res: Response
+): Promise<Record<string, unknown> | null> {
+  if (!res.body) return null;
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let last: Record<string, unknown> | null = null;
+
+  const consume = (chunk: string) => {
+    buffer += chunk;
+    let nl: number;
+    while ((nl = buffer.indexOf("\n")) >= 0) {
+      const line = buffer.slice(0, nl).trim();
+      buffer = buffer.slice(nl + 1);
+      if (!line) continue;
+      try {
+        const obj = JSON.parse(line) as Record<string, unknown>;
+        if (obj.type !== "heartbeat") last = obj;
+      } catch {
+        /* ignore partial/malformed line */
+      }
+    }
+  };
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    consume(decoder.decode(value, { stream: true }));
+  }
+  consume(decoder.decode());
+
+  // Parse any trailing data that arrived without a final newline so a complete
+  // last line is never dropped.
+  const tail = buffer.trim();
+  if (tail) {
+    try {
+      const obj = JSON.parse(tail) as Record<string, unknown>;
+      if (obj.type !== "heartbeat") last = obj;
+    } catch {
+      /* incomplete/truncated final line — leave `last` as the prior value */
+    }
+  }
+  return last;
 }
 
 function renderDocumentText(text: string) {
@@ -178,25 +226,43 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: secondDraftPrompt }),
       });
-      const data = await res.json();
 
-      if (res.status === 422 && data.fitness) {
-        setFitnessWarning({
-          rationale: data.fitness.rationale,
-          recommendedType: data.fitness.recommendedType ?? data.fitness.recommended_type ?? null,
-        });
-        setSecondDraftMessage(data.error ?? "Document type may not be appropriate for this matter.");
-        setGeneratingSecondDraft(false);
-        return;
-      }
-
+      // Pre-generation validation failures (auth, missing review, etc.) come back
+      // as a normal JSON error response. Generation itself streams NDJSON:
+      // heartbeats keep the long Opus call alive, and the final line is the result.
       if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
         setSecondDraftMessage(data.error ?? "Second draft generation failed.");
         setGeneratingSecondDraft(false);
         return;
       }
 
-      setSecondDraftMessage("Second draft generated successfully.");
+      const outcome = await readFinalNdjson(res);
+
+      if (outcome?.type === "fitness_reject" && outcome.fitness) {
+        const f = outcome.fitness as Record<string, unknown>;
+        setFitnessWarning({
+          rationale: String(f.rationale ?? ""),
+          recommendedType: (f.recommendedType ?? f.recommended_type ?? null) as string | null,
+        });
+        setSecondDraftMessage(
+          (outcome.error as string) ?? "Document type may not be appropriate for this matter."
+        );
+        setGeneratingSecondDraft(false);
+        return;
+      }
+
+      if (!outcome || outcome.type === "error" || !outcome.success) {
+        setSecondDraftMessage((outcome?.error as string) ?? "Second draft generation failed.");
+        setGeneratingSecondDraft(false);
+        return;
+      }
+
+      setSecondDraftMessage(
+        outcome.truncated
+          ? "Second draft generated (output was long and may be truncated)."
+          : "Second draft generated successfully."
+      );
       await load();
     } catch {
       setSecondDraftMessage("Network error — please try again.");
@@ -265,7 +331,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
         <div className="atty-review-sidebar">
           <div className="atty-review-section">
             <h3>Client</h3>
-            <p>{doc.profiles.full_name ?? "—"}</p>
+            <p>{personDisplayName(doc.profiles, "—")}</p>
             <p>{doc.profiles.email}</p>
             {doc.profiles.phone && <p>{doc.profiles.phone}</p>}
           </div>
@@ -309,9 +375,9 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
             <button
               className={`atty-ai-btn${reviewText ? " atty-ai-btn-done" : ""}`}
               onClick={runManualReview}
-              disabled={isReviewing}
+              disabled={aiRunning}
             >
-              {isReviewing ? "Generating…" : reviewText ? "Re-run Critical Review" : "Run Critical Review"}
+              {aiRunning ? "Generating…" : reviewText ? "Re-run Critical Review" : "Run Critical Review"}
             </button>
             {aiError && <p className="atty-ai-error">{aiError}</p>}
           </div>
@@ -326,9 +392,14 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
                   <p className="atty-standalone-doc-sub">{docTypeLabel(doc.doc_type)} · original wizard output</p>
                 </div>
                 {doc.draft_text && (
-                  <a href={`/api/documents/${id}/download`} download className="atty-btn atty-btn-download">
-                    Download .docx
-                  </a>
+                  <div className="atty-doc-downloads">
+                    <a href={`/api/documents/${id}/download`} download className="atty-btn atty-btn-download">
+                      Download .docx
+                    </a>
+                    <a href={`/api/documents/${id}/needed-info`} download className="atty-btn atty-btn-download">
+                      Info needed
+                    </a>
+                  </div>
                 )}
               </div>
               {Boolean(doc.content_json?.truncated) && (
@@ -365,7 +436,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
                 <pre className="atty-review-preformatted">{stripReviewMarkers(reviewText)}</pre>
               ) : (
                 <p className="atty-ai-empty">
-                  No review memo yet. Turn on Auto Critical Review in your dashboard, or click Run Critical Review in the sidebar.
+                  No review memo yet. Click Run Critical Review in the sidebar to generate one.
                 </p>
               )}
             </section>
@@ -386,10 +457,24 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
                   <h2>Document 3 — Revised Draft</h2>
                   <p className="atty-standalone-doc-sub">Generated second draft (approve this version to send to client)</p>
                 </div>
-                <a href={`/api/documents/${secondDraft.id}/download`} download className="atty-btn atty-btn-download">
-                  Download .docx
-                </a>
+                <div className="atty-doc-downloads">
+                  <a href={`/api/documents/${secondDraft.id}/download`} download className="atty-btn atty-btn-download">
+                    Download .docx
+                  </a>
+                  <a href={`/api/documents/${secondDraft.id}/needed-info`} download className="atty-btn atty-btn-download">
+                    Info needed
+                  </a>
+                </div>
               </div>
+              {(() => {
+                const changes = (secondDraft.content_json as Record<string, unknown> | null)?.changes;
+                return typeof changes === "string" && changes.trim() ? (
+                  <details className="atty-changes-panel" open>
+                    <summary>Key changes from first draft (attorney only — not shown to client)</summary>
+                    <pre className="atty-review-preformatted">{changes.trim()}</pre>
+                  </details>
+                ) : null;
+              })()}
               <div className="atty-review-draft">{renderDocumentText(secondDraft.draft_text)}</div>
             </section>
           )}

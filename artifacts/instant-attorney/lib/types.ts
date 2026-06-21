@@ -246,6 +246,35 @@ export function docTypeLabel(docType: string): string {
   return docType.replace(/_/g, " ");
 }
 
+/**
+ * Resolve a person's display name. `full_name` is collected at registration, but
+ * legacy/seed accounts can have an empty string (not null), which the `??`
+ * operator does not treat as missing — that left the attorney views showing a
+ * blank Client column. Trim and fall back to email, then to `fallback`.
+ */
+export function personDisplayName(
+  profile: { full_name?: string | null; email?: string | null } | null | undefined,
+  fallback = "Unknown",
+): string {
+  const name = profile?.full_name?.trim();
+  if (name) return name;
+  const email = profile?.email?.trim();
+  if (email) return email;
+  return fallback;
+}
+
+/**
+ * Normalize a possibly-annotated recommendation to a clean WizardType.
+ * The model sometimes emits bullets like `draft_contract — ready to proceed`
+ * or `RECOMMEND_CONSULT: true`; we take the leading identifier token and
+ * keep it only if it maps to a real wizard type. Returns null otherwise.
+ */
+export function coerceWizardType(raw: string | null | undefined): WizardType | null {
+  if (!raw) return null;
+  const token = raw.trim().split(/[^a-zA-Z_]/)[0]?.toLowerCase();
+  return token && token in WIZARD_LABELS ? (token as WizardType) : null;
+}
+
 export function isPrimaryDraft(doc: Pick<Document, "parent_document_id">): boolean {
   return !doc.parent_document_id;
 }
@@ -254,6 +283,8 @@ export interface Attachment {
   id: string;
   case_file_id: string;
   user_id: string;
+  // Set when the attachment is an inline chat screenshot; null for dashboard uploads.
+  message_id: string | null;
   file_name: string;
   file_type: string;
   file_size: number;

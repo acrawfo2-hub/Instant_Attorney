@@ -1,12 +1,14 @@
 import React from "react";
 import Link from "next/link";
 import AttachmentPanel from "@/components/AttachmentPanel";
+import DocumentInfoNeeded from "@/components/DocumentInfoNeeded";
 import GovFormInstruments from "@/components/GovFormInstruments";
-import NextStepGuide from "@/components/NextStepGuide";
+import MissionControlBoard from "@/components/MissionControlBoard";
 import ReviewSlaClock from "@/components/ReviewSlaClock";
-import type { CaseFile, FactItem, Document, Profile, WizardType, ConsultRequest } from "@/lib/types";
+import { computeMissionControl } from "@/lib/mission-control";
+import type { CaseFile, FactItem, Document, Profile, WizardType, ConsultRequest, RequestedAttachment, GovFormInstrument } from "@/lib/types";
 import { isValidWizardType } from "@/lib/document-utils";
-import { WIZARD_LABELS, docTypeLabel } from "@/lib/types";
+import { WIZARD_LABELS, docTypeLabel, personDisplayName } from "@/lib/types";
 
 // ── Document status display ──────────────────────────────────────────────────
 
@@ -80,23 +82,18 @@ const WIZARD_ICONS: Record<WizardType, string> = {
 function WizardCard({
   wizardType,
   caseFileId,
-  preWarmedDocId,
 }: {
   wizardType: WizardType;
   caseFileId: string;
-  preWarmedDocId?: string;
 }) {
   const label = WIZARD_LABELS[wizardType] ?? wizardType;
-  const href = preWarmedDocId
-    ? `/wizard/${wizardType}?caseFileId=${caseFileId}&docId=${preWarmedDocId}`
-    : `/wizard/${wizardType}?caseFileId=${caseFileId}`;
+  const href = `/wizard/${wizardType}?caseFileId=${caseFileId}`;
 
   return (
-    <Link href={href} className={`lf-wizard-card ${preWarmedDocId ? "lf-wizard-card-ready" : ""}`}>
+    <Link href={href} className="lf-wizard-card">
       <span className="lf-wizard-icon">{WIZARD_ICONS[wizardType] ?? "📄"}</span>
       <div className="lf-wizard-card-body">
         <span className="lf-wizard-label">{label}</span>
-        {preWarmedDocId && <span className="lf-wizard-ready-badge">Draft ready</span>}
       </div>
     </Link>
   );
@@ -183,7 +180,8 @@ interface ClientFileViewProps {
   facts: FactItem[];
   documents: Document[];
   childDocuments?: Document[];
-  preWarmedByType: Record<string, string>;
+  requestedAttachments?: RequestedAttachment[];
+  govForms?: GovFormInstrument[];
   mode: "client" | "attorney";
   clientProfile?: Profile;
   consultRequest?: ConsultRequest | null;
@@ -195,7 +193,8 @@ export default function ClientFileView({
   facts,
   documents,
   childDocuments = [],
-  preWarmedByType,
+  requestedAttachments = [],
+  govForms = [],
   mode,
   clientProfile,
   consultRequest,
@@ -212,18 +211,23 @@ export default function ClientFileView({
   const recommendedWizards = strategy?.recommended_wizards ?? [];
   const isAttorney = mode === "attorney";
 
+  const missionBoard = computeMissionControl({
+    caseFile,
+    documents,
+    facts,
+    requestedAttachments,
+    govForms,
+    mode,
+  });
+
   return (
     <div className="lf-grid">
-      {/* Plain-language guidance layer — always shows the one obvious next step.
-          Client mode only; sits on top of the detailed Living File below. */}
-      {!isAttorney && (
-        <NextStepGuide
-          caseFile={caseFile}
-          documents={documents}
-          facts={facts}
-          preWarmedByType={preWarmedByType}
-        />
-      )}
+      {/* Mission Control — ranked actions + hero next step; strategy & instruments remain below */}
+      <MissionControlBoard
+        board={missionBoard}
+        caseFileId={caseFile.id}
+        mode={mode}
+      />
 
       {/* Attorney banner */}
       {isAttorney && clientProfile && (
@@ -231,7 +235,7 @@ export default function ClientFileView({
           <div className="lf-atty-banner-inner">
             <div>
               <div className="lf-atty-banner-client">
-                {clientProfile.full_name ?? clientProfile.email}
+                {personDisplayName(clientProfile)}
               </div>
               {clientProfile.email && clientProfile.full_name && (
                 <div className="lf-atty-banner-email">{clientProfile.email}</div>
@@ -371,7 +375,7 @@ export default function ClientFileView({
 
       {/* Legal Strategy */}
       {strategy && (
-        <div className="lf-card lf-card-full lf-card-strategy">
+        <div className="lf-card lf-card-full lf-card-strategy" id="legal-strategy">
           <div className="lf-card-label">
             Legal Strategy
             {!isAttorney && <span className="lf-plain-caption">Your game plan, in plain terms</span>}
@@ -409,7 +413,6 @@ export default function ClientFileView({
 
                   const wizardType = guessWizardType(inst);
                   const doc = documents.find((d) => d.doc_type === wizardType);
-                  const preWarmedId = preWarmedByType[wizardType];
 
                   // Build the wizard URL — pass instrument name for general_document so the AI knows what to draft
                   const instrumentParam = wizardType === "general_document"
@@ -429,9 +432,7 @@ export default function ClientFileView({
                       </Link>
                     );
                   } else {
-                    const href = preWarmedId
-                      ? `/wizard/${wizardType}?caseFileId=${caseFile.id}&docId=${preWarmedId}${instrumentParam}`
-                      : `/wizard/${wizardType}?caseFileId=${caseFile.id}${instrumentParam}`;
+                    const href = `/wizard/${wizardType}?caseFileId=${caseFile.id}${instrumentParam}`;
                     action = <Link href={href} className="lf-inst-start-btn">Start Document →</Link>;
                   }
 
@@ -449,7 +450,9 @@ export default function ClientFileView({
       )}
 
       {/* Government forms detected in chat — surfaced as instruments to complete */}
-      {!isAttorney && <GovFormInstruments caseFileId={caseFile.id} />}
+      <div id="gov-forms">
+        <GovFormInstruments caseFileId={caseFile.id} />
+      </div>
 
       {/* Confirmed Facts + Gaps */}
       <div className="lf-card lf-card-half">
@@ -467,7 +470,7 @@ export default function ClientFileView({
         )}
       </div>
 
-      <div className="lf-card lf-card-half">
+      <div className="lf-card lf-card-half" id="fact-gaps">
         <div className="lf-card-label">
           Open Fact Gaps
           {gaps.length > 0 && <span className="lf-count lf-count-gap">{gaps.length}</span>}
@@ -475,7 +478,7 @@ export default function ClientFileView({
         </div>
         {gaps.length > 0 ? (
           <ul className="lf-list lf-list-gap">
-            {gaps.map((f) => <li key={f.id}>{f.description}</li>)}
+            {gaps.map((f) => <li key={f.id} id={`gap-${f.id}`}>{f.description}</li>)}
           </ul>
         ) : (
           <p className="lf-empty-field">Missing facts to track will appear here.</p>
@@ -500,7 +503,6 @@ export default function ClientFileView({
                     key={wType}
                     wizardType={wType}
                     caseFileId={caseFile.id}
-                    preWarmedDocId={preWarmedByType[wType]}
                   />
                 ))}
               </div>
@@ -576,12 +578,28 @@ export default function ClientFileView({
                 </div>
               );
 
-              // Draft docs link to wizard so client can submit; attorney links to review page
+              // Draft docs link to wizard so client can submit; attorney gets
+              // inline downloads plus a link through to the full review screen.
               if (isAttorney) {
                 return (
-                  <Link key={doc.id} href={`/attorney/review/${doc.id}`} className="lf-doc-item lf-doc-item-link">
+                  <div key={doc.id} className="lf-doc-item">
                     {docRow}
-                  </Link>
+                    <div className="lf-doc-downloads">
+                      {doc.draft_text && (
+                        <a href={`/api/documents/${doc.id}/download`} className="lf-doc-download-link">
+                          Download {secondDraft?.draft_text ? "original draft" : "document"} (.docx)
+                        </a>
+                      )}
+                      {secondDraft?.draft_text && (
+                        <a href={`/api/documents/${secondDraft.id}/download`} className="lf-doc-download-link">
+                          Download revised draft (.docx)
+                        </a>
+                      )}
+                      <Link href={`/attorney/review/${doc.id}`} className="lf-doc-download-link">
+                        Open review →
+                      </Link>
+                    </div>
+                  </div>
                 );
               }
               if (doc.status === "draft") {
@@ -595,9 +613,20 @@ export default function ClientFileView({
                   </Link>
                 );
               }
+              // Non-draft client docs are viewed inline. If the version the client
+              // will use still has [[blanks]], offer an easy fill-in panel that
+              // writes the answers straight into the document (and the Living File).
+              const fillTarget = secondDraft?.draft_text ? secondDraft : (doc.draft_text ? doc : null);
               return (
                 <div key={doc.id} className="lf-doc-item">
                   {docRow}
+                  {fillTarget?.draft_text && (
+                    <DocumentInfoNeeded
+                      documentId={fillTarget.id}
+                      draftText={fillTarget.draft_text}
+                      documentTitle={doc.title}
+                    />
+                  )}
                 </div>
               );
             })}
@@ -612,7 +641,7 @@ export default function ClientFileView({
       </div>
 
       {/* Attachments */}
-      <div className="lf-card lf-card-full">
+      <div className="lf-card lf-card-full" id="attachments">
         <div className="lf-card-label">Documents &amp; Attachments</div>
         <AttachmentPanel caseFileId={caseFile.id} />
       </div>

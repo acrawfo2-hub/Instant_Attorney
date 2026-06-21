@@ -2,10 +2,16 @@
 
 import { useState, useRef, useEffect, useCallback, FormEvent, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { IntakeMessage } from "@/lib/types";
+import { IntakeMessage, WIZARD_LABELS, LegalStrategy } from "@/lib/types";
+import { createClient } from "@/lib/supabase/client";
 import QuickConsultModal from "@/components/QuickConsultModal";
+import VoiceInputButton, { VoiceUnsupportedNote } from "@/components/VoiceInputButton";
 
-type Msg = Pick<IntakeMessage, "role" | "content">;
+type Msg = Pick<IntakeMessage, "role" | "content"> & {
+  // Local-only: object URL for a screenshot the user attached to this turn, so the
+  // image stays visible in the chat history instead of collapsing to a [filename] tag.
+  imageUrl?: string;
+};
 
 interface PendingAttachment {
   data: string;    // base64
@@ -126,16 +132,97 @@ function AcpChatInner() {
   const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [showQcModal, setShowQcModal] = useState(false);
+  const [handoff, setHandoff] = useState<{ label: string; href: string } | null>(null);
+  const [keepChatting, setKeepChatting] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputAreaRef = useRef<HTMLDivElement>(null);
+  const hydratedRef = useRef(false);
   const hasUserMessages = messages.some((m) => m.role === "user");
-  const userMessageCount = messages.filter((m) => m.role === "user").length;
-  const showFileCta = userMessageCount >= 2 && !loading && !!caseFileId;
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, streamingText]);
+  }, [messages, streamingText, handoff]);
+
+  // ── Resume an existing conversation ─────────────────────────────────────────
+  // When the page is opened with ?caseFileId=… (returning to an existing file),
+  // rehydrate the saved messages so a reload restores the chat instead of starting
+  // blank. Inline screenshots are reattached to their original bubble via the
+  // attachment→message link, using the durable /api/attachments/[id] URL (which
+  // 302-redirects to a signed storage URL) so they survive the session. New chats
+  // (no URL param) never hydrate, so a freshly-sent conversation is never clobbered.
+  useEffect(() => {
+    if (hydratedRef.current || !urlCaseFileId) return;
+    hydratedRef.current = true;
+    let cancelled = false;
+    (async () => {
+      const supabase = createClient();
+      const [{ data: msgs }, { data: atts }] = await Promise.all([
+        supabase
+          .from("intake_messages")
+          .select("id, role, content, created_at")
+          .eq("case_file_id", urlCaseFileId)
+          .order("created_at", { ascending: true }),
+        supabase
+          .from("attachments")
+          .select("id, message_id")
+          .eq("case_file_id", urlCaseFileId)
+          .eq("attachment_type", "screenshot")
+          .not("message_id", "is", null),
+      ]);
+      if (cancelled || !msgs?.length) return;
+
+      const imageByMessage = new Map<string, string>();
+      (atts ?? []).forEach((a: { id: string; message_id: string | null }) => {
+        if (a.message_id && !imageByMessage.has(a.message_id)) {
+          imageByMessage.set(a.message_id, `/api/attachments/${a.id}`);
+        }
+      });
+
+      const restored: Msg[] = msgs.map((m: { id: string; role: string; content: string }) => ({
+        role: m.role as Msg["role"],
+        content: m.content,
+        ...(imageByMessage.has(m.id) ? { imageUrl: imageByMessage.get(m.id) } : {}),
+      }));
+      setMessages([INITIAL_MESSAGE, ...restored]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [urlCaseFileId]);
+
+  // ── Ready signal ───────────────────────────────────────────────────────────
+  // The conversation reaches its handoff point once the attorney strategy has
+  // actually been established (a document is recommended) — NOT just a message
+  // count. We read the case file's legal_strategy directly (browser client) and
+  // name the recommended document so the next step is unmistakable. The strategy
+  // is written server-side just after a reply, so we retry briefly to win the race.
+  useEffect(() => {
+    if (isQuickConsult || !caseFileId || handoff || loading) return;
+    let cancelled = false;
+    (async () => {
+      const supabase = createClient();
+      for (let attempt = 0; attempt < 4 && !cancelled; attempt++) {
+        const { data } = await supabase
+          .from("case_files")
+          .select("legal_strategy")
+          .eq("id", caseFileId)
+          .single();
+        const strategy = data?.legal_strategy as LegalStrategy | null;
+        const wType = (strategy?.recommended_wizards ?? []).find((w) => Object.hasOwn(WIZARD_LABELS, w));
+        if (wType) {
+          if (!cancelled) {
+            setHandoff({ label: WIZARD_LABELS[wType], href: `/dashboard/${caseFileId}` });
+          }
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 1300));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [messages, loading, caseFileId, handoff, isQuickConsult]);
 
   function autoResize() {
     const el = textareaRef.current;
@@ -190,19 +277,26 @@ function AcpChatInner() {
     const text = input.trim();
     if ((!text && !pendingAttachment) || loading) return;
 
-    const displayContent = pendingAttachment
-      ? text ? `[${pendingAttachment.fileName}] ${text}` : `[${pendingAttachment.fileName}]`
+    const attachment = pendingAttachment;
+
+    const displayContent = attachment
+      ? text ? `[${attachment.fileName}] ${text}` : `[${attachment.fileName}]`
       : text;
 
-    const userMsg: Msg = { role: "user", content: displayContent };
+    const userMsg: Msg = {
+      role: "user",
+      content: displayContent,
+      ...(attachment ? { imageUrl: attachment.previewUrl } : {}),
+    };
     const nextMessages = [...messages, userMsg];
     setMessages(nextMessages);
     setInput("");
     setLoading(true);
     setStreamingText("");
 
-    const attachment = pendingAttachment;
-    clearAttachment();
+    // Hand the object URL off to the sent message so it stays visible in history.
+    // Do NOT revoke it here (clearAttachment would) — the message bubble now owns it.
+    setPendingAttachment(null);
 
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
@@ -240,7 +334,18 @@ function AcpChatInner() {
           const end = chunk.indexOf("\x00", 1);
           if (end !== -1) {
             const id = chunk.slice(1, end);
-            if (id) setCaseFileId(id);
+            if (id) {
+              setCaseFileId(id);
+              // Put the new file's id in the URL so a reload mid-session resumes
+              // this conversation. Mark it already-hydrated so the resume effect
+              // never overwrites the live in-memory chat from the DB.
+              if (!urlCaseFileId) {
+                hydratedRef.current = true;
+                const params = new URLSearchParams(window.location.search);
+                params.set("caseFileId", id);
+                window.history.replaceState(null, "", `?${params.toString()}`);
+              }
+            }
             full += chunk.slice(end + 1);
           } else {
             full += chunk;
@@ -370,7 +475,20 @@ function AcpChatInner() {
               </div>
             )}
             <div className={msg.role === "user" ? "fc-bubble fc-bubble-user" : "fc-bubble fc-bubble-ai"}>
-              {msg.role === "assistant" ? renderContent(msg.content) : <p>{msg.content}</p>}
+              {msg.role === "assistant" ? (
+                renderContent(msg.content)
+              ) : msg.imageUrl ? (
+                <>
+                  <img src={msg.imageUrl} alt="attached screenshot" className="fc-bubble-image" />
+                  {(() => {
+                    // Image is shown, so drop the redundant leading [filename] tag.
+                    const caption = msg.content.replace(/^\[[^\]]*\]\s*/, "");
+                    return caption ? <p>{caption}</p> : null;
+                  })()}
+                </>
+              ) : (
+                <p>{msg.content}</p>
+              )}
             </div>
           </div>
         ))}
@@ -411,28 +529,61 @@ function AcpChatInner() {
           </div>
         )}
 
+        {/* CLOSING HANDOFF MESSAGE — appears once a strategy/document is recommended */}
+        {handoff && !loading && (
+          <div className="fc-msg-row fc-msg-row-ai">
+            <div className="fc-avatar">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              </svg>
+            </div>
+            <div className="fc-bubble fc-bubble-ai">
+              <div className="fc-handoff-card">
+                <span className="fc-handoff-eyebrow">✓ Your file is ready</span>
+                <p className="fc-handoff-headline">Here&apos;s what happens next</p>
+                <p>
+                  I&apos;ve built your Living File and mapped out your legal strategy. Your
+                  recommended next step is to create your <strong>{handoff.label}</strong>.
+                </p>
+                <p>
+                  Open your file to review everything and start the document — I&apos;ll draft it for
+                  you, and Andrew Crawford, Esq. will review it once you send it. You can come back
+                  and keep chatting here anytime.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div ref={messagesEndRef} />
       </main>
 
-      {/* GO TO FILE CTA — appears after 2+ user messages */}
-      {showFileCta && (
+      {/* HANDOFF ACTION / INPUT — at the "ready" point the composer is replaced by the
+          one obvious next step, with a small link back to chatting if needed. */}
+      {handoff && !keepChatting ? (
+        <div className="fc-handoff-actions">
+          <button className="fc-handoff-btn" onClick={() => router.push(handoff.href)}>
+            Open my file → Start my {handoff.label}
+          </button>
+          <button className="fc-handoff-keep" onClick={() => setKeepChatting(true)}>
+            Still have a question? Keep chatting
+          </button>
+        </div>
+      ) : (
+      <>
+      {handoff && keepChatting && (
         <div className="fc-file-cta">
           <div className="fc-file-cta-inner">
             <div className="fc-file-cta-text">
-              <span className="fc-file-cta-eyebrow">⚡ Your Living File is ready</span>
-              <span className="fc-file-cta-headline">Start drafting your legal documents now</span>
+              <span className="fc-file-cta-eyebrow">⚡ Your file is ready</span>
+              <span className="fc-file-cta-headline">Next step: create your {handoff.label}</span>
             </div>
-            <button
-              className="fc-file-cta-btn"
-              onClick={() => router.push(caseFileId ? `/dashboard?caseFileId=${caseFileId}` : "/dashboard")}
-            >
-              Go to File → Start Documents
+            <button className="fc-file-cta-btn" onClick={() => router.push(handoff.href)}>
+              Open my file →
             </button>
           </div>
         </div>
       )}
-
-      {/* INPUT */}
       <div
         ref={inputAreaRef}
         className={`fc-input-area${dragOver ? " fc-input-area-dragover" : ""}`}
@@ -465,6 +616,13 @@ function AcpChatInner() {
             rows={1}
             disabled={loading}
           />
+          <VoiceInputButton
+            disabled={loading}
+            onTranscript={(t) => {
+              setInput((v) => (v.trim() ? `${v.trim()} ${t}` : t));
+              requestAnimationFrame(autoResize);
+            }}
+          />
           <button
             type="submit"
             className="fc-send-btn"
@@ -486,7 +644,10 @@ function AcpChatInner() {
             View Living File
           </button>
         </p>
+        <VoiceUnsupportedNote />
       </div>
+      </>
+      )}
     </div>
   );
 }

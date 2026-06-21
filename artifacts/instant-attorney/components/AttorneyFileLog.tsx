@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { personDisplayName } from "@/lib/types";
 import type { CaseFile, Profile } from "@/lib/types";
 
 type FileRow = CaseFile & { profiles: Profile | null };
@@ -17,7 +18,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 function clientName(f: FileRow) {
-  return f.profiles?.full_name ?? f.profiles?.email ?? "Unknown";
+  return personDisplayName(f.profiles);
 }
 
 function matterLabel(f: FileRow) {
