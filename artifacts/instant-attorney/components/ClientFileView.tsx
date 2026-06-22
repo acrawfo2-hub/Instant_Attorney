@@ -6,6 +6,8 @@ import GovFormInstruments from "@/components/GovFormInstruments";
 import MissionControlBoard from "@/components/MissionControlBoard";
 import ReviewSlaClock from "@/components/ReviewSlaClock";
 import RegenerateDocButton from "@/components/RegenerateDocButton";
+import FactsPanel from "@/components/FactsPanel";
+import { placeholderFields } from "@/lib/wizard-parsing";
 import { computeMissionControl } from "@/lib/mission-control";
 import type { CaseFile, FactItem, Document, Profile, WizardType, ConsultRequest, RequestedAttachment, GovFormInstrument, Attachment } from "@/lib/types";
 import { isValidWizardType } from "@/lib/document-utils";
@@ -220,6 +222,41 @@ export default function ClientFileView({
   const confirmed = facts.filter((f) => f.status === "confirmed" && !isHypothetical(f));
   const gaps = facts.filter((f) => f.status === "gap" && !isHypothetical(f));
   const hypotheticals = facts.filter(isHypothetical);
+
+  // Many "gaps" are really unfilled [[placeholders]] copied out of a drafted
+  // document (e.g. "Date Of Memorandum", "Reviewing Attorney Name"). They are
+  // noise in Open Fact Gaps because they carry no link to the document that needs
+  // them. Re-derive each document's current placeholder labels and pull any gap
+  // that matches one out into its own document-attributed section. Done in the
+  // view (no schema change) so it self-corrects as drafts get filled.
+  const docPlaceholders = [...documents, ...childDocuments]
+    .filter((d) => d.draft_text)
+    .map((d) => {
+      const labels = placeholderFields(d.draft_text as string).map((f) => f.label);
+      return { id: d.id, title: d.title || docTypeLabel(d.doc_type), lowerSet: new Set(labels.map((l) => l.toLowerCase())) };
+    });
+  const placeholderLabelSet = new Set<string>();
+  for (const dp of docPlaceholders) for (const l of dp.lowerSet) placeholderLabelSet.add(l);
+
+  const realGaps = gaps.filter((g) => !placeholderLabelSet.has(g.description.toLowerCase()));
+  const placeholderGaps = gaps.filter((g) => placeholderLabelSet.has(g.description.toLowerCase()));
+
+  // Group placeholder gaps under each document whose draft still contains them.
+  // A blank shared by multiple documents is listed under each so its origin is
+  // never ambiguous. Descriptions are deduped within a group.
+  const placeholderGroups = docPlaceholders
+    .map((dp) => ({
+      docId: dp.id,
+      docTitle: dp.title,
+      items: Array.from(
+        new Set(
+          placeholderGaps
+            .filter((g) => dp.lowerSet.has(g.description.toLowerCase()))
+            .map((g) => g.description),
+        ),
+      ),
+    }))
+    .filter((grp) => grp.items.length > 0);
   const strategy = caseFile.legal_strategy ?? null;
   const recommendedWizards = strategy?.recommended_wizards ?? [];
   const isAttorney = mode === "attorney";
@@ -491,40 +528,17 @@ export default function ClientFileView({
       )}
 
       {/* Government forms detected in chat — surfaced as instruments to complete */}
-      <div id="gov-forms">
+      <div id="gov-forms" className="lf-span-full">
         <GovFormInstruments caseFileId={caseFile.id} />
       </div>
 
-      {/* Confirmed Facts + Gaps */}
-      <div className="lf-card lf-card-half">
-        <div className="lf-card-label">
-          Confirmed Facts
-          {confirmed.length > 0 && <span className="lf-count">{confirmed.length}</span>}
-          {!isAttorney && <span className="lf-plain-caption">What we know so far</span>}
-        </div>
-        {confirmed.length > 0 ? (
-          <ul className="lf-list lf-list-confirmed">
-            {confirmed.map((f) => <li key={f.id}>{f.description}</li>)}
-          </ul>
-        ) : (
-          <p className="lf-empty-field">Facts confirmed during intake will appear here.</p>
-        )}
-      </div>
-
-      <div className="lf-card lf-card-half" id="fact-gaps">
-        <div className="lf-card-label">
-          Open Fact Gaps
-          {gaps.length > 0 && <span className="lf-count lf-count-gap">{gaps.length}</span>}
-          {!isAttorney && <span className="lf-plain-caption">Details still needed — these are okay to leave for now</span>}
-        </div>
-        {gaps.length > 0 ? (
-          <ul className="lf-list lf-list-gap">
-            {gaps.map((f) => <li key={f.id} id={`gap-${f.id}`}>{f.description}</li>)}
-          </ul>
-        ) : (
-          <p className="lf-empty-field">Missing facts to track will appear here.</p>
-        )}
-      </div>
+      {/* Confirmed Facts + Gaps (side-by-side, capped at 20) + document placeholders */}
+      <FactsPanel
+        confirmed={confirmed}
+        gaps={realGaps}
+        placeholderGroups={placeholderGroups}
+        isAttorney={isAttorney}
+      />
 
       {/* Contingency preferences captured by the What-If Game (hypothetical, not facts) */}
       {hypotheticals.length > 0 && (

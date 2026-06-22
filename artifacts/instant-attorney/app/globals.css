@@ -1948,6 +1948,42 @@ body {
 .lf-card-sm { }
 .lf-card-full { grid-column: 1 / -1; }
 .lf-card-half { }
+.lf-span-full { grid-column: 1 / -1; }
+.lf-pair {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+.lf-pair > .lf-card-half { height: 100%; }
+.lf-card-clickable { cursor: pointer; }
+.lf-card-clickable:hover { border-color: var(--brand-gold); }
+.lf-card-clickable:focus-visible {
+  outline: 2px solid var(--brand-gold);
+  outline-offset: 2px;
+}
+.lf-expand-btn {
+  display: inline-block;
+  margin-top: 0.6rem;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--brand-text-dk);
+  text-decoration: underline;
+}
+.lf-card-clickable:hover .lf-expand-btn { color: var(--brand-gold); }
+.lf-placeholders { border-left: 3px solid var(--brand-gold); }
+.lf-ph-group + .lf-ph-group {
+  margin-top: 0.85rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--brand-border);
+}
+.lf-ph-doc {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--brand-text-dk);
+  margin-bottom: 0.4rem;
+}
 .lf-card-action { border-left: 2.5px solid var(--brand-gold); }
 .lf-card-label {
   display: flex;
