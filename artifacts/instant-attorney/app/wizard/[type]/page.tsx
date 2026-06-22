@@ -558,10 +558,11 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
               <polyline points="9 15 12 12 15 15" />
             </svg>
           </div>
-          <h2 className="wiz-gate-title">Upload a document to review first</h2>
+          <h2 className="wiz-gate-title">Upload a document you want reviewed by the attorney</h2>
           <p className="wiz-gate-msg">
             Document Review reads a document you provide and checks it against your file.
-            You haven’t uploaded one yet — add the document to your file, then start the review.
+            You haven’t uploaded one yet — add the document you want reviewed by the attorney
+            to your file, then start the review.
           </p>
           <button
             className="wiz-gate-btn"

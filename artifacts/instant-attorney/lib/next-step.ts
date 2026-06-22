@@ -120,7 +120,7 @@ export function computeNextStep(
     activeStep = 3;
     title = "Review your draft and send it to your attorney";
     body =
-      "Your document is drafted and waiting. Look it over, fill in any blanks you can, then send it to Andrew. It's completely fine to leave blanks — he'll finish them for you.";
+      "Your document is drafted and waiting. Look it over, fill in any blanks you can, then send it to Andrew. It's fine to leave blanks, we'll get them filled in before the final draft.";
     cta = { label: "Open my draft →", href: wizardHref(id, draftDoc.doc_type as WizardType, draftDoc.id) };
   } else if (changesDoc) {
     activeStep = 3;
