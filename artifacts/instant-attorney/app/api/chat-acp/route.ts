@@ -9,6 +9,7 @@ import { triggerPendingLookups } from "@/lib/gov-form-lookup";
 import { generateCaseTitle } from "@/lib/title-generator";
 import { toAnthropicBlock, processAttachment } from "@/lib/attachment-processor";
 import { recordAiFromMessage, recordStorageUpload } from "@/lib/usage-tracker";
+import { getBillingGate } from "@/lib/topup";
 import { maxOutputTokensFor, limitSignalMetadata } from "@/lib/token-limits";
 import { BYPASS_USER_ID } from "@/lib/types";
 import type { CaseFile, FactItem, Attachment, RequestedAttachment } from "@/lib/types";
@@ -53,6 +54,20 @@ export async function POST(req: NextRequest) {
     }
 
     userId = user.id;
+
+    // Pre-call billing gate: block new AI spend while a top-up is pending/failed.
+    const gate = await getBillingGate(userId);
+    if (!gate.allowed) {
+      return NextResponse.json(
+        {
+          error: "Token top-up required",
+          reason: gate.reason,
+          meter_usd: gate.meterUsd,
+          threshold_usd: gate.thresholdUsd,
+        },
+        { status: 402 }
+      );
+    }
   }
 
   // Ensure case file exists

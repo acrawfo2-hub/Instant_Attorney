@@ -14,6 +14,7 @@ import { DRAFTER_SYSTEM_PROMPT, WIZARD_FIELD_HINTS, buildFileContext } from "@/l
 import { parseAndUpdateFile, extractDraftText, syncDraftGapsToLivingFile, isCompleteFileUpdate } from "@/lib/file-parser";
 import { stampFactsSynced, isValidWizardType } from "@/lib/document-utils";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
+import { getBillingGate } from "@/lib/topup";
 import { BYPASS_USER_ID, WIZARD_LABELS } from "@/lib/types";
 import type { WizardType, CaseFile, FactItem, Attachment, RequestedAttachment, Document } from "@/lib/types";
 import { logTruncation } from "@/lib/truncation-logger";
@@ -99,6 +100,20 @@ export async function POST(
     const activeStatuses = ["active", "trialing", "bypass"];
     if (!sub || !activeStatuses.includes(sub.status)) {
       return NextResponse.json({ error: "Subscription required" }, { status: 403 });
+    }
+
+    // Pre-call billing gate: block new AI spend while a top-up is pending/failed.
+    const gate = await getBillingGate(userId);
+    if (!gate.allowed) {
+      return NextResponse.json(
+        {
+          error: "Token top-up required",
+          reason: gate.reason,
+          meter_usd: gate.meterUsd,
+          threshold_usd: gate.thresholdUsd,
+        },
+        { status: 402 }
+      );
     }
 
     const { data: ownedCase } = await db

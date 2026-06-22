@@ -1,6 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceClient } from "@/lib/supabase/server";
+import { accrueUsage } from "@/lib/topup";
 
 /** Known AI features — used for cost attribution and future billing dashboards. */
 export type UsageFeature =
@@ -185,6 +186,12 @@ export async function recordUsage(
 
     if (input.billable !== false) {
       await upsertPeriodTotal(serviceDb, input.userId, period, input.category, input.costUsd);
+    }
+
+    // Feed the automatic token top-up ledger (AI COGS only). Self-contained and
+    // non-throwing; never blocks the request that produced the usage.
+    if (input.category === "ai" && input.billable !== false) {
+      await accrueUsage(input.userId, input.costUsd);
     }
   } catch (err) {
     console.error("[usage-tracker] recordUsage error:", err);

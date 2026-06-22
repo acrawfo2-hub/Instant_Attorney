@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/server";
+import { settleTopUpFromIntent, failTopUpFromIntent } from "@/lib/topup";
 import Stripe from "stripe";
 
 export async function POST(req: NextRequest) {
@@ -19,6 +20,15 @@ export async function POST(req: NextRequest) {
   }
 
   const db = createServiceClient();
+
+  // Idempotency: record the event id first. A duplicate delivery hits the
+  // primary-key conflict and is acknowledged without re-running side effects.
+  const { error: dedupeErr } = await db
+    .from("stripe_webhook_events")
+    .insert({ event_id: event.id, event_type: event.type });
+  if (dedupeErr) {
+    return NextResponse.json({ received: true, duplicate: true });
+  }
 
   switch (event.type) {
     case "checkout.session.completed": {
@@ -54,6 +64,23 @@ export async function POST(req: NextRequest) {
           updated_at: new Date().toISOString(),
         })
         .eq("stripe_subscription_id", sub.id);
+      break;
+    }
+
+    // ── Token top-up outcomes (authoritative reset / block) ──────────────────
+    case "payment_intent.succeeded": {
+      const intent = event.data.object as Stripe.PaymentIntent;
+      if (intent.metadata?.type === "token_topup") {
+        await settleTopUpFromIntent(db, intent);
+      }
+      break;
+    }
+
+    case "payment_intent.payment_failed": {
+      const intent = event.data.object as Stripe.PaymentIntent;
+      if (intent.metadata?.type === "token_topup") {
+        await failTopUpFromIntent(db, intent);
+      }
       break;
     }
   }
