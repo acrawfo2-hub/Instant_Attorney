@@ -1,3 +1,4 @@
+import type Anthropic from "@anthropic-ai/sdk";
 import type { CaseFile, FactItem, WizardType, Attachment, RequestedAttachment, Document } from "./types";
 import { WIZARD_LABELS, docTypeLabel } from "./types.ts";
 import { formCatalogForPrompt } from "./government-forms.ts";
@@ -856,6 +857,13 @@ export function parseSecondDraft(text: string): { draftText: string; changes: st
   return { draftText, changes };
 }
 
+/**
+ * Returns two content blocks. The first — living file + initial draft + critical
+ * review — is marked with cache_control so Anthropic prompt-caches it: it is
+ * byte-identical across the attorney's regenerations and retries, so every pass
+ * after the first reads it at ~10% of input price. Only the attorney notes (which
+ * change between regenerations) sit in the uncached tail block.
+ */
 export function buildSecondDraftUserMessage(
   parentDoc: Document,
   criticalReviewText: string,
@@ -863,14 +871,14 @@ export function buildSecondDraftUserMessage(
   caseFile: CaseFile,
   facts: FactItem[],
   attachments: Attachment[]
-): string {
+): Anthropic.TextBlockParam[] {
   const fileContext = buildFileContext(caseFile, facts, attachments);
   const draftText = parentDoc.draft_text ?? "(No draft text available)";
   const notesBlock = attorneyInstructions.trim()
     ? attorneyInstructions.trim()
     : "(No additional attorney notes provided)";
 
-  return `${fileContext}
+  const stableContext = `${fileContext}
 
 DOCUMENT TYPE: ${docTypeLabel(parentDoc.doc_type)}
 DOCUMENT TITLE: ${parentDoc.title}
@@ -881,13 +889,18 @@ ${draftText}
 
 ---CRITICAL REVIEW OF DRAFT---
 ${criticalReviewText}
----END CRITICAL REVIEW---
+---END CRITICAL REVIEW---`;
 
----ATTORNEY NOTES (PRIVATE — incorporate into revised draft)---
+  const volatileInstructions = `---ATTORNEY NOTES (PRIVATE — incorporate into revised draft)---
 ${notesBlock}
 ---END ATTORNEY NOTES---
 
 Produce the refined second draft now. Output only the final document text.`;
+
+  return [
+    { type: "text", text: stableContext, cache_control: { type: "ephemeral" } },
+    { type: "text", text: volatileInstructions },
+  ];
 }
 
 // ── What-If Game (standalone strategy tool) ─────────────────────────────────

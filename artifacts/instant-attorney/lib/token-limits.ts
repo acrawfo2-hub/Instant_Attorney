@@ -25,6 +25,39 @@ export function maxOutputTokensFor(model: string): number {
   return MODEL_MAX_OUTPUT_TOKENS[model] ?? DEFAULT_MAX_OUTPUT_TOKENS;
 }
 
+/**
+ * Per-document-type output ceilings. Used for the expensive Opus second-draft
+ * so a single call can't run to the full 64k model ceiling on a document type
+ * that is never that long. Caps sit generously above observed output lengths
+ * (priorLimit telemetry) so they bound the cost tail without truncating real
+ * documents. Keyed by DocType (WizardType | DerivedDocType).
+ */
+export const DOC_TYPE_MAX_OUTPUT_TOKENS: Record<string, number> = {
+  demand_letter: 6000,
+  complaint_letter: 8000,
+  draft_contract: 12000,
+  draft_waiver: 6000,
+  wills_trusts: 16000,
+  doc_review: 8000,
+  general_document: 10000,
+  critical_review: 6000,
+  second_draft: 16000,
+};
+
+/** Conservative fallback for an unknown document type. */
+export const DEFAULT_DOC_MAX_OUTPUT_TOKENS = 10000;
+
+/**
+ * Output ceiling for a generation, bounded by BOTH the model ceiling and the
+ * document type's expected length. Always returns the smaller of the two.
+ */
+export function maxOutputTokensForDoc(model: string, docType?: string | null): number {
+  const modelCeiling = maxOutputTokensFor(model);
+  const docCap =
+    (docType && DOC_TYPE_MAX_OUTPUT_TOKENS[docType]) || DEFAULT_DOC_MAX_OUTPUT_TOKENS;
+  return Math.min(modelCeiling, docCap);
+}
+
 export interface LimitSignalMetadata {
   /** Marks this usage_event as carrying token-limit telemetry. */
   token_limit_tracked: true;
