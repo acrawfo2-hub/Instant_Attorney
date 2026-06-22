@@ -152,7 +152,9 @@ REQUESTED ATTACHMENTS:
 ---END ANALYSIS---
 
 Only include CLARIFYING QUESTIONS if CONTRADICTIONS WITH LIVING FILE contains actual conflicts.
-If no companion documents are needed, omit the REQUESTED ATTACHMENTS bullets entirely.`;
+If no companion documents are needed, omit the REQUESTED ATTACHMENTS bullets entirely.
+
+If this is an HOA / property-owners'-association governing document (Declaration / CC&Rs, bylaws, rules & regulations, plat, or a violation / fine / assessment / lien / foreclosure notice), be especially precise in KEY SECTIONS and EXTRACTED FACTS: pull out the enforcement and fine provisions, the notice / cure / hearing rights, the architectural-control (ACC) approval procedure, the assessment and lien provisions, the amendment procedure, and — importantly — any attorney-fee / prevailing-party clause (note it under URGENT FINDINGS because it drives the cost-benefit of any dispute). Capture any deadlines a homeowner must meet (hearing request, cure period, records-request response, foreclosure cure) under URGENT FINDINGS.`;
 }
 
 // Screenshot/image prompt. For images — especially captures of text-message, email, or

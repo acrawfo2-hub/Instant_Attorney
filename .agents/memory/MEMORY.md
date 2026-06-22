@@ -13,6 +13,7 @@
 - [Client/server bundle boundary](instant-attorney-client-bundle.md) — never import from lib/document-utils in "use client" code (pulls Anthropic SDK); import pure constants from lib/types, read own rows via browser supabase client.
 - [RLS recursion on profiles](instant-attorney-rls-recursion.md) — an attorney-check policy ON profiles that sub-selects profiles → 42P17 recursion, breaks all profile reads; use SECURITY DEFINER is_attorney().
 - [Supabase unapplied migrations](instant-attorney-supabase-migrations.md) — live DB missing stage9/stage10 tables (form_instruments etc); writes fail PGRST205 silently; user must run SQL. head:true select gives false "ok".
+- [HOA dispute modules](instant-attorney-hoa-modules.md) — HOA support added via data catalogs (statutes/instruments/practice-areas) + prompt grounding, reusing existing wizard types; no new DocType/DB enum.
 - [DOCX download pitfalls](instant-attorney-docx-download.md) — non-ASCII titles (em-dash) crash Content-Disposition; use docxContentDisposition; literal ** leaks from placeholder/heading parsing.
 - [Ad-hoc scripts](instant-attorney-adhoc-scripts.md) — run inside artifact dir; service key only in .env.local; tsx=CJS no top-level await; long AI runs need a managed workflow + sentinel poll.
 - [Attorney full-file parity](instant-attorney-attorney-parity.md) — attorney sees everything only if BOTH the `!isAttorney` UI gate is removed in ClientFileView AND the section's API route has a service-client attorney bypass.

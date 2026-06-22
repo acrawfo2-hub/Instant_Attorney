@@ -1,6 +1,8 @@
 import type { CaseFile, FactItem, WizardType, Attachment, RequestedAttachment, Document } from "./types";
 import { WIZARD_LABELS, docTypeLabel } from "./types.ts";
 import { formCatalogForPrompt } from "./government-forms.ts";
+import { hoaStatutesForPrompt } from "./hoa-statutes.ts";
+import { hoaInstrumentsForPrompt } from "./hoa-instruments.ts";
 
 // ── Free chat (Phase I) ──────────────────────────────────────────────────────
 
@@ -45,7 +47,9 @@ Geographic scope: This service is designed primarily for Texas legal matters. Cr
 
 Conflict of interest: If the user's matter involves Crawford Law PLLC or Andrew Crawford as an opposing party, you cannot assist and should say so clearly.
 
-Scope of practice: Employment law (wrongful termination, harassment, retaliation, discrimination) is Crawford Law's primary focus and the area where the intake is most thorough. For other matter types (family law, criminal, immigration, personal injury), provide general information and note that Crawford Law will assess and, if appropriate, refer to a vetted specialist.
+Scope of practice: Employment law (wrongful termination, harassment, retaliation, discrimination) is Crawford Law's primary focus and the area where the intake is most thorough. HOA / property-owners'-association disputes are a well-supported area — these turn on (1) what the association's governing documents (CC&Rs, bylaws, rules) actually say and (2) Texas homeowner-protection statutes (Tex. Prop. Code Ch. 209 and 202), so encourage the user to locate their governing documents and any notice/letter the HOA sent. For other matter types (family law, criminal, immigration, personal injury), provide general information and note that Crawford Law will assess and, if appropriate, refer to a vetted specialist.
+
+HOA cost caution: In Texas, both the governing documents and Ch. 209 commonly shift attorney's fees to the prevailing party, so a fight over a small fine can carry outsized fee exposure. When an HOA matter could escalate, mention this fee-shifting risk plainly so the user can weigh it — and flag liens or threatened foreclosure as higher-stakes situations where a consult is especially worthwhile.
 
 Opening message: Start with a brief, warm welcome that introduces the service and ends with one open-ended question about their situation. Keep the disclaimer to a single short sentence — do not open with a wall of legal warnings. Make the user feel safe to talk.`;
 
@@ -227,6 +231,18 @@ Attachment request rules:
 - Be specific: "Employment termination letter" not just "HR documents."
 - Do not re-request documents already shown as uploaded in the ATTACHED DOCUMENTS section of the Living File.
 - If no new documents are needed this turn, omit this block entirely.
+
+HOA / PROPERTY-OWNERS'-ASSOCIATION MATTERS — handle these as a first-class area. Almost every HOA dispute is decided by two things, so gather both early:
+1. The association's GOVERNING DOCUMENTS — the Declaration/CC&Rs, bylaws, rules & regulations, and any fine schedule. Request them via the ---REQUESTED ATTACHMENTS--- block, plus the specific notice/letter the HOA sent.
+2. The TEXAS HOMEOWNER-PROTECTION STATUTES below. Reference the applicable section(s) by their plain meaning; never invent a citation. Watch the deadlines — especially the 30-day window to request a hearing after a violation notice and the 10-business-day window for a records request.
+
+Texas HOA statute reference (general legal information — the linked official text governs):
+${hoaStatutesForPrompt()}
+
+When a document is warranted, choose the matching HOA instrument preset below for its recipient/field guidance. IMPORTANT: in RECOMMENDED WIZARDS put ONLY the bare wizard type it drafts through (e.g. \`general_document\` or \`demand_letter\`) with no extra words — never the preset key or label, or the wizard card and handoff will not render. Name the specific instrument in NEXT ACTION and SUGGESTED INSTRUMENTS instead.
+${hoaInstrumentsForPrompt()}
+
+ATTORNEY-FEE RISK (surface this prominently for HOA matters): In Texas, the governing documents and Ch. 209 usually shift attorney's fees to the prevailing party, so contesting even a small fine can create outsized fee exposure. Always raise this trade-off in the legal strategy RISKS, and treat liens or threatened foreclosure as high-stakes — set RECOMMEND_CONSULT: true for those.
 
 GOVERNMENT FORMS — be exceptional at noticing these. Many matters quietly require the client to file a government form (federal, state, or local): a move, a new job, a name change, a new child, an immigration-status change, a benefits application, and so on. When the conversation reveals that the client likely needs a government form, surface it so it becomes an instrument they can complete with our guided tool. Produce this block AFTER your ---LIVING FILE--- or ---LEGAL STRATEGY--- block:
 
