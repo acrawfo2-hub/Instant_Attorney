@@ -28,6 +28,12 @@ export interface BillingConfig {
   includedAllowanceUsd: number;
   /** Stripe product id the top-up is attributed to (metadata only). */
   productId: string;
+  /**
+   * Default pre-approved ceiling (USD) on automatic top-ups per calendar month,
+   * applied when a customer hasn't set their own. Top-ups auto-charge up to
+   * this cap; beyond it the ledger pauses until the user raises their limit.
+   */
+  defaultMonthlyLimitUsd: number;
 }
 
 export function getBillingConfig(): BillingConfig {
@@ -37,6 +43,7 @@ export function getBillingConfig(): BillingConfig {
     chargeUsd: num("USAGE_TOPUP_CHARGE_USD", 8.5),
     includedAllowanceUsd: num("USAGE_INCLUDED_ALLOWANCE_USD", 0),
     productId: process.env.STRIPE_TOPUP_PRODUCT_ID ?? "",
+    defaultMonthlyLimitUsd: num("USAGE_DEFAULT_MONTHLY_TOPUP_LIMIT_USD", 25),
   };
 }
 

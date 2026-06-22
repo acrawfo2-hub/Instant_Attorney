@@ -7,6 +7,7 @@ import type { CaseFile, ConsultRequest } from "@/lib/types";
 import CaseFileCard from "@/components/CaseFileCard";
 import ConsultStatusCard from "@/components/ConsultStatusCard";
 import LogoutButton from "@/components/LogoutButton";
+import BillingMeter from "@/components/BillingMeter";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 const MAX_ACTIVE_FILES = 10;
@@ -94,6 +95,9 @@ export default async function DashboardPage() {
       </header>
 
       <main className="lf-main">
+        {/* Usage / top-up status + spend-limit controls (hidden for free users) */}
+        <BillingMeter />
+
         {/* Action buttons — left-aligned row */}
         <div className="dash-toolbar">
           {atLimit ? (
