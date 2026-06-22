@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { DRAFTER_SYSTEM_PROMPT, WIZARD_FIELD_HINTS, buildFileContext } from "@/lib/prompts";
 import { parseAndUpdateFile, extractDraftText, syncDraftGapsToLivingFile, isCompleteFileUpdate } from "@/lib/file-parser";
-import { resolveWizardDocumentTarget } from "@/lib/document-utils";
+import { resolveWizardDocumentTarget, stampFactsSynced } from "@/lib/document-utils";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
 import { BYPASS_USER_ID, WIZARD_LABELS } from "@/lib/types";
 import type { WizardType, CaseFile, FactItem, Attachment, RequestedAttachment } from "@/lib/types";
@@ -330,6 +330,15 @@ export async function POST(req: NextRequest) {
       gapSyncWarning = true;
       console.error("[wizard] gap sync error:", gapErr);
     }
+  }
+
+  // Record the file state this draft was generated against — stamped LAST, after
+  // the post-generation Living File writes above (parseAndUpdateFile / gap sync),
+  // so facts_synced_at sits at/after any fact change this generation caused and
+  // the draft isn't immediately flagged "out of date" by its own side effects.
+  // Best-effort and non-blocking — never fail a saved draft over this stamp.
+  if (savedDocId) {
+    await stampFactsSynced(writeDb, savedDocId);
   }
 
   return NextResponse.json({

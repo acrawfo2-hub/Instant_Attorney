@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { generateDocument, docxContentDisposition } from "@/lib/doc-generator";
-import { finalizeDocumentSubmission } from "@/lib/document-utils";
+import { finalizeDocumentSubmission, stampFactsSynced } from "@/lib/document-utils";
 import { BYPASS_USER_ID, WIZARD_LABELS } from "@/lib/types";
 import type { CaseFile, FactItem, Profile, WizardType } from "@/lib/types";
 
@@ -79,6 +79,10 @@ export async function POST(req: NextRequest) {
   }
 
   await finalizeDocumentSubmission(db, docRecord.id, userId);
+
+  // Stamp the file state this document was generated against (best-effort), so
+  // it can later be flagged "out of date" when the client's facts change.
+  await stampFactsSynced(db, docRecord.id);
 
   // Return the .docx as download (client saves for display; attorney downloads from dashboard)
   return new Response(new Uint8Array(buffer), {

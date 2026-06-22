@@ -150,6 +150,22 @@ export default function MissionControlBoard({ board, caseFileId, mode }: Mission
         )}
       </div>
 
+      {/* Strategy quick link — the What-If game. Client-mode only: a prominent,
+          always-available way to think a few moves ahead ("what if…") and feed
+          those contingency intentions back into the file. */}
+      {!isAttorney && (
+        <Link href={`/what-if?caseFileId=${caseFileId}`} className="mc-whatif">
+          <span className="mc-whatif-icon" aria-hidden="true">♟</span>
+          <span className="mc-whatif-text">
+            <span className="mc-whatif-title">Think a few steps ahead</span>
+            <span className="mc-whatif-sub">
+              Play the What-If game to work through “what if…” scenarios and build your strategy.
+            </span>
+          </span>
+          <span className="mc-whatif-arrow" aria-hidden="true">→</span>
+        </Link>
+      )}
+
       {actions.length > 0 && (
         <div className="mc-queue">
           <div className="mc-queue-header">

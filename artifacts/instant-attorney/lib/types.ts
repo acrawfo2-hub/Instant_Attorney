@@ -134,6 +134,12 @@ export interface FactItem {
    */
   kind?: FactKind;
   created_at: string;
+  /**
+   * Bumped whenever the item changes (gap answered, What-If answer revised). Set
+   * by the DB default on insert, so it equals created_at for brand-new items.
+   * Optional so rows from a DB predating the column still load.
+   */
+  updated_at?: string;
 }
 
 // ── Government form instruments ──────────────────────────────────────────────
@@ -230,6 +236,49 @@ export interface Document {
   review_status: ReviewStatus | null;
   created_at: string;
   updated_at: string;
+  /**
+   * The moment this draft was last generated/regenerated against the file's
+   * facts. A document is "out of date" when any of the case's fact_items changed
+   * after this timestamp. Optional/nullable: rows from a DB predating the
+   * `facts_synced_at` column load as undefined and are treated as NOT out of date
+   * (see isDocumentOutOfDate), so nothing is falsely flagged before the migration
+   * runs or before a draft has been (re)generated.
+   */
+  facts_synced_at?: string | null;
+}
+
+/**
+ * The most recent moment any fact item changed (created or updated), as a
+ * millisecond timestamp, or null when there are none / no parseable timestamps.
+ * Uses updated_at when present (it's bumped on gap answers and What-If revisions)
+ * and falls back to created_at for new items or DBs predating updated_at.
+ */
+export function latestFactChangeAt(
+  facts: Pick<FactItem, "created_at" | "updated_at">[]
+): number | null {
+  let max: number | null = null;
+  for (const f of facts) {
+    const t = Date.parse(f.updated_at ?? f.created_at);
+    if (!Number.isNaN(t) && (max === null || t > max)) max = t;
+  }
+  return max;
+}
+
+/**
+ * True when `doc` was generated before the file's facts last changed — i.e. the
+ * draft no longer reflects the current Living File. Degrades safely: a document
+ * with no facts_synced_at (NULL/undefined — pre-migration or never regenerated)
+ * is never reported out of date.
+ */
+export function isDocumentOutOfDate(
+  doc: Pick<Document, "facts_synced_at">,
+  facts: Pick<FactItem, "created_at" | "updated_at">[]
+): boolean {
+  if (!doc.facts_synced_at) return false;
+  const synced = Date.parse(doc.facts_synced_at);
+  if (Number.isNaN(synced)) return false;
+  const latest = latestFactChangeAt(facts);
+  return latest !== null && latest > synced;
 }
 
 // Human-readable labels for wizard types

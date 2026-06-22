@@ -7,6 +7,34 @@ export function isValidWizardType(type: string): type is WizardType {
   return type in WIZARD_LABELS;
 }
 
+/**
+ * Best-effort: record that document `docId` was just generated/regenerated
+ * against the file's current facts. Powers the "out of date" flag (a doc is
+ * stale when a fact_item changed after this stamp).
+ *
+ * Deliberately swallows errors: the `facts_synced_at` column may not exist on
+ * the live DB yet (manual migration), and a draft must NEVER fail to save just
+ * because we couldn't stamp it — staleness simply stays dormant until the
+ * column exists. Run separately from the main draft write so the draft persists
+ * regardless.
+ */
+export async function stampFactsSynced(
+  db: SupabaseClient,
+  docId: string
+): Promise<void> {
+  try {
+    const { error } = await db
+      .from("documents")
+      .update({ facts_synced_at: new Date().toISOString() })
+      .eq("id", docId);
+    if (error) {
+      console.warn("[document-utils] facts_synced_at stamp skipped:", error.message);
+    }
+  } catch (err) {
+    console.warn("[document-utils] facts_synced_at stamp error:", err);
+  }
+}
+
 /** First recommended wizard that maps to a supported WizardType. */
 export function pickFirstValidWizard(wizards: string[] | undefined): WizardType | null {
   if (!wizards?.length) return null;

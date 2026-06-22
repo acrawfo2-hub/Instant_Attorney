@@ -5,10 +5,16 @@ import DocumentInfoNeeded from "@/components/DocumentInfoNeeded";
 import GovFormInstruments from "@/components/GovFormInstruments";
 import MissionControlBoard from "@/components/MissionControlBoard";
 import ReviewSlaClock from "@/components/ReviewSlaClock";
+import RegenerateDocButton from "@/components/RegenerateDocButton";
 import { computeMissionControl } from "@/lib/mission-control";
 import type { CaseFile, FactItem, Document, Profile, WizardType, ConsultRequest, RequestedAttachment, GovFormInstrument } from "@/lib/types";
 import { isValidWizardType } from "@/lib/document-utils";
-import { WIZARD_LABELS, docTypeLabel, personDisplayName } from "@/lib/types";
+import { WIZARD_LABELS, docTypeLabel, personDisplayName, isDocumentOutOfDate } from "@/lib/types";
+
+// A document deemed finalized — the attorney's work product is the deliverable,
+// so the client's wizard draft underneath it is never flagged out of date or
+// offered for regeneration.
+const FINALIZED_DOC_STATUSES = new Set(["approved", "delivered"]);
 
 // ── Document status display ──────────────────────────────────────────────────
 
@@ -584,6 +590,13 @@ export default function ClientFileView({
             {documents.map((doc) => {
               const children = childrenByParent[doc.id] ?? [];
               const secondDraft = children.find((c) => c.doc_type === "second_draft");
+              // A drafted document is "out of date" when the client changed their
+              // facts / What-If answers after it was written. Client-only, and
+              // never for finalized deliverables.
+              const outOfDate =
+                !isAttorney &&
+                !FINALIZED_DOC_STATUSES.has(doc.status) &&
+                isDocumentOutOfDate(doc, facts);
               const docRow = (
                 <div className="lf-doc-inner">
                   <div className="lf-doc-info">
@@ -591,6 +604,11 @@ export default function ClientFileView({
                     <span className="lf-doc-type">{docTypeLabel(doc.doc_type)}</span>
                   </div>
                   <div className="lf-doc-right">
+                    {outOfDate && (
+                      <span className="lf-doc-stale-badge" title="Your file changed after this draft was written.">
+                        Out of date
+                      </span>
+                    )}
                     <DocStatusLine doc={doc} />
                     <span className="lf-doc-date">{new Date(doc.created_at).toLocaleDateString()}</span>
                     {!isAttorney && doc.status === "approved" && (
@@ -641,14 +659,25 @@ export default function ClientFileView({
                 );
               }
               if (doc.status === "draft") {
-                return (
+                const draftLink = (
                   <Link
-                    key={doc.id}
                     href={`/wizard/${doc.doc_type}?caseFileId=${doc.case_file_id}&docId=${doc.id}`}
                     className="lf-doc-item lf-doc-item-link lf-doc-item-draft"
                   >
                     {docRow}
                   </Link>
+                );
+                // Keep the regenerate control OUTSIDE the wrapping anchor — a
+                // button nested in an <a> is invalid and would also trigger the
+                // link navigation.
+                if (!outOfDate) {
+                  return <div key={doc.id}>{draftLink}</div>;
+                }
+                return (
+                  <div key={doc.id} className="lf-doc-stale-group">
+                    {draftLink}
+                    <RegenerateDocButton documentId={doc.id} />
+                  </div>
                 );
               }
               // Non-draft client docs are viewed inline. If the version the client
@@ -658,6 +687,7 @@ export default function ClientFileView({
               return (
                 <div key={doc.id} className="lf-doc-item">
                   {docRow}
+                  {outOfDate && <RegenerateDocButton documentId={doc.id} subtle />}
                   {fillTarget?.draft_text && (
                     <DocumentInfoNeeded
                       documentId={fillTarget.id}
