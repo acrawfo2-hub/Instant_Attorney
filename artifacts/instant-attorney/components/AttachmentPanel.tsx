@@ -90,32 +90,24 @@ export default function AttachmentPanel({ caseFileId }: AttachmentPanelProps) {
   }
 
   const pendingRequested = requested.filter((r) => r.status === "requested");
-  const uploadedRequested = requested.filter((r) => r.status === "uploaded");
+  const uploadedCount = attachments.length;
 
   return (
     <div className="att-panel">
-      {/* Requested attachments checklist */}
-      {requested.length > 0 && (
-        <div className="att-checklist">
-          <div className="att-checklist-title">Document Checklist</div>
+      {/* ── Documents STILL NEEDED — the actionable to-do list ───────────────── */}
+      {pendingRequested.length > 0 && (
+        <div className="att-section att-section-needed">
+          <div className="att-section-head">
+            <span className="att-section-title">Documents still needed</span>
+            <span className="att-section-count att-section-count-needed">{pendingRequested.length}</span>
+          </div>
+          <p className="att-section-sub">Upload these to move your file forward.</p>
           {pendingRequested.map((r) => (
             <div key={r.id} className="att-checklist-item att-checklist-pending">
               <span className="att-check-box" />
               <div className="att-check-body">
                 <span className="att-check-desc">{r.description}</span>
                 {r.reason && <span className="att-check-reason">{r.reason}</span>}
-              </div>
-            </div>
-          ))}
-          {uploadedRequested.map((r) => (
-            <div key={r.id} className="att-checklist-item att-checklist-done">
-              <span className="att-check-box att-check-box-done">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              </span>
-              <div className="att-check-body">
-                <span className="att-check-desc">{r.description}</span>
               </div>
             </div>
           ))}
@@ -218,8 +210,13 @@ export default function AttachmentPanel({ caseFileId }: AttachmentPanelProps) {
 
       {uploadError && <p className="att-upload-error">{uploadError}</p>}
 
-      {/* Attachment list */}
+      {/* ── Documents UPLOADED — what's already on the file ──────────────────── */}
       {attachments.length > 0 && (
+        <div className="att-section att-section-uploaded">
+          <div className="att-section-head">
+            <span className="att-section-title">Documents uploaded</span>
+            <span className="att-section-count att-section-count-uploaded">{uploadedCount}</span>
+          </div>
         <div className="att-list">
           {attachments.map((att) => {
             const isAnalyzed = !!att.ai_summary;
@@ -263,6 +260,7 @@ export default function AttachmentPanel({ caseFileId }: AttachmentPanelProps) {
               </div>
             );
           })}
+        </div>
         </div>
       )}
 

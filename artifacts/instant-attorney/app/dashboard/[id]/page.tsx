@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { CaseFile, FactItem, BYPASS_USER_ID } from "@/lib/types";
-import type { Document, ConsultRequest, RequestedAttachment, GovFormInstrument } from "@/lib/types";
+import type { Document, ConsultRequest, RequestedAttachment, GovFormInstrument, Attachment } from "@/lib/types";
 import ClientFileView from "@/components/ClientFileView";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
@@ -23,7 +23,7 @@ async function getData(caseFileId: string) {
     userId = user.id;
   }
 
-  const [{ data: caseFile }, { data: facts }, { data: documents }, { data: consultRow }, { data: subRow }, { data: requestedRows }, { data: formRows }] = await Promise.all([
+  const [{ data: caseFile }, { data: facts }, { data: documents }, { data: consultRow }, { data: subRow }, { data: requestedRows }, { data: formRows }, { data: attachmentRows }] = await Promise.all([
     db.from("case_files")
       .select("*")
       .eq("id", caseFileId)
@@ -60,6 +60,11 @@ async function getData(caseFileId: string) {
       .eq("case_file_id", caseFileId)
       .neq("status", "dismissed")
       .order("created_at", { ascending: true }),
+    db
+      .from("attachments")
+      .select("*")
+      .eq("case_file_id", caseFileId)
+      .order("created_at", { ascending: true }),
   ]);
 
   if (!caseFile) return null;
@@ -78,6 +83,7 @@ async function getData(caseFileId: string) {
     hasConsultSub: subRow?.plan === "consult" && ["active", "bypass"].includes(subRow?.status ?? ""),
     requestedAttachments: (requestedRows ?? []) as RequestedAttachment[],
     govForms: (formRows ?? []) as GovFormInstrument[],
+    attachments: (attachmentRows ?? []) as Attachment[],
   };
 }
 
@@ -93,7 +99,7 @@ export default async function FileDetailPage({
   const result = await getData(id);
   if (!result) notFound();
 
-  const { caseFile, facts, documents, childDocuments, consultRequest, hasConsultSub, requestedAttachments, govForms } = result;
+  const { caseFile, facts, documents, childDocuments, consultRequest, hasConsultSub, requestedAttachments, govForms, attachments } = result;
 
   const title = caseFile.title
     || (caseFile.matter_subtype ? caseFile.matter_subtype.replace(/_/g, " ") : null)
@@ -136,6 +142,7 @@ export default async function FileDetailPage({
           documents={documents}
           childDocuments={childDocuments}
           requestedAttachments={requestedAttachments}
+          attachments={attachments}
           govForms={govForms}
           mode="client"
           consultRequest={consultRequest}

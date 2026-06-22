@@ -89,6 +89,9 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   // left blank simply stays a highlighted placeholder for the attorney to finish.
   const [starterItems, setStarterItems] = useState<NeededItem[]>([]);
   const [starterSaved, setStarterSaved] = useState(false);
+  // Document Review needs a real uploaded document; when none exists this gates
+  // generation and shows an "upload first" screen instead of drafting.
+  const [docReviewGated, setDocReviewGated] = useState(false);
   // Staged starter answers to fold in once the first draft is ready: those that
   // map to a unique placeholder are filled deterministically; the rest go to one
   // model refine pass. Captured at save time because runDrafter clears the form.
@@ -183,6 +186,25 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
         }
       } catch {
         // Fall through to fresh generation
+      }
+    }
+
+    // 2b) Document Review only makes sense against a document the client actually
+    //     uploaded. If none exists yet, gate generation and prompt for an upload
+    //     instead of reviewing an empty Living File. (Resuming an existing
+    //     doc_review draft above is unaffected — that document already exists.)
+    if (wizardType === "doc_review" && caseFileId) {
+      try {
+        const res = await fetch(`/api/attachments?caseFileId=${encodeURIComponent(caseFileId)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (!data.attachments?.length) {
+            setDocReviewGated(true);
+            return;
+          }
+        }
+      } catch {
+        // If the check fails, fall through to normal generation rather than blocking.
       }
     }
 
@@ -517,6 +539,40 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   const hasAnyInput = filledCount > 0 || extraNote.trim().length > 0;
   const starterFilledCount = starterItems.filter((it) => answers[it.id]?.trim()).length;
   const hasStarterInput = starterFilledCount > 0 || extraNote.trim().length > 0;
+
+  if (docReviewGated) {
+    return (
+      <div className="wiz-shell wiz-shell-v2">
+        <header className="wiz-header">
+          <button className="wiz-back" onClick={() => router.push("/dashboard")}>← Back to File</button>
+          <div className="wiz-title">
+            <span className="wiz-type-pill">{label}</span>
+          </div>
+        </header>
+        <div className="wiz-gate">
+          <div className="wiz-gate-icon">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="12" y1="18" x2="12" y2="12" />
+              <polyline points="9 15 12 12 15 15" />
+            </svg>
+          </div>
+          <h2 className="wiz-gate-title">Upload a document to review first</h2>
+          <p className="wiz-gate-msg">
+            Document Review reads a document you provide and checks it against your file.
+            You haven’t uploaded one yet — add the document to your file, then start the review.
+          </p>
+          <button
+            className="wiz-gate-btn"
+            onClick={() => router.push(caseFileId ? `/dashboard/${caseFileId}#attachments` : "/dashboard")}
+          >
+            Go to my file to upload →
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="wiz-shell wiz-shell-v2">

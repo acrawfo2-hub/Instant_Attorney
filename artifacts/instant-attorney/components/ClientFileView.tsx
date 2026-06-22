@@ -7,9 +7,9 @@ import MissionControlBoard from "@/components/MissionControlBoard";
 import ReviewSlaClock from "@/components/ReviewSlaClock";
 import RegenerateDocButton from "@/components/RegenerateDocButton";
 import { computeMissionControl } from "@/lib/mission-control";
-import type { CaseFile, FactItem, Document, Profile, WizardType, ConsultRequest, RequestedAttachment, GovFormInstrument } from "@/lib/types";
+import type { CaseFile, FactItem, Document, Profile, WizardType, ConsultRequest, RequestedAttachment, GovFormInstrument, Attachment } from "@/lib/types";
 import { isValidWizardType } from "@/lib/document-utils";
-import { WIZARD_LABELS, docTypeLabel, personDisplayName, isDocumentOutOfDate } from "@/lib/types";
+import { WIZARD_LABELS, docTypeLabel, personDisplayName, isDocumentOutOfDate, coerceWizardType } from "@/lib/types";
 
 // A document deemed finalized — the attorney's work product is the deliverable,
 // so the client's wizard draft underneath it is never flagged out of date or
@@ -187,6 +187,7 @@ interface ClientFileViewProps {
   documents: Document[];
   childDocuments?: Document[];
   requestedAttachments?: RequestedAttachment[];
+  attachments?: Attachment[];
   govForms?: GovFormInstrument[];
   mode: "client" | "attorney";
   clientProfile?: Profile;
@@ -200,6 +201,7 @@ export default function ClientFileView({
   documents,
   childDocuments = [],
   requestedAttachments = [],
+  attachments = [],
   govForms = [],
   mode,
   clientProfile,
@@ -222,8 +224,28 @@ export default function ClientFileView({
   const recommendedWizards = strategy?.recommended_wizards ?? [];
   const isAttorney = mode === "attorney";
 
+  // The client has "brought in a document" once at least one upload exists that
+  // didn't fail to store. Document Review only makes sense against a real
+  // uploaded document, so it stays locked until then.
+  const hasUploadedDoc = attachments.some((a) => a.status !== "failed");
+
+  // Until a document is uploaded, strip Document Review from the recommended
+  // wizards so it never becomes the Mission Control hero or a queued action.
+  const gatedCaseFile: CaseFile =
+    hasUploadedDoc || !caseFile.legal_strategy
+      ? caseFile
+      : {
+          ...caseFile,
+          legal_strategy: {
+            ...caseFile.legal_strategy,
+            recommended_wizards: (caseFile.legal_strategy.recommended_wizards ?? []).filter(
+              (w) => coerceWizardType(w) !== "doc_review",
+            ),
+          },
+        };
+
   const missionBoard = computeMissionControl({
-    caseFile,
+    caseFile: gatedCaseFile,
     documents,
     facts,
     requestedAttachments,
@@ -431,7 +453,15 @@ export default function ClientFileView({
                     : "";
 
                   let action: React.ReactNode;
-                  if (doc?.status === "pending_review") {
+                  if (wizardType === "doc_review" && !hasUploadedDoc) {
+                    // Document Review needs a real document to review — point the
+                    // client to upload one first instead of starting a draft.
+                    action = (
+                      <a href="#attachments" className="lf-inst-start-btn lf-inst-locked-btn">
+                        Upload a document to review →
+                      </a>
+                    );
+                  } else if (doc?.status === "pending_review") {
                     action = <span className="lf-inst-pending">Awaiting 48hr Review</span>;
                   } else if (doc?.status === "approved" || doc?.status === "delivered") {
                     action = <span className="lf-inst-done">✓ Completed</span>;
@@ -461,39 +491,42 @@ export default function ClientFileView({
       )}
 
       {/* Government forms detected in chat — surfaced as instruments to complete */}
-      <div id="gov-forms">
+      <div id="gov-forms" className="lf-span-full">
         <GovFormInstruments caseFileId={caseFile.id} />
       </div>
 
-      {/* Confirmed Facts + Gaps */}
-      <div className="lf-card lf-card-half">
-        <div className="lf-card-label">
-          Confirmed Facts
-          {confirmed.length > 0 && <span className="lf-count">{confirmed.length}</span>}
-          {!isAttorney && <span className="lf-plain-caption">What we know so far</span>}
+      {/* Confirmed Facts + Gaps — always rendered side-by-side as a top-aligned
+          pair, independent of how the surrounding grid auto-flows. */}
+      <div className="lf-pair">
+        <div className="lf-card lf-card-half">
+          <div className="lf-card-label">
+            Confirmed Facts
+            {confirmed.length > 0 && <span className="lf-count">{confirmed.length}</span>}
+            {!isAttorney && <span className="lf-plain-caption">What we know so far</span>}
+          </div>
+          {confirmed.length > 0 ? (
+            <ul className="lf-list lf-list-confirmed">
+              {confirmed.map((f) => <li key={f.id}>{f.description}</li>)}
+            </ul>
+          ) : (
+            <p className="lf-empty-field">Facts confirmed during intake will appear here.</p>
+          )}
         </div>
-        {confirmed.length > 0 ? (
-          <ul className="lf-list lf-list-confirmed">
-            {confirmed.map((f) => <li key={f.id}>{f.description}</li>)}
-          </ul>
-        ) : (
-          <p className="lf-empty-field">Facts confirmed during intake will appear here.</p>
-        )}
-      </div>
 
-      <div className="lf-card lf-card-half" id="fact-gaps">
-        <div className="lf-card-label">
-          Open Fact Gaps
-          {gaps.length > 0 && <span className="lf-count lf-count-gap">{gaps.length}</span>}
-          {!isAttorney && <span className="lf-plain-caption">Details still needed — these are okay to leave for now</span>}
+        <div className="lf-card lf-card-half" id="fact-gaps">
+          <div className="lf-card-label">
+            Open Fact Gaps
+            {gaps.length > 0 && <span className="lf-count lf-count-gap">{gaps.length}</span>}
+            {!isAttorney && <span className="lf-plain-caption">Details still needed — these are okay to leave for now</span>}
+          </div>
+          {gaps.length > 0 ? (
+            <ul className="lf-list lf-list-gap">
+              {gaps.map((f) => <li key={f.id} id={`gap-${f.id}`}>{f.description}</li>)}
+            </ul>
+          ) : (
+            <p className="lf-empty-field">Missing facts to track will appear here.</p>
+          )}
         </div>
-        {gaps.length > 0 ? (
-          <ul className="lf-list lf-list-gap">
-            {gaps.map((f) => <li key={f.id} id={`gap-${f.id}`}>{f.description}</li>)}
-          </ul>
-        ) : (
-          <p className="lf-empty-field">Missing facts to track will appear here.</p>
-        )}
       </div>
 
       {/* Contingency preferences captured by the What-If Game (hypothetical, not facts) */}
@@ -542,7 +575,10 @@ export default function ClientFileView({
                 Click a document below to start drafting — the AI will compose a complete first draft from your Living File in under 2 minutes.
               </p>
               <div className="lf-wizard-grid">
-                {recommendedWizards.filter(isValidWizardType).map((wType) => (
+                {recommendedWizards
+                  .filter(isValidWizardType)
+                  .filter((wType) => wType !== "doc_review" || hasUploadedDoc)
+                  .map((wType) => (
                   <WizardCard
                     key={wType}
                     wizardType={wType}
