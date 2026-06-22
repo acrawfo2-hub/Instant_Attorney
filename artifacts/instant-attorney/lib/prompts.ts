@@ -61,8 +61,14 @@ export function buildFileContext(
   attachments: Attachment[] = [],
   requestedAttachments: RequestedAttachment[] = []
 ): string {
-  const confirmed = facts.filter((f) => f.status === "confirmed");
-  const gaps = facts.filter((f) => f.status === "gap");
+  // A fact is "hypothetical" if explicitly tagged (kind) OR it carries the
+  // What-If Game's "What-if · " description prefix. The prefix fallback keeps the
+  // distinction working even before the kind column migration is applied.
+  const isHypothetical = (f: FactItem) =>
+    f.kind === "hypothetical" || /^What-if · /i.test(f.description);
+  const confirmed = facts.filter((f) => f.status === "confirmed" && !isHypothetical(f));
+  const hypotheticals = facts.filter(isHypothetical);
+  const gaps = facts.filter((f) => f.status === "gap" && !isHypothetical(f));
 
   const lines: string[] = [
     "=== CURRENT LIVING FILE ===",
@@ -82,6 +88,17 @@ export function buildFileContext(
   if (confirmed.length) {
     lines.push("", "CONFIRMED FACTS:");
     confirmed.forEach((f) => lines.push(`• ${f.description}`));
+  }
+
+  if (hypotheticals.length) {
+    lines.push(
+      "",
+      "CLIENT INTENTIONS & CONTINGENCY PREFERENCES:",
+      '(These come from the optional What-If Game. They are the client\'s stated wishes for hypothetical "what if…" scenarios — they are NOT asserted facts that have happened. Use them to add appropriate backup/contingency provisions or conditional language; do not state them as established facts.)'
+    );
+    hypotheticals.forEach((f) =>
+      lines.push(`• ${f.description.replace(/^What-if · /i, "")}`)
+    );
   }
 
   if (gaps.length) {

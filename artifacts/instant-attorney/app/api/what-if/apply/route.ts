@@ -34,6 +34,7 @@ export async function POST(req: NextRequest) {
 
   // ── Write facts into the shared Living File (only when tied to a case) ───────
   let saved = 0;
+  let writeError: unknown = null;
   if (caseFileId && pairs.length) {
     // Ownership guard: fact_items RLS does NOT constrain case_file_id, so verify
     // the caller owns the case app-side (the RLS-scoped select proves it).
@@ -56,28 +57,63 @@ export async function POST(req: NextRequest) {
       .eq("status", "confirmed");
     const existing = (existingRows ?? []) as { id: string; description: string }[];
 
-    const toInsert: { case_file_id: string; user_id: string; description: string; status: "confirmed" }[] = [];
+    // What-If answers are saved as kind='hypothetical' so the drafter treats them
+    // as the client's contingency intentions, not asserted facts. If the live DB
+    // predates the kind column, we retry the write without it so a user's thinking
+    // is never lost — the "What-if · " description prefix still marks it as
+    // hypothetical app-side until the migration runs.
+    const toInsert: {
+      case_file_id: string;
+      user_id: string;
+      description: string;
+      status: "confirmed";
+      kind: "hypothetical";
+    }[] = [];
     for (const { label, value } of pairs) {
       const description = `${label}: ${value}`;
       const prefix = `${label.toLowerCase()}:`;
       const match = existing.find((f) => f.description.toLowerCase().startsWith(prefix));
       if (match) {
         if (match.description !== description) {
-          await db
+          const stamp = new Date().toISOString();
+          let { error } = await db
             .from("fact_items")
-            .update({ description, status: "confirmed", updated_at: new Date().toISOString() })
+            .update({ description, status: "confirmed", kind: "hypothetical", updated_at: stamp })
             .eq("id", match.id);
-          match.description = description;
-          saved++;
+          if (error) {
+            ({ error } = await db
+              .from("fact_items")
+              .update({ description, status: "confirmed", updated_at: stamp })
+              .eq("id", match.id));
+          }
+          if (error) {
+            writeError = error;
+          } else {
+            match.description = description;
+            saved++;
+          }
         }
       } else {
-        toInsert.push({ case_file_id: caseFileId, user_id: userId, description, status: "confirmed" });
+        toInsert.push({ case_file_id: caseFileId, user_id: userId, description, status: "confirmed", kind: "hypothetical" });
         existing.push({ id: "", description });
       }
     }
     if (toInsert.length) {
-      await db.from("fact_items").insert(toInsert);
-      saved += toInsert.length;
+      let { error } = await db.from("fact_items").insert(toInsert);
+      if (error) {
+        const stripped = toInsert.map((r) => ({
+          case_file_id: r.case_file_id,
+          user_id: r.user_id,
+          description: r.description,
+          status: r.status,
+        }));
+        ({ error } = await db.from("fact_items").insert(stripped));
+      }
+      if (error) {
+        writeError = error;
+      } else {
+        saved += toInsert.length;
+      }
     }
   }
 
@@ -92,6 +128,17 @@ export async function POST(req: NextRequest) {
     } catch (err) {
       console.error("[what-if] session answer persist skipped", err);
     }
+  }
+
+  // Surface write failures instead of falsely reporting success: if any fact
+  // write failed (e.g. RLS/constraint/outage), tell the client so the UI shows an
+  // error and the user can retry, rather than silently losing their notes.
+  if (writeError) {
+    console.error("[what-if/apply] fact write failed", writeError);
+    return NextResponse.json(
+      { error: "Couldn't save your notes just now. Please try again.", saved },
+      { status: 500 }
+    );
   }
 
   return NextResponse.json({ saved });

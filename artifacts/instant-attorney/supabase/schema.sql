@@ -119,6 +119,8 @@ create table if not exists fact_items (
   description    text not null,
   status         text not null default 'gap'
     check (status in ('confirmed', 'gap')),
+  kind           text not null default 'fact'
+    check (kind in ('fact', 'hypothetical')),
   created_at     timestamptz default now() not null,
   updated_at     timestamptz default now() not null
 );

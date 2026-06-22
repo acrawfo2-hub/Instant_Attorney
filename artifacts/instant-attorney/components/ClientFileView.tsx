@@ -205,8 +205,13 @@ export default function ClientFileView({
     (acc[child.parent_document_id] ??= []).push(child);
     return acc;
   }, {});
-  const confirmed = facts.filter((f) => f.status === "confirmed");
-  const gaps = facts.filter((f) => f.status === "gap");
+  // A fact is "hypothetical" if explicitly tagged (kind) OR it carries the
+  // What-If Game's "What-if · " description prefix (keeps working pre-migration).
+  const isHypothetical = (f: FactItem) =>
+    f.kind === "hypothetical" || /^What-if · /i.test(f.description);
+  const confirmed = facts.filter((f) => f.status === "confirmed" && !isHypothetical(f));
+  const gaps = facts.filter((f) => f.status === "gap" && !isHypothetical(f));
+  const hypotheticals = facts.filter(isHypothetical);
   const strategy = caseFile.legal_strategy ?? null;
   const recommendedWizards = strategy?.recommended_wizards ?? [];
   const isAttorney = mode === "attorney";
@@ -484,6 +489,39 @@ export default function ClientFileView({
           <p className="lf-empty-field">Missing facts to track will appear here.</p>
         )}
       </div>
+
+      {/* Contingency preferences captured by the What-If Game (hypothetical, not facts) */}
+      {hypotheticals.length > 0 && (
+        <div className="lf-card lf-card-full" id="contingency-preferences" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
+          <div className="lf-card-label">
+            Contingency Preferences
+            <span className="lf-count">{hypotheticals.length}</span>
+            {!isAttorney && <span className="lf-plain-caption">Your wishes for &ldquo;what if…&rdquo; situations — used to add backup plans to your documents, not treated as facts</span>}
+            {isAttorney && <span className="lf-plain-caption">Hypothetical intentions from the What-If Game — not asserted facts</span>}
+          </div>
+          <ul className="lf-list">
+            {hypotheticals.map((f) => (
+              <li key={f.id}>{f.description.replace(/^What-if · /i, "")}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* What-If Game — pressure-test this matter (client mode only) */}
+      {!isAttorney && (
+        <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
+          <div className="lf-card-label">Think a Few Steps Ahead</div>
+          <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
+            The law has seen your situation play out many times. Play the What-If Game to pressure-test
+            your goals against possibilities you may not have considered. It&apos;s optional, takes a few
+            minutes, and never changes your documents — anything you decide to keep is saved here as a
+            contingency preference.
+          </p>
+          <Link href={`/what-if?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
+            Play the What-If Game →
+          </Link>
+        </div>
+      )}
 
       {/* Document Wizards — client mode only */}
       {!isAttorney && (

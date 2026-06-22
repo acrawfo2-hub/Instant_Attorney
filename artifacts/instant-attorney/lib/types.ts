@@ -4,6 +4,8 @@ export type MatterType = "reactive" | "preventive";
 export type CaseStatus = "open" | "closed" | "referred" | "archived";
 export type CaseFileType = "standard" | "quick_consult";
 export type FactStatus = "confirmed" | "gap";
+/** Whether a fact_item is an asserted fact or a hypothetical "what-if" intention. */
+export type FactKind = "fact" | "hypothetical";
 export type MessageRole = "user" | "assistant";
 export type AttachmentType = "document" | "screenshot" | "other";
 export type AttachmentStatus = "processing" | "ready" | "failed";
@@ -125,6 +127,12 @@ export interface FactItem {
   user_id: string;
   description: string;
   status: FactStatus;
+  /**
+   * "fact" (default) for asserted facts; "hypothetical" for What-If Game answers,
+   * which are the client's stated intentions for "what if…" scenarios — NOT facts
+   * that have occurred. Optional so rows from a DB predating the column still load.
+   */
+  kind?: FactKind;
   created_at: string;
 }
 
