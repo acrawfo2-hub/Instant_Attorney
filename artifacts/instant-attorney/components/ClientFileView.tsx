@@ -6,6 +6,7 @@ import GovFormInstruments from "@/components/GovFormInstruments";
 import MissionControlBoard from "@/components/MissionControlBoard";
 import ReviewSlaClock from "@/components/ReviewSlaClock";
 import RegenerateDocButton from "@/components/RegenerateDocButton";
+import CancelDocButton from "@/components/CancelDocButton";
 import FactsPanel from "@/components/FactsPanel";
 import { placeholderFields } from "@/lib/wizard-parsing";
 import { computeMissionControl } from "@/lib/mission-control";
@@ -714,16 +715,14 @@ export default function ClientFileView({
                     {docRow}
                   </Link>
                 );
-                // Keep the regenerate control OUTSIDE the wrapping anchor — a
-                // button nested in an <a> is invalid and would also trigger the
-                // link navigation.
-                if (!outOfDate) {
-                  return <div key={doc.id}>{draftLink}</div>;
-                }
+                // Keep the regenerate / cancel controls OUTSIDE the wrapping
+                // anchor — a button nested in an <a> is invalid and would also
+                // trigger the link navigation.
                 return (
                   <div key={doc.id} className="lf-doc-stale-group">
                     {draftLink}
-                    <RegenerateDocButton documentId={doc.id} />
+                    {outOfDate && <RegenerateDocButton documentId={doc.id} />}
+                    <CancelDocButton documentId={doc.id} />
                   </div>
                 );
               }
@@ -741,6 +740,9 @@ export default function ClientFileView({
                       draftText={fillTarget.draft_text}
                       documentTitle={doc.title}
                     />
+                  )}
+                  {doc.status === "changes_requested" && (
+                    <CancelDocButton documentId={doc.id} />
                   )}
                 </div>
               );
