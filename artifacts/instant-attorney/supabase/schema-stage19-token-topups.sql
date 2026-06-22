@@ -7,9 +7,9 @@
 --   • Stripe webhook event de-duplication
 --   • billing_exempt flag so specific users (e.g. internal testers) stay free
 --
--- Economics (defaults): trigger at $5.00 of model COGS, charge $8.50.
--- After Stripe fees (2.9% + $0.30) the 35% gross-margin floor holds only while
--- a cycle's COGS stays <= ~$4.98 — see billing-config.ts topUpMarginPct(). The
+-- Economics (defaults): trigger at $4.75 of model COGS, charge $8.50.
+-- After Stripe fees (2.9% + $0.30) that yields ~37.7% gross margin at the
+-- trigger; the floor stays >=35% while a cycle's COGS stays <= ~$4.98, and the
 -- pre-call gate bounds overshoot to at most one in-flight call.
 
 -- ── Free / exempt users ─────────────────────────────────────────────────────

@@ -33,7 +33,7 @@ export interface BillingConfig {
 export function getBillingConfig(): BillingConfig {
   return {
     enabled: process.env.USAGE_TOPUP_ENABLED !== "false",
-    thresholdUsd: num("USAGE_TOPUP_THRESHOLD_USD", 5),
+    thresholdUsd: num("USAGE_TOPUP_THRESHOLD_USD", 4.75),
     chargeUsd: num("USAGE_TOPUP_CHARGE_USD", 8.5),
     includedAllowanceUsd: num("USAGE_INCLUDED_ALLOWANCE_USD", 0),
     productId: process.env.STRIPE_TOPUP_PRODUCT_ID ?? "",
