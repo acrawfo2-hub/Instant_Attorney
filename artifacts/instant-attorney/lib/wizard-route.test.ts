@@ -176,7 +176,13 @@ mock.module(libUrl("file-parser.ts"), {
   },
 });
 mock.module(libUrl("document-utils.ts"), {
-  namedExports: { resolveWizardDocumentTarget: async () => target },
+  namedExports: {
+    resolveWizardDocumentTarget: async () => target,
+    // The wizard route also stamps facts-synced after a successful save; mocking
+    // it as a no-op keeps this test focused on draft persistence. Module mocks
+    // replace the whole module, so every export the route imports must be listed.
+    stampFactsSynced: async () => {},
+  },
 });
 mock.module(libUrl("usage-tracker.ts"), {
   namedExports: { recordAiFromMessage: async () => {} },

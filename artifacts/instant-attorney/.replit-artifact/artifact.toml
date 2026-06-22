@@ -23,6 +23,7 @@ paths = [
   "/api/auth",
   "/api/attorney",
   "/api/subscriptions",
+  "/api/billing",
   "/api/agreements",
   "/api/consult",
   "/api/case-files",
