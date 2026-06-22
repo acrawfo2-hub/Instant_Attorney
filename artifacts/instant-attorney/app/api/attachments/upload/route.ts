@@ -30,6 +30,8 @@ export async function POST(req: NextRequest) {
   const caseFileId = formData.get("caseFileId") as string | null;
   // analyze=false → store the file but skip AI processing (default true)
   const analyze = formData.get("analyze") !== "false";
+  // Optional: links this upload to a specific "still needed" requested item.
+  const requestedAttachmentId = formData.get("requestedAttachmentId") as string | null;
 
   if (!file || !caseFileId) {
     return NextResponse.json({ error: "file and caseFileId are required" }, { status: 400 });
@@ -100,6 +102,19 @@ export async function POST(req: NextRequest) {
     console.error("[attachments/upload] insert error:", insertErr);
     await serviceDb.storage.from("case-attachments").remove([storagePath]).catch(() => {});
     return NextResponse.json({ error: "Failed to create attachment record" }, { status: 500 });
+  }
+
+  // If this upload fulfills a specific "still needed" item, mark it satisfied.
+  if (requestedAttachmentId) {
+    const { error: reqErr } = await db
+      .from("requested_attachments")
+      .update({ status: "uploaded", fulfilled_by: attachment.id })
+      .eq("id", requestedAttachmentId)
+      .eq("case_file_id", caseFileId)
+      .eq("user_id", userId);
+    if (reqErr) {
+      console.error("[attachments/upload] requested-attachment update error:", reqErr);
+    }
   }
 
   if (analyze) {

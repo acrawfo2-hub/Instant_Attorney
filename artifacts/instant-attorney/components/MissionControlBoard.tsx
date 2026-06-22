@@ -114,6 +114,15 @@ export default function MissionControlBoard({ board, caseFileId, mode }: Mission
 
   return (
     <section className={`lf-nextstep lf-nextstep-${hero.tone} mc-board`} aria-label="Mission control">
+      {!isAttorney && (
+        <div className="mc-board-intro">
+          <span className="mc-board-intro-title">Generate a legal document for your file and have it reviewed</span>
+          <span className="mc-board-intro-sub">
+            These five steps take you from telling your story to a final, attorney-reviewed document.
+          </span>
+        </div>
+      )}
+
       <ol className="lf-stepper" aria-label="Your progress">
         {hero.steps.map((step, i) => (
           <li key={step.label} className={`lf-step lf-step-${step.state}`}>
@@ -159,7 +168,8 @@ export default function MissionControlBoard({ board, caseFileId, mode }: Mission
           <span className="mc-whatif-text">
             <span className="mc-whatif-title">Think a few steps ahead</span>
             <span className="mc-whatif-sub">
-              Play the What-If game to work through “what if…” scenarios and build your strategy.
+              A legal strategy is really about understanding every possible outcome. The What-If game walks you
+              through those “what if…” scenarios so we can build a strategy that actually works for you.
             </span>
           </span>
           <span className="mc-whatif-arrow" aria-hidden="true">→</span>

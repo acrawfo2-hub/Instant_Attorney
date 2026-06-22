@@ -255,38 +255,7 @@ export default function ClientFileView({
 
   return (
     <div className="lf-grid">
-      {/* Mission Control — ranked actions + hero next step; strategy & instruments remain below */}
-      <MissionControlBoard
-        board={missionBoard}
-        caseFileId={caseFile.id}
-        mode={mode}
-      />
-
-      {/* Attorney banner */}
-      {isAttorney && clientProfile && (
-        <div className="lf-card lf-card-full lf-atty-banner">
-          <div className="lf-atty-banner-inner">
-            <div>
-              <div className="lf-atty-banner-client">
-                {personDisplayName(clientProfile)}
-              </div>
-              {clientProfile.email && clientProfile.full_name && (
-                <div className="lf-atty-banner-email">{clientProfile.email}</div>
-              )}
-              {clientProfile.phone && (
-                <div className="lf-atty-banner-email">{clientProfile.phone}</div>
-              )}
-            </div>
-            <div className="lf-atty-banner-actions">
-              <button className="lf-atty-review-btn" disabled title="Coming soon">
-                Review File
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Consult status / CTA — client mode only */}
+      {/* Consult status / CTA — client mode only; pinned to the very top */}
       {!isAttorney && (() => {
         const cr = consultRequest;
         if (cr?.status === "confirmed" && cr.confirmed_time) {
@@ -357,6 +326,37 @@ export default function ClientFileView({
           </div>
         );
       })()}
+
+      {/* Mission Control — ranked actions + hero next step; strategy & instruments remain below */}
+      <MissionControlBoard
+        board={missionBoard}
+        caseFileId={caseFile.id}
+        mode={mode}
+      />
+
+      {/* Attorney banner */}
+      {isAttorney && clientProfile && (
+        <div className="lf-card lf-card-full lf-atty-banner">
+          <div className="lf-atty-banner-inner">
+            <div>
+              <div className="lf-atty-banner-client">
+                {personDisplayName(clientProfile)}
+              </div>
+              {clientProfile.email && clientProfile.full_name && (
+                <div className="lf-atty-banner-email">{clientProfile.email}</div>
+              )}
+              {clientProfile.phone && (
+                <div className="lf-atty-banner-email">{clientProfile.phone}</div>
+              )}
+            </div>
+            <div className="lf-atty-banner-actions">
+              <button className="lf-atty-review-btn" disabled title="Coming soon">
+                Review File
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Matter + Next Action */}
       <div className="lf-card lf-card-sm">
@@ -491,42 +491,39 @@ export default function ClientFileView({
       )}
 
       {/* Government forms detected in chat — surfaced as instruments to complete */}
-      <div id="gov-forms" className="lf-span-full">
+      <div id="gov-forms">
         <GovFormInstruments caseFileId={caseFile.id} />
       </div>
 
-      {/* Confirmed Facts + Gaps — always rendered side-by-side as a top-aligned
-          pair, independent of how the surrounding grid auto-flows. */}
-      <div className="lf-pair">
-        <div className="lf-card lf-card-half">
-          <div className="lf-card-label">
-            Confirmed Facts
-            {confirmed.length > 0 && <span className="lf-count">{confirmed.length}</span>}
-            {!isAttorney && <span className="lf-plain-caption">What we know so far</span>}
-          </div>
-          {confirmed.length > 0 ? (
-            <ul className="lf-list lf-list-confirmed">
-              {confirmed.map((f) => <li key={f.id}>{f.description}</li>)}
-            </ul>
-          ) : (
-            <p className="lf-empty-field">Facts confirmed during intake will appear here.</p>
-          )}
+      {/* Confirmed Facts + Gaps */}
+      <div className="lf-card lf-card-half">
+        <div className="lf-card-label">
+          Confirmed Facts
+          {confirmed.length > 0 && <span className="lf-count">{confirmed.length}</span>}
+          {!isAttorney && <span className="lf-plain-caption">What we know so far</span>}
         </div>
+        {confirmed.length > 0 ? (
+          <ul className="lf-list lf-list-confirmed">
+            {confirmed.map((f) => <li key={f.id}>{f.description}</li>)}
+          </ul>
+        ) : (
+          <p className="lf-empty-field">Facts confirmed during intake will appear here.</p>
+        )}
+      </div>
 
-        <div className="lf-card lf-card-half" id="fact-gaps">
-          <div className="lf-card-label">
-            Open Fact Gaps
-            {gaps.length > 0 && <span className="lf-count lf-count-gap">{gaps.length}</span>}
-            {!isAttorney && <span className="lf-plain-caption">Details still needed — these are okay to leave for now</span>}
-          </div>
-          {gaps.length > 0 ? (
-            <ul className="lf-list lf-list-gap">
-              {gaps.map((f) => <li key={f.id} id={`gap-${f.id}`}>{f.description}</li>)}
-            </ul>
-          ) : (
-            <p className="lf-empty-field">Missing facts to track will appear here.</p>
-          )}
+      <div className="lf-card lf-card-half" id="fact-gaps">
+        <div className="lf-card-label">
+          Open Fact Gaps
+          {gaps.length > 0 && <span className="lf-count lf-count-gap">{gaps.length}</span>}
+          {!isAttorney && <span className="lf-plain-caption">Details still needed — these are okay to leave for now</span>}
         </div>
+        {gaps.length > 0 ? (
+          <ul className="lf-list lf-list-gap">
+            {gaps.map((f) => <li key={f.id} id={`gap-${f.id}`}>{f.description}</li>)}
+          </ul>
+        ) : (
+          <p className="lf-empty-field">Missing facts to track will appear here.</p>
+        )}
       </div>
 
       {/* Contingency preferences captured by the What-If Game (hypothetical, not facts) */}
@@ -551,10 +548,10 @@ export default function ClientFileView({
         <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
           <div className="lf-card-label">Think a Few Steps Ahead</div>
           <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
-            The law has seen your situation play out many times. Play the What-If Game to pressure-test
-            your goals against possibilities you may not have considered. It&apos;s optional, takes a few
-            minutes, and never changes your documents — anything you decide to keep is saved here as a
-            contingency preference.
+            A legal strategy is really about understanding every possible outcome before it happens. The
+            What-If Game walks you through those &ldquo;what if&hellip;&rdquo; scenarios so we can build a
+            strategy that actually works for you. It&apos;s optional, takes a few minutes, and never changes
+            your documents — anything you decide to keep is saved here as a contingency preference.
           </p>
           <Link href={`/what-if?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
             Play the What-If Game →

@@ -23,6 +23,9 @@ export default function AttachmentPanel({ caseFileId }: AttachmentPanelProps) {
   const [uploadError, setUploadError] = useState("");
   // A file the user has added but not yet decided whether AI should analyze.
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  // When the upload was started from a specific "still needed" item, this holds
+  // that requested-attachment id so we can mark it fulfilled after upload.
+  const [pendingRequestedId, setPendingRequestedId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -52,12 +55,14 @@ export default function AttachmentPanel({ caseFileId }: AttachmentPanelProps) {
       form.append("file", file);
       form.append("caseFileId", caseFileId);
       form.append("analyze", String(analyze));
+      if (pendingRequestedId) form.append("requestedAttachmentId", pendingRequestedId);
       const res = await fetch("/api/attachments/upload", { method: "POST", body: form });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setUploadError(data.error ?? "Upload failed");
       } else {
         setPendingFile(null);
+        setPendingRequestedId(null);
         await load();
       }
     } catch {
@@ -65,6 +70,13 @@ export default function AttachmentPanel({ caseFileId }: AttachmentPanelProps) {
     } finally {
       setUploading(false);
     }
+  }
+
+  // Start an upload tied to a specific "still needed" item.
+  function startRequestedUpload(requestedId: string) {
+    setUploadError("");
+    setPendingRequestedId(requestedId);
+    fileInputRef.current?.click();
   }
 
   // Add a file first; the analyze-or-store decision happens afterward.
@@ -85,8 +97,16 @@ export default function AttachmentPanel({ caseFileId }: AttachmentPanelProps) {
     const file = e.dataTransfer.files[0];
     if (file) {
       setUploadError("");
+      setPendingRequestedId(null);
       setPendingFile(file);
     }
+  }
+
+  // Generic (not item-specific) upload entry point.
+  function openGenericPicker() {
+    setUploadError("");
+    setPendingRequestedId(null);
+    fileInputRef.current?.click();
   }
 
   const pendingRequested = requested.filter((r) => r.status === "requested");
@@ -109,6 +129,18 @@ export default function AttachmentPanel({ caseFileId }: AttachmentPanelProps) {
                 <span className="att-check-desc">{r.description}</span>
                 {r.reason && <span className="att-check-reason">{r.reason}</span>}
               </div>
+              <button
+                type="button"
+                className="att-check-upload-btn"
+                onClick={() => startRequestedUpload(r.id)}
+                disabled={uploading}
+                title={`Upload “${r.description}”`}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+                Upload
+              </button>
             </div>
           ))}
         </div>
@@ -191,10 +223,10 @@ export default function AttachmentPanel({ caseFileId }: AttachmentPanelProps) {
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={openGenericPicker}
           role="button"
           tabIndex={0}
-          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInputRef.current?.click(); } }}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openGenericPicker(); } }}
         >
           <span className="att-upload-zone-icon">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
