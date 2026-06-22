@@ -5,6 +5,7 @@ import { DRAFTER_SYSTEM_PROMPT, WIZARD_FIELD_HINTS, buildFileContext } from "@/l
 import { parseAndUpdateFile, extractDraftText, syncDraftGapsToLivingFile, isCompleteFileUpdate } from "@/lib/file-parser";
 import { resolveWizardDocumentTarget, stampFactsSynced } from "@/lib/document-utils";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
+import { getBillingGate } from "@/lib/topup";
 import { BYPASS_USER_ID, WIZARD_LABELS } from "@/lib/types";
 import type { WizardType, CaseFile, FactItem, Attachment, RequestedAttachment } from "@/lib/types";
 import { logTruncation } from "@/lib/truncation-logger";
@@ -68,6 +69,21 @@ export async function POST(req: NextRequest) {
     }
 
     userId = user.id;
+
+    // Pre-call billing gate: stop new AI spend while a token top-up is pending
+    // or failed, bounding overshoot and protecting gross margin.
+    const gate = await getBillingGate(userId);
+    if (!gate.allowed) {
+      return NextResponse.json(
+        {
+          error: "Token top-up required",
+          reason: gate.reason,
+          meter_usd: gate.meterUsd,
+          threshold_usd: gate.thresholdUsd,
+        },
+        { status: 402 }
+      );
+    }
 
     // Guard against operating on someone else's case. This route writes
     // fact_items and documents keyed by the caller-supplied caseFileId, and

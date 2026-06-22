@@ -14,7 +14,7 @@ import { recordAiFromMessage } from "@/lib/usage-tracker";
 import { BYPASS_USER_ID, docTypeLabel } from "@/lib/types";
 import type { Document, CaseFile, FactItem, Attachment } from "@/lib/types";
 import { logTruncation } from "@/lib/truncation-logger";
-import { maxOutputTokensFor, limitSignalMetadata } from "@/lib/token-limits";
+import { maxOutputTokensFor, maxOutputTokensForDoc, limitSignalMetadata } from "@/lib/token-limits";
 
 // Two model calls (fitness + full second draft) — give the route room to finish.
 export const maxDuration = 300;
@@ -189,7 +189,9 @@ export async function POST(
 
         const draftResponse = await anthropic.messages.stream({
           model: SECOND_DRAFT_MODEL,
-          max_tokens: maxOutputTokensFor(SECOND_DRAFT_MODEL),
+          // Bound the expensive Opus output by the document type's expected
+          // length rather than the full 64k model ceiling.
+          max_tokens: maxOutputTokensForDoc(SECOND_DRAFT_MODEL, parentDoc.doc_type),
           system: [
             {
               type: "text" as const,

@@ -1,6 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceClient } from "@/lib/supabase/server";
+import { accrueUsage } from "@/lib/topup";
 
 /** Known AI features — used for cost attribution and future billing dashboards. */
 export type UsageFeature =
@@ -61,12 +62,17 @@ export function computeAiCostUsd(
   model: string,
   inputTokens: number,
   outputTokens: number,
-  costMultiplier = 1
+  costMultiplier = 1,
+  cacheCreationTokens = 0,
+  cacheReadTokens = 0
 ): number {
   const pricing = MODEL_PRICING_USD_PER_M[model] ?? DEFAULT_MODEL_PRICING;
   const inputCost = (inputTokens / 1_000_000) * pricing.input;
+  // Anthropic prompt caching: writes cost 1.25x input, reads cost 0.1x input.
+  const cacheWriteCost = (cacheCreationTokens / 1_000_000) * pricing.input * 1.25;
+  const cacheReadCost = (cacheReadTokens / 1_000_000) * pricing.input * 0.1;
   const outputCost = (outputTokens / 1_000_000) * pricing.output;
-  return roundUsd((inputCost + outputCost) * costMultiplier);
+  return roundUsd((inputCost + cacheWriteCost + cacheReadCost + outputCost) * costMultiplier);
 }
 
 /** One month of storage cost attributed at upload time (bytes × $/GB/mo). */
@@ -186,6 +192,12 @@ export async function recordUsage(
     if (input.billable !== false) {
       await upsertPeriodTotal(serviceDb, input.userId, period, input.category, input.costUsd);
     }
+
+    // Feed the automatic token top-up ledger (AI COGS only). Self-contained and
+    // non-throwing; never blocks the request that produced the usage.
+    if (input.category === "ai" && input.billable !== false) {
+      await accrueUsage(input.userId, input.costUsd);
+    }
   } catch (err) {
     console.error("[usage-tracker] recordUsage error:", err);
   }
@@ -205,13 +217,21 @@ export async function recordAiUsage(
     metadata?: Record<string, unknown>;
     /** e.g. 0.5 for Anthropic Message Batches API */
     costMultiplier?: number;
+    /** Prompt-cache write tokens (billed 1.25x input). */
+    cacheCreationTokens?: number;
+    /** Prompt-cache read tokens (billed 0.1x input). */
+    cacheReadTokens?: number;
   }
 ): Promise<void> {
+  const cacheCreationTokens = params.cacheCreationTokens ?? 0;
+  const cacheReadTokens = params.cacheReadTokens ?? 0;
   const costUsd = computeAiCostUsd(
     params.model,
     params.inputTokens,
     params.outputTokens,
-    params.costMultiplier ?? 1
+    params.costMultiplier ?? 1,
+    cacheCreationTokens,
+    cacheReadTokens
   );
   await recordUsage(db, {
     userId: params.userId,
@@ -224,7 +244,16 @@ export async function recordAiUsage(
     outputTokens: params.outputTokens,
     costUsd,
     billable: params.billable,
-    metadata: params.metadata,
+    // Cache-token breakdown lives in metadata so the ledger stays auditable
+    // without a schema change.
+    metadata:
+      cacheCreationTokens || cacheReadTokens
+        ? {
+            ...params.metadata,
+            cache_creation_tokens: cacheCreationTokens,
+            cache_read_tokens: cacheReadTokens,
+          }
+        : params.metadata,
   });
 }
 
@@ -238,6 +267,8 @@ export async function recordAiFromMessage(
     model: message.model,
     inputTokens: message.usage.input_tokens,
     outputTokens: message.usage.output_tokens,
+    cacheCreationTokens: message.usage.cache_creation_input_tokens ?? 0,
+    cacheReadTokens: message.usage.cache_read_input_tokens ?? 0,
   });
 }
 

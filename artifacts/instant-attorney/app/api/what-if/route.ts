@@ -5,6 +5,7 @@ import { WHAT_IF_SYSTEM_PROMPT, buildFileContext } from "@/lib/prompts";
 import { parseWhatIfResponse } from "@/lib/what-if";
 import { maxOutputTokensFor } from "@/lib/token-limits";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
+import { getBillingGate } from "@/lib/topup";
 import { BYPASS_USER_ID } from "@/lib/types";
 import type { CaseFile, FactItem } from "@/lib/types";
 
@@ -39,6 +40,20 @@ export async function POST(req: NextRequest) {
     const { data: { user }, error } = await (db as Awaited<ReturnType<typeof createClient>>).auth.getUser();
     if (error || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     userId = user.id;
+
+    // Pre-call billing gate: block new AI spend while a top-up is pending/failed.
+    const gate = await getBillingGate(userId);
+    if (!gate.allowed) {
+      return NextResponse.json(
+        {
+          error: "Token top-up required",
+          reason: gate.reason,
+          meter_usd: gate.meterUsd,
+          threshold_usd: gate.thresholdUsd,
+        },
+        { status: 402 }
+      );
+    }
   }
 
   // ── Optional Living File context (read-only) ────────────────────────────────
