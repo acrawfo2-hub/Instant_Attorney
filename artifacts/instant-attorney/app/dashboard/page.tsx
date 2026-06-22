@@ -115,6 +115,13 @@ export default async function DashboardPage() {
             Quick Question
             <span className="dash-btn-hint">Seek legal advice on any legal topic unrelated to your files</span>
           </Link>
+          <Link href="/what-if" className="dash-btn dash-btn-secondary">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            What-If Game
+            <span className="dash-btn-hint">Optional — pressure-test your strategy against scenarios the law has seen</span>
+          </Link>
           {consult && consult.status !== "cancelled" && consult.status !== "completed" ? (
             <a href="#consult-status" className="dash-btn dash-btn-secondary dash-btn--consult-active">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

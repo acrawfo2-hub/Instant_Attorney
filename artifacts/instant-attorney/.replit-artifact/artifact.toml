@@ -16,6 +16,7 @@ paths = [
   "/api/chat",
   "/api/chat-acp",
   "/api/wizard",
+  "/api/what-if",
   "/api/attachments",
   "/api/documents",
   "/api/gov-forms",

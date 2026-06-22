@@ -7,6 +7,7 @@ export type UsageFeature =
   | "free_chat"
   | "chat_acp"
   | "wizard"
+  | "what_if"
   | "title_generator"
   | "attachment_analysis"
   | "auto_critical_review"
