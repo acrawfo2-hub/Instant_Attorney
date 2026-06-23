@@ -96,8 +96,18 @@ Terms of Service (Document 3, §6), and the Privacy Policy (Document 4, §6). If
 documents state a specific period inconsistent with this policy after approval, this
 policy controls for retention.
 
-> **Implementation note (engineering) — MUST reconcile before launch.** The app
-> today has **two** deletion mechanisms that contradict this policy:
+> **Implementation status (engineering).** The cold-archival engine that backs this
+> policy is now built (schema `stage21-matter-archival.sql`; `lib/archive/*`; admin
+> routes under `/api/admin/archives/*`): at `archive_at`, a matter is serialized,
+> gzip-compressed, AES-256-GCM encrypted, uploaded to the private `matter-archives`
+> bucket, **verified, then the hot rows are purged** — i.e. **archived, not deleted**
+> — and retained per the schedule above with a manifest, legal holds, and an
+> attorney-only retrieval endpoint. To enable: set `ARCHIVE_ENCRYPTION_KEY` (backed
+> up), point a daily scheduler at `POST /api/admin/archives/run` (via `CRON_SECRET`),
+> and confirm the retention periods. **End-of-retention destruction is intentionally
+> NOT automated** pending the client-notice mechanism — destroy only after notice.
+>
+> **Still to reconcile before launch:**
 > 1. **Case-file archive → permanent deletion in 30 days** (`CaseFileCard.tsx`
 >    "scheduled for deletion in 30 days"; `case_files.archive_at`; the
 >    `/api/case-files/[id]/archive` flow and whatever job acts on `archive_at`).
