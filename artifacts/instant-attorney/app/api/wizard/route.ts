@@ -22,7 +22,8 @@ export async function POST(req: NextRequest) {
   if (!body || typeof body !== "object") {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
-  const { messages, caseFileId, wizardType, documentId, instrument } = body;
+  const { messages, caseFileId, wizardType, documentId, instrument, planKey } = body;
+  const planKeyStr = typeof planKey === "string" && planKey.trim() ? planKey.trim() : undefined;
 
   if (!Array.isArray(messages) || messages.length === 0) {
     return NextResponse.json({ error: "Invalid messages" }, { status: 400 });
@@ -216,22 +217,14 @@ export async function POST(req: NextRequest) {
   if (draftText) {
     const now = new Date().toISOString();
 
-    // Resolve which document this draft lands on (selection precedence + IDOR /
-    // duplicate-primary guards). `writeDb` is the service client used for the
-    // reads/writes below, so the resolver scopes every candidate to this caller.
     const target = await resolveWizardDocumentTarget(writeDb, {
       caseFileId,
       wizardType,
       userId,
       suppliedDocumentId: savedDocId,
+      planKey: planKeyStr,
     });
 
-    // The case already has a FINALIZED / in-review primary document
-    // (pending_review, approved, delivered, ...). We must neither INSERT a
-    // duplicate top-level row NOR overwrite the canonical finalized content with
-    // this regeneration. Resolve the client to the existing document (return its
-    // real saved draft, not the throw-away regeneration) and let them see/continue
-    // from it instead of silently re-drafting.
     if (target.action === "already_finalized") {
       return NextResponse.json({
         text: target.document.draft_text ?? fullResponse,
@@ -245,13 +238,6 @@ export async function POST(req: NextRequest) {
     if (target.action === "update") {
       savedDocId = target.documentId;
       const existingDoc = target.existing;
-      // Preserve where the document already is in its lifecycle. Once a client
-      // has sent a draft for review (pending_review) — or the attorney has asked
-      // for changes (changes_requested), or finalized it (approved/delivered) —
-      // editing it again must NOT silently knock it back to a plain "draft".
-      // Doing so would drop it out of the attorney's queue and make the client's
-      // progress disappear. Only a brand-new or still-"pre_warmed" suggestion
-      // gets promoted to "draft".
       const curStatus = existingDoc.status as string | undefined;
       const nextStatus = curStatus && curStatus !== "pre_warmed" ? curStatus : "draft";
 
@@ -260,10 +246,13 @@ export async function POST(req: NextRequest) {
         status: nextStatus,
         updated_at: now,
       };
-      // Merge truncated flag into existing content_json when re-generating
-      if (truncated) {
-        const existingCj = (existingDoc.content_json as Record<string, unknown>) ?? {};
-        update.content_json = { ...existingCj, truncated: true };
+      const existingCj = (existingDoc.content_json as Record<string, unknown>) ?? {};
+      if (truncated || (planKeyStr && existingCj.plan_key !== planKeyStr)) {
+        update.content_json = {
+          ...existingCj,
+          ...(truncated ? { truncated: true } : {}),
+          ...(planKeyStr ? { plan_key: planKeyStr } : {}),
+        };
       }
       const { error: updateErr } = await writeDb
         .from("documents")
@@ -282,7 +271,11 @@ export async function POST(req: NextRequest) {
           user_id: userId,
           doc_type: wizardType,
           title: `${documentLabel} — ${new Date().toLocaleDateString()}`,
-          content_json: { init_response: fullResponse, ...(truncated ? { truncated: true } : {}) },
+          content_json: {
+            init_response: fullResponse,
+            ...(truncated ? { truncated: true } : {}),
+            ...(planKeyStr ? { plan_key: planKeyStr } : {}),
+          },
           draft_text: draftText,
           status: "draft",
           updated_at: now,
@@ -296,11 +289,6 @@ export async function POST(req: NextRequest) {
       savedDocId = inserted?.id;
     }
 
-    // We generated a draft but could not persist it. Fail loudly instead of
-    // returning HTTP 200 with documentId: null — that would strand the client
-    // with an on-screen draft they can never submit for attorney review (the
-    // exact "draft appears but nothing happens" symptom). The client surfaces
-    // this error and can retry. `text` is included so no work is lost on screen.
     if (!savedDocId) {
       return NextResponse.json(
         {
@@ -313,17 +301,10 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Log document ID now that it's known
   if (truncated && savedDocId) {
     logTruncation({ endpoint: "wizard/doc-saved", documentId: savedDocId });
   }
 
-  // Update the Living File only when the drafter produced a COMPLETE FILE UPDATE
-  // block — both the opening AND closing markers present. A truncated response
-  // (stop_reason "max_tokens") can leave a half-written block whose structured
-  // sub-sections would otherwise be parsed and PARTIALLY applied to the file,
-  // corrupting facts / legal strategy. Requiring the closing marker makes a
-  // partial application impossible; the saved draft text is unaffected.
   if (isCompleteFileUpdate(fullResponse)) {
     try {
       await parseAndUpdateFile(writeDb, caseFileId, userId, fullResponse);
@@ -332,35 +313,29 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Record whatever the draft still needs as Living File gaps, so an imperfect
-  // document can be sent and the file (and attorney) still tracks exactly what's
-  // outstanding. Best-effort — never block the response on it.
   let gapSyncWarning = false;
   if (draftText) {
     try {
       await syncDraftGapsToLivingFile(writeDb, caseFileId, userId, draftText);
     } catch (gapErr) {
-      // Non-fatal, but no longer silent: flag it so the client can show a soft
-      // notice, and keep the server log. The draft itself is already saved, so
-      // only the dashboard "outstanding items" view may briefly lag.
       gapSyncWarning = true;
       console.error("[wizard] gap sync error:", gapErr);
     }
   }
 
-  // Record the file state this draft was generated against — stamped LAST, after
-  // the post-generation Living File writes above (parseAndUpdateFile / gap sync),
-  // so facts_synced_at sits at/after any fact change this generation caused and
-  // the draft isn't immediately flagged "out of date" by its own side effects.
-  // Best-effort and non-blocking — never fail a saved draft over this stamp.
   if (savedDocId) {
     await stampFactsSynced(writeDb, savedDocId);
   }
+
+  const knownFacts = facts
+    .filter((f) => f.status === "confirmed")
+    .map((f) => f.description);
 
   return NextResponse.json({
     text: fullResponse,
     documentId: savedDocId ?? null,
     truncated,
     gapSyncWarning,
+    knownFacts,
   });
 }

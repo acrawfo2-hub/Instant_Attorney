@@ -109,11 +109,48 @@ export function extractPlaceholders(draft: string): { raw: string; dedupeKey: st
   return out;
 }
 
+// Normalize a label/fact into a comparable key: lowercase alphanumeric words.
+function normalizeFactKey(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/\[\[[^\]]+\]\]/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+// True when the file already holds a confirmed fact that answers this checklist
+// item, so we should not ask for it again. Cross-document reuse: a fact captured
+// while drafting document 1 (stored by save-answers as "<label>: <value>")
+// suppresses the matching question when drafting document 3. Identity-bearing
+// labels stay distinct — "Full legal name — Party A" never matches "— Party B"
+// — because we compare the FULL normalized label, not just its head.
+export function isAnsweredByFacts(item: NeededItem, confirmedFacts: string[]): boolean {
+  const itemKey = normalizeFactKey(item.label);
+  if (itemKey.length < 4) return false; // too generic to match safely
+  for (const fact of confirmedFacts) {
+    const factLabel = normalizeFactKey(fact.split(":")[0] ?? fact);
+    if (!factLabel) continue;
+    if (factLabel === itemKey) return true;
+    // Strong containment either direction, guarded by length to avoid loose hits.
+    if (itemKey.length >= 6 && factLabel.includes(itemKey)) return true;
+    if (factLabel.length >= 6 && itemKey.includes(factLabel)) return true;
+  }
+  return false;
+}
+
 // Build the guided checklist of needed items. Prefer the actual [[placeholders]]
 // in the draft (those are the literal blanks to fill); fall back to the parsed
 // missing-facts / questions when the draft has no bracketed placeholders.
 // Blocking items always come first.
-export function buildNeededItems(parsed: ParsedDrafter): NeededItem[] {
+//
+// `confirmedFacts` are the file's confirmed fact descriptions ("<label>: <value>").
+// Any item already answered by one of them is dropped so the wizard never asks
+// for information the Living File already holds — including info captured while
+// drafting an earlier document in the same file.
+export function buildNeededItems(
+  parsed: ParsedDrafter,
+  confirmedFacts: string[] = [],
+): NeededItem[] {
   const draft = parsed.draftText ?? "";
   const blockingText = parsed.missingFacts.blocking.join(" \n ").toLowerCase();
   const placeholders = extractPlaceholders(draft);
@@ -164,10 +201,15 @@ export function buildNeededItems(parsed: ParsedDrafter): NeededItem[] {
     }
   }
 
+  // Drop anything the Living File already answers (never ask twice).
+  const remaining = confirmedFacts.length
+    ? items.filter((it) => !isAnsweredByFacts(it, confirmedFacts))
+    : items;
+
   // Blocking first, preserve original order within each group.
   return [
-    ...items.filter((it) => it.severity === "blocking"),
-    ...items.filter((it) => it.severity === "helpful"),
+    ...remaining.filter((it) => it.severity === "blocking"),
+    ...remaining.filter((it) => it.severity === "helpful"),
   ];
 }
 

@@ -2,13 +2,9 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { docTypeLabel, personDisplayName } from "@/lib/types";
-import type {
-  CaseFile,
-  Document,
-  Attachment,
-  Profile,
-  IntakeMessage,
-} from "@/lib/types";
+import { buildDocumentPlan } from "@/lib/next-step";
+import type { CaseFile, Document, Attachment, Profile, IntakeMessage } from "@/lib/types";
+import DocumentPlanEditor from "./DocumentPlanEditor";
 
 interface CaseFileWithDocs extends CaseFile {
   documents: Document[];
@@ -199,9 +195,6 @@ export default async function ClientFilePage({
                     {cf.jurisdiction && ` · ${cf.jurisdiction}`}
                   </div>
                 </div>
-                <Link href={`/attorney/file/${cf.id}`} className="atty-row-link">
-                  Open full file →
-                </Link>
               </div>
 
               {cf.summary && (
@@ -224,6 +217,25 @@ export default async function ClientFilePage({
                   <strong>Next action:</strong> {cf.next_action}
                 </div>
               )}
+
+              {/* Document plan — AI ranking + attorney lead override */}
+              {(() => {
+                const plan = buildDocumentPlan(cf, cf.documents);
+                if (plan.length === 0) return null;
+                const usesPlan = !!cf.legal_strategy?.document_plan?.length;
+                const overridden = usesPlan
+                  ? !!cf.legal_strategy?.lead_key_override
+                  : !!cf.legal_strategy?.lead_override;
+                return (
+                  <DocumentPlanEditor
+                    caseFileId={cf.id}
+                    items={plan}
+                    usesPlan={usesPlan}
+                    overridden={overridden}
+                    rationale={cf.legal_strategy?.lead_rationale}
+                  />
+                );
+              })()}
 
               {/* Documents for this case file */}
               {cf.documents.length > 0 && (
@@ -266,6 +278,30 @@ export default async function ClientFilePage({
                           </div>
                         )}
                       </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {cf.messages.length > 0 && (
+                <div className="atty-case-subsection">
+                  <h3 className="atty-case-subtitle">
+                    Intake Conversation ({cf.messages.length})
+                  </h3>
+                  <div className="atty-chat-list">
+                    {cf.messages.map((m) => (
+                      <div
+                        key={m.id}
+                        className={`atty-chat-msg ${m.role === "user" ? "atty-chat-user" : "atty-chat-assistant"}`}
+                      >
+                        <span className="atty-chat-role">
+                          {m.role === "user" ? "Client" : "Assistant"}
+                          <span className="atty-chat-time">
+                            {new Date(m.created_at).toLocaleString()}
+                          </span>
+                        </span>
+                        {m.content}
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -332,38 +368,11 @@ export default async function ClientFilePage({
                 </div>
               )}
 
-              {/* Intake conversation for this case file */}
-              {cf.messages.length > 0 && (
-                <div className="atty-case-subsection">
-                  <h3 className="atty-case-subtitle">
-                    Intake Conversation ({cf.messages.length})
-                  </h3>
-                  <div className="atty-chat-list">
-                    {cf.messages.map((m) => (
-                      <div
-                        key={m.id}
-                        className={`atty-chat-msg ${m.role === "user" ? "atty-chat-user" : "atty-chat-assistant"}`}
-                      >
-                        <span className="atty-chat-role">
-                          {m.role === "user" ? "Client" : "Assistant"}
-                          <span className="atty-chat-time">
-                            {new Date(m.created_at).toLocaleString()}
-                          </span>
-                        </span>
-                        {m.content}
-                      </div>
-                    ))}
-                  </div>
+              {cf.documents.length === 0 && cf.attachments.length === 0 && (
+                <div className="atty-empty" style={{ marginTop: 12 }}>
+                  No documents or attachments yet
                 </div>
               )}
-
-              {cf.documents.length === 0 &&
-                cf.attachments.length === 0 &&
-                cf.messages.length === 0 && (
-                  <div className="atty-empty" style={{ marginTop: 12 }}>
-                    No documents, attachments, or messages yet
-                  </div>
-                )}
             </section>
           ))
         )}

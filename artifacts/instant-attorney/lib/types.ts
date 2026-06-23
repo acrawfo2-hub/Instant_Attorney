@@ -91,13 +91,45 @@ export interface Subscription {
   created_at: string;
 }
 
+/**
+ * One planned document in a file's strategy. The identity is the stable `key`
+ * (a slug derived from the title), NOT the drafting `engine` — so two custom
+ * documents that both use the `general_document` engine are still tracked
+ * separately. The `engine` only selects interview hints / formatting.
+ */
+export interface PlanEntry {
+  /** Stable slug identity — preserved across strategy re-parses. */
+  key: string;
+  /** Human-readable document name shown to the user (e.g. "LLC Operating Agreement"). */
+  title: string;
+  /** Which wizard engine drafts/formats this document. */
+  engine: WizardType;
+  /** One-line reason this document matters / why its priority. */
+  rationale?: string;
+}
+
 export interface LegalStrategy {
   summary: string;
   instruments: string[];
   strengths: string[];
   risks: string[];
+  /**
+   * @deprecated Superseded by `document_plan`. Still derived (unique engines, in
+   * order) for back-compat readers; new code should read `document_plan`.
+   */
   recommended_wizards: WizardType[];
   recommend_consult?: boolean;
+  /** Ordered list of the file's planned documents — the source of truth for tracking. */
+  document_plan?: PlanEntry[];
+  /** Attorney's override of the lead document, by PlanEntry.key. null = AI's pick. */
+  lead_key_override?: string | null;
+  /**
+   * @deprecated Legacy lead override by wizard type, used only on the pre-
+   * `document_plan` path. `lead_key_override` supersedes it.
+   */
+  lead_override?: WizardType | null;
+  /** One-line rationale for why the lead document is the priority. */
+  lead_rationale?: string;
 }
 
 export interface CaseFile {
