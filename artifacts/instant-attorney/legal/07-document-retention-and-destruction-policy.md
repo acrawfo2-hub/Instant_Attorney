@@ -96,33 +96,30 @@ Terms of Service (Document 3, §6), and the Privacy Policy (Document 4, §6). If
 documents state a specific period inconsistent with this policy after approval, this
 policy controls for retention.
 
-> **Implementation status (engineering).** The cold-archival engine that backs this
-> policy is now built (schema `stage21-matter-archival.sql`; `lib/archive/*`; admin
-> routes under `/api/admin/archives/*`): at `archive_at`, a matter is serialized,
-> gzip-compressed, AES-256-GCM encrypted, uploaded to the private `matter-archives`
-> bucket, **verified, then the hot rows are purged** — i.e. **archived, not deleted**
-> — and retained per the schedule above with a manifest, legal holds, and an
-> attorney-only retrieval endpoint. To enable: set `ARCHIVE_ENCRYPTION_KEY` (backed
-> up), point a daily scheduler at `POST /api/admin/archives/run` (via `CRON_SECRET`),
-> and confirm the retention periods. **End-of-retention destruction is intentionally
-> NOT automated** pending the client-notice mechanism — destroy only after notice.
+> **Implementation status (engineering) — full lifecycle now built.**
+> - **Archival** (`stage21`; `lib/archive/*`; `/api/admin/archives/run`): at
+>   `archive_at`, a matter is serialized, gzip-compressed, AES-256-GCM encrypted,
+>   uploaded to the private `matter-archives` bucket, **verified, then the hot rows
+>   are purged** — archived, not deleted — and retained per the schedule with a
+>   manifest, legal holds, and attorney-only retrieval.
+> - **Notice-then-destroy** (`stage22`; `lib/archive/destruction.ts`;
+>   `/api/admin/archives/destroy-run`): at `retention_until`, the client is emailed a
+>   destruction notice; only after `ARCHIVE_DESTRUCTION_NOTICE_DAYS` (default 30) and
+>   with no legal hold is the object securely destroyed and the manifest tombstoned.
+>   Indefinite categories are never auto-destroyed.
+> - **Scheduling** (`scripts/archival-cron.mjs`): point a daily scheduler at it
+>   (`APP_URL` + `CRON_SECRET`); it runs both sweeps.
+> - **Attorney UI** (`/admin/archives`): browse, download (produce), hold/release,
+>   and destroy.
+> - **User copy** updated to reflect archival/retention (no longer "deleted").
 >
-> **Still to reconcile before launch:**
-> 1. **Case-file archive → permanent deletion in 30 days** (`CaseFileCard.tsx`
->    "scheduled for deletion in 30 days"; `case_files.archive_at`; the
->    `/api/case-files/[id]/archive` flow and whatever job acts on `archive_at`).
-> 2. **Quick-consult conversations → "archived and permanently deleted in 7 days
->    unless you save it"** (`QuickConsultModal.tsx`, `app/chat/page.tsx`). Note these
->    are described as ACP-protected; deleting privileged client communications on a
->    7-day timer should be reviewed even where the client declined to save.
+> Quick-consult conversations now **archive** (retain) like other matters rather than
+> being permanently deleted, which resolves the prior concern about deleting
+> ACP-flagged communications on a 7-day timer. **Attorney decision:** confirm whether
+> unsaved quick consults should be retained for the full period or treated as
+> genuinely ephemeral scratch (which would require a deletion-instead-of-archival
+> exception).
 >
-> Required changes: (a) stop automatic permanent deletion of client **matter files**
-> on these short timers; (b) provide export + pre-deletion notice; (c) implement
-> category-aware retention, legal holds, and the schedule in Section 3; (d) preserve
-> signed-agreement and conflicts records.
->
-> **Until that backend work lands, do NOT change the operative in-app deletion copy
-> (the "30 days" / "7 days" strings) to claim long-term retention — the live behavior
-> still deletes on those timers, so the current strings remain accurate for now.**
-> These legal drafts are not yet effective; the code and copy must change together
-> when the policy is adopted.
+> To enable: set `ARCHIVE_ENCRYPTION_KEY` (backed up), run `stage21`+`stage22`, set
+> `CRON_SECRET`/`APP_URL`, schedule the cron, and confirm the retention/notice
+> periods.
