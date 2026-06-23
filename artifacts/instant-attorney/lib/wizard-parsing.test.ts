@@ -9,7 +9,9 @@ import {
   buildBundledMessage,
   buildStarterItems,
   mapAnswersToPlaceholders,
+  isAnsweredByFacts,
   type ParsedDrafter,
+  type NeededItem,
 } from "./wizard-parsing.ts";
 
 // ── Regression 1: empty right pane ───────────────────────────────────────────
@@ -342,4 +344,59 @@ test("each wizard type yields a distinct, type-appropriate template", () => {
 
   const all = [demand, contract, waiver, generic];
   assert.equal(new Set(all).size, all.length, "templates should differ by type");
+});
+
+// ── Never ask twice: checklist dedup against confirmed Living File facts ──────
+// Cross-document reuse: a fact captured while drafting document 1 (stored by
+// save-answers as "<label>: <value>") must suppress the matching question when
+// drafting a later document in the same file.
+
+test("buildNeededItems drops items already answered by a confirmed fact", () => {
+  const raw = [
+    "---DRAFT READY---",
+    "Agreement between [[FULL LEGAL NAME — Party A]] for $[[AMOUNT]].",
+    "---END DRAFT---",
+  ].join("\n");
+
+  const parsed = ensureChecklistNeeds(parseDrafterResponse(raw));
+
+  // No facts yet → both fields are asked.
+  assert.equal(buildNeededItems(parsed).length, 2);
+
+  // The file already captured Party A's name on an earlier document.
+  const facts = ["Full legal name — Party A: Jane Q. Public"];
+  const items = buildNeededItems(parsed, facts);
+  const labels = items.map((i) => i.label.toLowerCase());
+  assert.ok(!labels.some((l) => l.includes("party a")), "answered Party A must not be re-asked");
+  assert.ok(labels.some((l) => l.includes("amount")), "unanswered amount is still asked");
+});
+
+test("identity-bearing labels stay distinct — answering Party A does not drop Party B", () => {
+  const raw = [
+    "---DRAFT READY---",
+    "Between [[FULL LEGAL NAME — Party A]] and [[FULL LEGAL NAME — Party B]].",
+    "---END DRAFT---",
+  ].join("\n");
+  const parsed = ensureChecklistNeeds(parseDrafterResponse(raw));
+
+  const facts = ["Full legal name — Party A: Jane Q. Public"];
+  const items = buildNeededItems(parsed, facts);
+  const labels = items.map((i) => i.label.toLowerCase());
+  assert.ok(!labels.some((l) => l.includes("party a")), "Party A is known");
+  assert.ok(labels.some((l) => l.includes("party b")), "Party B is still needed");
+});
+
+test("isAnsweredByFacts matches on field key, ignores too-generic items", () => {
+  const item = (label: string): NeededItem => ({ id: "x", label, hint: "", severity: "helpful" });
+  assert.ok(isAnsweredByFacts(item("Response deadline"), ["Response deadline: 30 days"]));
+  assert.ok(isAnsweredByFacts(item("Amount"), ["Amount owed: $5,000"]));
+  assert.ok(!isAnsweredByFacts(item("Governing law"), ["Response deadline: 30 days"]));
+  // Too-short keys never match (avoids false positives).
+  assert.ok(!isAnsweredByFacts(item("ID"), ["Identification number: 12"]));
+});
+
+test("an empty confirmedFacts list leaves the checklist unchanged", () => {
+  const raw = "---DRAFT READY---\n[[FULL LEGAL NAME — Party A]]\n---END DRAFT---";
+  const parsed = ensureChecklistNeeds(parseDrafterResponse(raw));
+  assert.equal(buildNeededItems(parsed).length, buildNeededItems(parsed, []).length);
 });

@@ -76,7 +76,7 @@ export default function QuickConsultModal({ caseFileId, onClose }: QuickConsultM
           </div>
           <div>
             <h3 className="qc-modal-title">Save this Quick Question?</h3>
-            <p className="qc-modal-sub">This conversation will be archived and permanently deleted in 7 days unless you save it now.</p>
+            <p className="qc-modal-sub">Unless you save it, this conversation leaves your dashboard in 7 days and moves to secure long-term storage. We retain it and you can request a copy later.</p>
           </div>
         </div>
 
@@ -115,7 +115,7 @@ export default function QuickConsultModal({ caseFileId, onClose }: QuickConsultM
             </button>
 
             <button className="qc-modal-expire" onClick={handleLetExpire} disabled={loading}>
-              Let it expire — delete in 7 days
+              Let it expire — archives in 7 days
             </button>
           </div>
         )}

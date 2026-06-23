@@ -45,22 +45,31 @@ export function pickFirstValidWizard(wizards: string[] | undefined): WizardType 
   return null;
 }
 
-/** Reuse an in-progress primary draft (never child documents). */
+/** Reuse an in-progress or pre-warmed primary draft (never child documents).
+ *  When a planKey is given it is the document's stable identity — match on it
+ *  so two documents sharing the general_document engine stay distinct. Without
+ *  a planKey (legacy / typed engines) fall back to matching by doc_type. */
 export async function findReusableDocument(
   db: SupabaseClient,
   caseFileId: string,
   wizardType: string,
-  userId?: string
+  userId?: string,
+  planKey?: string
 ): Promise<{ id: string } | null> {
   let query = db
     .from("documents")
     .select("id")
     .eq("case_file_id", caseFileId)
-    .eq("doc_type", wizardType)
     .is("parent_document_id", null)
     .in("status", ["draft", "changes_requested"])
     .order("updated_at", { ascending: false })
     .limit(1);
+
+  if (planKey) {
+    query = query.eq("content_json->>plan_key", planKey);
+  } else {
+    query = query.eq("doc_type", wizardType);
+  }
 
   if (userId) {
     query = query.eq("user_id", userId);
@@ -79,16 +88,22 @@ export async function findPrimaryDocument(
   db: SupabaseClient,
   caseFileId: string,
   wizardType: string,
-  userId?: string
+  userId?: string,
+  planKey?: string
 ): Promise<{ id: string; status: string | null; content_json: unknown; draft_text: string | null } | null> {
   let query = db
     .from("documents")
     .select("id, status, content_json, draft_text")
     .eq("case_file_id", caseFileId)
-    .eq("doc_type", wizardType)
     .is("parent_document_id", null)
     .order("updated_at", { ascending: false })
     .limit(1);
+
+  if (planKey) {
+    query = query.eq("content_json->>plan_key", planKey);
+  } else {
+    query = query.eq("doc_type", wizardType);
+  }
 
   if (userId) {
     query = query.eq("user_id", userId);
@@ -136,13 +151,14 @@ export async function resolveWizardDocumentTarget(
     wizardType: string;
     userId: string;
     suppliedDocumentId?: string;
+    planKey?: string;
   }
 ): Promise<WizardDocumentTarget> {
-  const { caseFileId, wizardType, userId, suppliedDocumentId } = params;
+  const { caseFileId, wizardType, userId, suppliedDocumentId, planKey } = params;
   let savedDocId: string | undefined = suppliedDocumentId;
 
   if (!savedDocId) {
-    const reusable = await findReusableDocument(db, caseFileId, wizardType, userId);
+    const reusable = await findReusableDocument(db, caseFileId, wizardType, userId, planKey);
     savedDocId = reusable?.id;
   }
 
@@ -163,7 +179,7 @@ export async function resolveWizardDocumentTarget(
   }
 
   if (!savedDocId) {
-    const primary = await findPrimaryDocument(db, caseFileId, wizardType, userId);
+    const primary = await findPrimaryDocument(db, caseFileId, wizardType, userId, planKey);
     if (primary) {
       const isEditable =
         primary.status === "draft" ||

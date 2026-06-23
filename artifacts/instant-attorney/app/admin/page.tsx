@@ -122,6 +122,7 @@ export default async function AdminPage() {
           </div>
           <div className="admin-header-right">
             <span className="admin-name">{personDisplayName(profile)}</span>
+            <Link href="/admin/archives" className="admin-link">Archived Matters →</Link>
             <Link href="/attorney" className="admin-link">Attorney Dashboard →</Link>
           </div>
         </div>
