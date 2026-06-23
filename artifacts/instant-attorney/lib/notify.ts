@@ -65,6 +65,40 @@ export async function notifyAttorneyDocumentReady(
   });
 }
 
+/**
+ * Notify a former client that their archived file has reached the end of its
+ * retention period and is scheduled for destruction, with how to request a copy.
+ */
+export async function notifyClientArchiveDestruction(
+  toEmail: string,
+  opts: { matterTitle: string | null; noticeDays: number }
+): Promise<void> {
+  if (process.env.BYPASS_AUTH === "true" || !process.env.RESEND_API_KEY) {
+    console.log(`[notify] BYPASS or no RESEND_API_KEY — skipping destruction notice to ${toEmail}`);
+    return;
+  }
+
+  const matter = opts.matterTitle ? `"${opts.matterTitle}"` : "your matter";
+
+  await getResend().emails.send({
+    from: FROM_EMAIL,
+    to: toEmail,
+    subject: "[Crawford Law] Your archived file is scheduled for destruction",
+    html: `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px;">
+        <h2 style="color: #1a1a2e;">Records destruction notice</h2>
+        <p>The file for ${matter} has reached the end of its retention period and is
+        scheduled to be securely destroyed in <strong>${opts.noticeDays} days</strong>.</p>
+        <p>If you would like a copy of your file before it is destroyed, reply to this
+        email or contact us at ${ATTORNEY_EMAIL}. After destruction we cannot recover it.</p>
+        <p style="font-size: 12px; color: #888; margin-top: 32px; border-top: 1px solid #eee; padding-top: 12px;">
+          Crawford Law PLLC · Texas Bar #24148908
+        </p>
+      </div>
+    `,
+  });
+}
+
 export async function notifyClientDocumentApproved(
   document: Document,
   clientProfile: Profile

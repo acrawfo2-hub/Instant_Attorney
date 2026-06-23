@@ -72,7 +72,7 @@ export default function LandingPage() {
           </button>
           <span className="lp-micro-divider">·</span>
           <button className="lp-micro-link" onClick={() => go("/register?upgrade=phase2")}>
-            Review or generate legal documents with 48 hr attorney review · $9.99 a month
+            Review or generate legal documents with attorney review (target 48 hr) · $9.99/mo + usage-based top-ups
           </button>
           <span className="lp-micro-divider">·</span>
           <button className="lp-micro-link" onClick={() => go("/register?upgrade=consult")}>
@@ -150,7 +150,7 @@ export default function LandingPage() {
               </p>
               <div className="lp-phase-price">
                 <span className="lp-price-num serif">$9.99</span>
-                <span className="lp-price-label">&nbsp;/ month</span>
+                <span className="lp-price-label">&nbsp;/ month + usage</span>
               </div>
             </div>
             <div className="lp-phase-divider" />
@@ -167,7 +167,7 @@ export default function LandingPage() {
                 </li>
                 <li>
                   <i className="lp-fi lp-fi-check">✓</i>Document drafts: watermarked pre-review
-                  immediately; attorney-reviewed within 48 hours
+                  immediately; attorney review targeted within 48 hours (eligible matters)
                 </li>
                 <li>
                   <i className="lp-fi lp-fi-info">ℹ</i>Pre-review drafts must not be filed or
@@ -187,6 +187,16 @@ export default function LandingPage() {
                 <a href="#acp-limits" className="lp-acp-inline-link">
                   Full privilege limits ↓
                 </a>
+              </div>
+              <div className="lp-billing-note" style={{
+                marginTop: "0.75rem", fontSize: "11.5px", lineHeight: 1.5, opacity: 0.85,
+              }}>
+                <strong>Billing:</strong> $9.99/mo auto-renews until cancelled. AI usage is metered;
+                when usage since your last top-up reaches $4.75, an automatic $8.50 top-up is charged —
+                up to a monthly cap you set (default $25). No refunds or proration; cancel anytime.
+                After cancellation, app access ends and the Firm retains your file under its retention
+                policy (you can export or request a copy). Your agreement includes binding arbitration.
+                Full terms at checkout.
               </div>
             </div>
             <div className="lp-phase-footer">
@@ -458,8 +468,9 @@ export default function LandingPage() {
             </div>
             <div className="lp-pillar-title">Privacy First</div>
             <p className="lp-pillar-text">
-              Zero data retention on API calls. Your information is never used to train AI models.
-              PII scrubbing on every input.
+              Your information is not used to train AI models, and we request zero data retention
+              from our AI provider where available. Phase II data is handled as confidential client
+              information.
             </p>
           </div>
           <div className="lp-pillar">
@@ -471,7 +482,8 @@ export default function LandingPage() {
             <div className="lp-pillar-title">Privilege Protected</div>
             <p className="lp-pillar-text">
               Phase II conversations are conducted under a signed Crawford Law representation
-              agreement. Attorney-client privilege applies.
+              agreement and are intended to be protected by attorney-client privilege, subject to
+              limits.
             </p>
           </div>
           <div className="lp-pillar">
@@ -507,7 +519,7 @@ export default function LandingPage() {
         <p className="lp-privilege-eyebrow">Attorney-Client Privilege</p>
         <h2 className="lp-privilege-title">
           Your conversations with Crawford Law are{" "}
-          <em>protected by privilege</em> — not just encrypted.
+          <em>intended to be privileged</em> — not just encrypted.
         </h2>
         <p className="lp-privilege-lead">
           Most AI legal tools are public chatbots. What you tell them can be subpoenaed,
@@ -516,8 +528,9 @@ export default function LandingPage() {
             When you sign a Crawford Law representation agreement, your intake conversations
             are conducted within an attorney-client relationship.
           </strong>{" "}
-          That means they&apos;re protected by{" "}
-          <em>attorney-client privilege</em> — the strongest legal protection available.
+          That means they&apos;re intended to be protected by{" "}
+          <em>attorney-client privilege</em> — among the strongest legal protections available —
+          subject to important limits like the crime-fraud exception and waiver.
         </p>
 
         <ul className="lp-privilege-bullets">
@@ -537,8 +550,9 @@ export default function LandingPage() {
               <path d="M7 11V7a5 5 0 0 1 10 0v4" />
             </svg>
             <span>
-              <strong>Not just a privacy policy.</strong> Privilege is a legal right enforceable in
-              court. A court order cannot compel your attorney to disclose privileged communications.
+              <strong>Not just a privacy policy.</strong> Privilege is a legal right recognized by
+              courts that can shield attorney-client communications from disclosure — subject to
+              limits such as the crime-fraud exception and waiver by sharing with third parties.
             </span>
           </li>
           <li>
@@ -564,7 +578,7 @@ export default function LandingPage() {
           </div>
           <div className="lp-privilege-compare-card lp-privilege-compare-card-featured">
             <div className="lp-privilege-compare-label">Instant Attorney · Phase II</div>
-            <strong>Attorney-client privilege. Texas-licensed counsel. 48-hour review.</strong>{" "}
+            <strong>Intended privilege. Texas-licensed counsel. Attorney review (48-hr target).</strong>{" "}
             Your conversation is conducted within a signed representation agreement and supervised
             by Crawford Law PLLC.
           </div>

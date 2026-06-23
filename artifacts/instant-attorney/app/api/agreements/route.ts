@@ -34,13 +34,13 @@ export async function POST(req: NextRequest) {
     const { error } = await db.from("representation_agreements").insert({
       user_id: userId,
       signature_name: signatureName,
-      agreement_version: "1.0",
+      agreement_version: "2.0-draft",
     });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   } else if (agreementType === "ai_consent") {
     const { error } = await db.from("ai_consents").insert({
       user_id: userId,
-      consent_version: "1.0",
+      consent_version: "2.0-draft",
     });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   } else {
