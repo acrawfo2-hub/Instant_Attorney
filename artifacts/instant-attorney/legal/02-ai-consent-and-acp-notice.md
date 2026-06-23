@@ -35,10 +35,11 @@ should raise any concern about a document with the Firm before acting on it.
 
 ### A.4 Confidentiality and data handling
 The Firm treats the information you provide in Phase II as confidential client
-information under Tex. Disciplinary R. 1.05. The Firm configures AI processing to
-use providers under confidentiality and data-processing obligations, requests
-**zero data retention** by the AI provider where that option is available, and
-**does not permit your communications to be used to train AI models.** See the
+information under Tex. Disciplinary R. 1.05. The Firm uses a **single AI provider
+(Anthropic, PBC)** under confidentiality and data-processing obligations, **does not
+permit your communications to be used to train AI models**, and is implementing
+**zero-data-retention (ZDR) processing before the service is offered to the public**
+so that your prompt and output content is not retained by the AI provider. See the
 Privacy Policy (Document 4) for full detail.
 
 ### A.5 Consent to third-party service providers

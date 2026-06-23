@@ -124,21 +124,27 @@ services to commit or further any crime or fraud, or to plan future unlawful
 conduct. Inaccurate or incomplete information may materially affect the quality of
 the services and the documents produced.
 
-## 7. File Retention, Archival, and Destruction
+## 7. File Retention, Access, and Destruction
 
-The Firm maintains your case file for the duration of the engagement. **Following
-cancellation or prolonged inactivity, your file is archived and then permanently
-deleted [30 days] after archival.** Before deletion, you are responsible for
-downloading or exporting any documents you wish to keep, and the Firm will provide
-[notice and an export option] before deletion. After deletion, the Firm cannot
-recover your file.
+The Firm maintains your case file consistent with its **Client File Retention &
+Destruction Policy** (Document 7), which is incorporated here. In summary:
 
-> **⚠️ ATTORNEY REVIEW — CRITICAL.** A fixed 30-day post-cancellation deletion may
-> conflict with the lawyer's duties regarding client property and reasonable file
-> retention (see Tex. Disciplinary R. 1.14/1.15 and related authority). Confirm the
-> retention period, the advance-notice mechanism, the client's ability to retrieve
-> the file, and whether any records (e.g., conflicts data, billing records) must be
-> retained longer regardless of deletion.
+- **Two separate things.** Your interactive access to the platform ends when your
+  subscription ends (after the paid period/archival). The Firm's **retention of your
+  client file** is separate and continues for the periods in the Retention Policy
+  because of the Firm's duties regarding client property and records.
+- **You own your documents.** You may export your documents during the engagement
+  and are reminded to export anything you want to keep before access ends. During the
+  retention period you may request a copy of your file in writing.
+- **Retention.** Client matter files are retained for **at least five (5) years**
+  after the engagement ends; certain records are retained longer or indefinitely
+  (e.g., original wills and items of intrinsic value, conflicts records, signed
+  agreements, minors' matters). See Document 7 for the full schedule.
+- **Destruction.** After the retention period, the Firm may securely destroy a file
+  only after reasonable advance notice and an opportunity for you to obtain it, and
+  never as to items that must be returned to you or retained by law.
+
+This replaces any prior practice of deleting files 30 days after cancellation.
 
 ## 8. Confidentiality and Attorney-Client Privilege
 
@@ -184,19 +190,63 @@ You consent to electronic communications and to delivery of documents and notice
 through the Platform and by email. You are responsible for maintaining a current
 email address and for safeguarding your account credentials.
 
-## 14. Governing Law and Dispute Resolution
+## 14. Governing Law and Binding Arbitration (Please Read Carefully)
 
 This Agreement is governed by the laws of the State of Texas and the Texas
 Disciplinary Rules of Professional Conduct, without regard to conflict-of-laws
-rules. [ATTORNEY REVIEW: decide venue and whether to include the optional dispute
-resolution / arbitration provision from the Terms of Service; if arbitration is
-used with a client, address informed consent and the client's opportunity to
-consult independent counsel.]
+rules.
 
-**Nothing in this Agreement limits or waives any right you have that cannot be
-limited or waived by law or by the Texas Disciplinary Rules of Professional
-Conduct, including any restriction on prospectively limiting the Firm's liability
-for malpractice (Tex. Disciplinary R. 1.08(g)).**
+**14.1 Agreement to arbitrate.** Except as stated in Section 14.4, **you and the
+Firm agree that any dispute arising out of or relating to this engagement, the
+Firm's services, fees, or the platform — including claims of legal malpractice and
+fee disputes — will be resolved by final and binding arbitration**, on an individual
+basis, administered by [AAA / JAMS] under its applicable rules, before a single
+arbitrator, seated in [county], Texas, under the Federal Arbitration Act and, where
+applicable, the Texas Arbitration Act.
+
+**14.2 What this means — informed consent.** By agreeing to arbitration, **you give
+up your right to have disputes decided by a judge or jury in court, your right to a
+jury trial, and most rights to appeal**, and arbitration may limit discovery
+compared to court. Arbitration is generally faster and more private than court.
+**This provision changes only the *forum* for disputes — it does NOT reduce, cap, or
+waive the Firm's substantive liability to you (including for malpractice), and it
+does NOT limit any duty the Firm owes you under the Texas Disciplinary Rules of
+Professional Conduct.**
+
+**14.3 Your right to independent advice.** Because this provision affects important
+rights, **you may, and are encouraged to, consult an independent attorney before
+agreeing to it.** You are entering this provision voluntarily and with the
+opportunity to seek independent advice.
+
+**14.4 What is not arbitrated.** Nothing in this Section limits or waives, and
+arbitration does not apply to: (a) your right to file a grievance or complaint with
+the **State Bar of Texas** or any disciplinary authority; (b) any claim that, by law
+or the Texas Disciplinary Rules, cannot be subject to binding arbitration; (c)
+claims qualifying for **small-claims court**, which either party may bring there; and
+(d) requests for emergency or injunctive relief.
+
+**14.5 Class-action waiver.** [Arbitration will be conducted on an individual basis;
+class or representative proceedings are waived. — ATTORNEY REVIEW: confirm
+enforceability/desirability with a client.]
+
+**14.6 Opt-out.** [Recommended safeguard: You may opt out of this arbitration
+provision by notifying the Firm in writing at [contact] within 30 days of first
+accepting it; opting out will not affect any other part of this Agreement. —
+ATTORNEY DECISION: keep or remove.]
+
+**14.7 Non-waiver of protected rights.** **Nothing in this Agreement limits or
+waives any right you have that cannot be limited or waived by law or by the Texas
+Disciplinary Rules of Professional Conduct, including any restriction on
+prospectively limiting the Firm's liability for malpractice (Tex. Disciplinary R.
+1.08(g)).** If any part of this Section is unenforceable, the remainder of the
+arbitration agreement remains in effect, except that an unenforceable class-action
+waiver voids the agreement to arbitrate the affected claim.
+
+> **⚠️ ATTORNEY REVIEW.** This clause is drafted to follow Tex. Ethics Op. 586
+> (arbitration with clients requires informed consent and must not limit the
+> lawyer's substantive liability) and to preserve the client's grievance rights.
+> Confirm administrator, seat, the class-waiver and opt-out decisions, and that the
+> informed-consent presentation is sufficiently conspicuous.
 
 ## 15. Entire Agreement; Amendment; Severability
 

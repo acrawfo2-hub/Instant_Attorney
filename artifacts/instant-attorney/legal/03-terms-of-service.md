@@ -84,10 +84,11 @@ responsible for where required.
   where a refund is required by law.
 - **Cancellation true-up:** When you cancel, you authorize a final charge for any
   metered usage you have already incurred that has not yet been charged.
-- **Data after cancellation:** Your file is archived and then permanently deleted
-  per the Privacy Policy (Document 4). **Export anything you want to keep before
-  deletion.** [ATTORNEY REVIEW: retention period and pre-deletion notice — see
-  README open issues.]
+- **Data after cancellation:** Your interactive access ends after the paid period,
+  but the Firm **retains your client file** under its Client File Retention &
+  Destruction Policy (Document 7) and the Privacy Policy (Document 4) — generally at
+  least five years, longer for certain records. **Export anything you want to keep
+  before your access ends;** you may also request a copy during the retention period.
 
 ## 7. Documents Are Drafts Until Approved
 Documents generated on the Platform are **drafts**. Pre-approval drafts are
@@ -156,23 +157,49 @@ misuse of the Platform, your violation of these Terms or law, or content you upl
 that you had no right to share — except to the extent caused by the Firm's own
 wrongdoing. [ATTORNEY REVIEW: confirm scope; consider consumer-protection limits.]
 
-## 14. Dispute Resolution — [OPTIONAL / BRACKETED]
-> **⚠️ ATTORNEY DECISION REQUIRED.** Binding arbitration and class-action waivers
-> with clients implicate ethics duties (informed consent; possibly advising the
-> client to seek independent counsel) and consumer-protection law. **Do not enable
-> the following unless counsel approves and an appropriate consent process is in
-> place.**
+## 14. Binding Arbitration (Please Read Carefully)
 
-[Optional: *Any dispute relating to the Platform (excluding claims that must be
-handled under the Texas Disciplinary Rules or that cannot be arbitrated by law)
-will be resolved by binding arbitration in [county], Texas, on an individual basis;
-class actions are waived. Either party may bring qualifying claims in small-claims
-court. You may opt out within 30 days of acceptance by [method].*]
+**14.1 Agreement to arbitrate.** Except as stated below, **you and the Firm agree
+that any dispute arising out of or relating to the Platform, these Terms, the Firm's
+services, or fees — including legal-malpractice and fee disputes — will be resolved
+by final and binding arbitration on an individual basis**, administered by [AAA /
+JAMS] under its applicable rules, before a single arbitrator, seated in [county],
+Texas, under the Federal Arbitration Act and, where applicable, the Texas Arbitration
+Act.
+
+**14.2 What you give up — informed consent.** Arbitration means **you waive your
+right to a judge or jury trial and most rights to appeal**, and discovery may be more
+limited than in court. **This changes only the forum; it does NOT cap, reduce, or
+waive the Firm's substantive liability (including for legal malpractice) or any duty
+the Firm owes under the Texas Disciplinary Rules of Professional Conduct.** Because
+this affects important rights, **you may, and are encouraged to, consult an
+independent attorney before agreeing.**
+
+**14.3 Exceptions (not arbitrated).** This Section does not apply to, and does not
+waive: (a) your right to file a grievance/complaint with the **State Bar of Texas**
+or any disciplinary authority; (b) any claim that by law or the Texas Disciplinary
+Rules cannot be arbitrated; (c) **small-claims** matters, which either party may
+bring in small-claims court; and (d) requests for emergency or injunctive relief.
+
+**14.4 Class waiver / opt-out.** [Arbitration is individual only; class or
+representative actions are waived. You may opt out by written notice to [contact]
+within 30 days of first accepting these Terms. — ATTORNEY DECISION: confirm class
+waiver and opt-out.]
+
+**14.5 Severability.** If the class-action waiver is unenforceable as to a claim,
+the agreement to arbitrate that claim is void and it proceeds in court; the rest of
+this Section survives.
+
+> **⚠️ ATTORNEY REVIEW.** Mirrors the Representation Agreement (Document 1, §14) and
+> Tex. Ethics Op. 586. Confirm administrator, seat, class waiver, opt-out, and
+> consumer-protection considerations. This provision is intended to be presented with
+> conspicuous, affirmative consent.
 
 ## 15. Governing Law and Venue
 These Terms are governed by the laws of the State of Texas, without regard to
-conflict-of-laws rules. Subject to Section 14, the exclusive venue for disputes is
-the state and federal courts located in [county], Texas. [ATTORNEY REVIEW: venue.]
+conflict-of-laws rules. For any matter not subject to arbitration under Section 14,
+the exclusive venue is the state and federal courts located in [county], Texas.
+[ATTORNEY REVIEW: venue.]
 
 ## 16. Changes to These Terms
 We may update these Terms prospectively. Material changes will be communicated

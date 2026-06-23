@@ -54,15 +54,18 @@ the charges above automatically as they come due.**
   usage you already incurred that has not yet been charged.
 
 ## What happens to your data when you cancel
-Your file is archived and then **permanently deleted [30 days] after archival**.
-**Please export anything you want to keep before then.** [ATTORNEY REVIEW: retention
-period and pre-deletion notice/export — see README.]
+Your interactive access ends after the paid period. The Firm then **retains your
+client file** under its Retention Policy (Document 7) — generally at least five years,
+longer for certain records — and you may **request a copy** during that period.
+**Please export anything you want to keep before your access ends.**
 
 ## Your affirmative consent
 By checking the consent box and subscribing, you confirm that you have read and
 agree to: the **recurring $9.99/month charge**; the **automatic $8.50 usage top-ups**
 at the **$4.75** threshold up to your monthly cap; the **no-refund / no-proration**
-policy; the **cancellation true-up**; and the **data-deletion** practice above.
+policy; the **cancellation true-up**; the **file-retention practice** above; and the
+**binding arbitration** provision in the Terms of Service and Representation
+Agreement.
 
 Questions about a charge? Contact [contact email]. Receipts are available from
 Stripe and in your account.

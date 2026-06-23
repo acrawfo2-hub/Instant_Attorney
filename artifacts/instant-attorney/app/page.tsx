@@ -194,8 +194,9 @@ export default function LandingPage() {
                 <strong>Billing:</strong> $9.99/mo auto-renews until cancelled. AI usage is metered;
                 when usage since your last top-up reaches $4.75, an automatic $8.50 top-up is charged —
                 up to a monthly cap you set (default $25). No refunds or proration; cancel anytime.
-                After cancellation your file is archived and later permanently deleted. Full terms at
-                checkout.
+                After cancellation, app access ends and the Firm retains your file under its retention
+                policy (you can export or request a copy). Your agreement includes binding arbitration.
+                Full terms at checkout.
               </div>
             </div>
             <div className="lp-phase-footer">

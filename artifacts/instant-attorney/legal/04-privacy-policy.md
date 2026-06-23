@@ -51,12 +51,14 @@ tracking is added, update this Policy and add a consent mechanism as required.]
   obligations (including conflicts checks and records duties).
 
 ## 4. AI Processing
-We use AI providers (including **Anthropic, PBC**) to process your content to
-deliver the services. We configure AI processing to: use providers under
-confidentiality and data-processing terms; request **zero data retention** by the
-AI provider where that option is available; and **prohibit use of your content to
-train AI models.** AI output is reviewed by an attorney before being delivered as
-approved. See the AI Consent (Document 2).
+We use a **single AI provider, Anthropic, PBC**, to process your content to deliver
+the services. We configure AI processing under confidentiality and data-processing
+terms and **prohibit use of your content to train AI models.** **Zero-data-retention
+(ZDR) processing will be enabled before the service is offered to the public**, so
+that prompt and output content is not retained by the AI provider. AI output is
+reviewed by an attorney before being delivered as approved. See the AI Consent
+(Document 2). [ATTORNEY REVIEW: confirm ZDR is in place before launch; do not
+publish ZDR claims until enabled.]
 
 ## 5. How We Share Information
 We share information only as needed to provide the service or as required by law:
@@ -74,17 +76,21 @@ We share information only as needed to provide the service or as required by law
 advertising.**
 
 ## 6. Data Retention and Deletion
-- We retain your case file for the duration of your engagement.
-- **After cancellation or prolonged inactivity, your file is archived and then
-  permanently deleted [30 days] after archival.** Export anything you wish to keep
-  before deletion; after deletion we cannot recover it.
-- Certain records (e.g., conflicts-check data, billing/tax records, records we are
-  ethically or legally required to keep) may be retained for longer as required.
-
-> **⚠️ ATTORNEY REVIEW — CRITICAL.** Confirm the deletion timeline, the advance
-> notice and export mechanism, and any minimum file-retention obligations under the
-> Texas Disciplinary Rules and applicable law (see README open issues). The "[30
-> days]" figure is a placeholder pending that review.
+We retain information under our **Client File Retention & Destruction Policy**
+(Document 7), which is designed to meet the Firm's ethical duties regarding client
+property and records. In summary:
+- Your **interactive app access** ends when your subscription ends; that is separate
+  from how long the Firm **retains your file.**
+- The Firm retains client matter files for **at least five (5) years** after the
+  engagement ends, and retains certain records longer or indefinitely (e.g., original
+  wills and items of intrinsic value, conflicts-check data, signed agreements,
+  trust/billing records, and minors' matters).
+- You can **export your documents** during the engagement and may **request a copy**
+  during the retention period.
+- After the retention period, files are securely destroyed **only** after reasonable
+  advance notice and an opportunity to obtain them, and never as to items that must
+  be returned or kept by law.
+- This **replaces** the prior practice of deleting files 30 days after cancellation.
 
 ## 7. Security
 We use reasonable administrative, technical, and organizational safeguards

@@ -27,8 +27,8 @@ These are legal fees intended to be reasonable under Tex. Disciplinary R. 1.04. 
 5. CANCELLATION; NO REFUNDS
 Client may cancel anytime. Cancellation stops auto-renewal; access continues through the paid period; fees already paid are non-refundable and not prorated (except where required by law); the Section 4(e) true-up applies.
 
-6. FILE RETENTION AND DELETION
-After cancellation or prolonged inactivity, the file is archived and then permanently deleted [30 days] after archival. Client should export anything to keep before deletion; after deletion the Firm cannot recover it. [Pending attorney review of retention obligations.]
+6. FILE RETENTION AND ACCESS
+Your interactive app access ends when your subscription ends; this is separate from how long the Firm retains your client file. The Firm retains client matter files for at least five (5) years after the engagement ends, and longer or indefinitely for certain records (e.g., original wills and items of intrinsic value, conflicts records, signed agreements, minors' matters), under its Client File Retention & Destruction Policy. You own your documents: export them during the engagement (you'll be reminded before access ends) and you may request a copy during the retention period. After the retention period, files are securely destroyed only after reasonable notice and a chance to obtain them. This replaces any prior 30-day deletion practice.
 
 7. CONFIDENTIALITY AND PRIVILEGE
 The Firm protects Client information under Tex. Disciplinary R. 1.05. Phase II communications to obtain legal services are intended to be privileged, subject to limits including the crime-fraud exception and waiver by third-party disclosure. Privilege is decided by courts and cannot be guaranteed in every proceeding.
@@ -37,7 +37,10 @@ The Firm protects Client information under Tex. Disciplinary R. 1.05. Phase II c
 Provide truthful, complete information; respond promptly; do not rely on pre-approval drafts; use the platform only for lawful purposes and never to commit or further a crime or fraud or plan future unlawful conduct.
 
 9. NO GUARANTEE; CONFLICTS; TERMINATION; GOVERNING LAW
-The Firm provides competent, diligent service but guarantees no outcome. The Firm checks conflicts (R. 1.06–1.09) and may decline or withdraw consistent with R. 1.15. Either party may terminate with notice; earned fees and authorized charges survive. This Agreement is governed by Texas law and the Texas Disciplinary Rules of Professional Conduct. NOTHING in this Agreement limits or waives any right that cannot be limited or waived by law or those Rules, including any restriction on prospectively limiting the Firm's malpractice liability (R. 1.08(g)).
+The Firm provides competent, diligent service but guarantees no outcome. The Firm checks conflicts (R. 1.06–1.09) and may decline or withdraw consistent with R. 1.15. Either party may terminate with notice; earned fees and authorized charges survive. This Agreement is governed by Texas law and the Texas Disciplinary Rules of Professional Conduct.
+
+10. BINDING ARBITRATION (PLEASE READ CAREFULLY)
+Except as below, you and the Firm agree that any dispute arising out of or relating to this engagement, the Firm's services, fees, or the platform — INCLUDING legal-malpractice and fee disputes — will be resolved by FINAL AND BINDING ARBITRATION on an individual basis, seated in [county], Texas, under the Federal Arbitration Act. This means you GIVE UP your right to a judge or jury trial and most appeal rights, and discovery may be limited. This changes only the FORUM; it does NOT cap, reduce, or waive the Firm's substantive liability (including for malpractice) or any duty under the Texas Disciplinary Rules. Because this affects important rights, you may — and are encouraged to — consult an independent attorney before agreeing. Arbitration does NOT apply to and does NOT waive: your right to file a grievance with the State Bar of Texas; claims that by law cannot be arbitrated; small-claims matters; or requests for emergency/injunctive relief. [Class actions waived; you may opt out in writing within 30 days — pending attorney review.] NOTHING in this Agreement limits or waives any right that cannot be limited or waived by law or the Texas Disciplinary Rules, including any restriction on prospectively limiting the Firm's malpractice liability (R. 1.08(g)).
 
 Crawford Law PLLC · www.instant-attorney.com · Texas Bar #24148908`;
 
@@ -50,7 +53,7 @@ PART A — AI-ASSISTED SERVICES
 1. AI USE. Crawford Law PLLC uses AI tools, including models from Anthropic, PBC, to assist with intake, analysis, and document drafting. AI is a tool, not my attorney, and does not exercise legal judgment.
 2. ATTORNEY REVIEW. A licensed attorney supervises AI use and reviews AI-generated documents before delivery as approved. Pre-review drafts must not be filed, signed, or relied upon. These practices are intended to comply with the Texas Disciplinary Rules and Texas Ethics Opinion 705.
 3. AI LIMITATIONS. AI can produce incomplete, outdated, or incorrect output (including "hallucinations"). Attorney review is the safeguard, but no process is perfect; I will raise concerns before acting on a document.
-4. CONFIDENTIALITY & DATA. The Firm treats my Phase II information as confidential under Tex. Disciplinary R. 1.05, configures AI processing for zero data retention where available, and does NOT permit my content to be used to train AI models. (See Privacy Policy.)
+4. CONFIDENTIALITY & DATA. The Firm treats my Phase II information as confidential under Tex. Disciplinary R. 1.05, uses a single AI provider (Anthropic, PBC), does NOT permit my content to be used to train AI models, and is enabling zero-data-retention processing before public launch so prompt/output content is not retained by the AI provider. (See Privacy Policy.)
 5. THIRD-PARTY PROVIDERS. I consent to processing by the Firm's service providers acting as its agents under confidentiality and data-protection obligations: AI inference (Anthropic), cloud hosting/storage (Supabase), payments (Stripe), and transactional email (Resend).
 6. BILLING. I acknowledge AI usage has a cost, charged via the subscription and automatic usage top-ups described in my Representation Agreement.
 7. REVOCATION. I may revoke this consent in writing at any time. Because AI assistance is integral to the service, revocation generally ends the Firm's ability to provide platform services and may end the engagement. Revocation does not affect prior lawful processing or charges already incurred.
@@ -277,7 +280,8 @@ export default function OnboardingPage() {
                     <li><strong>You set a monthly cap</strong> on top-ups (default <strong>$25</strong>); charging pauses once it would exceed your cap.</li>
                     <li><strong>No refunds and no proration.</strong> Cancel anytime in Account → Billing; access continues through the paid period.</li>
                     <li><strong>Cancellation true-up:</strong> a final charge may apply for usage already incurred.</li>
-                    <li><strong>Data:</strong> after cancellation your file is archived and then permanently deleted — export anything you want to keep.</li>
+                    <li><strong>Data:</strong> after cancellation your app access ends, but the Firm retains your file under its retention policy (generally 5+ years) — export anything you want, and you can request a copy later.</li>
+                    <li><strong>Disputes:</strong> your agreement includes a <strong>binding arbitration</strong> provision (you waive court/jury trial; it does not limit the Firm&apos;s malpractice liability or your right to file a State Bar grievance).</li>
                   </ul>
                 </div>
 
@@ -288,7 +292,7 @@ export default function OnboardingPage() {
                     checked={billingAck}
                     onChange={(e) => setBillingAck(e.target.checked)}
                   />
-                  I authorize the recurring $9.99/month charge and automatic $8.50 usage top-ups up to my monthly cap, and I agree to the no-refund and cancellation terms above.
+                  I authorize the recurring $9.99/month charge and automatic $8.50 usage top-ups up to my monthly cap, and I agree to the no-refund, cancellation, file-retention, and binding-arbitration terms above.
                 </label>
 
                 <button
