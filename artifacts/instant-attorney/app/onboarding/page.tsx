@@ -7,54 +7,60 @@ const BYPASS_AUTH = process.env.NEXT_PUBLIC_BYPASS_AUTH === "true";
 
 const STEPS = ["Agreement", "AI Consent", "Subscribe"];
 
-const REPRESENTATION_AGREEMENT = `CRAWFORD LAW PLLC — CLIENT REPRESENTATION AGREEMENT
+const REPRESENTATION_AGREEMENT = `CRAWFORD LAW PLLC — CLIENT REPRESENTATION AGREEMENT (LIMITED SCOPE)
+Draft v2.0 — pending attorney review.
 
-This Agreement is entered into between Crawford Law PLLC ("Firm"), a Texas professional limited liability company, Texas Bar #24148908, and the person who signs below ("Client").
+This Agreement is between Crawford Law PLLC ("Firm"), a Texas professional limited liability company, Texas Bar #24148908 (responsible attorney: Andrew Crawford, Esq.; licensed in Texas and Illinois), and the person who signs below ("Client"). Typing your name and clicking to sign creates a binding agreement and an electronic signature.
 
-1. SCOPE OF REPRESENTATION
-The Firm agrees to represent Client in connection with the legal matter(s) disclosed through the Instant Attorney platform. The scope of representation will be defined based on the facts gathered during intake. The Firm may limit representation to advice, document review, or drafting, or may extend to full litigation representation depending on the matter.
+1. SCOPE OF REPRESENTATION (LIMITED)
+The Firm represents Client in limited scope through the Instant Attorney platform: (a) AI-assisted intake to gather facts; (b) analysis of legal issues, risks, and pathways; and (c) preparation and attorney review of eligible legal documents. This engagement does NOT include, unless separately agreed in writing and separately priced: court appearances; filing with any court or agency; litigation, hearings, mediation, or arbitration; negotiation with opposing parties; deadline/limitations calendaring; ongoing monitoring; or matters outside Texas and Illinois. Client remains responsible for all deadlines unless the Firm agrees in writing to assume them.
 
-2. AI-ASSISTED INTAKE
-Client acknowledges that intake conversations on the Instant Attorney platform are conducted with AI assistance and that such conversations, once Client has signed this Agreement, are undertaken within the attorney-client relationship and subject to attorney-client privilege. The Firm's attorney(s) review all AI-generated documents before delivery.
+2. WHEN REPRESENTATION BEGINS
+Phase I (free) is general information only — NO attorney-client relationship and NO privilege. The attorney-client relationship forms when Client signs this Agreement, the subscription is active, and the Firm completes its conflicts check and accepts the engagement.
 
-3. ATTORNEY-CLIENT PRIVILEGE
-Communications made by Client to the Firm in connection with seeking legal advice are protected by attorney-client privilege, subject to exceptions including the crime-fraud exception and voluntary disclosure to third parties. Phase I (free) conversations are not privileged.
+3. AI-ASSISTED SERVICES AND ATTORNEY SUPERVISION
+The Firm uses AI tools (including models from Anthropic, PBC) under attorney supervision. AI is a tool, not your attorney. A licensed attorney reviews AI-generated documents before delivery as approved. Pre-review drafts are labeled and must not be filed, signed, or relied upon until approved. (See the AI & Privilege consent, incorporated by reference.)
 
-4. FEES AND BILLING
-Subscriber fees are as described on the Instant Attorney platform at the time of enrollment. The Firm reserves the right to adjust fees with notice. Fees for services beyond the subscription (e.g., court appearances, extended litigation) will be separately negotiated.
+4. FEES AND AUTOMATIC USAGE CHARGES
+These are legal fees intended to be reasonable under Tex. Disciplinary R. 1.04. (a) Subscription: $9.99/month, billed in advance, auto-renewing monthly until cancelled. (b) Automatic usage top-ups: when Client's cumulative metered AI usage since the last top-up reaches $4.75, Client authorizes an automatic one-time $8.50 charge to the payment method on file; this may recur whenever the threshold is reached. (c) Spending cap: Client sets a pre-approved monthly cap on automatic top-ups (default $25/month); automatic charging and AI features pause once a top-up would exceed the cap, until Client raises it or the month renews. (d) Declined payments pause AI features until payment succeeds. (e) Cancellation true-up: at cancellation Client authorizes a final charge for metered usage already incurred but not yet charged. Client authorizes the Firm and Stripe to store the payment method and make these charges automatically.
 
-5. CLIENT OBLIGATIONS
-Client agrees to provide truthful and complete information, to communicate promptly, and to cooperate with the Firm's requests. Client agrees to use this platform only for lawful purposes.
+5. CANCELLATION; NO REFUNDS
+Client may cancel anytime. Cancellation stops auto-renewal; access continues through the paid period; fees already paid are non-refundable and not prorated (except where required by law); the Section 4(e) true-up applies.
 
-6. TERMINATION
-Either party may terminate this Agreement with written notice. The Firm may withdraw consistent with applicable Rules of Professional Conduct.
+6. FILE RETENTION AND DELETION
+After cancellation or prolonged inactivity, the file is archived and then permanently deleted [30 days] after archival. Client should export anything to keep before deletion; after deletion the Firm cannot recover it. [Pending attorney review of retention obligations.]
 
-7. GOVERNING LAW
-This Agreement is governed by the laws of the State of Texas and the Texas Disciplinary Rules of Professional Conduct.
+7. CONFIDENTIALITY AND PRIVILEGE
+The Firm protects Client information under Tex. Disciplinary R. 1.05. Phase II communications to obtain legal services are intended to be privileged, subject to limits including the crime-fraud exception and waiver by third-party disclosure. Privilege is decided by courts and cannot be guaranteed in every proceeding.
+
+8. CLIENT OBLIGATIONS
+Provide truthful, complete information; respond promptly; do not rely on pre-approval drafts; use the platform only for lawful purposes and never to commit or further a crime or fraud or plan future unlawful conduct.
+
+9. NO GUARANTEE; CONFLICTS; TERMINATION; GOVERNING LAW
+The Firm provides competent, diligent service but guarantees no outcome. The Firm checks conflicts (R. 1.06–1.09) and may decline or withdraw consistent with R. 1.15. Either party may terminate with notice; earned fees and authorized charges survive. This Agreement is governed by Texas law and the Texas Disciplinary Rules of Professional Conduct. NOTHING in this Agreement limits or waives any right that cannot be limited or waived by law or those Rules, including any restriction on prospectively limiting the Firm's malpractice liability (R. 1.08(g)).
 
 Crawford Law PLLC · www.instant-attorney.com · Texas Bar #24148908`;
 
-const AI_CONSENT = `CONSENT TO AI-ASSISTED SERVICES AND THIRD-PARTY PROCESSING
+const AI_CONSENT = `CONSENT TO AI-ASSISTED SERVICES & ATTORNEY-CLIENT PRIVILEGE NOTICE
+Draft v2.0 — pending attorney review.
 
-By signing below, I ("Client") acknowledge and consent to the following:
+By signing, I ("Client") give informed consent to the following and acknowledge the privilege notice below.
 
-1. AI-ASSISTED SERVICES
-I understand that Crawford Law PLLC uses AI technology, including models provided by Anthropic, PBC, to assist with legal intake, document drafting, and case analysis. All AI outputs are reviewed by a licensed attorney before delivery to me.
+PART A — AI-ASSISTED SERVICES
+1. AI USE. Crawford Law PLLC uses AI tools, including models from Anthropic, PBC, to assist with intake, analysis, and document drafting. AI is a tool, not my attorney, and does not exercise legal judgment.
+2. ATTORNEY REVIEW. A licensed attorney supervises AI use and reviews AI-generated documents before delivery as approved. Pre-review drafts must not be filed, signed, or relied upon. These practices are intended to comply with the Texas Disciplinary Rules and Texas Ethics Opinion 705.
+3. AI LIMITATIONS. AI can produce incomplete, outdated, or incorrect output (including "hallucinations"). Attorney review is the safeguard, but no process is perfect; I will raise concerns before acting on a document.
+4. CONFIDENTIALITY & DATA. The Firm treats my Phase II information as confidential under Tex. Disciplinary R. 1.05, configures AI processing for zero data retention where available, and does NOT permit my content to be used to train AI models. (See Privacy Policy.)
+5. THIRD-PARTY PROVIDERS. I consent to processing by the Firm's service providers acting as its agents under confidentiality and data-protection obligations: AI inference (Anthropic), cloud hosting/storage (Supabase), payments (Stripe), and transactional email (Resend).
+6. BILLING. I acknowledge AI usage has a cost, charged via the subscription and automatic usage top-ups described in my Representation Agreement.
+7. REVOCATION. I may revoke this consent in writing at any time. Because AI assistance is integral to the service, revocation generally ends the Firm's ability to provide platform services and may end the engagement. Revocation does not affect prior lawful processing or charges already incurred.
 
-2. THIRD-PARTY SERVICE PROVIDERS
-I consent to the processing of my information by the following categories of service providers: AI model providers (for inference), cloud infrastructure providers (for hosting and storage), and payment processors. These providers are bound by data processing agreements.
+PART B — ATTORNEY-CLIENT PRIVILEGE (READ CAREFULLY)
+8. Phase I (free) communications are NOT privileged — do not share sensitive facts there. Phase II communications made to obtain legal services, after I sign and while subscribed, are intended to be privileged.
+9. LIMITS. Privilege may not apply or may be lost: (a) crime-fraud — communications to commit/further a crime or fraud, or to plan future unlawful conduct, are not privileged; (b) third-party disclosure may waive privilege; (c) my own public use may waive it; (d) privilege is applied by courts and cannot be guaranteed in any particular proceeding.
+10. VENDORS. The Firm's use of agents (AI, cloud) under confidentiality obligations is not intended to waive privilege, subject to the limits above.
 
-3. DATA RETENTION AND PRIVACY
-I understand that Phase II intake conversations are stored securely and associated with my case file. API calls to AI providers are configured for zero data retention where available. My data is never used to train AI models.
-
-4. NO TRAINING DATA
-Crawford Law PLLC and its AI service providers will not use my communications to train AI models under any circumstances.
-
-5. REVOCATION
-I may revoke this consent at any time by contacting Crawford Law PLLC in writing. Revocation will not affect the lawfulness of processing prior to revocation.
-
-6. TEXAS ETHICS COMPLIANCE
-These practices are maintained in compliance with Texas Disciplinary Rule 1.05 (Confidentiality) and Texas Ethics Opinion 705 (AI in legal practice).`;
+These practices rely in good faith on Tex. Disciplinary R. 1.05 and Texas Ethics Opinion 705.`;
 
 type Step = 0 | 1 | 2;
 
@@ -64,6 +70,7 @@ export default function OnboardingPage() {
   const [signatureName, setSignatureName] = useState("");
   const [repAgreed, setRepAgreed] = useState(false);
   const [aiAgreed, setAiAgreed] = useState(false);
+  const [billingAck, setBillingAck] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -254,12 +261,40 @@ export default function OnboardingPage() {
                   <li>ACP-protected intake chat</li>
                   <li>Living File — goals, facts, gaps</li>
                   <li>Document drafts (watermarked immediately)</li>
-                  <li>Attorney review within 48 hours</li>
+                  <li>Attorney review targeted within 48 hours</li>
                 </ul>
+
+                {/* Clear-and-conspicuous pre-purchase billing disclosure */}
+                <div className="ob-billing-disclosure" style={{
+                  fontSize: 12.5, lineHeight: 1.5, textAlign: "left",
+                  background: "#f8fafc", border: "1px solid #e2e8f0",
+                  borderRadius: 8, padding: "10px 12px", margin: "12px 0",
+                }}>
+                  <strong>Before you subscribe — please review:</strong>
+                  <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+                    <li><strong>$9.99/month</strong>, charged today and <strong>auto-renewing monthly</strong> until you cancel.</li>
+                    <li><strong>Automatic usage top-ups:</strong> when your AI usage since the last top-up reaches <strong>$4.75</strong>, an <strong>$8.50</strong> charge is made automatically. It can recur as you use the service.</li>
+                    <li><strong>You set a monthly cap</strong> on top-ups (default <strong>$25</strong>); charging pauses once it would exceed your cap.</li>
+                    <li><strong>No refunds and no proration.</strong> Cancel anytime in Account → Billing; access continues through the paid period.</li>
+                    <li><strong>Cancellation true-up:</strong> a final charge may apply for usage already incurred.</li>
+                    <li><strong>Data:</strong> after cancellation your file is archived and then permanently deleted — export anything you want to keep.</li>
+                  </ul>
+                </div>
+
+                <label className="ob-checkbox-label" style={{ fontSize: 12.5, textAlign: "left" }}>
+                  <input
+                    type="checkbox"
+                    className="ob-checkbox"
+                    checked={billingAck}
+                    onChange={(e) => setBillingAck(e.target.checked)}
+                  />
+                  I authorize the recurring $9.99/month charge and automatic $8.50 usage top-ups up to my monthly cap, and I agree to the no-refund and cancellation terms above.
+                </label>
+
                 <button
                   className="auth-btn"
                   onClick={() => handleSubscribe("phase2")}
-                  disabled={loading}
+                  disabled={loading || (!BYPASS_AUTH && !billingAck)}
                 >
                   {loading ? "Loading…" : BYPASS_AUTH ? "Activate Test Subscription →" : "Subscribe · $9.99/mo →"}
                 </button>
