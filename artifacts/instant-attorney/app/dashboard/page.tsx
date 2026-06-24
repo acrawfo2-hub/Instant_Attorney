@@ -126,6 +126,34 @@ export default async function DashboardPage() {
             What-If Game
             <span className="dash-btn-hint">Optional — pressure-test your strategy against scenarios the law has seen</span>
           </Link>
+          <Link href="/family/child-support" className="dash-btn dash-btn-secondary">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+            </svg>
+            Child Support Estimator
+            <span className="dash-btn-hint">Free — a Texas guideline child-support estimate in seconds</span>
+          </Link>
+          <Link href="/family/property-division" className="dash-btn dash-btn-secondary">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 6h18M6 6v13a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /><line x1="12" y1="11" x2="12" y2="16" />
+            </svg>
+            Property Division Estimator
+            <span className="dash-btn-hint">Free — see how a Texas community estate would split</span>
+          </Link>
+          <Link href="/family/possession-schedule" className="dash-btn dash-btn-secondary">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+            Possession Schedule
+            <span className="dash-btn-hint">Free — the Texas Standard Possession Order on a calendar</span>
+          </Link>
+          <Link href="/family/maintenance" className="dash-btn dash-btn-secondary">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 3v18" /><path d="M5 7l7-4 7 4" /><path d="M5 7l-2 6a4 4 0 0 0 8 0L9 7M19 7l-2 6a4 4 0 0 0 8 0l-2-6" />
+            </svg>
+            Spousal Maintenance Screen
+            <span className="dash-btn-hint">Free — an honest read on Texas spousal maintenance</span>
+          </Link>
           {consult && consult.status !== "cancelled" && consult.status !== "completed" ? (
             <a href="#consult-status" className="dash-btn dash-btn-secondary dash-btn--consult-active">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

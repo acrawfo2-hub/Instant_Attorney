@@ -10,6 +10,9 @@ import CancelDocButton from "@/components/CancelDocButton";
 import FactsPanel from "@/components/FactsPanel";
 import { placeholderFields } from "@/lib/wizard-parsing";
 import { computeMissionControl } from "@/lib/mission-control";
+import { looksLikeFamilyMatter } from "@/lib/family-instruments";
+import { buildFamilyRoadmap } from "@/lib/family-roadmap";
+import FamilyRoadmap from "@/components/FamilyRoadmap";
 import type { CaseFile, FactItem, Document, Profile, WizardType, ConsultRequest, RequestedAttachment, GovFormInstrument, Attachment } from "@/lib/types";
 import { isValidWizardType } from "@/lib/document-utils";
 import { WIZARD_LABELS, docTypeLabel, personDisplayName, isDocumentOutOfDate, coerceWizardType } from "@/lib/types";
@@ -261,6 +264,17 @@ export default function ClientFileView({
   const strategy = caseFile.legal_strategy ?? null;
   const recommendedWizards = strategy?.recommended_wizards ?? [];
   const isAttorney = mode === "attorney";
+  // Surface the child-support estimator only on family matters, detected by
+  // reusing the family-instrument keyword matcher over the matter's own text.
+  const isFamilyMatter = looksLikeFamilyMatter(`${caseFile.matter_subtype ?? ""} ${caseFile.summary ?? ""}`);
+  const familyRoadmap =
+    !isAttorney && isFamilyMatter
+      ? buildFamilyRoadmap({
+          matterText: `${caseFile.matter_subtype ?? ""} ${caseFile.summary ?? ""}`,
+          facts: confirmed.map((f) => f.description),
+          documents: documents.map((d) => ({ title: d.title, status: d.status })),
+        })
+      : null;
 
   // The client has "brought in a document" once at least one upload exists that
   // didn't fail to store. Document Review only makes sense against a real
@@ -558,6 +572,9 @@ export default function ClientFileView({
         </div>
       )}
 
+      {/* Family Law Roadmap — orients the family tools and documents below it */}
+      {familyRoadmap && <FamilyRoadmap roadmap={familyRoadmap} />}
+
       {/* What-If Game — pressure-test this matter (client mode only) */}
       {!isAttorney && (
         <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
@@ -570,6 +587,69 @@ export default function ClientFileView({
           </p>
           <Link href={`/what-if?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
             Play the What-If Game →
+          </Link>
+        </div>
+      )}
+
+      {/* Child-support estimator — family matters only (client mode). Saves a
+          guideline estimate into this file so a support order/decree seeds from it. */}
+      {!isAttorney && isFamilyMatter && (
+        <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
+          <div className="lf-card-label">Estimate Child Support</div>
+          <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
+            Texas sets child support as a percentage of the paying parent&apos;s monthly net resources.
+            Get a free guideline estimate in seconds — we&apos;ll save it to this file so a support order or
+            decree can use it. It&apos;s an estimate, not legal advice, and a court may order a different amount.
+          </p>
+          <Link href={`/family/child-support?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
+            Estimate child support →
+          </Link>
+        </div>
+      )}
+
+      {/* Property-division estimator — family matters only (client mode). Saves a
+          guideline community-estate split into this file so a decree seeds from it. */}
+      {!isAttorney && isFamilyMatter && (
+        <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
+          <div className="lf-card-label">Estimate the Property Split</div>
+          <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
+            Texas divides what you built during the marriage (the community estate) &ldquo;just and
+            right,&rdquo; while each spouse keeps their separate property. List your assets and debts for a
+            free starting-point picture — we&apos;ll save it to this file so a decree can use it. It&apos;s an
+            estimate, not legal advice, and a court may divide things differently.
+          </p>
+          <Link href={`/family/property-division?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
+            Estimate the property split →
+          </Link>
+        </div>
+      )}
+
+      {/* Possession-schedule generator — family matters only (client mode). */}
+      {!isAttorney && isFamilyMatter && (
+        <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
+          <div className="lf-card-label">See Your Possession Schedule</div>
+          <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
+            Texas presumes the Standard Possession Order for a child 3 or older. See the actual weekend and
+            Thursday periods on a calendar, plus the holiday and summer rules — and we&apos;ll save it to this
+            file so a parenting plan or decree can use it. It&apos;s the standard schedule; your court order controls.
+          </p>
+          <Link href={`/family/possession-schedule?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
+            Show the possession schedule →
+          </Link>
+        </div>
+      )}
+
+      {/* Spousal-maintenance screen — family matters only (client mode). */}
+      {!isAttorney && isFamilyMatter && (
+        <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
+          <div className="lf-card-label">Check Spousal Maintenance</div>
+          <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
+            Texas keeps spousal maintenance narrow. Answer a few questions for an honest read on whether it&apos;s
+            on the table, and roughly how much and how long — saved to this file for your documents. General
+            information, not legal advice; the court decides.
+          </p>
+          <Link href={`/family/maintenance?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
+            Check spousal maintenance →
           </Link>
         </div>
       )}

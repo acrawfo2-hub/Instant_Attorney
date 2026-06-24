@@ -21,7 +21,7 @@ test("slugs are unique", () => {
 
 test("covers the slugs the landing page links to", () => {
   // Tiles in app/page.tsx route to /free-chat?area=<slug>.
-  for (const slug of ["contract", "employment", "harassment", "business", "estate", "landlord", "hoa", "nda", "other"]) {
+  for (const slug of ["contract", "employment", "harassment", "business", "estate", "landlord", "hoa", "family", "nda", "other"]) {
     assert.ok(isKnownPracticeArea(slug), `missing practice area: ${slug}`);
   }
 });
@@ -38,4 +38,11 @@ test("hoa opener references governing documents and Texas law", () => {
   assert.ok(hoa);
   assert.match(hoa.opener, /governing documents|CC&Rs/);
   assert.match(hoa.opener, /Texas/);
+});
+
+test("family opener leads with safety and names the Texas Family Code", () => {
+  const family = getPracticeArea("family");
+  assert.ok(family);
+  assert.match(family.opener, /safety|family violence|danger/i);
+  assert.match(family.opener, /Texas Family Code/);
 });
