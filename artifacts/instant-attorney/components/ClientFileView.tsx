@@ -11,6 +11,7 @@ import FactsPanel from "@/components/FactsPanel";
 import { placeholderFields } from "@/lib/wizard-parsing";
 import { computeMissionControl } from "@/lib/mission-control";
 import { looksLikeFamilyMatter } from "@/lib/family-instruments";
+import { looksLikeDebtMatter } from "@/lib/debt-instruments";
 import { buildFamilyRoadmap } from "@/lib/family-roadmap";
 import FamilyRoadmap from "@/components/FamilyRoadmap";
 import type { CaseFile, FactItem, Document, Profile, WizardType, ConsultRequest, RequestedAttachment, GovFormInstrument, Attachment } from "@/lib/types";
@@ -266,7 +267,9 @@ export default function ClientFileView({
   const isAttorney = mode === "attorney";
   // Surface the child-support estimator only on family matters, detected by
   // reusing the family-instrument keyword matcher over the matter's own text.
-  const isFamilyMatter = looksLikeFamilyMatter(`${caseFile.matter_subtype ?? ""} ${caseFile.summary ?? ""}`);
+  const matterText = `${caseFile.matter_subtype ?? ""} ${caseFile.summary ?? ""}`;
+  const isFamilyMatter = looksLikeFamilyMatter(matterText);
+  const isDebtMatter = looksLikeDebtMatter(matterText);
   const familyRoadmap =
     !isAttorney && isFamilyMatter
       ? buildFamilyRoadmap({
@@ -574,6 +577,21 @@ export default function ClientFileView({
 
       {/* Family Law Roadmap — orients the family tools and documents below it */}
       {familyRoadmap && <FamilyRoadmap roadmap={familyRoadmap} />}
+
+      {/* Debt-collection rights — debt matters only (client mode). */}
+      {!isAttorney && isDebtMatter && (
+        <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
+          <div className="lf-card-label">Know Your Debt-Collection Rights</div>
+          <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
+            Debt problems are common and solvable, and you have real protections — especially in Texas,
+            where ordinary debts usually can&apos;t touch your wages. See your rights, the steps you can take,
+            and the traps to avoid. If you&apos;ve been sued, there&apos;s a deadline to answer — start there.
+          </p>
+          <Link href={`/debt/rights?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
+            See your rights &amp; next steps →
+          </Link>
+        </div>
+      )}
 
       {/* What-If Game — pressure-test this matter (client mode only) */}
       {!isAttorney && (

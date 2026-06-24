@@ -47,6 +47,12 @@ export const PRACTICE_AREAS: PracticeArea[] = [
     starterPrompt: "I'm experiencing harassment at work.",
   },
   {
+    slug: "debt",
+    label: "Debt & Bankruptcy",
+    opener: `Hello — I'm really glad you reached out, and I want you to know up front: debt problems are common, they're solvable, and you have real rights here. I'm the Instant Attorney assistant, part of Crawford Law PLLC, and I help people deal with debt collectors and think through their options — including, if it comes to it, bankruptcy.\n\n${DISCLAIMER}\n\nOne thing first, because timing matters: if you've been served with a lawsuit or court papers about a debt, tell me right away — there's a deadline to respond. Otherwise, tell me what's going on — who's contacting you, and about what?`,
+    starterPrompt: "A debt collector keeps contacting me and I'm not sure what to do.",
+  },
+  {
     slug: "contract",
     label: "Contracts",
     opener: `Hello — I'm glad you reached out. I'm the Instant Attorney assistant, part of Crawford Law PLLC, and I can help you review, draft, or work through a dispute over a contract.\n\n${DISCLAIMER}\n\nWhat kind of contract is it, and what do you need — a review, a new draft, or help with a disagreement?`,
