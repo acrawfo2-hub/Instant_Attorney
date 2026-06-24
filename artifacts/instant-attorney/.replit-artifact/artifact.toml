@@ -28,6 +28,7 @@ paths = [
   "/api/consult",
   "/api/case-files",
   "/api/usage",
+  "/api/admin",
   "/consult",
 ]
 localPort = 21203
