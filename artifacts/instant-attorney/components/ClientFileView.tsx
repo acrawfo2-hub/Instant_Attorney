@@ -11,6 +11,8 @@ import FactsPanel from "@/components/FactsPanel";
 import { placeholderFields } from "@/lib/wizard-parsing";
 import { computeMissionControl } from "@/lib/mission-control";
 import { looksLikeFamilyMatter } from "@/lib/family-instruments";
+import { buildFamilyRoadmap } from "@/lib/family-roadmap";
+import FamilyRoadmap from "@/components/FamilyRoadmap";
 import type { CaseFile, FactItem, Document, Profile, WizardType, ConsultRequest, RequestedAttachment, GovFormInstrument, Attachment } from "@/lib/types";
 import { isValidWizardType } from "@/lib/document-utils";
 import { WIZARD_LABELS, docTypeLabel, personDisplayName, isDocumentOutOfDate, coerceWizardType } from "@/lib/types";
@@ -265,6 +267,14 @@ export default function ClientFileView({
   // Surface the child-support estimator only on family matters, detected by
   // reusing the family-instrument keyword matcher over the matter's own text.
   const isFamilyMatter = looksLikeFamilyMatter(`${caseFile.matter_subtype ?? ""} ${caseFile.summary ?? ""}`);
+  const familyRoadmap =
+    !isAttorney && isFamilyMatter
+      ? buildFamilyRoadmap({
+          matterText: `${caseFile.matter_subtype ?? ""} ${caseFile.summary ?? ""}`,
+          facts: confirmed.map((f) => f.description),
+          documents: documents.map((d) => ({ title: d.title, status: d.status })),
+        })
+      : null;
 
   // The client has "brought in a document" once at least one upload exists that
   // didn't fail to store. Document Review only makes sense against a real
@@ -561,6 +571,9 @@ export default function ClientFileView({
           </ul>
         </div>
       )}
+
+      {/* Family Law Roadmap — orients the family tools and documents below it */}
+      {familyRoadmap && <FamilyRoadmap roadmap={familyRoadmap} />}
 
       {/* What-If Game — pressure-test this matter (client mode only) */}
       {!isAttorney && (
