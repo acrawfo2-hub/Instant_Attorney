@@ -17,7 +17,7 @@
 // could escalate danger. The intake prompt enforces this.
 
 import type { WizardType } from "./types.ts";
-import type { FamilyStatuteKey } from "./family-statutes.ts";
+import { matchFamilyStatutesByText, type FamilyStatuteKey } from "./family-statutes.ts";
 
 export interface FamilyInstrument {
   /** Stable identifier for the preset. */
@@ -177,28 +177,54 @@ export const FAMILY_INSTRUMENTS: FamilyInstrument[] = [
     triggers: ["child support order", "support worksheet", "calculate child support", "how much support"],
   },
   {
-    key: "premarital_or_marital_agreement",
-    label: "Premarital / Marital Property Agreement",
+    key: "premarital_agreement",
+    label: "Premarital (Prenuptial) Agreement",
     purpose:
-      "Draft a premarital (prenuptial) or post-marital agreement defining each spouse's separate property and how property and debts are characterized.",
+      "Draft a premarital agreement (signed BEFORE marriage, effective on marriage) defining each party's separate property, how property and debts acquired during marriage are characterized, and any spousal-support terms.",
     wizard_type: "draft_contract",
     recipient_guidance:
-      "A contract between the spouses (or spouses-to-be); each party should have the opportunity for independent review before signing.",
+      "A written contract between the two spouses-to-be, signed before the wedding. To maximize enforceability, attach a fair-and-reasonable disclosure of each party's assets and debts, and give each party the opportunity for independent counsel before signing.",
     required_fields: [
-      "Both parties' full legal names and the date of the agreement",
-      "Each party's separate property and debts to be confirmed",
-      "How future income, gifts, and acquisitions are characterized",
-      "Any waiver or limitation of spousal maintenance",
-      "Disclosure of assets and acknowledgment of voluntary signing",
+      "Both parties' full legal names and the intended marriage date",
+      "Each party's separate property and debts to be confirmed (with disclosure exhibit)",
+      "How income, gifts, and property acquired during marriage are characterized",
+      "Any agreement on or waiver of spousal support / maintenance",
+      "Acknowledgment of voluntary signing and fair financial disclosure",
     ],
     relevant_statutes: [
-      "tx-fam-property-division",
+      "tx-fam-premarital-agreement",
       "tx-fam-separate-property",
+      "tx-fam-property-division",
       "tx-fam-maintenance-eligibility",
     ],
     default_response_days: null,
     high_stakes: false,
-    triggers: ["prenup", "prenuptial", "postnup", "marital agreement", "before we marry", "protect my assets"],
+    triggers: ["prenup", "prenuptial", "premarital agreement", "before we marry", "before the wedding", "protect my assets before marriage"],
+  },
+  {
+    key: "marital_property_agreement",
+    label: "Marital (Postnuptial) Property Agreement — Partition or Exchange",
+    purpose:
+      "Draft a postnuptial agreement for spouses who are ALREADY married — partitioning or exchanging community property into each spouse's separate property, and/or making future income from separate property separate.",
+    wizard_type: "draft_contract",
+    recipient_guidance:
+      "A written contract between the two married spouses, signed during the marriage. Like a premarital agreement, fair disclosure of each party's assets/debts and the opportunity for independent counsel strengthen enforceability under the same voluntariness/unconscionability standard.",
+    required_fields: [
+      "Both spouses' full legal names and the agreement date",
+      "The specific community property being partitioned or exchanged (with disclosure exhibit)",
+      "Whether future income from separate property is to be separate property",
+      "How resulting separate property is held and managed going forward",
+      "Acknowledgment of voluntary signing and fair financial disclosure",
+    ],
+    relevant_statutes: [
+      "tx-fam-marital-agreement",
+      "tx-fam-separate-property",
+      "tx-fam-community-presumption",
+      "tx-fam-property-division",
+    ],
+    default_response_days: null,
+    high_stakes: false,
+    triggers: ["postnup", "postnuptial", "postnuptial agreement", "marital property agreement", "partition agreement", "partition and exchange", "already married protect assets", "convert community to separate"],
   },
   {
     key: "motion_to_modify",
@@ -319,4 +345,45 @@ export function matchFamilyInstrumentsByText(text: string): FamilyInstrument[] {
   return FAMILY_INSTRUMENTS.filter((i) =>
     i.triggers.some((t) => haystack.includes(t.toLowerCase()))
   );
+}
+
+// Short, single-concept terms a family matter is described by. The instrument
+// and statute triggers are multi-word phrases tuned for detecting a SPECIFIC
+// document/statute, so a terse matter_subtype like "divorce" or "custody" would
+// match none of them — these core terms close that gap.
+const FAMILY_CORE_TERMS = [
+  "divorce",
+  "custody",
+  "child support",
+  "conservatorship",
+  "possession and access",
+  "visitation",
+  "spousal support",
+  "spousal maintenance",
+  "alimony",
+  "prenup",
+  "postnup",
+  "premarital",
+  "paternity",
+  "parentage",
+  "protective order",
+  "family violence",
+  "sapcr",
+  "parenting plan",
+  "co-parent",
+  "child custody",
+];
+
+/**
+ * Whether a piece of free text (e.g. a case's matter subtype + summary) looks
+ * like a family-law matter. Used to decide whether to surface the family tools.
+ * Combines the core terms with the instrument and statute keyword matchers so
+ * both terse subtypes and richer summaries are caught.
+ */
+export function looksLikeFamilyMatter(text: string | null | undefined): boolean {
+  if (!text) return false;
+  const haystack = text.toLowerCase();
+  if (FAMILY_CORE_TERMS.some((t) => haystack.includes(t))) return true;
+  if (matchFamilyInstrumentsByText(haystack).length > 0) return true;
+  return matchFamilyStatutesByText(haystack).length > 0;
 }

@@ -61,7 +61,7 @@ export const PRACTICE_AREAS: PracticeArea[] = [
   {
     slug: "family",
     label: "Family Law",
-    opener: `Hello — I'm glad you reached out, and I know matters like these can be hard to talk about. I'm the Instant Attorney assistant, part of Crawford Law PLLC, and I help people work through family-law issues — divorce, child custody and support, modifications, and related matters under the Texas Family Code.\n\n${DISCLAIMER}\n\nBefore anything else: if you or your children are in danger or there's been family violence, your safety comes first — tell me and we'll focus there. Otherwise, tell me what's going on in your own words — are we talking about a divorce, children (custody or support), changing an existing order, or something else?`,
+    opener: `Hello — I'm glad you reached out, and I know matters like these can be hard to talk about. I'm the Instant Attorney assistant, part of Crawford Law PLLC, and I help people work through family-law issues — divorce, child custody and support, modifications, and related matters under the Texas Family Code.\n\n${DISCLAIMER}\n\nBefore anything else: if you or your children are in danger or there's been family violence, your safety comes first — tell me and we'll focus there. Otherwise, tell me what's going on in your own words — are we talking about a divorce, children (custody or support), changing an existing order, a prenup or postnup agreement, or something else?`,
     starterPrompt: "I'm thinking about filing for divorce and have kids.",
   },
   {

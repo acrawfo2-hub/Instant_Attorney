@@ -7,6 +7,7 @@ import {
   familyInstrumentsForPrompt,
   familyInstrumentFieldHint,
   matchFamilyInstrumentsByText,
+  looksLikeFamilyMatter,
 } from "./family-instruments.ts";
 import { isKnownFamilyStatuteKey } from "./family-statutes.ts";
 import { WIZARD_LABELS } from "./types.ts";
@@ -58,6 +59,20 @@ test("prompt catalog lists every key; field hint resolves", () => {
   const hint = familyInstrumentFieldHint("child_support_proposal");
   assert.ok(hint && hint.includes("Required fields:"));
   assert.equal(familyInstrumentFieldHint("nope"), null);
+});
+
+test("looksLikeFamilyMatter catches terse subtypes and richer summaries", () => {
+  // Terse matter subtypes that match no multi-word instrument trigger.
+  for (const t of ["divorce", "custody", "child support", "conservatorship", "paternity"]) {
+    assert.ok(looksLikeFamilyMatter(t), `should detect ${t}`);
+  }
+  // Richer summary text.
+  assert.ok(looksLikeFamilyMatter("Client wants to file for divorce and set up a parenting plan."));
+  // Non-family matters are not flagged.
+  assert.ok(!looksLikeFamilyMatter("HOA violation notice and fine dispute"));
+  assert.ok(!looksLikeFamilyMatter("wrongful termination at work"));
+  assert.ok(!looksLikeFamilyMatter(null));
+  assert.ok(!looksLikeFamilyMatter(""));
 });
 
 test("offline keyword fallback maps situations to instruments", () => {

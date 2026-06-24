@@ -10,7 +10,7 @@ import CancelDocButton from "@/components/CancelDocButton";
 import FactsPanel from "@/components/FactsPanel";
 import { placeholderFields } from "@/lib/wizard-parsing";
 import { computeMissionControl } from "@/lib/mission-control";
-import { matchFamilyInstrumentsByText } from "@/lib/family-instruments";
+import { looksLikeFamilyMatter } from "@/lib/family-instruments";
 import type { CaseFile, FactItem, Document, Profile, WizardType, ConsultRequest, RequestedAttachment, GovFormInstrument, Attachment } from "@/lib/types";
 import { isValidWizardType } from "@/lib/document-utils";
 import { WIZARD_LABELS, docTypeLabel, personDisplayName, isDocumentOutOfDate, coerceWizardType } from "@/lib/types";
@@ -264,8 +264,7 @@ export default function ClientFileView({
   const isAttorney = mode === "attorney";
   // Surface the child-support estimator only on family matters, detected by
   // reusing the family-instrument keyword matcher over the matter's own text.
-  const isFamilyMatter =
-    matchFamilyInstrumentsByText(`${caseFile.matter_subtype ?? ""} ${caseFile.summary ?? ""}`).length > 0;
+  const isFamilyMatter = looksLikeFamilyMatter(`${caseFile.matter_subtype ?? ""} ${caseFile.summary ?? ""}`);
 
   // The client has "brought in a document" once at least one upload exists that
   // didn't fail to store. Document Review only makes sense against a real
@@ -608,6 +607,36 @@ export default function ClientFileView({
           </p>
           <Link href={`/family/property-division?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
             Estimate the property split →
+          </Link>
+        </div>
+      )}
+
+      {/* Possession-schedule generator — family matters only (client mode). */}
+      {!isAttorney && isFamilyMatter && (
+        <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
+          <div className="lf-card-label">See Your Possession Schedule</div>
+          <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
+            Texas presumes the Standard Possession Order for a child 3 or older. See the actual weekend and
+            Thursday periods on a calendar, plus the holiday and summer rules — and we&apos;ll save it to this
+            file so a parenting plan or decree can use it. It&apos;s the standard schedule; your court order controls.
+          </p>
+          <Link href={`/family/possession-schedule?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
+            Show the possession schedule →
+          </Link>
+        </div>
+      )}
+
+      {/* Spousal-maintenance screen — family matters only (client mode). */}
+      {!isAttorney && isFamilyMatter && (
+        <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
+          <div className="lf-card-label">Check Spousal Maintenance</div>
+          <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
+            Texas keeps spousal maintenance narrow. Answer a few questions for an honest read on whether it&apos;s
+            on the table, and roughly how much and how long — saved to this file for your documents. General
+            information, not legal advice; the court decides.
+          </p>
+          <Link href={`/family/maintenance?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
+            Check spousal maintenance →
           </Link>
         </div>
       )}

@@ -16,6 +16,7 @@
 
 export type FamilyChapter =
   | "3"
+  | "4"
   | "6"
   | "7"
   | "8"
@@ -51,6 +52,50 @@ const FA_URL = (ch: FamilyChapter) =>
   `https://statutes.capitol.texas.gov/Docs/FA/htm/FA.${ch}.htm`;
 
 export const FAMILY_STATUTES: FamilyStatute[] = [
+  {
+    key: "tx-fam-premarital-agreement",
+    code: "Tex. Fam. Code §§ 4.001–4.010",
+    chapter: "4",
+    topic: "Premarital (prenuptial) agreements",
+    summary:
+      "Under the Uniform Premarital Agreement Act, spouses-to-be may agree before marriage on the characterization, management, and disposition of property, spousal support, and other matters. The agreement must be in writing and signed, takes effect on marriage, and is unenforceable only if a party did not sign voluntarily or it was unconscionable when signed and that party was not given fair disclosure, did not waive it, and lacked adequate knowledge of the other's finances.",
+    client_right:
+      "Before marrying, you can agree in writing on how property and debts are characterized and on spousal support — and it is hard to set aside if signed voluntarily with fair financial disclosure.",
+    deadline: "Must be signed before the marriage; it takes effect upon marriage.",
+    official_url: FA_URL("4"),
+    triggers: [
+      "prenup",
+      "prenuptial",
+      "premarital agreement",
+      "before we marry",
+      "before the wedding",
+      "protect my assets before marriage",
+    ],
+  },
+  {
+    key: "tx-fam-marital-agreement",
+    code: "Tex. Fam. Code §§ 4.102–4.106",
+    chapter: "4",
+    topic: "Marital (postnuptial) property agreements — partition or exchange",
+    summary:
+      "Spouses who are already married may at any time partition or exchange between themselves any part of their community property, and may agree that income from a spouse's separate property is that spouse's separate property. The agreement must be in writing and signed; it is unenforceable on the same voluntariness/unconscionability-plus-disclosure standard as a premarital agreement.",
+    client_right:
+      "Already married, you and your spouse can sign an agreement that divides community property into each spouse's separate property (a postnuptial or 'partition and exchange' agreement).",
+    deadline: null,
+    official_url: FA_URL("4"),
+    triggers: [
+      "postnup",
+      "postnuptial",
+      // NB: not bare "marital agreement" — it is a substring of "premarital
+      // agreement", which would mis-flag a prenup as a postnup.
+      "postnuptial agreement",
+      "marital property agreement",
+      "partition agreement",
+      "partition and exchange",
+      "already married protect assets",
+      "convert community to separate",
+    ],
+  },
   {
     key: "tx-fam-divorce-grounds",
     code: "Tex. Fam. Code §§ 6.001–6.007",

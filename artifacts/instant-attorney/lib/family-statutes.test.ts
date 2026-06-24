@@ -8,7 +8,7 @@ import {
   matchFamilyStatutesByText,
 } from "./family-statutes.ts";
 
-const VALID_CHAPTERS = ["3", "6", "7", "8", "85", "153", "154", "156", "157", "160"];
+const VALID_CHAPTERS = ["3", "4", "6", "7", "8", "85", "153", "154", "156", "157", "160"];
 
 test("registry is non-empty and every statute cites an official .gov source", () => {
   assert.ok(FAMILY_STATUTES.length >= 1);
@@ -52,4 +52,16 @@ test("offline keyword fallback catches obvious family situations", () => {
 
   const safety = matchFamilyStatutesByText("I am afraid, there has been family violence").map((s) => s.key);
   assert.ok(safety.includes("tx-fam-protective-order"));
+
+  const prenup = matchFamilyStatutesByText("we want a prenup before the wedding").map((s) => s.key);
+  assert.ok(prenup.includes("tx-fam-premarital-agreement"));
+  assert.ok(!prenup.includes("tx-fam-marital-agreement"));
+
+  const postnup = matchFamilyStatutesByText("we're already married and want a postnup / partition agreement").map((s) => s.key);
+  assert.ok(postnup.includes("tx-fam-marital-agreement"));
+
+  // "premarital agreement" must NOT trip the postnup statute (substring collision).
+  const premaritalPhrase = matchFamilyStatutesByText("i want a premarital agreement").map((s) => s.key);
+  assert.ok(premaritalPhrase.includes("tx-fam-premarital-agreement"));
+  assert.ok(!premaritalPhrase.includes("tx-fam-marital-agreement"));
 });
