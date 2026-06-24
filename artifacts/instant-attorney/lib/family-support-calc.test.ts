@@ -39,9 +39,18 @@ test("net resources are capped at the statutory cap", () => {
   });
   assert.equal(est.capApplied, true);
   assert.equal(est.cappedNetResources, DEFAULT_NET_RESOURCES_CAP);
-  // 25% of the $9,200 cap
+  // 25% of the statutory cap (two children)
   assert.equal(est.monthlyAmount, Math.round(DEFAULT_NET_RESOURCES_CAP * 0.25 * 100) / 100);
   assert.ok(est.assumptions.some((a) => a.includes("cap")));
+});
+
+test("default cap matches the current OAG figure ($11,700, eff. Sept 1, 2025)", () => {
+  // Locks the live statutory value so an accidental change is caught and the
+  // figure is documented. Update with the OAG's next six-year adjustment.
+  assert.equal(DEFAULT_NET_RESOURCES_CAP, 11700);
+  // One child at/above the cap => 20% of $11,700 = $2,340/month.
+  const est = estimateChildSupport({ netMonthlyResources: 50000, childrenBeforeCourt: 1 });
+  assert.equal(est.monthlyAmount, 2340);
 });
 
 test("capOverride uses the provided cap", () => {

@@ -47,10 +47,11 @@ const MULTIPLE_FAMILY_TABLE: Record<number, Record<number, number>> = {
 /**
  * Statutory cap on monthly net resources to which the guidelines apply
  * (§ 154.125(a-1)). The Office of the Attorney General adjusts it for inflation
- * every six years; it was $9,200 effective Sept 1, 2019. ALWAYS confirm the
- * current OAG cap — pass `capOverride` to use a different figure.
+ * every six years. It rose to $11,700 effective Sept 1, 2025 (from $9,200, which
+ * had applied since Sept 1, 2019). The next adjustment is due around Sept 2031 —
+ * confirm the current OAG cap and pass `capOverride` if it has changed again.
  */
-export const DEFAULT_NET_RESOURCES_CAP = 9200;
+export const DEFAULT_NET_RESOURCES_CAP = 11700;
 
 export interface ChildSupportInput {
   /** Obligor's monthly net resources (after taxes, union dues, and the child's
