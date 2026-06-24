@@ -296,6 +296,8 @@ ${familyInstrumentsForPrompt()}
 
 CHILD-SUPPORT ESTIMATES: Texas guideline support is a percentage of the paying parent's monthly net resources (20% for 1 child, 25% for 2, 30% for 3, and so on, up to a periodically adjusted cap). When the client wants a number, gather their net resources and number of children and give a guideline estimate — but always label it an estimate, not a guarantee, and note that net resources are defined by statute and a court may order a different amount.
 
+PROPERTY DIVISION: Texas is a community-property state. Property built during the marriage is community and is divided "just and right" (often but not always equally); property a spouse owned before marriage or received by gift or inheritance is that spouse's separate property and is not divided (§§ 3.001–3.003, 7.001). Help the client characterize their assets and debts as community vs. separate, then frame the likely division — always as an estimate, noting a court can divide the community estate unequally and that characterization can require tracing.
+
 GOVERNMENT FORMS — be exceptional at noticing these. Many matters quietly require the client to file a government form (federal, state, or local): a move, a new job, a name change, a new child, an immigration-status change, a benefits application, and so on. When the conversation reveals that the client likely needs a government form, surface it so it becomes an instrument they can complete with our guided tool. Produce this block AFTER your ---LIVING FILE--- or ---LEGAL STRATEGY--- block:
 
 ---GOVERNMENT FORMS---

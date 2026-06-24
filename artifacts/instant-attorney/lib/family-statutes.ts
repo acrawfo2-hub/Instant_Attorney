@@ -15,6 +15,7 @@
 // intentionally high-level; the linked official text governs.
 
 export type FamilyChapter =
+  | "3"
   | "6"
   | "7"
   | "8"
@@ -110,6 +111,48 @@ export const FAMILY_STATUTES: FamilyStatute[] = [
       "60 days",
       "when will it be final",
       "finalize divorce",
+    ],
+  },
+  {
+    key: "tx-fam-separate-property",
+    code: "Tex. Fam. Code § 3.001",
+    chapter: "3",
+    topic: "What is separate property",
+    summary:
+      "A spouse's separate property is property owned or claimed before marriage; property acquired during marriage by gift, devise, or descent (inheritance); and recovery for personal injuries sustained during marriage, except any recovery for loss of earning capacity.",
+    client_right:
+      "Property you owned before marriage, or received during marriage by gift or inheritance, is your separate property and is not divided in the divorce.",
+    deadline: null,
+    official_url: FA_URL("3"),
+    triggers: [
+      "before the marriage",
+      "owned before",
+      "inheritance",
+      "inherited",
+      "gift",
+      "separate property",
+      "premarital asset",
+      "personal injury settlement",
+    ],
+  },
+  {
+    key: "tx-fam-community-presumption",
+    code: "Tex. Fam. Code §§ 3.002–3.003",
+    chapter: "3",
+    topic: "Community property and the community presumption",
+    summary:
+      "Community property is all property, other than separate property, acquired by either spouse during marriage. Property possessed by either spouse during or on dissolution of marriage is presumed to be community property, and that presumption can be overcome only by clear and convincing evidence.",
+    client_right:
+      "Anything acquired during the marriage is presumed community property to be divided — to keep something out, you must clearly prove it is separate.",
+    deadline: null,
+    official_url: FA_URL("3"),
+    triggers: [
+      "acquired during marriage",
+      "is it community",
+      "presumed community",
+      "prove separate",
+      "commingled",
+      "tracing",
     ],
   },
   {

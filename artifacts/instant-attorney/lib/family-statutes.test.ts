@@ -8,7 +8,7 @@ import {
   matchFamilyStatutesByText,
 } from "./family-statutes.ts";
 
-const VALID_CHAPTERS = ["6", "7", "8", "85", "153", "154", "156", "157", "160"];
+const VALID_CHAPTERS = ["3", "6", "7", "8", "85", "153", "154", "156", "157", "160"];
 
 test("registry is non-empty and every statute cites an official .gov source", () => {
   assert.ok(FAMILY_STATUTES.length >= 1);

@@ -595,6 +595,23 @@ export default function ClientFileView({
         </div>
       )}
 
+      {/* Property-division estimator — family matters only (client mode). Saves a
+          guideline community-estate split into this file so a decree seeds from it. */}
+      {!isAttorney && isFamilyMatter && (
+        <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
+          <div className="lf-card-label">Estimate the Property Split</div>
+          <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
+            Texas divides what you built during the marriage (the community estate) &ldquo;just and
+            right,&rdquo; while each spouse keeps their separate property. List your assets and debts for a
+            free starting-point picture — we&apos;ll save it to this file so a decree can use it. It&apos;s an
+            estimate, not legal advice, and a court may divide things differently.
+          </p>
+          <Link href={`/family/property-division?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
+            Estimate the property split →
+          </Link>
+        </div>
+      )}
+
       {/* Document Wizards — client mode only */}
       {!isAttorney && (
         <div className="lf-card lf-card-full lf-wizard-spotlight">

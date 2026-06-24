@@ -103,6 +103,7 @@ export const FAMILY_INSTRUMENTS: FamilyInstrument[] = [
     ],
     relevant_statutes: [
       "tx-fam-property-division",
+      "tx-fam-separate-property",
       "tx-fam-conservatorship",
       "tx-fam-spo",
       "tx-fam-support-guidelines",
@@ -190,7 +191,11 @@ export const FAMILY_INSTRUMENTS: FamilyInstrument[] = [
       "Any waiver or limitation of spousal maintenance",
       "Disclosure of assets and acknowledgment of voluntary signing",
     ],
-    relevant_statutes: ["tx-fam-property-division", "tx-fam-maintenance-eligibility"],
+    relevant_statutes: [
+      "tx-fam-property-division",
+      "tx-fam-separate-property",
+      "tx-fam-maintenance-eligibility",
+    ],
     default_response_days: null,
     high_stakes: false,
     triggers: ["prenup", "prenuptial", "postnup", "marital agreement", "before we marry", "protect my assets"],
