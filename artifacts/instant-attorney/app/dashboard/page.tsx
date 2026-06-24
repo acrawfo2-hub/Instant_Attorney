@@ -133,6 +133,20 @@ export default async function DashboardPage() {
             Debt-Collection Rights
             <span className="dash-btn-hint">Free — your rights and next steps against a debt collector</span>
           </Link>
+          <Link href="/bankruptcy/means-test" className="dash-btn dash-btn-secondary">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 6l9-3 9 3M5 10v8m14-8v8M3 21h18M9 10v8m6-8v8" />
+            </svg>
+            Chapter 7 Means Test
+            <span className="dash-btn-hint">Free — can you file Chapter 7? Check the income screen</span>
+          </Link>
+          <Link href="/bankruptcy/options" className="dash-btn dash-btn-secondary">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3" /><path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6l2.1 2.1m0-12.8l-2.1 2.1M7.7 16.3l-2.1 2.1" />
+            </svg>
+            Debt-Relief Options
+            <span className="dash-btn-hint">Free — weigh bankruptcy vs. the alternatives</span>
+          </Link>
           <Link href="/family/child-support" className="dash-btn dash-btn-secondary">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />

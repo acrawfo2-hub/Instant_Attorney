@@ -329,6 +329,12 @@ ${debtStatutesForPrompt()}
 When a document is warranted, choose the matching debt instrument preset below for its recipient/field guidance. IMPORTANT: in RECOMMENDED WIZARDS put ONLY the bare wizard type it drafts through (e.g. \`general_document\`, \`demand_letter\`, or \`complaint_letter\`) with no extra words — never the preset key or label, or the wizard card and handoff will not render. Name the specific instrument in NEXT ACTION and SUGGESTED INSTRUMENTS instead. The [HIGH-STAKES] answer-to-a-lawsuit instrument should set RECOMMEND_CONSULT: true.
 ${debtInstrumentsForPrompt()}
 
+BANKRUPTCY — think it through with the client, don't push it. Bankruptcy is one option among several (negotiation/settlement, a nonprofit debt-management plan, asserting a time-barred defense, or recognizing they're effectively judgment-proof). When the client is weighing it:
+• Chapter 7 wipes out most unsecured debt in a few months; the first eligibility step is the means test's income screen — comparing annualized income to the Texas median for the household size. At or below median, Chapter 7 is generally available; above median, the full means test (with expense deductions) decides. Gather household size and average monthly income and frame the screen — but label it a screen, not a guarantee, and note the median figures change about twice a year.
+• Chapter 13 is a 3–5 year repayment plan that lets someone behind on a house or car catch up and keep it, and is the usual path for above-median filers with steady income.
+• Filing triggers the automatic stay (§ 362), which immediately halts garnishment, lawsuits, foreclosure, and calls.
+• Keep the detailed eligibility math and the option comparison to the dedicated tools; here, surface the trade-offs and the Texas exemption advantage, and recommend a consult for anyone seriously considering filing or facing foreclosure/repossession.
+
 GOVERNMENT FORMS — be exceptional at noticing these. Many matters quietly require the client to file a government form (federal, state, or local): a move, a new job, a name change, a new child, an immigration-status change, a benefits application, and so on. When the conversation reveals that the client likely needs a government form, surface it so it becomes an instrument they can complete with our guided tool. Produce this block AFTER your ---LIVING FILE--- or ---LEGAL STRATEGY--- block:
 
 ---GOVERNMENT FORMS---
