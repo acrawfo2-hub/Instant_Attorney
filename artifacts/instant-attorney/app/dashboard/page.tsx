@@ -126,6 +126,13 @@ export default async function DashboardPage() {
             What-If Game
             <span className="dash-btn-hint">Optional — pressure-test your strategy against scenarios the law has seen</span>
           </Link>
+          <Link href="/family/child-support" className="dash-btn dash-btn-secondary">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+            </svg>
+            Child Support Estimator
+            <span className="dash-btn-hint">Free — a Texas guideline child-support estimate in seconds</span>
+          </Link>
           {consult && consult.status !== "cancelled" && consult.status !== "completed" ? (
             <a href="#consult-status" className="dash-btn dash-btn-secondary dash-btn--consult-active">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

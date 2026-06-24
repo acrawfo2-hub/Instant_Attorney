@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   estimateChildSupport,
   formatChildSupportEstimate,
+  childSupportEstimateToFact,
+  CHILD_SUPPORT_FACT_LABEL,
   DEFAULT_NET_RESOURCES_CAP,
 } from "./family-support-calc.ts";
 
@@ -74,6 +76,24 @@ test("negative net resources are treated as zero", () => {
 
 test("invalid child count throws", () => {
   assert.throws(() => estimateChildSupport({ netMonthlyResources: 5000, childrenBeforeCourt: 0 }), RangeError);
+});
+
+test("estimate-to-fact uses the stable label and carries inputs + caveat", () => {
+  const input = { netMonthlyResources: 5000, childrenBeforeCourt: 1 };
+  const est = estimateChildSupport(input);
+  const fact = childSupportEstimateToFact(input, est);
+  assert.equal(fact.label, CHILD_SUPPORT_FACT_LABEL);
+  assert.ok(fact.value.includes("$1,000"));
+  assert.ok(fact.value.includes("1 child"));
+  assert.ok(/estimate only/i.test(fact.value));
+});
+
+test("estimate-to-fact notes the cap and other children when present", () => {
+  const input = { netMonthlyResources: 20000, childrenBeforeCourt: 2, otherChildren: 1 };
+  const est = estimateChildSupport(input);
+  const fact = childSupportEstimateToFact(input, est);
+  assert.ok(/cap/i.test(fact.value));
+  assert.ok(fact.value.includes("1 other child"));
 });
 
 test("formatter produces a readable one-liner with a dollar amount", () => {

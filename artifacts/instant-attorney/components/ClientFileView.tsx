@@ -10,6 +10,7 @@ import CancelDocButton from "@/components/CancelDocButton";
 import FactsPanel from "@/components/FactsPanel";
 import { placeholderFields } from "@/lib/wizard-parsing";
 import { computeMissionControl } from "@/lib/mission-control";
+import { matchFamilyInstrumentsByText } from "@/lib/family-instruments";
 import type { CaseFile, FactItem, Document, Profile, WizardType, ConsultRequest, RequestedAttachment, GovFormInstrument, Attachment } from "@/lib/types";
 import { isValidWizardType } from "@/lib/document-utils";
 import { WIZARD_LABELS, docTypeLabel, personDisplayName, isDocumentOutOfDate, coerceWizardType } from "@/lib/types";
@@ -261,6 +262,10 @@ export default function ClientFileView({
   const strategy = caseFile.legal_strategy ?? null;
   const recommendedWizards = strategy?.recommended_wizards ?? [];
   const isAttorney = mode === "attorney";
+  // Surface the child-support estimator only on family matters, detected by
+  // reusing the family-instrument keyword matcher over the matter's own text.
+  const isFamilyMatter =
+    matchFamilyInstrumentsByText(`${caseFile.matter_subtype ?? ""} ${caseFile.summary ?? ""}`).length > 0;
 
   // The client has "brought in a document" once at least one upload exists that
   // didn't fail to store. Document Review only makes sense against a real
@@ -570,6 +575,22 @@ export default function ClientFileView({
           </p>
           <Link href={`/what-if?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
             Play the What-If Game →
+          </Link>
+        </div>
+      )}
+
+      {/* Child-support estimator — family matters only (client mode). Saves a
+          guideline estimate into this file so a support order/decree seeds from it. */}
+      {!isAttorney && isFamilyMatter && (
+        <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
+          <div className="lf-card-label">Estimate Child Support</div>
+          <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
+            Texas sets child support as a percentage of the paying parent&apos;s monthly net resources.
+            Get a free guideline estimate in seconds — we&apos;ll save it to this file so a support order or
+            decree can use it. It&apos;s an estimate, not legal advice, and a court may order a different amount.
+          </p>
+          <Link href={`/family/child-support?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
+            Estimate child support →
           </Link>
         </div>
       )}

@@ -158,6 +158,43 @@ export function estimateChildSupport(input: ChildSupportInput): ChildSupportEsti
   };
 }
 
+/** A {label, value} pair ready for the Living File's dedupe-by-prefix fact writer. */
+export interface EstimateFact {
+  label: string;
+  value: string;
+}
+
+/** Stable label so re-running the estimator UPDATES the same fact in place
+ * (dedupe-by-"<label>:" prefix) instead of piling up duplicates. */
+export const CHILD_SUPPORT_FACT_LABEL = "Child support (Texas guideline estimate)";
+
+/**
+ * Turn an estimate into a single confirmed fact for the Living File, so a Child
+ * Support Order / decree drafted later seeds from the computed number instead of
+ * a blank placeholder. The value carries the inputs and an estimate caveat so a
+ * reader (or the drafter) sees how it was derived. Pure — the route decides
+ * status/kind ('confirmed'/'fact') and handles the write.
+ */
+export function childSupportEstimateToFact(
+  input: ChildSupportInput,
+  est: ChildSupportEstimate
+): EstimateFact {
+  const amt = est.monthlyAmount.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+  });
+  const net = est.cappedNetResources.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+  });
+  const kids = Math.floor(input.childrenBeforeCourt);
+  const otherChildren = Math.max(0, Math.floor(input.otherChildren ?? 0));
+  const otherClause = otherChildren > 0 ? `, ${otherChildren} other child(ren) supported` : "";
+  const capClause = est.capApplied ? " (net resources capped at the statutory maximum)" : "";
+  const value = `about ${amt}/month — ${est.applicablePercentage}% of ${net} monthly net resources for ${kids} child${kids === 1 ? "" : "ren"}${otherClause}${capClause}. Estimate only, not a guarantee; net resources are defined by statute and a court may order a different amount.`;
+  return { label: CHILD_SUPPORT_FACT_LABEL, value };
+}
+
 /**
  * One-line human summary of an estimate, for chat/document surfaces.
  */
