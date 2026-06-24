@@ -1,0 +1,72 @@
+name: Legal data freshness
+
+# Scheduled re-verification reminder for time-sensitive legal data (statutory
+# dollar caps, guideline figures, statute registries, government-form revisions).
+# It NEVER changes a value — it scans lib/legal-freshness/registry.ts and, when
+# something is overdue or due soon, opens or updates a single tracking issue so a
+# human re-verifies against the official source.
+
+on:
+  schedule:
+    # 1st of each month, 13:00 UTC.
+    - cron: "0 13 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  scan:
+    name: Scan legal data freshness
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: artifacts/instant-attorney
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Run freshness scan
+        id: scan
+        run: npm run freshness
+
+      - name: Open or update the review issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('artifacts/instant-attorney/freshness-report.md', 'utf8');
+            const overdue = Number('${{ steps.scan.outputs.overdue }}' || '0');
+            const dueSoon = Number('${{ steps.scan.outputs.due_soon }}' || '0');
+            const title = 'Legal data due for review';
+            const label = 'legal-data-review';
+
+            const { owner, repo } = context.repo;
+            const open = await github.paginate(github.rest.issues.listForRepo, {
+              owner, repo, state: 'open', per_page: 100,
+            });
+            const existing = open.find((i) => i.title === title && !i.pull_request);
+
+            if (overdue > 0 || dueSoon > 0) {
+              if (existing) {
+                await github.rest.issues.update({ owner, repo, issue_number: existing.number, body });
+                console.log(`Updated issue #${existing.number}`);
+              } else {
+                const created = await github.rest.issues.create({ owner, repo, title, body, labels: [label] });
+                console.log(`Opened issue #${created.data.number}`);
+              }
+            } else if (existing) {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: existing.number,
+                body: 'All tracked legal data is current as of this scan. Closing — the scheduled scan will reopen this if anything goes overdue.',
+              });
+              await github.rest.issues.update({ owner, repo, issue_number: existing.number, state: 'closed' });
+              console.log(`Closed issue #${existing.number} (all clear)`);
+            } else {
+              console.log('All clear; no tracking issue to manage.');
+            }
