@@ -75,16 +75,20 @@ export async function POST(req: NextRequest) {
     userId = user.id;
   }
 
-  // Subscription gate
+  // Subscription gate: accept plan=consult OR a Phase 2 user with a consult credit
+  let consultSub: { plan: string; status: string; consult_credits: number } | null = null;
   if (!BYPASS_AUTH) {
     const { data: sub } = await db
       .from("subscriptions")
-      .select("status, plan")
+      .select("status, plan, consult_credits")
       .eq("user_id", userId)
       .maybeSingle();
-    if (!sub || sub.plan !== "consult" || !["active", "bypass"].includes(sub.status)) {
-      return NextResponse.json({ error: "Consult subscription required" }, { status: 403 });
+    const isActive = sub && ["active", "bypass"].includes(sub.status);
+    const hasAccess = isActive && (sub.plan === "consult" || (sub.consult_credits ?? 0) > 0);
+    if (!hasAccess) {
+      return NextResponse.json({ error: "Consult credit required" }, { status: 403 });
     }
+    consultSub = sub;
   }
 
   // No existing active request
@@ -125,6 +129,14 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (insertErr) return NextResponse.json({ error: insertErr.message }, { status: 500 });
+
+  // Consume a credit for Phase 2 add-on users (plan=consult never expires by credit)
+  if (!BYPASS_AUTH && consultSub && consultSub.plan !== "consult" && (consultSub.consult_credits ?? 0) > 0) {
+    await db
+      .from("subscriptions")
+      .update({ consult_credits: consultSub.consult_credits - 1 })
+      .eq("user_id", userId);
+  }
 
   // Notify attorney
   try {

@@ -8,6 +8,7 @@ import CaseFileCard from "@/components/CaseFileCard";
 import ConsultStatusCard from "@/components/ConsultStatusCard";
 import LogoutButton from "@/components/LogoutButton";
 import BillingMeter from "@/components/BillingMeter";
+import ConsultCheckoutButton from "@/components/ConsultCheckoutButton";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 const MAX_ACTIVE_FILES = 10;
@@ -52,7 +53,7 @@ async function getData() {
       .maybeSingle(),
     db
       .from("subscriptions")
-      .select("status, plan")
+      .select("status, plan, consult_credits")
       .eq("user_id", userId)
       .maybeSingle(),
   ]);
@@ -66,7 +67,8 @@ async function getData() {
   const archivedFiles = files.filter((f) => f.status === "archived");
   const totalPendingDocs = (pendingDocs ?? []).length;
   const consult = consultRow as ConsultRequest | null;
-  const hasConsultSub = subRow?.plan === "consult" && ["active", "bypass"].includes(subRow?.status ?? "");
+  const isActiveStatus = ["active", "bypass"].includes(subRow?.status ?? "");
+  const hasConsultSub = isActiveStatus && (subRow?.plan === "consult" || (subRow?.consult_credits ?? 0) > 0);
 
   return { activeFiles, archivedFiles, totalPendingDocs, consult, hasConsultSub };
 }
@@ -123,13 +125,31 @@ export default async function DashboardPage() {
             Quick Question
             <span className="dash-btn-hint">Seek legal advice on any legal topic unrelated to your files</span>
           </Link>
-          <Link href="/what-if" className="dash-btn dash-btn-secondary">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><line x1="12" y1="17" x2="12.01" y2="17" />
-            </svg>
-            What-If Game
-            <span className="dash-btn-hint">Optional — pressure-test your strategy against scenarios the law has seen</span>
-          </Link>
+          {consult && consult.status !== "cancelled" && consult.status !== "completed" ? (
+            <a href="#consult-status" className="dash-btn dash-btn-secondary dash-btn--consult-active">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+              View Consult
+              <span className="dash-btn-hint">
+                {consult.status === "confirmed" ? "Confirmed — see details below" :
+                 consult.status === "attorney_proposed" ? "New time proposed — respond below" :
+                 "Pending attorney confirmation"}
+              </span>
+            </a>
+          ) : hasConsultSub ? (
+            <Link href="/consult/schedule" className="dash-btn dash-btn-secondary">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+              Schedule Consult
+              <span className="dash-btn-hint">Book 1-on-1 time with Andrew Crawford, Esq.</span>
+            </Link>
+          ) : (
+            <ConsultCheckoutButton />
+          )}
           <Link href="/debt/rights" className="dash-btn dash-btn-secondary">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
@@ -179,38 +199,13 @@ export default async function DashboardPage() {
             Spousal Maintenance Screen
             <span className="dash-btn-hint">Free — an honest read on Texas spousal maintenance</span>
           </Link>
-          {consult && consult.status !== "cancelled" && consult.status !== "completed" ? (
-            <a href="#consult-status" className="dash-btn dash-btn-secondary dash-btn--consult-active">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-              </svg>
-              View Consult
-              <span className="dash-btn-hint">
-                {consult.status === "confirmed" ? "Confirmed — see details below" :
-                 consult.status === "attorney_proposed" ? "New time proposed — respond below" :
-                 "Pending attorney confirmation"}
-              </span>
-            </a>
-          ) : hasConsultSub ? (
-            <Link href="/consult/schedule" className="dash-btn dash-btn-secondary">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-              </svg>
-              Schedule Consult
-              <span className="dash-btn-hint">Book 1-on-1 time with Andrew Crawford, Esq.</span>
-            </Link>
-          ) : (
-            <Link href="/register?upgrade=consult" className="dash-btn dash-btn-secondary">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-              </svg>
-              Schedule Consult · $49.99
-              <span className="dash-btn-hint">Book 1-on-1 time with Andrew Crawford, Esq.</span>
-            </Link>
-          )}
+          <Link href="/what-if" className="dash-btn dash-btn-secondary">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            What-If Game
+            <span className="dash-btn-hint">Optional — pressure-test your strategy against scenarios the law has seen</span>
+          </Link>
         </div>
 
         {/* Global status bar */}

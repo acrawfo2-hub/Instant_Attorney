@@ -30,12 +30,27 @@ export async function POST(req: NextRequest) {
   const priceId = plan === "consult" ? CONSULT_PRICE_ID : PHASE2_PRICE_ID;
   const mode = plan === "consult" ? "payment" : "subscription";
 
+  // Pre-fill the saved card for returning subscribers (one-click confirm on Stripe)
+  const serviceDb = createServiceClient();
+  const { data: existingSub } = await serviceDb
+    .from("subscriptions")
+    .select("stripe_customer_id, plan")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  const cancelUrl =
+    plan === "consult" && existingSub?.plan === "phase2"
+      ? `${origin}/dashboard`
+      : `${origin}/onboarding?step=payment&canceled=true`;
+
   const session = await getStripe().checkout.sessions.create({
-    mode,
-    customer_email: user.email,
+    mode: mode as "payment" | "subscription",
+    ...(existingSub?.stripe_customer_id
+      ? { customer: existingSub.stripe_customer_id }
+      : { customer_email: user.email }),
     line_items: [{ price: priceId, quantity: 1 }],
     success_url: `${origin}/api/subscriptions/confirm?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${origin}/onboarding?step=payment&canceled=true`,
+    cancel_url: cancelUrl,
     metadata: { user_id: user.id, plan },
   });
 
