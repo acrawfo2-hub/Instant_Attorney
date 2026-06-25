@@ -182,8 +182,17 @@ function PlannerTool() {
           })}
         </div>
 
-        {/* Next steps: the practical checklist + the What-If reflection */}
+        {/* Next steps: the dollars, the practical checklist + the What-If reflection */}
         <div style={{ marginTop: 28, display: "grid", gap: 12 }}>
+          <Link href={caseFileId ? `/estate/estimate?caseFileId=${caseFileId}` : "/estate/estimate"} style={nextCard}>
+            <div>
+              <div style={{ fontSize: 14.5, fontWeight: 600, color: navy }}>See the dollars: probate vs. trust →</div>
+              <div style={{ fontSize: 13, color: textMd, marginTop: 3, lineHeight: 1.5 }}>
+                Put rough numbers on the trade-off — what a plain will, a will plus transfer-on-death
+                tools, and a living trust each cost for your situation.
+              </div>
+            </div>
+          </Link>
           <Link href={caseFileId ? `/estate/checklist?caseFileId=${caseFileId}` : "/estate/checklist"} style={nextCard}>
             <div>
               <div style={{ fontSize: 14.5, fontWeight: 600, color: navy }}>Next: your get-ready checklist →</div>
