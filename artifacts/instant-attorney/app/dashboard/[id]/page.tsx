@@ -5,6 +5,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { CaseFile, FactItem, BYPASS_USER_ID } from "@/lib/types";
 import type { Document, ConsultRequest, RequestedAttachment, GovFormInstrument, Attachment } from "@/lib/types";
 import ClientFileView from "@/components/ClientFileView";
+import AccountMenu from "@/components/AccountMenu";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
@@ -136,6 +137,7 @@ export default async function FileDetailPage({
               <polyline points="9 18 15 12 9 6" />
             </svg>
           </Link>
+          <AccountMenu />
         </div>
       </header>
 

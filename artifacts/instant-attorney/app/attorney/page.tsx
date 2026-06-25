@@ -5,7 +5,7 @@ import { docTypeLabel, personDisplayName } from "@/lib/types";
 import type { Document, CaseFile, Profile } from "@/lib/types";
 import AttorneyFileLog from "@/components/AttorneyFileLog";
 import ConsultRequestQueue, { type ConsultRequestRow } from "@/components/ConsultRequestQueue";
-import LogoutButton from "@/components/LogoutButton";
+import AccountMenu from "@/components/AccountMenu";
 
 interface DocumentWithRelations extends Document {
   case_files: CaseFile;
@@ -92,8 +92,7 @@ export default async function AttorneyPage() {
             <span>Attorney Dashboard</span>
           </div>
           <div className="atty-header-right">
-            <span className="atty-name">{personDisplayName(profile)}</span>
-            <LogoutButton />
+            <AccountMenu name={personDisplayName(profile)} email={profile?.email ?? ""} />
           </div>
         </div>
       </header>

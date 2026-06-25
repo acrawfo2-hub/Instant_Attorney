@@ -26,7 +26,7 @@ export async function GET(_req: NextRequest) {
 
   const { data } = await ctx.db
     .from("profiles")
-    .select("full_name, phone, email")
+    .select("full_name, phone, email, is_attorney")
     .eq("id", ctx.userId)
     .maybeSingle();
 
@@ -34,6 +34,7 @@ export async function GET(_req: NextRequest) {
     full_name: data?.full_name ?? "",
     phone: data?.phone ?? "",
     email: data?.email ?? "",
+    is_attorney: !!data?.is_attorney,
   });
 }
 

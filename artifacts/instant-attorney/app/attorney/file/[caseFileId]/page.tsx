@@ -2,6 +2,7 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import ClientFileView from "@/components/ClientFileView";
+import AccountMenu from "@/components/AccountMenu";
 import type { CaseFile, FactItem, Document, Profile, RequestedAttachment, GovFormInstrument } from "@/lib/types";
 
 // Attorney view of a single client case file. Renders the exact same Living
@@ -103,6 +104,7 @@ export default async function AttorneyFilePage({
           <Link href="/attorney" className="lf-begin-btn">
             Dashboard
           </Link>
+          <AccountMenu />
         </div>
       </header>
 

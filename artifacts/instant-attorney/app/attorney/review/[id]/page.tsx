@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { Attachment, Document } from "@/lib/types";
 import { docTypeLabel, personDisplayName } from "@/lib/types";
+import AccountMenu from "@/components/AccountMenu";
 
 interface DocumentDetail {
   id: string;
@@ -324,6 +325,9 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
           {isMerging && (
             <span className="atty-badge atty-badge-blue atty-badge-pulse">Generating 2nd draft…</span>
           )}
+        </div>
+        <div style={{ marginLeft: "auto" }}>
+          <AccountMenu onLight />
         </div>
       </header>
 

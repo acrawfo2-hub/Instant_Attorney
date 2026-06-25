@@ -3809,6 +3809,12 @@ mark.atty-placeholder {
   max-width: 220px;
 }
 .am-trigger:hover { border-color: rgba(255,255,255,0.5); color: #fff; }
+/* Variant for light header backgrounds (e.g. attorney review page). */
+.am-trigger--on-light {
+  border-color: var(--brand-border);
+  color: var(--brand-text-md);
+}
+.am-trigger--on-light:hover { border-color: var(--brand-text-lt); color: var(--brand-text-dk); }
 .am-avatar {
   display: inline-flex;
   align-items: center;

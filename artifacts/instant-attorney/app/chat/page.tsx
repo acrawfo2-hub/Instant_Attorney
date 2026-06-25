@@ -6,6 +6,7 @@ import { IntakeMessage, WIZARD_LABELS, LegalStrategy } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
 import QuickConsultModal from "@/components/QuickConsultModal";
 import VoiceInputButton, { VoiceUnsupportedNote } from "@/components/VoiceInputButton";
+import AccountMenu from "@/components/AccountMenu";
 
 type Msg = Pick<IntakeMessage, "role" | "content"> & {
   // Local-only: object URL for a screenshot the user attached to this turn, so the
@@ -429,6 +430,7 @@ function AcpChatInner() {
               {isQuickConsult ? "All Files" : "View File"}
             </button>
           )}
+          <AccountMenu />
         </div>
       </header>
 

@@ -5,6 +5,7 @@ import { docTypeLabel, personDisplayName } from "@/lib/types";
 import { buildDocumentPlan } from "@/lib/next-step";
 import type { CaseFile, Document, Attachment, Profile, IntakeMessage } from "@/lib/types";
 import DocumentPlanEditor from "./DocumentPlanEditor";
+import AccountMenu from "@/components/AccountMenu";
 
 interface CaseFileWithDocs extends CaseFile {
   documents: Document[];
@@ -127,9 +128,12 @@ export default async function ClientFilePage({
             </svg>
             <span>Client File</span>
           </div>
-          <Link href="/attorney" className="atty-back-link">
-            ← Dashboard
-          </Link>
+          <div className="atty-header-right">
+            <Link href="/attorney" className="atty-back-link">
+              ← Dashboard
+            </Link>
+            <AccountMenu />
+          </div>
         </div>
       </header>
 

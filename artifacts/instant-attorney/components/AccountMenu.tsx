@@ -5,22 +5,55 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 interface AccountMenuProps {
-  /** Display name (full name preferred, falls back to email). */
-  name: string;
+  /**
+   * Display name (full name preferred, falls back to email). Optional — when
+   * omitted (e.g. on client-rendered pages), the menu fetches the signed-in
+   * user's identity from /api/account/profile itself.
+   */
+  name?: string;
   /** Account email — shown under the name in the dropdown. */
-  email: string;
+  email?: string;
+  /** Set when the header background is light, so the trigger uses dark text. */
+  onLight?: boolean;
 }
 
 /**
  * Header identity control: shows who you're signed in as and opens a menu with
  * a path to account settings / billing and a sign-out action. Drop it into any
- * authenticated page header (replaces the bare LogoutButton).
+ * authenticated page header (replaces the bare LogoutButton). Pass name/email
+ * from a server component to avoid a fetch, or omit them to self-resolve.
  */
-export default function AccountMenu({ name, email }: AccountMenuProps) {
+export default function AccountMenu({ name: nameProp, email: emailProp, onLight = false }: AccountMenuProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
+  // Self-resolve identity when not supplied by a server parent.
+  const [fetchedName, setFetchedName] = useState("");
+  const [fetchedEmail, setFetchedEmail] = useState("");
+  const [isAttorney, setIsAttorney] = useState(false);
+  const needsFetch = !nameProp && !emailProp;
+
+  useEffect(() => {
+    if (!needsFetch) return;
+    let active = true;
+    fetch("/api/account/profile")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!active || !data) return;
+        setFetchedEmail(data.email ?? "");
+        setFetchedName((data.full_name?.trim() || data.email || "").trim());
+        setIsAttorney(!!data.is_attorney);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [needsFetch]);
+
+  const email = emailProp ?? fetchedEmail;
+  const name = nameProp ?? (fetchedName || fetchedEmail || "Account");
 
   // Close on outside click or Escape.
   useEffect(() => {
@@ -57,7 +90,7 @@ export default function AccountMenu({ name, email }: AccountMenuProps) {
     <div className="am-root" ref={ref}>
       <button
         type="button"
-        className="am-trigger"
+        className={`am-trigger${onLight ? " am-trigger--on-light" : ""}`}
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
@@ -85,14 +118,16 @@ export default function AccountMenu({ name, email }: AccountMenuProps) {
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
             </svg>
-            Account &amp; billing
+            {isAttorney ? "Account settings" : "Account & billing"}
           </Link>
-          <Link href="/account#pay-history" className="am-menu-item" role="menuitem" onClick={() => setOpen(false)}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <rect x="1" y="4" width="22" height="16" rx="2" ry="2" /><line x1="1" y1="10" x2="23" y2="10" />
-            </svg>
-            Payment history
-          </Link>
+          {!isAttorney && (
+            <Link href="/account#pay-history" className="am-menu-item" role="menuitem" onClick={() => setOpen(false)}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="1" y="4" width="22" height="16" rx="2" ry="2" /><line x1="1" y1="10" x2="23" y2="10" />
+              </svg>
+              Payment history
+            </Link>
+          )}
           <div className="am-menu-sep" />
           <button type="button" className="am-menu-item am-menu-item--danger" role="menuitem" onClick={handleLogout} disabled={loading}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

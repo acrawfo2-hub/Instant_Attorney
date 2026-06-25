@@ -15,6 +15,7 @@ interface ProfileRow {
   full_name: string | null;
   phone: string | null;
   created_at: string | null;
+  is_attorney?: boolean | null;
 }
 interface SubscriptionRow {
   status: string | null;
@@ -85,7 +86,7 @@ async function getData() {
   }
 
   const [{ data: profile }, { data: sub }, { data: ledger }, { data: charges }] = await Promise.all([
-    db.from("profiles").select("email, full_name, phone, created_at").eq("id", userId).maybeSingle(),
+    db.from("profiles").select("email, full_name, phone, created_at, is_attorney").eq("id", userId).maybeSingle(),
     db.from("subscriptions").select("status, plan, current_period_end, consult_credits, stripe_customer_id").eq("user_id", userId).maybeSingle(),
     db.from("top_up_ledger").select("total_topups, total_topup_usd, month_topup_usd, monthly_topup_limit_usd").eq("user_id", userId).maybeSingle(),
     db.from("top_up_charges").select("id, amount_usd, status, created_at, settled_at").eq("user_id", userId).order("created_at", { ascending: false }).limit(50),
@@ -103,6 +104,7 @@ async function getData() {
 export default async function AccountPage() {
   const { email, profile, sub, ledger, charges } = await getData();
 
+  const isAttorney = !!profile?.is_attorney;
   const planLabel = sub?.plan ? (PLAN_LABEL[sub.plan] ?? sub.plan) : "No active plan";
   const statusLabel = sub?.status ? (STATUS_LABEL[sub.status] ?? sub.status) : "—";
   const statusKey = sub?.status ?? "none";
@@ -110,6 +112,7 @@ export default async function AccountPage() {
   const hasBilling = !!sub?.stripe_customer_id;
 
   const succeededCharges = charges.filter((c) => c.status === "succeeded");
+  const backHref = isAttorney ? "/attorney" : "/dashboard";
 
   return (
     <div className="lf-shell">
@@ -126,14 +129,14 @@ export default async function AccountPage() {
           <span className="lf-header-title">Account</span>
         </div>
         <div className="lf-header-right">
-          <Link href="/dashboard" className="lf-logout-btn">Back to Files</Link>
+          <Link href={backHref} className="lf-logout-btn">{isAttorney ? "Back to Dashboard" : "Back to Files"}</Link>
           <LogoutButton />
         </div>
       </header>
 
       <main className="lf-main">
         <div className="acc-page-head">
-          <h1 className="acc-page-title">Account &amp; billing</h1>
+          <h1 className="acc-page-title">{isAttorney ? "Account" : "Account & billing"}</h1>
           <p className="acc-page-sub">Signed in as <strong>{email}</strong></p>
         </div>
 
@@ -150,7 +153,17 @@ export default async function AccountPage() {
           />
         </section>
 
+        {isAttorney && (
+          <section className="acc-card">
+            <p className="acc-note" style={{ margin: 0 }}>
+              You&apos;re signed in as firm staff. Client billing and payment history don&apos;t apply
+              to your account.
+            </p>
+          </section>
+        )}
+
         {/* Subscription */}
+        {!isAttorney && (
         <section className="acc-card">
           <h2 className="acc-card-title">Subscription</h2>
           <dl className="acc-rows">
@@ -185,8 +198,10 @@ export default async function AccountPage() {
             )}
           </div>
         </section>
+        )}
 
         {/* Pay history */}
+        {!isAttorney && (
         <section className="acc-card" id="pay-history">
           <div className="acc-card-head">
             <h2 className="acc-card-title">Payment history</h2>
@@ -235,6 +250,7 @@ export default async function AccountPage() {
             </div>
           )}
         </section>
+        )}
 
         <div className="acc-signout-row">
           <LogoutButton />
