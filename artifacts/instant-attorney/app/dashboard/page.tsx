@@ -2,11 +2,11 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { BYPASS_USER_ID } from "@/lib/types";
+import { BYPASS_USER_ID, BYPASS_EMAIL, personDisplayName } from "@/lib/types";
 import type { CaseFile, ConsultRequest } from "@/lib/types";
 import CaseFileCard from "@/components/CaseFileCard";
 import ConsultStatusCard from "@/components/ConsultStatusCard";
-import LogoutButton from "@/components/LogoutButton";
+import AccountMenu from "@/components/AccountMenu";
 import BillingMeter from "@/components/BillingMeter";
 import ConsultCheckoutButton from "@/components/ConsultCheckoutButton";
 
@@ -17,20 +17,23 @@ export const dynamic = "force-dynamic";
 
 async function getData() {
   let userId: string;
+  let email: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let db: any;
 
   if (BYPASS_AUTH) {
     userId = BYPASS_USER_ID;
+    email = BYPASS_EMAIL;
     db = createServiceClient();
   } else {
     db = await createClient();
     const { data: { user } } = await db.auth.getUser();
     if (!user) redirect("/login");
     userId = user.id;
+    email = user.email ?? "";
   }
 
-  const [{ data: allFiles }, { data: pendingDocs }, { data: consultRow }, { data: subRow }] = await Promise.all([
+  const [{ data: allFiles }, { data: pendingDocs }, { data: consultRow }, { data: subRow }, { data: profileRow }] = await Promise.all([
     db
       .from("case_files")
       .select("*")
@@ -56,6 +59,11 @@ async function getData() {
       .select("status, plan, consult_credits")
       .eq("user_id", userId)
       .maybeSingle(),
+    db
+      .from("profiles")
+      .select("full_name, email")
+      .eq("id", userId)
+      .maybeSingle(),
   ]);
 
   if (!BYPASS_AUTH && (!subRow || !["active", "trialing", "bypass"].includes(subRow.status ?? ""))) {
@@ -70,14 +78,20 @@ async function getData() {
   const isActiveStatus = ["active", "bypass"].includes(subRow?.status ?? "");
   const hasConsultSub = isActiveStatus && (subRow?.plan === "consult" || (subRow?.consult_credits ?? 0) > 0);
 
-  return { activeFiles, archivedFiles, totalPendingDocs, consult, hasConsultSub };
+  const accountEmail = profileRow?.email ?? email;
+  const accountName = personDisplayName(
+    { full_name: profileRow?.full_name, email: accountEmail },
+    accountEmail || "Account",
+  );
+
+  return { activeFiles, archivedFiles, totalPendingDocs, consult, hasConsultSub, accountName, accountEmail };
 }
 
 export default async function DashboardPage() {
   const hdrs = await headers();
   const isBypass = hdrs.get("x-bypass-auth") === "true" || BYPASS_AUTH;
 
-  const { activeFiles, archivedFiles, totalPendingDocs, consult, hasConsultSub } = await getData();
+  const { activeFiles, archivedFiles, totalPendingDocs, consult, hasConsultSub, accountName, accountEmail } = await getData();
   const atLimit = activeFiles.length >= MAX_ACTIVE_FILES;
 
   return (
@@ -96,7 +110,7 @@ export default async function DashboardPage() {
         </div>
         <div className="lf-header-right">
           {isBypass && <span className="ob-bypass-badge">Test Mode</span>}
-          <LogoutButton />
+          <AccountMenu name={accountName} email={accountEmail} />
         </div>
       </header>
 
