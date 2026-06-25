@@ -12,6 +12,7 @@ import { placeholderFields } from "@/lib/wizard-parsing";
 import { computeMissionControl } from "@/lib/mission-control";
 import { looksLikeFamilyMatter } from "@/lib/family-instruments";
 import { looksLikeDebtMatter } from "@/lib/debt-instruments";
+import { looksLikeDefamationMatter } from "@/lib/defamation-instruments";
 import { buildFamilyRoadmap } from "@/lib/family-roadmap";
 import FamilyRoadmap from "@/components/FamilyRoadmap";
 import { buildBankruptcyRoadmap } from "@/lib/bankruptcy-roadmap";
@@ -274,6 +275,7 @@ export default function ClientFileView({
   const matterText = `${caseFile.matter_subtype ?? ""} ${caseFile.summary ?? ""}`;
   const isFamilyMatter = looksLikeFamilyMatter(matterText);
   const isDebtMatter = looksLikeDebtMatter(matterText);
+  const isDefamationMatter = looksLikeDefamationMatter(matterText);
   const familyRoadmap =
     !isAttorney && isFamilyMatter
       ? buildFamilyRoadmap({
@@ -647,6 +649,21 @@ export default function ClientFileView({
               Weigh my options →
             </Link>
           </div>
+        </div>
+      )}
+
+      {/* Defamation check — defamation matters only (client mode). */}
+      {!isAttorney && isDefamationMatter && (
+        <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
+          <div className="lf-card-label">Do You Have a Defamation Case?</div>
+          <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
+            Defamation is common online but tricky in the law. Get an honest read on whether you have a
+            claim — and learn the two things people miss: the short one-year deadline, and the anti-SLAPP
+            rule that can make you pay the other side&apos;s fees if you sue over public commentary.
+          </p>
+          <Link href={`/defamation/assess?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
+            Check my situation →
+          </Link>
         </div>
       )}
 

@@ -53,6 +53,12 @@ export const PRACTICE_AREAS: PracticeArea[] = [
     starterPrompt: "A debt collector keeps contacting me and I'm not sure what to do.",
   },
   {
+    slug: "defamation",
+    label: "Defamation",
+    opener: `Hello — I'm really glad you reached out. Having something false said about you, especially online, can feel awful and overwhelming, and a lot of people don't realize they have options. I'm the Instant Attorney assistant, part of Crawford Law PLLC, and I help people work through defamation — libel and slander, including social-media posts and reviews.\n\n${DISCLAIMER}\n\nTwo quick things up front, because they matter a lot here: there's a short one-year deadline in Texas to act, and rushing to sue over public commentary can sometimes backfire — so it's worth thinking it through. To start: what was said about you, where did it appear, and roughly when?`,
+    starterPrompt: "Someone posted false things about me online and I want it taken down.",
+  },
+  {
     slug: "contract",
     label: "Contracts",
     opener: `Hello — I'm glad you reached out. I'm the Instant Attorney assistant, part of Crawford Law PLLC, and I can help you review, draft, or work through a dispute over a contract.\n\n${DISCLAIMER}\n\nWhat kind of contract is it, and what do you need — a review, a new draft, or help with a disagreement?`,

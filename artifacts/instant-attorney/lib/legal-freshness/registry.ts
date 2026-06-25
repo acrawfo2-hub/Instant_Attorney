@@ -19,6 +19,20 @@ import type { FreshnessItem } from "./scan.ts";
 
 export const LEGAL_FRESHNESS_ITEMS: FreshnessItem[] = [
   {
+    id: "tx-defamation-statutes",
+    label: "Texas defamation law registry (Ch. 73, TCPA Ch. 27, 1-yr SOL)",
+    area: "defamation",
+    volatility: "catalog",
+    currentValue:
+      "Ch. 73 (libel + Defamation Mitigation Act), Ch. 27 (anti-SLAPP/TCPA), § 16.002 (1-year SOL), § 230 platform immunity",
+    sourceUrl: "https://statutes.capitol.texas.gov/Docs/CP/htm/CP.73.htm",
+    verifiedOn: "2026-06-25",
+    reviewAfter: "2027-10-01",
+    nextExpectedChange: "2027-09-01",
+    notes:
+      "Code: lib/defamation-statutes.ts. The TCPA (anti-SLAPP) has been amended repeatedly — re-check after each Texas legislative session.",
+  },
+  {
     id: "means-test-707b-thresholds",
     label: "§ 707(b)(2) means-test presumption thresholds",
     area: "bankruptcy",
