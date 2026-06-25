@@ -593,6 +593,26 @@ export default function ClientFileView({
         </div>
       )}
 
+      {/* Bankruptcy tools — debt matters only (client mode). */}
+      {!isAttorney && isDebtMatter && (
+        <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
+          <div className="lf-card-label">Weighing Bankruptcy?</div>
+          <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
+            Bankruptcy is one option among several, and it&apos;s often more manageable than people fear. Check
+            whether you could file Chapter 7 (the income screen), and think through all your options — saved to
+            this file. General information, not legal advice.
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+            <Link href={`/bankruptcy/means-test?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
+              Run the means test →
+            </Link>
+            <Link href={`/bankruptcy/options?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
+              Weigh my options →
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* What-If Game — pressure-test this matter (client mode only) */}
       {!isAttorney && (
         <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>

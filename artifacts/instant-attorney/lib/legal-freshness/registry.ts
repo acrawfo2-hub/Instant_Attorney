@@ -19,6 +19,21 @@ import type { FreshnessItem } from "./scan.ts";
 
 export const LEGAL_FRESHNESS_ITEMS: FreshnessItem[] = [
   {
+    id: "tx-means-test-median-income",
+    label: "Texas median family income (Chapter 7 means test)",
+    area: "bankruptcy",
+    volatility: "indexed-dollar",
+    currentValue:
+      "Household 1:$65,123 · 2:$84,491 · 3:$96,728 · 4:$114,938 (+$11,100/addl), effective Nov 1, 2025",
+    sourceUrl: "https://www.justice.gov/ust/means-testing",
+    verifiedOn: "2026-06-24",
+    reviewAfter: "2026-08-01",
+    effectiveDate: "2025-11-01",
+    nextExpectedChange: "2026-11-01",
+    notes:
+      "Code: TX_MEANS_TEST in lib/bankruptcy-means-test.ts. The U.S. Trustee updates these figures about twice a year (≈ Nov 1 and a spring update) — verify against the current UST table; a spring-2026 update may already apply.",
+  },
+  {
     id: "tx-child-support-net-resources-cap",
     label: "Texas child-support net-resources cap (§ 154.125)",
     area: "family",
