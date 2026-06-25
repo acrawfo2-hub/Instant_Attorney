@@ -257,6 +257,13 @@ export default async function DashboardPage() {
               Spousal Maintenance Screen
               <span className="dash-btn-hint">Free — an honest read on Texas spousal maintenance</span>
             </Link>
+            <Link href="/estate/planner" className="dash-btn dash-btn-secondary">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6" />
+              </svg>
+              Estate Planning &amp; Trusts
+              <span className="dash-btn-hint">Free — do you actually need a trust? A plain-English read for the middle class</span>
+            </Link>
             <Link href="/what-if" className="dash-btn dash-btn-secondary">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><line x1="12" y1="17" x2="12.01" y2="17" />
