@@ -30,14 +30,18 @@ test("default recommendation returns all instruments, essentials first", () => {
   assert.equal(r[0].fit, "essential");
 });
 
-test("the honest thesis: a simple Texas estate does NOT get a strong trust push", () => {
+test("balanced thesis: a simple Texas estate gets a fair 'consider', not a dismissal", () => {
   const r = recommendEstatePlan({ ownsHome: true, minorChildren: false });
   const trust = r.find((i) => i.key === "revocable_living_trust")!;
-  assert.equal(trust.fit, "optional");
-  // The cheap home tool should be the strong pick instead.
+  // Balanced stance: never dismissed as unnecessary — it's a genuine option.
+  assert.equal(trust.fit, "consider");
+  // The cheap home tool is still a strong pick as the simpler alternative.
   const todd = r.find((i) => i.key === "transfer_on_death_deed")!;
   assert.equal(todd.fit, "strong");
-  assert.match(trustVerdict({ ownsHome: true }), /don't need an expensive trust/i);
+  // The verdict presents a personal trade-off and corrects the will-avoids-probate myth.
+  const verdict = trustVerdict({ ownsHome: true });
+  assert.match(verdict, /personal call/i);
+  assert.match(verdict, /will does NOT avoid probate/i);
 });
 
 test("out-of-state real estate makes a living trust a strong fit", () => {
@@ -45,10 +49,10 @@ test("out-of-state real estate makes a living trust a strong fit", () => {
   const trust = r.find((i) => i.key === "revocable_living_trust")!;
   assert.equal(trust.fit, "strong");
   assert.match(trust.reason, /out-of-state|second probate/i);
-  assert.match(trustVerdict({ outOfStateRealEstate: true }), /worth it/i);
+  assert.match(trustVerdict({ outOfStateRealEstate: true }), /strong fit/i);
 });
 
-test("two trust payoffs (privacy + incapacity) make it strong; one alone is only 'consider'", () => {
+test("two trust payoffs (privacy + incapacity) make it strong; one or none stays 'consider'", () => {
   const strong = recommendEstatePlan({ wantsPrivacy: true, wantsIncapacityManagement: true })
     .find((i) => i.key === "revocable_living_trust")!;
   assert.equal(strong.fit, "strong");
@@ -56,6 +60,9 @@ test("two trust payoffs (privacy + incapacity) make it strong; one alone is only
   const one = recommendEstatePlan({ wantsPrivacy: true })
     .find((i) => i.key === "revocable_living_trust")!;
   assert.equal(one.fit, "consider");
+
+  const none = recommendEstatePlan().find((i) => i.key === "revocable_living_trust")!;
+  assert.equal(none.fit, "consider");
 });
 
 test("minor children make a guardian designation essential", () => {

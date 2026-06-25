@@ -72,7 +72,7 @@ const INSTRUMENTS: Record<EstateInstrumentKey, EstateInstrument> = {
     label: "Will with independent administration",
     costBand: "Low — the foundation of almost every plan",
     summary:
-      "A will that names who inherits, names your executor, asks for independent administration, and (for parents) names a guardian for your children. Thanks to Texas independent administration, a will-based estate usually clears probate quickly and cheaply — which is why, for most middle-class families, a solid will is the backbone, not a starter step toward a trust.",
+      "A will names who inherits, names your executor, asks for independent administration, and (for parents) names a guardian for your children. Be clear-eyed about one thing: a will does NOT avoid probate — property passing under it still goes through the courts. In Texas, independent administration keeps that relatively efficient, but it's still a court process with real cost (commonly a few thousand dollars), and a married couple typically probates twice. A solid will is the backbone of nearly every plan; whether you ALSO want a living trust to skip probate entirely is a separate, personal question.",
     bestWhen: [
       "You want a clear, low-cost plan that says who gets what and who's in charge.",
       "You have minor children and need to name a guardian (a will is where you do it).",
@@ -172,10 +172,10 @@ const INSTRUMENTS: Record<EstateInstrumentKey, EstateInstrument> = {
     label: "Revocable living trust",
     costBand: "Higher — costs more to draft AND must be funded",
     summary:
-      "A trust you control during life that owns assets you retitle into it, so they avoid probate and can be managed privately if you're incapacitated. It's a genuinely useful tool — but in Texas, with cheap independent-administration probate, it's usually NOT necessary for a straightforward estate. It earns its cost for specific situations: real estate in another state, a real need for privacy, blended-family complexity, or hands-on incapacity management.",
+      "A trust you control during life that owns assets you retitle into it, so they avoid probate and can be managed privately if you're incapacitated. It's a genuinely useful tool for almost anyone — and a leading school of thought says most families should use one. In Texas, independent administration makes probate less burdensome than in many states, so the cost savings alone are often modest; but a trust still avoids probate ENTIRELY (including the second probate a married couple usually faces), keeps your affairs private, and lets a successor trustee manage things seamlessly if you're incapacitated — no court, no bank balking at a power of attorney. Whether that's worth the extra upfront cost is a personal call, and it's especially compelling with out-of-state real estate, a desire for privacy, blended-family complexity, or hands-on incapacity planning.",
     bestWhen: [
+      "You'd rather avoid probate altogether — including a married couple's second probate — and keep it private.",
       "You own real estate in another state (a trust avoids a second, out-of-state probate).",
-      "You genuinely want privacy — a trust keeps your plan out of the public probate record.",
       "You want seamless management of assets if you're incapacitated, beyond a power of attorney.",
       "A blended family or complex wishes need tighter control than a simple will provides.",
     ],
@@ -252,7 +252,9 @@ function rate(key: EstateInstrumentKey, s: PlanSignals): { fit: Fit; reason: str
       return { fit: "optional", reason: "Only needed if a beneficiary relies on means-tested benefits." };
 
     case "revocable_living_trust": {
-      // The honest core: a trust is "strong" only when it genuinely pays off.
+      // Balanced: a trust is a real option for almost anyone. Specific factors
+      // make it a "strong" fit; absent those it's a genuine "consider," never a
+      // dismissive "you don't need one."
       const payoffs =
         Number(!!s.outOfStateRealEstate) +
         Number(!!s.wantsPrivacy) +
@@ -262,10 +264,14 @@ function rate(key: EstateInstrumentKey, s: PlanSignals): { fit: Fit; reason: str
       if (s.outOfStateRealEstate)
         return { fit: "strong", reason: "Out-of-state real estate is the classic case — a trust avoids a second probate there." };
       if (payoffs >= 2)
-        return { fit: "strong", reason: "Your situation (privacy, incapacity, or complexity) is where a trust earns its cost." };
+        return { fit: "strong", reason: "Privacy, incapacity, or complexity in your answers is where a trust clearly earns its cost." };
       if (payoffs === 1)
-        return { fit: "consider", reason: "Could help, but in Texas a will plus the simple tools often does the same job for less." };
-      return { fit: "optional", reason: "In Texas, with cheap probate and no death tax, most simple estates don't need one." };
+        return { fit: "consider", reason: "It could tip the balance for you — weigh it against a simpler will-plus-TOD-deed plan." };
+      return {
+        fit: "consider",
+        reason:
+          "A genuine, personal call: the extra upfront cost is modest, and a trust avoids probate entirely, privately, with built-in incapacity coverage — set against a simpler will-plus-TOD-deed plan.",
+      };
     }
   }
 }
@@ -299,16 +305,14 @@ export function recommendEstatePlan(signals: PlanSignals = {}): RankedInstrument
 export function trustVerdict(signals: PlanSignals = {}): string {
   const t = recommendEstatePlan(signals).find((i) => i.key === "revocable_living_trust")!;
   if (t.fit === "strong") {
-    return "A revocable living trust looks worth it for your situation — see why below.";
+    return "Based on your answers, a revocable living trust looks like a strong fit — see why below.";
   }
-  if (t.fit === "consider") {
-    return "A trust is worth weighing, but in Texas a will plus a few simple tools may get you the same result for far less.";
-  }
-  return "Good news: most Texas estates like yours don't need an expensive trust — a will plus a transfer-on-death deed and beneficiary forms usually does the job.";
+  // Balanced default: present it as a real, personal trade-off, not a verdict.
+  return "Whether to use a living trust is a genuine, personal call. Remember a will does NOT avoid probate, and in Texas a married couple usually probates twice — so weigh a trust's modest extra cost against avoiding probate entirely, the privacy, and the built-in incapacity coverage. A simpler will-plus-TOD-deed plan is also a legitimate path. A short consult can price both for your situation.";
 }
 
 const DISCLAIMER =
-  "This is general legal information to help you understand your options, not legal advice or a recommendation. The right plan depends on your full family and financial picture and on documents being signed and funded correctly. Texas has independent administration (low-cost probate) and no state death tax, so for most middle-class families the goal is a smooth, inexpensive transfer — not tax avoidance. A consult can confirm the right plan for you.";
+  "This is general legal information to help you understand your options, not legal advice or a recommendation. The right plan depends on your full family and financial picture and on documents being signed and funded correctly. A will does not avoid probate; Texas independent administration keeps probate relatively efficient, but it still has real cost and a married couple often probates twice. Texas has no state death tax and the federal estate tax reaches only multi-million-dollar estates, so for most families this is about a smooth, low-cost, private transfer and incapacity planning — not tax avoidance. Whether a living trust is worth it is a personal call a consult can price for you.";
 
 export function estatePlanDisclaimer(): string {
   return DISCLAIMER;

@@ -68,7 +68,7 @@ export const ESTATE_STATUTES: EstateStatute[] = [
     jurisdiction: "Texas",
     topic: "Independent administration",
     summary:
-      "Texas's signature probate feature: a will can name an independent executor, or the heirs can agree to one, so the estate is settled with minimal court supervision — no court approval for each sale, payment, or distribution and no costly bond in most cases. This is why ordinary Texas probate is typically far cheaper and faster than the multi-year, percentage-fee horror stories from other states.",
+      "Texas's signature probate feature: a will can name an independent executor, or the heirs can agree to one, so the estate is settled with minimal court supervision — no court approval for each sale, payment, or distribution and no costly bond in most cases. This is why ordinary Texas probate is far cheaper and faster than the multi-year, percentage-fee horror stories from other states. It is not free, though — it still runs commonly a few thousand dollars and takes some months, and a married couple typically faces two separate probates.",
     client_right:
       "If your will asks for independent administration (or your heirs agree to it), your executor can settle the estate with little court involvement, keeping probate relatively quick and inexpensive.",
     deadline: "A will is generally offered for probate within 4 years of death (Est. Code § 256.003).",
@@ -154,7 +154,7 @@ export const ESTATE_STATUTES: EstateStatute[] = [
     jurisdiction: "Texas",
     topic: "Revocable living trust",
     summary:
-      "A trust you create and control during life, holding assets you transfer ('fund') into it. Because the trust — not you personally — owns those assets, they avoid probate and a successor trustee can manage them if you become incapacitated, all privately. The catch: it only works for assets you actually retitle into it, and it costs more to set up than a will. It earns its keep mainly for out-of-state real estate, privacy, complex/blended families, or robust incapacity planning — not as a default for every middle-class estate.",
+      "A trust you create and control during life, holding assets you transfer ('fund') into it. Because the trust — not you personally — owns those assets, they avoid probate and a successor trustee can manage them if you become incapacitated, all privately. The catch: it only works for assets you actually retitle into it, and it costs more to set up than a will. It earns its keep by avoiding probate entirely (including a married couple's second probate), keeping your affairs private, and covering incapacity without a court — benefits that are especially compelling with out-of-state real estate, a desire for privacy, blended-family complexity, or hands-on incapacity planning. Whether that's worth the extra cost over a will-based plan is a personal call; in Texas, where independent administration already keeps probate efficient, the savings alone are often modest.",
     client_right:
       "You can place assets in a revocable trust you control, so they avoid probate and can be managed for you privately if you're incapacitated — provided you fund the trust by retitling those assets into it.",
     deadline: "Only assets retitled into the trust during life are governed by it — funding is the step people skip.",

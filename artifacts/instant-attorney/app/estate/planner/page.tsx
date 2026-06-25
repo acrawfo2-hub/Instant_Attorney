@@ -118,11 +118,15 @@ function PlannerTool() {
           Do I really need a trust?
         </h1>
         <p style={{ fontSize: 16, lineHeight: 1.6, color: textMd, margin: "0 0 16px" }}>
-          The estate-planning industry can make trusts sound mandatory. For most middle-class
-          Texans, they aren&apos;t. Texas has <strong>independent administration</strong> (which keeps
-          probate relatively cheap and fast) and <strong>no state death tax</strong>, so the real goal
-          is usually a smooth, low-cost transfer — not avoiding taxes. Answer what you can and
-          we&apos;ll show you the plan that actually fits.
+          Here&apos;s the honest version. A will does <strong>not</strong> avoid probate — property
+          passing under a will still goes through the courts. In Texas, <strong>independent
+          administration</strong> keeps probate relatively efficient, but it still costs real money
+          (commonly a few thousand dollars) and a married couple usually probates <strong>twice</strong>.
+          A <strong>revocable living trust</strong> avoids probate entirely, keeps things private, and
+          lets someone manage your assets if you&apos;re incapacitated — for a modest extra cost
+          upfront. There&apos;s <strong>no Texas death tax</strong> either way, so this isn&apos;t about
+          taxes; it&apos;s a genuine, personal trade-off. Answer what you can and we&apos;ll show you
+          the options that fit.
         </p>
 
         <div style={{ background: "var(--brand-white)", border: `1px solid ${border}`, borderRadius: 12, padding: "6px 18px 14px" }}>
