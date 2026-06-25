@@ -19,6 +19,19 @@ import type { FreshnessItem } from "./scan.ts";
 
 export const LEGAL_FRESHNESS_ITEMS: FreshnessItem[] = [
   {
+    id: "employment-law-registry",
+    label: "Employment & labor law registry (EEOC deadlines, FLSA, non-compete)",
+    area: "employment",
+    volatility: "catalog",
+    currentValue:
+      "EEOC 300-day / TWC 180-day charge deadlines; FLSA overtime + exempt-salary thresholds; Tex. non-compete § 15.50; OWBPA severance timing",
+    sourceUrl: "https://www.eeoc.gov/time-limits-filing-charge",
+    verifiedOn: "2026-06-25",
+    reviewAfter: "2027-06-25",
+    notes:
+      "Code: lib/employment-statutes.ts (+ claim/non-compete assessments). The FLSA exempt-salary threshold and EEOC/NLRB guidance change more often than the statutes — re-check annually and after rulemaking.",
+  },
+  {
     id: "tx-defamation-statutes",
     label: "Texas defamation law registry (Ch. 73, TCPA Ch. 27, 1-yr SOL)",
     area: "defamation",

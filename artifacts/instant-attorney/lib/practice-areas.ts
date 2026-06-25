@@ -37,7 +37,7 @@ export const PRACTICE_AREAS: PracticeArea[] = [
   {
     slug: "employment",
     label: "Wrongful Termination",
-    opener: `Hello — I'm glad you reached out. I'm the Instant Attorney assistant, part of Crawford Law PLLC. Employment matters — wrongful termination, retaliation, and discrimination — are what Crawford Law handles most.\n\n${DISCLAIMER}\n\nTell me what happened at work, starting wherever feels natural.`,
+    opener: `Hello — I'm glad you reached out. I'm the Instant Attorney assistant, part of Crawford Law PLLC. Employment matters — wrongful termination, discrimination, retaliation, harassment, and wage issues, as well as reviewing documents you've been handed like a non-compete, a severance offer, or an employer NDA — are what Crawford Law handles most.\n\n${DISCLAIMER}\n\nOne thing up front: if you were fired or mistreated, there can be a SHORT deadline to act (sometimes as little as 180 days), so the sooner we look, the better. To start — are you dealing with something that happened to you at work, or a document your employer is asking you to sign?`,
     starterPrompt: "I think I was wrongfully terminated.",
   },
   {

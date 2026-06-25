@@ -13,6 +13,9 @@ import { computeMissionControl } from "@/lib/mission-control";
 import { looksLikeFamilyMatter } from "@/lib/family-instruments";
 import { looksLikeDebtMatter } from "@/lib/debt-instruments";
 import { looksLikeDefamationMatter } from "@/lib/defamation-instruments";
+import { looksLikeEmploymentMatter } from "@/lib/employment-instruments";
+import { buildEmploymentRoadmap } from "@/lib/employment-roadmap";
+import EmploymentRoadmap from "@/components/EmploymentRoadmap";
 import { buildFamilyRoadmap } from "@/lib/family-roadmap";
 import FamilyRoadmap from "@/components/FamilyRoadmap";
 import { buildBankruptcyRoadmap } from "@/lib/bankruptcy-roadmap";
@@ -276,6 +279,7 @@ export default function ClientFileView({
   const isFamilyMatter = looksLikeFamilyMatter(matterText);
   const isDebtMatter = looksLikeDebtMatter(matterText);
   const isDefamationMatter = looksLikeDefamationMatter(matterText);
+  const isEmploymentMatter = looksLikeEmploymentMatter(matterText);
   const familyRoadmap =
     !isAttorney && isFamilyMatter
       ? buildFamilyRoadmap({
@@ -292,9 +296,17 @@ export default function ClientFileView({
           documents: documents.map((d) => ({ title: d.title, status: d.status })),
         })
       : null;
+  const employmentRoadmap =
+    !isAttorney && isEmploymentMatter
+      ? buildEmploymentRoadmap({
+          matterText,
+          facts: confirmed.map((f) => f.description),
+          documents: documents.map((d) => ({ title: d.title, status: d.status })),
+        })
+      : null;
   // Tier-1 fallback: any client matter without an authored roadmap still gets one.
   const genericRoadmap =
-    !isAttorney && !isFamilyMatter && !isDebtMatter
+    !isAttorney && !isFamilyMatter && !isDebtMatter && !isEmploymentMatter
       ? buildGenericRoadmap({
           hasSummary: Boolean(caseFile.summary),
           matterTypeKnown: Boolean(caseFile.matter_type),
@@ -611,8 +623,31 @@ export default function ClientFileView({
       {/* Bankruptcy Roadmap — orients the debt/bankruptcy tools below it */}
       {bankruptcyRoadmap && <BankruptcyRoadmap roadmap={bankruptcyRoadmap} />}
 
+      {/* Employment Roadmap — orients the employment tools below it */}
+      {employmentRoadmap && <EmploymentRoadmap roadmap={employmentRoadmap} />}
+
       {/* Generic Roadmap — Tier-1 fallback so every matter shows a roadmap */}
       {genericRoadmap && <GenericRoadmap roadmap={genericRoadmap} />}
+
+      {/* Employment tools — employment matters only (client mode). */}
+      {!isAttorney && isEmploymentMatter && (
+        <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
+          <div className="lf-card-label">Employment Tools</div>
+          <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
+            Employment deadlines are short and unforgiving. Check what claim you may have and how much time you
+            have left, and — if you were handed a non-compete — see how much of it actually holds up in Texas.
+            General information, not legal advice.
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+            <Link href={`/employment/claim-check?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
+              Check my claim &amp; deadline →
+            </Link>
+            <Link href={`/employment/noncompete?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
+              Is my non-compete enforceable? →
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Debt-collection rights — debt matters only (client mode). */}
       {!isAttorney && isDebtMatter && (

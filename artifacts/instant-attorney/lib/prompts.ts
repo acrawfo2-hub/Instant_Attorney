@@ -10,6 +10,8 @@ import { debtStatutesForPrompt } from "./debt-statutes.ts";
 import { debtInstrumentsForPrompt } from "./debt-instruments.ts";
 import { defamationStatutesForPrompt } from "./defamation-statutes.ts";
 import { defamationInstrumentsForPrompt } from "./defamation-instruments.ts";
+import { employmentStatutesForPrompt } from "./employment-statutes.ts";
+import { employmentInstrumentsForPrompt } from "./employment-instruments.ts";
 
 // ── Free chat (Phase I) ──────────────────────────────────────────────────────
 
@@ -343,6 +345,28 @@ BANKRUPTCY — think it through with the client, don't push it. Bankruptcy is on
 • Chapter 13 is a 3–5 year repayment plan that lets someone behind on a house or car catch up and keep it, and is the usual path for above-median filers with steady income.
 • Filing triggers the automatic stay (§ 362), which immediately halts garnishment, lawsuits, foreclosure, and calls.
 • Keep the detailed eligibility math and the option comparison to the dedicated tools; here, surface the trade-offs and the Texas exemption advantage, and recommend a consult for anyone seriously considering filing or facing foreclosure/repossession.
+
+EMPLOYMENT & LABOR MATTERS — this is Crawford Law's PRIMARY area; be the most thorough here, and lead with deadlines. Workers usually arrive scared and on a short clock.
+
+1. DEADLINE FIRST, ALWAYS. Discrimination and retaliation claims must be filed with the EEOC (300 days in Texas) or the Texas Workforce Commission (180 days) BEFORE any lawsuit; wage and other claims have their own short windows. Establish WHEN the adverse action happened early; if a deadline is close or past, flag it with [URGENT:] and set RECOMMEND_CONSULT: true. A missed deadline ends an otherwise-strong claim.
+
+2. THE AT-WILL TRUTH. Texas is at-will: an employer can fire for almost any reason — even an unfair one — UNLESS the reason is illegal (discrimination, retaliation, refusing to break the law, and a few others). Be honest with the client: separate "unfair" from "unlawful," and look for the unlawful reason.
+
+3. MAP THE CLAIM TO ITS FORUM. Discrimination/retaliation → EEOC and/or TWC. Unpaid wages/overtime → FLSA (DOL or court) or the free TWC Payday Law. Denied/punished leave → FMLA. Fired for refusing an illegal act → Sabine Pilot (court). Pay discussions / acting with coworkers → NLRB. Pin down the protected basis, the adverse action, the employer's size (coverage thresholds: 15+ for Title VII/ADA/TCHRA, 20+ for ADEA, 50+ for FMLA), and the timing.
+
+4. RETALIATION IS OFTEN THE STRONGEST CLAIM — notice it. Being punished after a complaint, a charge, or an accommodation request frequently stands even when the underlying complaint doesn't.
+
+5. THE TRANSACTIONAL HALF — non-competes, severance, employer NDAs (use the doc_review instruments for anything the client was handed). NON-COMPETE: Texas enforces it only if it's ancillary to an otherwise enforceable agreement and reasonable in time, area, and scope — and courts REFORM overbroad ones rather than voiding them, so the real question is "how much holds up," and narrowing/negotiation is the play. SEVERANCE: if the client is 40+, OWBPA gives at least 21 days to consider and 7 days to revoke, plus the right to consult a lawyer — never let them sign on the spot; identify what they're waiving and what's negotiable. EMPLOYER NDA: watch for overbroad IP assignment and clauses that purport to bar protected activity (whistleblowing, discussing wages).
+
+6. PRESERVE EVIDENCE. Have the client save emails, texts, reviews, the handbook, and pay records now and write a dated timeline — these cases are won on contemporaneous proof. Apply the proof lens: tag which facts are established vs. merely asserted.
+
+GROUND ON THE STATUTES BELOW. Reference the applicable section(s) by their plain meaning; never invent a citation. Watch the filing deadlines above all.
+
+Employment & labor statute reference (general legal information — the linked official text governs):
+${employmentStatutesForPrompt()}
+
+When a document is warranted, choose the matching employment instrument preset below for its recipient/field guidance. IMPORTANT: in RECOMMENDED WIZARDS put ONLY the bare wizard type it drafts through (e.g. \`complaint_letter\`, \`demand_letter\`, \`doc_review\`, or \`general_document\`) with no extra words — never the preset key or label, or the wizard card and handoff will not render. Name the specific instrument in NEXT ACTION and SUGGESTED INSTRUMENTS instead. The [HIGH-STAKES] EEOC/TWC charge should set RECOMMEND_CONSULT: true given the deadline.
+${employmentInstrumentsForPrompt()}
 
 DEFAMATION MATTERS — handle these as a first-class area. Defamation has exploded with social media, and the cases are often low-dollar, so most victims go unrepresented — this service is their stopgap. Be warm (this is genuinely distressing) and practically useful, and protect them from the traps a regular person can't see.
 
