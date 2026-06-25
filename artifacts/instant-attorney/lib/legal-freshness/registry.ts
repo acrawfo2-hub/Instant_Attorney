@@ -19,6 +19,45 @@ import type { FreshnessItem } from "./scan.ts";
 
 export const LEGAL_FRESHNESS_ITEMS: FreshnessItem[] = [
   {
+    id: "means-test-707b-thresholds",
+    label: "§ 707(b)(2) means-test presumption thresholds",
+    area: "bankruptcy",
+    volatility: "indexed-dollar",
+    currentValue: "Lower $10,275 / Upper $17,150, effective Apr 1, 2025",
+    sourceUrl: "https://www.justice.gov/ust/means-testing",
+    verifiedOn: "2026-06-24",
+    reviewAfter: "2027-06-24",
+    effectiveDate: "2025-04-01",
+    nextExpectedChange: "2028-04-01",
+    notes:
+      "Code: MEANS_TEST_THRESHOLDS in lib/bankruptcy-disposable-income.ts. Adjusted every 3 years on April 1.",
+  },
+  {
+    id: "irs-collection-financial-standards",
+    label: "IRS Collection Financial Standards (means-test expenses)",
+    area: "bankruptcy",
+    volatility: "indexed-dollar",
+    currentValue: "National + Local Standards (food/housing/transportation) — used as allowed-expense inputs",
+    sourceUrl: "https://www.irs.gov/businesses/small-businesses-self-employed/collection-financial-standards",
+    verifiedOn: "2026-06-24",
+    reviewAfter: "2027-04-01",
+    notes:
+      "Not encoded (county-specific, large). The full means-test step (lib/bankruptcy-disposable-income.ts) takes expenses as input; the tool links users here. IRS updates these about annually.",
+  },
+  {
+    id: "tx-personal-property-exemption-cap",
+    label: "Texas personal-property exemption cap (§ 42.001)",
+    area: "bankruptcy",
+    volatility: "statute",
+    currentValue: "$100,000 family / $50,000 single adult",
+    sourceUrl: "https://statutes.capitol.texas.gov/Docs/PR/htm/PR.42.htm",
+    verifiedOn: "2026-06-24",
+    reviewAfter: "2027-10-01",
+    nextExpectedChange: "2027-09-01",
+    notes:
+      "Code: TX_EXEMPTION_CAP in lib/bankruptcy-exemptions.ts. Statutory — changes only by amendment; re-check after each Texas legislative session.",
+  },
+  {
     id: "tx-means-test-median-income",
     label: "Texas median family income (Chapter 7 means test)",
     area: "bankruptcy",

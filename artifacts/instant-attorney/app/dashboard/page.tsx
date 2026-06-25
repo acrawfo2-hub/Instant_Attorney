@@ -140,6 +140,13 @@ export default async function DashboardPage() {
             Chapter 7 Means Test
             <span className="dash-btn-hint">Free — can you file Chapter 7? Check the income screen</span>
           </Link>
+          <Link href="/bankruptcy/exemptions" className="dash-btn dash-btn-secondary">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><polyline points="9 12 11 14 15 10" />
+            </svg>
+            What You&apos;d Keep
+            <span className="dash-btn-hint">Free — Texas exemptions: what bankruptcy can&apos;t touch</span>
+          </Link>
           <Link href="/bankruptcy/options" className="dash-btn dash-btn-secondary">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="3" /><path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6l2.1 2.1m0-12.8l-2.1 2.1M7.7 16.3l-2.1 2.1" />

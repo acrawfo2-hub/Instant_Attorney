@@ -14,6 +14,8 @@ import { looksLikeFamilyMatter } from "@/lib/family-instruments";
 import { looksLikeDebtMatter } from "@/lib/debt-instruments";
 import { buildFamilyRoadmap } from "@/lib/family-roadmap";
 import FamilyRoadmap from "@/components/FamilyRoadmap";
+import { buildBankruptcyRoadmap } from "@/lib/bankruptcy-roadmap";
+import BankruptcyRoadmap from "@/components/BankruptcyRoadmap";
 import type { CaseFile, FactItem, Document, Profile, WizardType, ConsultRequest, RequestedAttachment, GovFormInstrument, Attachment } from "@/lib/types";
 import { isValidWizardType } from "@/lib/document-utils";
 import { WIZARD_LABELS, docTypeLabel, personDisplayName, isDocumentOutOfDate, coerceWizardType } from "@/lib/types";
@@ -274,6 +276,14 @@ export default function ClientFileView({
     !isAttorney && isFamilyMatter
       ? buildFamilyRoadmap({
           matterText: `${caseFile.matter_subtype ?? ""} ${caseFile.summary ?? ""}`,
+          facts: confirmed.map((f) => f.description),
+          documents: documents.map((d) => ({ title: d.title, status: d.status })),
+        })
+      : null;
+  const bankruptcyRoadmap =
+    !isAttorney && isDebtMatter
+      ? buildBankruptcyRoadmap({
+          matterText,
           facts: confirmed.map((f) => f.description),
           documents: documents.map((d) => ({ title: d.title, status: d.status })),
         })
@@ -578,6 +588,9 @@ export default function ClientFileView({
       {/* Family Law Roadmap — orients the family tools and documents below it */}
       {familyRoadmap && <FamilyRoadmap roadmap={familyRoadmap} />}
 
+      {/* Bankruptcy Roadmap — orients the debt/bankruptcy tools below it */}
+      {bankruptcyRoadmap && <BankruptcyRoadmap roadmap={bankruptcyRoadmap} />}
+
       {/* Debt-collection rights — debt matters only (client mode). */}
       {!isAttorney && isDebtMatter && (
         <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
@@ -605,6 +618,9 @@ export default function ClientFileView({
           <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
             <Link href={`/bankruptcy/means-test?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
               Run the means test →
+            </Link>
+            <Link href={`/bankruptcy/exemptions?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
+              What would I keep? →
             </Link>
             <Link href={`/bankruptcy/options?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
               Weigh my options →
