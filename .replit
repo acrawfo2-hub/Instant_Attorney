@@ -42,5 +42,8 @@ NEXT_PUBLIC_SUPABASE_URL = "https://vgovrxtzcmofkoifxkvw.supabase.co"
 
 [userenv.development]
 
+[userenv.production]
+APP_URL = "https://instant-attorney.com"
+
 [nix]
 channel = "stable-25_05"

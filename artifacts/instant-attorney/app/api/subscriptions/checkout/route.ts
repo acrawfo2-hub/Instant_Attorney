@@ -2,21 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getStripe, PHASE2_PRICE_ID, CONSULT_PRICE_ID } from "@/lib/stripe";
 import { BYPASS_USER_ID } from "@/lib/types";
+import { getAppUrl } from "@/lib/app-url";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
-/** Replit's internal proxy gives req.nextUrl.origin as localhost:PORT.
- *  Use REPLIT_DOMAINS (the public-facing domain) for Stripe redirect URLs. */
-function publicOrigin(req: NextRequest): string {
-  if (process.env.REPLIT_DOMAINS) {
-    return `https://${process.env.REPLIT_DOMAINS.split(",")[0].trim()}`;
-  }
-  return req.nextUrl.origin;
-}
-
 export async function POST(req: NextRequest) {
   const { plan } = await req.json();
-  const origin = publicOrigin(req);
+  const origin = getAppUrl(req.nextUrl.origin);
 
   // BYPASS: skip Stripe entirely, provision subscription directly
   if (BYPASS_AUTH) {

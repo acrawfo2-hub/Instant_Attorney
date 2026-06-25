@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getStripe } from "@/lib/stripe";
 import { BYPASS_USER_ID } from "@/lib/types";
+import { getAppUrl } from "@/lib/app-url";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
@@ -10,7 +11,7 @@ const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
  * for automatic top-ups — the graceful "fix it before it fails" path.
  */
 export async function POST(req: NextRequest) {
-  const origin = req.nextUrl.origin;
+  const origin = getAppUrl(req.nextUrl.origin);
   let userId: string;
 
   if (BYPASS_AUTH) {
