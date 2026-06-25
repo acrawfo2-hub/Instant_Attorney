@@ -57,6 +57,10 @@ async function getData() {
       .maybeSingle(),
   ]);
 
+  if (!BYPASS_AUTH && (!subRow || !["active", "trialing", "bypass"].includes(subRow.status ?? ""))) {
+    redirect("/onboarding");
+  }
+
   const files = (allFiles ?? []) as CaseFile[];
   const activeFiles = files.filter((f) => f.status === "open");
   const archivedFiles = files.filter((f) => f.status === "archived");

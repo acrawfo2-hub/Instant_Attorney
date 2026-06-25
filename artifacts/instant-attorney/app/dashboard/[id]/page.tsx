@@ -67,6 +67,10 @@ async function getData(caseFileId: string) {
       .order("created_at", { ascending: true }),
   ]);
 
+  if (!BYPASS_AUTH && (!subRow || !["active", "trialing", "bypass"].includes(subRow?.status ?? ""))) {
+    redirect("/onboarding");
+  }
+
   if (!caseFile) return null;
 
   const allDocs = (documents ?? []) as Document[];
