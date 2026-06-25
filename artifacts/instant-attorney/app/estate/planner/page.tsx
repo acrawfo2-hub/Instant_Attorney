@@ -178,7 +178,30 @@ function PlannerTool() {
           })}
         </div>
 
-        <div style={{ marginTop: 26, background: "rgba(200,169,110,0.08)", border: `1px solid ${border}`, borderRadius: 12, padding: "16px 18px" }}>
+        {/* Next steps: the practical checklist + the What-If reflection */}
+        <div style={{ marginTop: 28, display: "grid", gap: 12 }}>
+          <Link href={caseFileId ? `/estate/checklist?caseFileId=${caseFileId}` : "/estate/checklist"} style={nextCard}>
+            <div>
+              <div style={{ fontSize: 14.5, fontWeight: 600, color: navy }}>Next: your get-ready checklist →</div>
+              <div style={{ fontSize: 13, color: textMd, marginTop: 3, lineHeight: 1.5 }}>
+                Most of the work isn&apos;t legal — naming beneficiaries, moving money, and organizing
+                your passwords so your family can find everything. The checklist walks you through it.
+              </div>
+            </div>
+          </Link>
+          <Link href={caseFileId ? `/what-if?caseFileId=${caseFileId}` : "/what-if"} style={nextCard}>
+            <div>
+              <div style={{ fontSize: 14.5, fontWeight: 600, color: navy }}>Play the What-If game →</div>
+              <div style={{ fontSize: 13, color: textMd, marginTop: 3, lineHeight: 1.5 }}>
+                &ldquo;What if I&apos;m incapacitated? What if a child isn&apos;t ready for money at 18?&rdquo;
+                Playing it captures those worries so they get built into your strategy and the
+                documents we draft — not left as loose ends.
+              </div>
+            </div>
+          </Link>
+        </div>
+
+        <div style={{ marginTop: 16, background: "rgba(200,169,110,0.08)", border: `1px solid ${border}`, borderRadius: 12, padding: "16px 18px" }}>
           <div style={{ fontSize: 14, fontWeight: 600, color: navy, marginBottom: 4 }}>Ready to put a plan in place?</div>
           <p style={{ fontSize: 13.5, color: textMd, lineHeight: 1.55, margin: "0 0 12px" }}>
             Start a privileged conversation and we&apos;ll turn this into a concrete plan and draft the
@@ -209,6 +232,14 @@ const miniList = {
   fontSize: 12.5,
   lineHeight: 1.5,
   color: "var(--brand-text-md)",
+};
+const nextCard = {
+  display: "block",
+  background: "var(--brand-white)",
+  border: "1px solid var(--brand-border)",
+  borderRadius: 12,
+  padding: "14px 16px",
+  textDecoration: "none",
 };
 
 export default function EstatePlannerPage() {
