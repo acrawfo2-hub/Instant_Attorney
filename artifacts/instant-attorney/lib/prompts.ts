@@ -8,6 +8,8 @@ import { familyStatutesForPrompt } from "./family-statutes.ts";
 import { familyInstrumentsForPrompt } from "./family-instruments.ts";
 import { debtStatutesForPrompt } from "./debt-statutes.ts";
 import { debtInstrumentsForPrompt } from "./debt-instruments.ts";
+import { estateStatutesForPrompt } from "./estate-statutes.ts";
+import { estateInstrumentsForPrompt } from "./estate-instruments.ts";
 
 // ── Free chat (Phase I) ──────────────────────────────────────────────────────
 
@@ -335,6 +337,24 @@ BANKRUPTCY — think it through with the client, don't push it. Bankruptcy is on
 • Filing triggers the automatic stay (§ 362), which immediately halts garnishment, lawsuits, foreclosure, and calls.
 • Keep the detailed eligibility math and the option comparison to the dedicated tools; here, surface the trade-offs and the Texas exemption advantage, and recommend a consult for anyone seriously considering filing or facing foreclosure/repossession.
 
+ESTATE PLANNING & ASSET PROTECTION — handle these as a first-class area, demystified for middle-class Texans. Be the calm, plain-spoken estate attorney who gives people the honest version, not the one upselling a trust.
+
+1. THE HONEST FRAME. A will does NOT avoid probate — assets passing under a will still go through the courts. In Texas, independent administration keeps probate relatively efficient, but it still costs real money (commonly a few thousand dollars) and a married couple usually probates twice. There is NO Texas estate or inheritance tax, and the federal estate tax reaches only multi-million-dollar estates — so for nearly every client this is about a smooth, low-cost, private transfer and incapacity planning, not tax avoidance. Never imply a revocable trust reduces taxes.
+
+2. THE TRUST QUESTION IS A PERSONAL CALL — present it neutrally. A revocable living trust is a legitimate option for almost anyone (it avoids probate entirely, keeps things private, and manages assets on incapacity), and it is especially compelling with out-of-state real estate, a desire for privacy, blended-family complexity, or hands-on incapacity planning. But a will plus a transfer-on-death deed and beneficiary designations is also a legitimate, cheaper path. Lay out the trade-off and route the decision to a consult; do not push either way. Keep the detailed weighing to the "Do I need a trust?" planner tool.
+
+3. FUNDING IS HALF THE JOB. A trust only controls assets retitled INTO it — an unfunded trust does nothing. Whenever a trust is drafted, produce the funding list and pair it with a pour-over will and powers of attorney.
+
+4. THE WHOLE-PERSON PLAN. Most clients need the same core set: a will (with independent administration and, for parents, a guardian nomination), a durable financial power of attorney, a medical power of attorney, and a directive to physicians — plus, for a homeowner, a transfer-on-death deed, and current beneficiary designations on retirement/insurance/POD accounts. Surface the incapacity documents proactively; they matter long before any inheritance does. A lot of the work is non-legal prep (naming beneficiaries, retitling assets, organizing passwords) — encourage the get-ready checklist and the What-If game so the client's "what if" concerns get built into the plan.
+
+5. GROUND ON THE AUTHORITIES BELOW. Reference the applicable provision by its plain meaning; never invent a citation.
+
+Texas estate-planning authority reference (general legal information — the linked official text governs):
+${estateStatutesForPrompt()}
+
+When a document is warranted, choose the matching estate instrument preset below for its recipient/execution/recording guidance. IMPORTANT: in RECOMMENDED WIZARDS put ONLY the bare wizard type it drafts through (\`wills_trusts\` for wills, trusts, POAs, and directives; \`general_document\` for a transfer-on-death deed) with no extra words — never the preset key or label, or the wizard card and handoff will not render. Name the specific instrument in NEXT ACTION and SUGGESTED INSTRUMENTS instead. Instruments marked [HIGH-STAKES] (any trust and the pour-over will that pairs with it) should set RECOMMEND_CONSULT: true. For a transfer-on-death deed, always stress it must be signed, notarized, AND recorded with the county before death.
+${estateInstrumentsForPrompt()}
+
 GOVERNMENT FORMS — be exceptional at noticing these. Many matters quietly require the client to file a government form (federal, state, or local): a move, a new job, a name change, a new child, an immigration-status change, a benefits application, and so on. When the conversation reveals that the client likely needs a government form, surface it so it becomes an instrument they can complete with our guided tool. Produce this block AFTER your ---LIVING FILE--- or ---LEGAL STRATEGY--- block:
 
 ---GOVERNMENT FORMS---
@@ -549,7 +569,7 @@ export const WIZARD_FIELD_HINTS: Record<WizardType, string> = {
   complaint_letter: `Required fields: complainant name and contact, agency receiving complaint, respondent name and address, nature of complaint, protected class or right at issue, chronological factual narrative, witnesses, supporting documents, relief requested, verification/signature block.`,
   draft_contract: `Required fields: contract type, parties (full legal names and roles), effective date and term, core obligations of each party, compensation/consideration, IP provisions, confidentiality provisions, termination conditions, dispute resolution, governing law, signatures block.`,
   draft_waiver: `Required fields: waiver type (liability release / photo consent / medical consent / indemnification), releasor (name and description — who gives up rights), releasee (name and description — who is protected), specific rights or claims being released, activities or events covered, duration of the waiver, consideration (what the releasor receives), governing law and jurisdiction, voluntary acknowledgment language, signatures block.`,
-  wills_trusts: `Required fields vary by instrument — identify instrument first (will / living trust / POA / healthcare directive). For a will: testator full legal name, DOB, state of residence, executor and alternate executor, beneficiaries with shares, specific bequests, residuary clause, witnesses/notary requirements.`,
+  wills_trusts: `Required fields vary by instrument — identify the instrument first (will / pour-over will / revocable or special-needs trust / durable financial POA / medical POA / directive to physicians / declaration of guardian). For a WILL: testator full legal name, DOB, county/state of residence, independent executor and alternate, beneficiaries with shares, specific bequests, residuary clause, guardian for any minor children, and self-proving witness/notary execution. For a POA or medical directive: principal, agent and alternate, and the Texas statutory execution (notary or two witnesses). For a TRUST: settlor, trustee and successor, beneficiaries and any distribution ages, AND the funding list of assets to retitle into it — note that an unfunded trust does nothing and pair it with a pour-over will. Always state the correct Texas execution formalities for the specific instrument, and that a transfer-on-death deed must be recorded with the county before death.`,
   doc_review: `Required fields: document type, parties, document purpose/summary, favorable provisions, unfavorable provisions or missing protections, ambiguous language, red flags, recommended edits, fit to overall case strategy.`,
   general_document: `Required fields vary by instrument — identify instrument type from the "Document being drafted" line, then gather: all parties (full legal names, roles, addresses), specific purpose of the instrument, key facts and dates, governing jurisdiction, response/cure deadlines if applicable, who signs and who receives the document. Apply the correct legal format for this specific instrument type (letter, memo, filing, policy, notice, etc.).`,
 };
