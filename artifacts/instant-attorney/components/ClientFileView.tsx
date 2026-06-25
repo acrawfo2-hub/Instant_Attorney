@@ -16,6 +16,8 @@ import { buildFamilyRoadmap } from "@/lib/family-roadmap";
 import FamilyRoadmap from "@/components/FamilyRoadmap";
 import { buildBankruptcyRoadmap } from "@/lib/bankruptcy-roadmap";
 import BankruptcyRoadmap from "@/components/BankruptcyRoadmap";
+import { buildGenericRoadmap } from "@/lib/generic-roadmap";
+import GenericRoadmap from "@/components/GenericRoadmap";
 import type { CaseFile, FactItem, Document, Profile, WizardType, ConsultRequest, RequestedAttachment, GovFormInstrument, Attachment } from "@/lib/types";
 import { isValidWizardType } from "@/lib/document-utils";
 import { WIZARD_LABELS, docTypeLabel, personDisplayName, isDocumentOutOfDate, coerceWizardType } from "@/lib/types";
@@ -286,6 +288,22 @@ export default function ClientFileView({
           matterText,
           facts: confirmed.map((f) => f.description),
           documents: documents.map((d) => ({ title: d.title, status: d.status })),
+        })
+      : null;
+  // Tier-1 fallback: any client matter without an authored roadmap still gets one.
+  const genericRoadmap =
+    !isAttorney && !isFamilyMatter && !isDebtMatter
+      ? buildGenericRoadmap({
+          hasSummary: Boolean(caseFile.summary),
+          matterTypeKnown: Boolean(caseFile.matter_type),
+          confirmedFactCount: confirmed.length,
+          openGapCount: gaps.length,
+          pendingUploadCount: requestedAttachments.filter((r) => r.status === "requested").length,
+          hasDocumentPlan:
+            (caseFile.legal_strategy?.document_plan?.length ?? 0) > 0 ||
+            (caseFile.legal_strategy?.recommended_wizards?.length ?? 0) > 0,
+          documents: documents.map((d) => ({ status: d.status, hasDraft: Boolean(d.draft_text) })),
+          consultActive: Boolean(consultRequest) && consultRequest?.status !== "cancelled",
         })
       : null;
 
@@ -590,6 +608,9 @@ export default function ClientFileView({
 
       {/* Bankruptcy Roadmap — orients the debt/bankruptcy tools below it */}
       {bankruptcyRoadmap && <BankruptcyRoadmap roadmap={bankruptcyRoadmap} />}
+
+      {/* Generic Roadmap — Tier-1 fallback so every matter shows a roadmap */}
+      {genericRoadmap && <GenericRoadmap roadmap={genericRoadmap} />}
 
       {/* Debt-collection rights — debt matters only (client mode). */}
       {!isAttorney && isDebtMatter && (
