@@ -5,9 +5,18 @@ import { BYPASS_USER_ID } from "@/lib/types";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
+/** Replit's internal proxy gives req.nextUrl.origin as localhost:PORT.
+ *  Use REPLIT_DOMAINS (the public-facing domain) for Stripe redirect URLs. */
+function publicOrigin(req: NextRequest): string {
+  if (process.env.REPLIT_DOMAINS) {
+    return `https://${process.env.REPLIT_DOMAINS.split(",")[0].trim()}`;
+  }
+  return req.nextUrl.origin;
+}
+
 export async function POST(req: NextRequest) {
   const { plan } = await req.json();
-  const origin = req.nextUrl.origin;
+  const origin = publicOrigin(req);
 
   // BYPASS: skip Stripe entirely, provision subscription directly
   if (BYPASS_AUTH) {
