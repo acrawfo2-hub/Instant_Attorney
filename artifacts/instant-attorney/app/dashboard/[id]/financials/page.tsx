@@ -1,0 +1,89 @@
+import { redirect, notFound } from "next/navigation";
+import Link from "next/link";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { BYPASS_USER_ID } from "@/lib/types";
+import type { FinancialItem } from "@/lib/types";
+import { looksLikeFamilyMatter } from "@/lib/family-instruments";
+import AccountMenu from "@/components/AccountMenu";
+import FinancialPicture from "@/components/FinancialPicture";
+
+const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
+
+export const dynamic = "force-dynamic";
+
+const ITEM_FIELDS =
+  "id, case_file_id, user_id, category, label, acquisition_note, owner, characterization, exempt_status, value_low, value_high, value_basis, valued_as_of, provenance, verification_status, source_attachment_id, phase_collected, privileged, red_flags, needs_attorney_review, status, superseded_by, created_at, updated_at";
+
+export default async function FinancialsPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+
+  let userId: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let db: any;
+  if (BYPASS_AUTH) {
+    userId = BYPASS_USER_ID;
+    db = createServiceClient();
+  } else {
+    db = await createClient();
+    const { data: { user } } = await db.auth.getUser();
+    if (!user) redirect("/login");
+    userId = user.id;
+  }
+
+  const { data: caseFile } = await db
+    .from("case_files")
+    .select(
+      "id, user_id, title, matter_subtype, representation_scope, partner_role, partner_consented, joint_no_secrets_ack, financial_disclosure_acked_at"
+    )
+    .eq("id", id)
+    .maybeSingle();
+
+  if (!caseFile || caseFile.user_id !== userId) notFound();
+
+  const { data: itemRows } = await db
+    .from("financial_items")
+    .select(ITEM_FIELDS)
+    .eq("case_file_id", id)
+    .neq("status", "removed")
+    .order("created_at", { ascending: true });
+
+  const items = (itemRows ?? []) as FinancialItem[];
+  const isFamilyLaw = looksLikeFamilyMatter(caseFile.matter_subtype ?? "");
+  const backHref = `/dashboard/${id}`;
+  const title = caseFile.title || "Your file";
+
+  return (
+    <div className="lf-shell">
+      <header className="lf-header">
+        <Link href={backHref} className="lf-header-logo">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+          {title}
+        </Link>
+        <div className="lf-header-center">
+          <span className="lf-header-title">Financial Picture</span>
+        </div>
+        <div className="lf-header-right">
+          <AccountMenu />
+        </div>
+      </header>
+
+      <main className="lf-main">
+        <FinancialPicture
+          caseFileId={id}
+          initialItems={items}
+          disclosureAcked={!!caseFile.financial_disclosure_acked_at}
+          context={{
+            representation_scope: caseFile.representation_scope ?? "single_client",
+            partner_role: caseFile.partner_role ?? "none",
+            partner_consented: !!caseFile.partner_consented,
+            joint_no_secrets_ack: !!caseFile.joint_no_secrets_ack,
+          }}
+          isFamilyLaw={isFamilyLaw}
+          backHref={backHref}
+        />
+      </main>
+    </div>
+  );
+}

@@ -131,6 +131,9 @@ export default async function FileDetailPage({
 
         <div className="lf-header-right">
           {isBypass && <span className="ob-bypass-badge">Test Mode</span>}
+          <Link href={`/dashboard/${caseFile.id}/financials`} className="lf-logout-btn">
+            Financials
+          </Link>
           <Link href={`/chat?caseFileId=${caseFile.id}`} className="lf-begin-btn">
             Continue Intake
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

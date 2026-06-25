@@ -148,8 +148,93 @@ export interface CaseFile {
   attorney_assessment: string | null;
   next_action: string | null;
   jurisdiction: string | null;
+  /** Financial Picture — per-matter representation context (Stage 23). Optional
+   *  so rows predating the migration still load. */
+  representation_scope?: RepresentationScope;
+  partner_role?: PartnerRole;
+  partner_consented?: boolean;
+  joint_no_secrets_ack?: boolean;
+  financial_disclosure_acked_at?: string | null;
+  financial_disclosure_version?: string | null;
   opened_at: string;
   updated_at: string;
+}
+
+// ── Financial Picture (asset-dependent matters) ──────────────────────────────
+// Milestone 1 of docs/financial-picture-spec.md. A structured sibling to
+// fact_items for matters whose strategy/documents depend on assets, debts, or
+// income — carrying the three metadata axes (ownership+relationship,
+// provenance+verification, phase+privilege).
+
+export type RepresentationScope = "single_client" | "joint_spouses";
+export type PartnerRole = "none" | "adverse_party" | "joint_client" | "non_client_third_party";
+
+export type FinancialCategory =
+  | "real_property"
+  | "vehicle"
+  | "financial_account"
+  | "retirement_account"
+  | "business_interest"
+  | "personal_property"
+  | "life_insurance"
+  | "receivable"
+  | "secured_debt"
+  | "unsecured_debt"
+  | "income_source"
+  | "recurring_expense";
+export type FinancialOwner = "client" | "partner" | "joint" | "other_third_party";
+export type Characterization =
+  | "community"
+  | "separate_client"
+  | "separate_partner"
+  | "mixed_or_unknown"
+  | "not_applicable";
+export type ExemptStatus = "exempt" | "non_exempt" | "partial" | "unknown" | "not_applicable";
+export type ValueBasis =
+  | "client_estimate"
+  | "account_statement"
+  | "appraisal"
+  | "tax_assessment"
+  | "contract_or_title"
+  | "other_document";
+export type FinancialProvenance = "client_asserted" | "document_extracted" | "attorney_verified";
+export type VerificationStatus = "unverified" | "doc_supported" | "attorney_verified";
+export type PhaseCollected = "phase_1_unprivileged" | "phase_2_privileged";
+export type FinancialItemStatus = "active" | "superseded" | "removed";
+
+export interface FinancialRedFlag {
+  code: string;
+  severity: "info" | "warn" | "critical";
+  message: string;
+}
+
+export interface FinancialItem {
+  id: string;
+  case_file_id: string;
+  user_id: string;
+  category: FinancialCategory;
+  /** Minimized, human-readable, redacted label (e.g. "Chase checking ••4321"). */
+  label: string;
+  /** When/how acquired and with what funds — the basis for TX characterization/tracing. */
+  acquisition_note: string | null;
+  owner: FinancialOwner;
+  characterization: Characterization;
+  exempt_status: ExemptStatus;
+  value_low: number | null;
+  value_high: number | null;
+  value_basis: ValueBasis;
+  valued_as_of: string | null;
+  provenance: FinancialProvenance;
+  verification_status: VerificationStatus;
+  source_attachment_id: string | null;
+  phase_collected: PhaseCollected;
+  privileged: boolean;
+  red_flags: FinancialRedFlag[];
+  needs_attorney_review: boolean;
+  status: FinancialItemStatus;
+  superseded_by: string | null;
+  created_at: string;
+  updated_at?: string;
 }
 
 export interface FactItem {
