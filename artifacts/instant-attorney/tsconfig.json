@@ -9,7 +9,10 @@
     "node_modules",
     "build",
     "dist",
-    "**/*.test.ts"
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "e2e",
+    "playwright.config.ts"
   ],
   "compilerOptions": {
     "incremental": true,
