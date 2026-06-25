@@ -1,7 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+
+/** Count the digits in a phone string (ignores formatting). */
+function digitCount(s: string): number {
+  return (s.match(/\d/g) ?? []).length;
+}
 
 const BYPASS_AUTH = process.env.NEXT_PUBLIC_BYPASS_AUTH === "true";
 
@@ -71,11 +76,30 @@ export default function OnboardingPage() {
   const router = useRouter();
   const [step, setStep] = useState<Step>(0);
   const [signatureName, setSignatureName] = useState("");
+  const [phone, setPhone] = useState("");
   const [repAgreed, setRepAgreed] = useState(false);
   const [aiAgreed, setAiAgreed] = useState(false);
   const [billingAck, setBillingAck] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Pre-fill name/phone from the profile so returning users don't retype.
+  useEffect(() => {
+    let active = true;
+    fetch("/api/account/profile")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!active || !data) return;
+        if (data.full_name) setSignatureName((v) => v || data.full_name);
+        if (data.phone) setPhone((v) => v || data.phone);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const phoneValid = digitCount(phone) >= 10 && digitCount(phone) <= 15;
 
   async function signAgreement(type: "representation" | "ai_consent") {
     const res = await fetch("/api/agreements", {
@@ -87,14 +111,28 @@ export default function OnboardingPage() {
   }
 
   async function handleRepNext() {
-    if (!repAgreed || !signatureName.trim()) return;
+    if (!repAgreed || !signatureName.trim() || !phoneValid) return;
     setLoading(true);
     setError("");
     try {
+      // Capture contact info (name + phone) before representation begins.
+      const profRes = await fetch("/api/account/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ full_name: signatureName.trim(), phone: phone.trim() }),
+      });
+      if (!profRes.ok) {
+        const b = await profRes.json().catch(() => ({}));
+        throw new Error(b.error ?? "save_failed");
+      }
       await signAgreement("representation");
       setStep(1);
-    } catch {
-      setError("Failed to save your agreement. Please try again.");
+    } catch (e) {
+      setError(
+        e instanceof Error && e.message && e.message !== "save_failed"
+          ? e.message
+          : "Failed to save your information. Please try again."
+      );
     } finally {
       setLoading(false);
     }
@@ -192,6 +230,27 @@ export default function OnboardingPage() {
               />
             </div>
 
+            <div className="ob-field">
+              <label className="auth-label" htmlFor="phone">
+                Phone number
+              </label>
+              <input
+                id="phone"
+                type="tel"
+                className="auth-input"
+                placeholder="(555) 123-4567"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                autoComplete="tel"
+              />
+              <p className="ob-field-hint">
+                The firm uses this to coordinate your consult and to secure your account.
+                {phone.trim() && !phoneValid && (
+                  <span className="ob-field-error"> Please enter a valid phone number.</span>
+                )}
+              </p>
+            </div>
+
             <label className="ob-checkbox-label">
               <input
                 type="checkbox"
@@ -207,7 +266,7 @@ export default function OnboardingPage() {
             <button
               className="auth-btn"
               onClick={handleRepNext}
-              disabled={!repAgreed || !signatureName.trim() || loading}
+              disabled={!repAgreed || !signatureName.trim() || !phoneValid || loading}
             >
               {loading ? "Saving…" : "I Agree — Continue →"}
             </button>

@@ -1724,6 +1724,8 @@ body {
   font-family: "Georgia", serif;
 }
 .ob-field { display: flex; flex-direction: column; gap: 0.4rem; }
+.ob-field-hint { font-size: 12px; color: var(--brand-text-lt); margin: 0; line-height: 1.4; }
+.ob-field-error { color: #b91c1c; font-weight: 600; }
 .ob-checkbox-label {
   display: flex;
   align-items: flex-start;
@@ -4005,6 +4007,36 @@ mark.atty-placeholder {
 .acc-portal-wrap { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .acc-portal-err { font-size: 12px; color: #b91c1c; }
 .acc-signout-row { margin-top: 1.5rem; display: flex; justify-content: center; }
+.acc-saved-note { font-size: 12.5px; color: #15803d; font-weight: 600; }
+
+/* Profile edit form */
+.acc-edit { display: flex; flex-direction: column; gap: 0.9rem; }
+.acc-field { display: flex; flex-direction: column; gap: 5px; }
+.acc-field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--brand-text-lt);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.acc-input {
+  font-size: 14px;
+  font-family: var(--font-dm-sans, "DM Sans"), sans-serif;
+  color: var(--brand-text-dk);
+  background: var(--brand-white);
+  border: 0.5px solid var(--brand-border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  max-width: 360px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.acc-input:focus {
+  outline: none;
+  border-color: var(--brand-gold);
+  box-shadow: 0 0 0 3px rgba(200, 169, 110, 0.15);
+}
+.acc-input:disabled { background: var(--brand-cream); color: var(--brand-text-lt); cursor: not-allowed; }
+.acc-field-hint { font-size: 11.5px; color: var(--brand-text-xlt); }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Dashboard — Action Bar, File Cards, Empty State, Archive
@@ -4073,6 +4105,129 @@ mark.atty-placeholder {
 }
 .dash-btn-lg { padding: 12px 28px; font-size: 14px; border-radius: 10px; }
 .dash-btn--coming-soon { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Start Here hero — chat is the front door ── */
+.dash-start {
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(200,169,110,0.10), rgba(200,169,110,0.03)),
+    var(--brand-white);
+  border: 1px solid rgba(200,169,110,0.45);
+  border-radius: 14px;
+  padding: 1.5rem 1.6rem;
+  margin-bottom: 20px;
+  box-shadow: 0 8px 24px rgba(12, 25, 41, 0.06);
+}
+.dash-start--compact {
+  padding: 1rem 1.2rem;
+  background: var(--brand-white);
+  border-color: var(--brand-border);
+  box-shadow: none;
+}
+.dash-start-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8a6d2f;
+  background: rgba(200,169,110,0.18);
+  border: 0.5px solid rgba(200,169,110,0.4);
+  border-radius: 20px;
+  padding: 4px 11px;
+  margin-bottom: 0.85rem;
+}
+.dash-start-title {
+  font-family: var(--font-playfair, "Playfair Display"), serif;
+  font-size: 22px;
+  color: var(--brand-text-dk);
+  margin: 0 0 0.4rem;
+}
+.dash-start-sub {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--brand-text-md);
+  max-width: 620px;
+  margin: 0 0 1.1rem;
+}
+.dash-start-sub strong { color: var(--brand-text-dk); }
+.dash-start-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+/* Primary "start" CTA gets a gentle pulse ring on the new-user hero. */
+.dash-start:not(.dash-start--compact) .dash-btn-primary {
+  box-shadow: 0 0 0 0 rgba(200,169,110,0.55);
+  animation: dash-start-pulse 2.4s ease-out infinite;
+}
+@keyframes dash-start-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(200,169,110,0.5); }
+  70%  { box-shadow: 0 0 0 10px rgba(200,169,110,0); }
+  100% { box-shadow: 0 0 0 0 rgba(200,169,110,0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dash-start:not(.dash-start--compact) .dash-btn-primary { animation: none; }
+}
+
+/* ── Collapsible self-service tools ── */
+.dash-toolbox {
+  border: 1px solid var(--brand-border);
+  border-radius: 12px;
+  background: rgba(26,22,18,0.015);
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+.dash-toolbox-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.dash-toolbox-summary::-webkit-details-marker { display: none; }
+.dash-toolbox-summary:hover { background: rgba(26,22,18,0.03); }
+.dash-toolbox-summary-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--brand-text-dk);
+  flex: none;
+}
+.dash-toolbox-icon { color: var(--brand-text-lt); }
+.dash-toolbox-summary-note {
+  font-size: 12px;
+  color: var(--brand-text-lt);
+  flex: 1;
+  min-width: 0;
+}
+.dash-toolbox-caret { color: var(--brand-text-lt); transition: transform 0.2s ease; flex: none; }
+.dash-toolbox[open] .dash-toolbox-caret { transform: rotate(180deg); }
+.dash-toolbox-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+  padding: 4px 16px 14px;
+}
+/* Muted by default; brighten on hover so they read as secondary/optional. */
+.dash-toolbox-grid .dash-btn-secondary { opacity: 0.78; transition: opacity 0.15s, border-color 0.15s, color 0.15s, background 0.15s; }
+.dash-toolbox-grid .dash-btn-secondary:hover { opacity: 1; }
+.dash-toolbox-foot {
+  font-size: 12px;
+  color: var(--brand-text-lt);
+  border-top: 0.5px solid var(--brand-border);
+  margin: 0;
+  padding: 11px 16px;
+  background: rgba(26,22,18,0.02);
+  line-height: 1.45;
+}
 
 /* Global status bar */
 .dash-status-bar {

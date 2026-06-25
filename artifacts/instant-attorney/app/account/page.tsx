@@ -1,9 +1,10 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { BYPASS_USER_ID, BYPASS_EMAIL, personDisplayName } from "@/lib/types";
+import { BYPASS_USER_ID, BYPASS_EMAIL } from "@/lib/types";
 import LogoutButton from "@/components/LogoutButton";
 import ManageBillingButton from "@/components/ManageBillingButton";
+import ProfileEditForm from "@/components/ProfileEditForm";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
@@ -102,8 +103,6 @@ async function getData() {
 export default async function AccountPage() {
   const { email, profile, sub, ledger, charges } = await getData();
 
-  const displayName = personDisplayName({ full_name: profile?.full_name, email }, email || "Your account");
-  const hasName = !!profile?.full_name?.trim();
   const planLabel = sub?.plan ? (PLAN_LABEL[sub.plan] ?? sub.plan) : "No active plan";
   const statusLabel = sub?.status ? (STATUS_LABEL[sub.status] ?? sub.status) : "—";
   const statusKey = sub?.status ?? "none";
@@ -140,25 +139,15 @@ export default async function AccountPage() {
 
         {/* Profile */}
         <section className="acc-card">
-          <h2 className="acc-card-title">Profile</h2>
-          <dl className="acc-rows">
-            <div className="acc-row">
-              <dt>Name</dt>
-              <dd>{hasName ? displayName : <span className="acc-muted">Not provided</span>}</dd>
-            </div>
-            <div className="acc-row">
-              <dt>Email</dt>
-              <dd>{email || <span className="acc-muted">—</span>}</dd>
-            </div>
-            <div className="acc-row">
-              <dt>Phone</dt>
-              <dd>{profile?.phone?.trim() || <span className="acc-muted">Not provided</span>}</dd>
-            </div>
-            <div className="acc-row">
-              <dt>Member since</dt>
-              <dd>{fmtDate(profile?.created_at)}</dd>
-            </div>
-          </dl>
+          <div className="acc-card-head">
+            <h2 className="acc-card-title">Profile</h2>
+            <span className="acc-card-meta">Member since {fmtDate(profile?.created_at)}</span>
+          </div>
+          <ProfileEditForm
+            initialName={profile?.full_name ?? ""}
+            initialPhone={profile?.phone ?? ""}
+            email={email}
+          />
         </section>
 
         {/* Subscription */}

@@ -93,6 +93,7 @@ export default async function DashboardPage() {
 
   const { activeFiles, archivedFiles, totalPendingDocs, consult, hasConsultSub, accountName, accountEmail } = await getData();
   const atLimit = activeFiles.length >= MAX_ACTIVE_FILES;
+  const hasFiles = activeFiles.length > 0;
 
   return (
     <div className="lf-shell">
@@ -118,109 +119,158 @@ export default async function DashboardPage() {
         {/* Usage / top-up status + spend-limit controls (hidden for free users) */}
         <BillingMeter />
 
-        {/* Action buttons — left-aligned row */}
-        <div className="dash-toolbar">
-          {atLimit ? (
-            <span className="dash-limit-note">
-              {MAX_ACTIVE_FILES}/{MAX_ACTIVE_FILES} files — archive one to open a new file
+        {/* Start Here — the chat is the front door to everything */}
+        <section className={`dash-start${hasFiles ? " dash-start--compact" : ""}`}>
+          {!hasFiles && (
+            <div className="dash-start-badge">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="13 17 18 12 13 7" /><polyline points="6 17 11 12 6 7" />
+              </svg>
+              Start here
+            </div>
+          )}
+          <div className="dash-start-body">
+            {!hasFiles && (
+              <>
+                <h2 className="dash-start-title">Start with a conversation</h2>
+                <p className="dash-start-sub">
+                  Tell Instant-Attorney what&apos;s going on. We&apos;ll open your file, gather the
+                  facts, surface the gaps, and map your next steps. <strong>Everything begins here</strong> —
+                  the tools further down are optional and you don&apos;t need them to start.
+                </p>
+              </>
+            )}
+            <div className="dash-start-actions">
+              {atLimit ? (
+                <span className="dash-limit-note">
+                  {MAX_ACTIVE_FILES}/{MAX_ACTIVE_FILES} files — archive one to open a new file
+                </span>
+              ) : (
+                <Link href="/chat" className="dash-btn dash-btn-primary dash-btn-lg">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                  {hasFiles ? "Create New File" : "Start Your File"}
+                </Link>
+              )}
+              <Link href="/chat?type=quick_consult" className="dash-btn dash-btn-secondary">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                </svg>
+                Quick Question
+                <span className="dash-btn-hint">A privileged one-off question, unrelated to your files</span>
+              </Link>
+              {consult && consult.status !== "cancelled" && consult.status !== "completed" ? (
+                <a href="#consult-status" className="dash-btn dash-btn-secondary dash-btn--consult-active">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                    <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+                  </svg>
+                  View Consult
+                  <span className="dash-btn-hint">
+                    {consult.status === "confirmed" ? "Confirmed — see details below" :
+                     consult.status === "attorney_proposed" ? "New time proposed — respond below" :
+                     "Pending attorney confirmation"}
+                  </span>
+                </a>
+              ) : hasConsultSub ? (
+                <Link href="/consult/schedule" className="dash-btn dash-btn-secondary">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                    <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+                  </svg>
+                  Schedule Consult
+                  <span className="dash-btn-hint">Book 1-on-1 time with Andrew Crawford, Esq.</span>
+                </Link>
+              ) : (
+                <ConsultCheckoutButton />
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* Self-service tools — optional, collapsed once the client has a file so
+            the file's strategy / gaps / next steps stay front and center. */}
+        <details className="dash-toolbox" {...(!hasFiles ? { open: true } : {})}>
+          <summary className="dash-toolbox-summary">
+            <span className="dash-toolbox-summary-main">
+              <svg className="dash-toolbox-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="7" width="20" height="14" rx="2" ry="2" /><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              </svg>
+              <span>Self-service tools</span>
             </span>
-          ) : (
-            <Link href="/chat" className="dash-btn dash-btn-primary">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-              Create New File
-            </Link>
-          )}
-          <Link href="/chat?type=quick_consult" className="dash-btn dash-btn-secondary">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            <span className="dash-toolbox-summary-note">
+              Optional — free calculators &amp; screeners. You don&apos;t need these to start.
+            </span>
+            <svg className="dash-toolbox-caret" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="6 9 12 15 18 9" />
             </svg>
-            Quick Question
-            <span className="dash-btn-hint">Seek legal advice on any legal topic unrelated to your files</span>
-          </Link>
-          {consult && consult.status !== "cancelled" && consult.status !== "completed" ? (
-            <a href="#consult-status" className="dash-btn dash-btn-secondary dash-btn--consult-active">
+          </summary>
+
+          <div className="dash-toolbox-grid">
+            <Link href="/debt/rights" className="dash-btn dash-btn-secondary">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+                <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
               </svg>
-              View Consult
-              <span className="dash-btn-hint">
-                {consult.status === "confirmed" ? "Confirmed — see details below" :
-                 consult.status === "attorney_proposed" ? "New time proposed — respond below" :
-                 "Pending attorney confirmation"}
-              </span>
-            </a>
-          ) : hasConsultSub ? (
-            <Link href="/consult/schedule" className="dash-btn dash-btn-secondary">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-              </svg>
-              Schedule Consult
-              <span className="dash-btn-hint">Book 1-on-1 time with Andrew Crawford, Esq.</span>
+              Debt-Collection Rights
+              <span className="dash-btn-hint">Free — your rights and next steps against a debt collector</span>
             </Link>
-          ) : (
-            <ConsultCheckoutButton />
-          )}
-          <Link href="/debt/rights" className="dash-btn dash-btn-secondary">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-            </svg>
-            Debt-Collection Rights
-            <span className="dash-btn-hint">Free — your rights and next steps against a debt collector</span>
-          </Link>
-          <Link href="/bankruptcy/means-test" className="dash-btn dash-btn-secondary">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 6l9-3 9 3M5 10v8m14-8v8M3 21h18M9 10v8m6-8v8" />
-            </svg>
-            Chapter 7 Means Test
-            <span className="dash-btn-hint">Free — can you file Chapter 7? Check the income screen</span>
-          </Link>
-          <Link href="/bankruptcy/options" className="dash-btn dash-btn-secondary">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="3" /><path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6l2.1 2.1m0-12.8l-2.1 2.1M7.7 16.3l-2.1 2.1" />
-            </svg>
-            Debt-Relief Options
-            <span className="dash-btn-hint">Free — weigh bankruptcy vs. the alternatives</span>
-          </Link>
-          <Link href="/family/child-support" className="dash-btn dash-btn-secondary">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-            </svg>
-            Child Support Estimator
-            <span className="dash-btn-hint">Free — a Texas guideline child-support estimate in seconds</span>
-          </Link>
-          <Link href="/family/property-division" className="dash-btn dash-btn-secondary">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 6h18M6 6v13a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /><line x1="12" y1="11" x2="12" y2="16" />
-            </svg>
-            Property Division Estimator
-            <span className="dash-btn-hint">Free — see how a Texas community estate would split</span>
-          </Link>
-          <Link href="/family/possession-schedule" className="dash-btn dash-btn-secondary">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
-            </svg>
-            Possession Schedule
-            <span className="dash-btn-hint">Free — the Texas Standard Possession Order on a calendar</span>
-          </Link>
-          <Link href="/family/maintenance" className="dash-btn dash-btn-secondary">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 3v18" /><path d="M5 7l7-4 7 4" /><path d="M5 7l-2 6a4 4 0 0 0 8 0L9 7M19 7l-2 6a4 4 0 0 0 8 0l-2-6" />
-            </svg>
-            Spousal Maintenance Screen
-            <span className="dash-btn-hint">Free — an honest read on Texas spousal maintenance</span>
-          </Link>
-          <Link href="/what-if" className="dash-btn dash-btn-secondary">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><line x1="12" y1="17" x2="12.01" y2="17" />
-            </svg>
-            What-If Game
-            <span className="dash-btn-hint">Optional — pressure-test your strategy against scenarios the law has seen</span>
-          </Link>
-        </div>
+            <Link href="/bankruptcy/means-test" className="dash-btn dash-btn-secondary">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 6l9-3 9 3M5 10v8m14-8v8M3 21h18M9 10v8m6-8v8" />
+              </svg>
+              Chapter 7 Means Test
+              <span className="dash-btn-hint">Free — can you file Chapter 7? Check the income screen</span>
+            </Link>
+            <Link href="/bankruptcy/options" className="dash-btn dash-btn-secondary">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3" /><path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6l2.1 2.1m0-12.8l-2.1 2.1M7.7 16.3l-2.1 2.1" />
+              </svg>
+              Debt-Relief Options
+              <span className="dash-btn-hint">Free — weigh bankruptcy vs. the alternatives</span>
+            </Link>
+            <Link href="/family/child-support" className="dash-btn dash-btn-secondary">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+              </svg>
+              Child Support Estimator
+              <span className="dash-btn-hint">Free — a Texas guideline child-support estimate in seconds</span>
+            </Link>
+            <Link href="/family/property-division" className="dash-btn dash-btn-secondary">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 6h18M6 6v13a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /><line x1="12" y1="11" x2="12" y2="16" />
+              </svg>
+              Property Division Estimator
+              <span className="dash-btn-hint">Free — see how a Texas community estate would split</span>
+            </Link>
+            <Link href="/family/possession-schedule" className="dash-btn dash-btn-secondary">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+              Possession Schedule
+              <span className="dash-btn-hint">Free — the Texas Standard Possession Order on a calendar</span>
+            </Link>
+            <Link href="/family/maintenance" className="dash-btn dash-btn-secondary">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 3v18" /><path d="M5 7l7-4 7 4" /><path d="M5 7l-2 6a4 4 0 0 0 8 0L9 7M19 7l-2 6a4 4 0 0 0 8 0l-2-6" />
+              </svg>
+              Spousal Maintenance Screen
+              <span className="dash-btn-hint">Free — an honest read on Texas spousal maintenance</span>
+            </Link>
+            <Link href="/what-if" className="dash-btn dash-btn-secondary">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+              What-If Game
+              <span className="dash-btn-hint">Optional — pressure-test your strategy against scenarios the law has seen</span>
+            </Link>
+          </div>
+
+          <p className="dash-toolbox-foot">
+            Document review and government-form help live inside each file — start a conversation
+            and they&apos;ll appear there when your matter needs them.
+          </p>
+        </details>
 
         {/* Global status bar */}
         <div className="dash-status-bar">
