@@ -53,5 +53,5 @@ Andrew Crawford, Esq. · Licensed in **Texas and Illinois**.
 ## How these map into the app
 
 - Documents **1 and 2** are the click-to-sign agreements presented during onboarding (`app/onboarding/page.tsx`) and recorded by `POST /api/agreements`. Update the version string there when text is finalized.
-- Documents **3–6** are intended to be linked (footer + checkout) and acknowledged at sign-up; they are not yet rendered as in-app pages — wiring them in is a follow-up once text is approved.
+- Documents **3–6** are rendered at `/legal/terms`, `/legal/privacy`, `/legal/billing`, and `/legal/disclaimers`, linked from the landing footer, legal page footers, and onboarding checkout. Treat as drafts until attorney approval.
 - Document **8** is rendered at `/legal/ai-philosophy` and linked from the landing footer, onboarding AI consent step, and free chat. Treat as draft until attorney approval.

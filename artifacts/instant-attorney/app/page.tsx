@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { LEGAL_NAV_LINKS } from "@/lib/legal/nav";
 
 export default function LandingPage() {
   const router = useRouter();
@@ -721,9 +722,11 @@ export default function LandingPage() {
       <footer className="lp-footer">
         <div>
           <nav className="lp-footer-nav" aria-label="Legal">
-            <a href="/legal/ai-philosophy">AI Philosophy</a>
-            <a href="#acp-limits">Privilege Limits</a>
-            <a href="/free-chat">Free Chat</a>
+            {LEGAL_NAV_LINKS.map((link) => (
+              <a key={link.href} href={link.href}>
+                {link.label}
+              </a>
+            ))}
           </nav>
           <p className="lp-footer-legal">
           Instant-Attorney is a product of Crawford Law PLLC. Crawford Law PLLC is a Texas law firm

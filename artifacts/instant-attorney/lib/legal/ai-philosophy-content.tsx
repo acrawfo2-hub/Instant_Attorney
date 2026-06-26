@@ -1,17 +1,15 @@
-import type { ReactNode } from "react";
+import type { LegalDocumentMeta, LegalSection } from "@/lib/legal/types";
 
-export interface LegalSection {
-  id: string;
-  title: string;
-  content: ReactNode;
-}
+export type { LegalSection };
 
-export const AI_PHILOSOPHY_META = {
+export const AI_PHILOSOPHY_META: LegalDocumentMeta = {
   title: "Our Philosophy on Artificial Intelligence",
   subtitle:
     "How Crawford Law PLLC uses AI responsibly — with a licensed attorney always in the loop.",
   version: "Draft v1.0 — pending attorney review",
   effectiveDate: "[TO BE SET]",
+  footerNote:
+    "This statement is maintained in good-faith reliance on the Texas Disciplinary Rules of Professional Conduct and Texas Ethics Opinion 705 (February 2025).",
 };
 
 export const AI_PHILOSOPHY_SECTIONS: LegalSection[] = [

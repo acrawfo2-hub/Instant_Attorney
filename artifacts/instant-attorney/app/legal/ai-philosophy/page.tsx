@@ -18,6 +18,7 @@ export default function AiPhilosophyPage() {
       subtitle={AI_PHILOSOPHY_META.subtitle}
       version={AI_PHILOSOPHY_META.version}
       effectiveDate={AI_PHILOSOPHY_META.effectiveDate}
+      footerNote={AI_PHILOSOPHY_META.footerNote}
       sections={AI_PHILOSOPHY_SECTIONS}
     />
   );

@@ -252,6 +252,22 @@ export default async function AccountPage() {
         </section>
         )}
 
+        {!isAttorney && (
+        <section className="acc-card">
+          <h2 className="acc-card-title">Legal &amp; policies</h2>
+          <p className="acc-note">
+            Review how we handle your data, billing, and AI-assisted services.
+          </p>
+          <div className="acc-legal-links">
+            <Link href="/legal/terms">Terms of Service</Link>
+            <Link href="/legal/privacy">Privacy Policy</Link>
+            <Link href="/legal/billing">Billing &amp; Refunds</Link>
+            <Link href="/legal/disclaimers">Legal Disclaimers</Link>
+            <Link href="/legal/ai-philosophy">AI Philosophy</Link>
+          </div>
+        </section>
+        )}
+
         <div className="acc-signout-row">
           <LogoutButton />
         </div>

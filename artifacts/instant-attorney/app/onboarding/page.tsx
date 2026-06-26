@@ -348,6 +348,16 @@ export default function OnboardingPage() {
                     <li><strong>Data:</strong> after cancellation your app access ends, but the Firm retains your file under its retention policy (generally 5+ years) — export anything you want, and you can request a copy later.</li>
                     <li><strong>Disputes:</strong> your agreement includes a <strong>binding arbitration</strong> provision (you waive court/jury trial; it does not limit the Firm&apos;s malpractice liability or your right to file a State Bar grievance).</li>
                   </ul>
+                  <p className="ob-legal-links">
+                    Full disclosures:{" "}
+                    <a href="/legal/billing" target="_blank" rel="noopener noreferrer">Billing &amp; Refunds</a>
+                    {" · "}
+                    <a href="/legal/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a>
+                    {" · "}
+                    <a href="/legal/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
+                    {" · "}
+                    <a href="/legal/disclaimers" target="_blank" rel="noopener noreferrer">Legal Disclaimers</a>
+                  </p>
                 </div>
 
                 <label className="ob-checkbox-label" style={{ fontSize: 12.5, textAlign: "left" }}>

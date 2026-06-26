@@ -1,5 +1,6 @@
 import Link from "next/link";
-import type { LegalSection } from "@/lib/legal/ai-philosophy-content";
+import { LEGAL_NAV_LINKS } from "@/lib/legal/nav";
+import type { LegalSection } from "@/lib/legal/types";
 
 interface LegalDocumentPageProps {
   title: string;
@@ -7,6 +8,7 @@ interface LegalDocumentPageProps {
   version: string;
   effectiveDate?: string;
   sections: LegalSection[];
+  footerNote?: string;
   draftNotice?: boolean;
 }
 
@@ -16,6 +18,7 @@ export default function LegalDocumentPage({
   version,
   effectiveDate,
   sections,
+  footerNote,
   draftNotice = true,
 }: LegalDocumentPageProps) {
   return (
@@ -34,8 +37,8 @@ export default function LegalDocumentPage({
         <article className="legal-article">
           {draftNotice && (
             <div className="legal-draft-banner">
-              <strong>Draft — pending attorney review.</strong> This statement is not yet
-              effective. Do not rely on it until approved by licensed counsel.
+              <strong>Draft — pending attorney review.</strong> This document is not yet effective.
+              Do not rely on it until approved by licensed counsel.
             </div>
           )}
 
@@ -70,14 +73,11 @@ export default function LegalDocumentPage({
           ))}
 
           <footer className="legal-article-footer">
-            <p>
-              This statement is maintained in good-faith reliance on the Texas Disciplinary
-              Rules of Professional Conduct and Texas Ethics Opinion 705 (February 2025).
-            </p>
+            {footerNote && <p>{footerNote}</p>}
             <p>
               Instant-Attorney is a product of Crawford Law PLLC. Licensed in Texas and Illinois.
               Nothing on this page constitutes legal advice or creates an attorney-client
-              relationship.
+              relationship unless and until you sign a Representation Agreement.
             </p>
           </footer>
         </article>
@@ -85,11 +85,12 @@ export default function LegalDocumentPage({
 
       <footer className="legal-site-footer">
         <div className="legal-footer-links">
-          <Link href="/legal/ai-philosophy">AI Philosophy</Link>
-          <span aria-hidden="true">·</span>
-          <Link href="/free-chat">Free Chat</Link>
-          <span aria-hidden="true">·</span>
-          <Link href="/">Home</Link>
+          {LEGAL_NAV_LINKS.map((link, i) => (
+            <span key={link.href} className="legal-footer-link-item">
+              {i > 0 && <span aria-hidden="true">·</span>}
+              <Link href={link.href}>{link.label}</Link>
+            </span>
+          ))}
         </div>
         <p className="legal-footer-copy">
           © Crawford Law PLLC · Andrew Crawford, Esq. · TX Bar #24148908
