@@ -257,16 +257,11 @@ export default function AcpChatClient({ accountName, accountEmail }: AcpChatClie
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
     try {
-      const apiMessages = nextMessages.map((m, idx) => ({
-        role: m.role,
-        content: idx === nextMessages.length - 1 ? text : m.content,
-      }));
-
       const res = await fetch("/api/chat-acp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: apiMessages,
+          userMessage: text,
           caseFileId,
           ...(isQuickConsult ? { fileType: "quick_consult" } : {}),
           ...(attachment ? { pendingAttachment: { data: attachment.data, mimeType: attachment.mimeType, fileName: attachment.fileName } } : {}),

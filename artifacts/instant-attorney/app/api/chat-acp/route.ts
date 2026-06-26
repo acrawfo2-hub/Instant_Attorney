@@ -3,7 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { logTruncation } from "@/lib/truncation-logger";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { ACP_CHAT_SYSTEM_PROMPT, buildFileContext } from "@/lib/prompts";
+import { buildAcpChatSystemPrompt, buildFileContext } from "@/lib/prompts";
+import { buildAcpMatterSignals, resolveAcpPracticeAreas } from "@/lib/acp-matter-areas";
+import { windowChatHistory, toChatTurns } from "@/lib/chat-history";
 import { parseAndUpdateFile, isCompleteFileUpdate } from "@/lib/file-parser";
 import { triggerPendingLookups } from "@/lib/gov-form-lookup";
 import { generateCaseTitle } from "@/lib/title-generator";
@@ -18,14 +20,17 @@ const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney, m
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
 export async function POST(req: NextRequest) {
-  const { messages, caseFileId, pendingAttachment, fileType } = await req.json() as {
-    messages: Array<{ role: string; content: string }>;
+  const body = await req.json() as {
+    messages?: Array<{ role: string; content: string }>;
+    userMessage?: string;
     caseFileId?: string;
     fileType?: "standard" | "quick_consult";
     pendingAttachment?: { data: string; mimeType: string; fileName: string };
   };
 
-  if (!Array.isArray(messages) || messages.length === 0) {
+  const { messages, userMessage, caseFileId, pendingAttachment, fileType } = body;
+
+  if (typeof userMessage !== "string" && (!Array.isArray(messages) || messages.length === 0)) {
     return NextResponse.json({ error: "Invalid messages" }, { status: 400 });
   }
 
@@ -119,10 +124,48 @@ export async function POST(req: NextRequest) {
     ? buildFileContext(caseFile, facts, attachments, requestedAttachments)
     : "";
 
+  // ── Conversation history: prefer server-loaded turns; fall back to client payload ──
+  let conversationMessages = toChatTurns(messages ?? []);
+
+  if (typeof userMessage === "string") {
+    const trimmed = userMessage.trim();
+    if (resolvedCaseFileId) {
+      try {
+        const { data: stored } = await db
+          .from("intake_messages")
+          .select("role, content")
+          .eq("case_file_id", resolvedCaseFileId)
+          .order("created_at", { ascending: true });
+        conversationMessages = [...toChatTurns(stored ?? []), { role: "user", content: trimmed }];
+      } catch (err) {
+        console.error("[chat-acp] history load failed, using client payload:", err);
+        conversationMessages = messages?.length
+          ? toChatTurns(messages)
+          : [{ role: "user" as const, content: trimmed }];
+      }
+    } else {
+      conversationMessages = [{ role: "user", content: trimmed }];
+    }
+  }
+
+  const { messages: windowedHistory, windowed: historyWindowed, droppedCount } =
+    windowChatHistory(conversationMessages);
+
+  const conversationText = [
+    typeof userMessage === "string" ? userMessage : "",
+    ...windowedHistory.slice(-6).map((m) => m.content),
+  ].join(" ");
+  const practiceAreas = resolveAcpPracticeAreas(
+    buildAcpMatterSignals(caseFile, facts, conversationText),
+  );
+  const { coreAndTail, practice, full: systemPrompt } = await buildAcpChatSystemPrompt({
+    practiceAreas,
+  });
+
   // Build Anthropic messages — replace last user message with multimodal if attachment present
   type AnthropicMessage = { role: "user" | "assistant"; content: Anthropic.MessageParam["content"] };
-  const anthropicMessages: AnthropicMessage[] = messages.map((m) => ({
-    role: m.role as "user" | "assistant",
+  const anthropicMessages: AnthropicMessage[] = windowedHistory.map((m) => ({
+    role: m.role,
     content: m.content,
   }));
 
@@ -156,7 +199,7 @@ export async function POST(req: NextRequest) {
   // inline screenshot uploaded below can be linked back to this exact message and
   // reattached to the right bubble when the conversation is reloaded.
   let userMessageId: string | null = null;
-  const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
+  const lastUserMsg = [...windowedHistory].reverse().find((m) => m.role === "user");
   if (lastUserMsg) {
     const textToSave = pendingAttachment
       ? `[${pendingAttachment.fileName}]\n${lastUserMsg.content}`
@@ -181,9 +224,17 @@ export async function POST(req: NextRequest) {
     system: [
       {
         type: "text" as const,
-        text: ACP_CHAT_SYSTEM_PROMPT,
+        text: coreAndTail,
         cache_control: { type: "ephemeral" as const },
       },
+      ...(practice
+        ? [{
+            type: "text" as const,
+            text: practice,
+            cache_control: { type: "ephemeral" as const },
+          }]
+        : []),
+      // Living File is always injected in full — never truncated or cached (must reflect latest DB state).
       ...(fileContext ? [{ type: "text" as const, text: fileContext }] : []),
     ],
     messages: anthropicMessages,
@@ -216,12 +267,19 @@ export async function POST(req: NextRequest) {
             actorId: userId,
             caseFileId: resolvedCaseFileId,
             feature: "chat_acp",
-            metadata: { ...limitSignalMetadata({
-              model: finalMsg.model,
-              outputTokens: finalMsg.usage.output_tokens,
-              priorLimit: 4000,
-              stopReason: finalMsg.stop_reason,
-            }) },
+            metadata: {
+              ...limitSignalMetadata({
+                model: finalMsg.model,
+                outputTokens: finalMsg.usage.output_tokens,
+                priorLimit: 4000,
+                stopReason: finalMsg.stop_reason,
+              }),
+              living_file_injected: Boolean(fileContext),
+              living_file_bytes: fileContext.length,
+              history_windowed: historyWindowed,
+              history_dropped: droppedCount,
+              practice_areas: practiceAreas,
+            },
           });
         }
 
