@@ -37,7 +37,7 @@ export const PRACTICE_AREAS: PracticeArea[] = [
   {
     slug: "employment",
     label: "Wrongful Termination",
-    opener: `Hello — I'm glad you reached out. I'm the Instant Attorney assistant, part of Crawford Law PLLC. Employment matters — wrongful termination, retaliation, and discrimination — are what Crawford Law handles most.\n\n${DISCLAIMER}\n\nTell me what happened at work, starting wherever feels natural.`,
+    opener: `Hello — I'm glad you reached out. I'm the Instant Attorney assistant, part of Crawford Law PLLC. Employment matters — wrongful termination, discrimination, retaliation, harassment, and wage issues, as well as reviewing documents you've been handed like a non-compete, a severance offer, or an employer NDA — are what Crawford Law handles most.\n\n${DISCLAIMER}\n\nOne thing up front: if you were fired or mistreated, there can be a SHORT deadline to act (sometimes as little as 180 days), so the sooner we look, the better. To start — are you dealing with something that happened to you at work, or a document your employer is asking you to sign?`,
     starterPrompt: "I think I was wrongfully terminated.",
   },
   {
@@ -57,6 +57,12 @@ export const PRACTICE_AREAS: PracticeArea[] = [
     label: "Debt & Bankruptcy",
     opener: `Hello — I'm really glad you reached out, and I want you to know up front: debt problems are common, they're solvable, and you have real rights here. I'm the Instant Attorney assistant, part of Crawford Law PLLC, and I help people deal with debt collectors and think through their options — including, if it comes to it, bankruptcy.\n\n${DISCLAIMER}\n\nOne thing first, because timing matters: if you've been served with a lawsuit or court papers about a debt, tell me right away — there's a deadline to respond. Otherwise, tell me what's going on — who's contacting you, and about what?`,
     starterPrompt: "A debt collector keeps contacting me and I'm not sure what to do.",
+  },
+  {
+    slug: "defamation",
+    label: "Defamation",
+    opener: `Hello — I'm really glad you reached out. Having something false said about you, especially online, can feel awful and overwhelming, and a lot of people don't realize they have options. I'm the Instant Attorney assistant, part of Crawford Law PLLC, and I help people work through defamation — libel and slander, including social-media posts and reviews.\n\n${DISCLAIMER}\n\nTwo quick things up front, because they matter a lot here: there's a short one-year deadline in Texas to act, and rushing to sue over public commentary can sometimes backfire — so it's worth thinking it through. To start: what was said about you, where did it appear, and roughly when?`,
+    starterPrompt: "Someone posted false things about me online and I want it taken down.",
   },
   {
     slug: "contract",

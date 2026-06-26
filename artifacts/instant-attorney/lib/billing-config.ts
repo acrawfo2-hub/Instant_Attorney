@@ -34,16 +34,28 @@ export interface BillingConfig {
    * this cap; beyond it the ledger pauses until the user raises their limit.
    */
   defaultMonthlyLimitUsd: number;
+  /**
+   * Completion-grace buffer (USD of model COGS) a customer who has opted in may
+   * consume *past* a billing block (top-up pending / failed / limit reached) so
+   * an in-flight document can always finish. The overshoot is never forgiven —
+   * it stays on the meter and is collected on the next successful top-up — so
+   * margin is preserved and total exposure is bounded to this buffer. Defaults
+   * to one top-up charge: a single bounded cycle of "finish now, pay later".
+   */
+  graceBufferUsd: number;
 }
 
 export function getBillingConfig(): BillingConfig {
+  const chargeUsd = num("USAGE_TOPUP_CHARGE_USD", 8.5);
   return {
     enabled: process.env.USAGE_TOPUP_ENABLED !== "false",
     thresholdUsd: num("USAGE_TOPUP_THRESHOLD_USD", 4.75),
-    chargeUsd: num("USAGE_TOPUP_CHARGE_USD", 8.5),
+    chargeUsd,
     includedAllowanceUsd: num("USAGE_INCLUDED_ALLOWANCE_USD", 0),
     productId: process.env.STRIPE_TOPUP_PRODUCT_ID ?? "",
     defaultMonthlyLimitUsd: num("USAGE_DEFAULT_MONTHLY_TOPUP_LIMIT_USD", 25),
+    // Default the completion-grace buffer to one top-up charge.
+    graceBufferUsd: num("USAGE_GRACE_BUFFER_USD", chargeUsd),
   };
 }
 

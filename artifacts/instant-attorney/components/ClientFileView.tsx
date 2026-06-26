@@ -12,11 +12,19 @@ import { placeholderFields } from "@/lib/wizard-parsing";
 import { computeMissionControl } from "@/lib/mission-control";
 import { looksLikeFamilyMatter } from "@/lib/family-instruments";
 import { looksLikeDebtMatter } from "@/lib/debt-instruments";
+import { looksLikeDefamationMatter } from "@/lib/defamation-instruments";
+import { looksLikeEmploymentMatter } from "@/lib/employment-instruments";
 import { looksLikePersonalInjuryMatter } from "@/lib/pi-instruments";
+import { buildEmploymentRoadmap } from "@/lib/employment-roadmap";
+import EmploymentRoadmap from "@/components/EmploymentRoadmap";
 import { buildFamilyRoadmap } from "@/lib/family-roadmap";
 import { buildMatterRoadmap } from "@/lib/matter-roadmap";
 import { buildPiRoadmap } from "@/lib/pi-roadmap";
 import FamilyRoadmap from "@/components/FamilyRoadmap";
+import { buildBankruptcyRoadmap } from "@/lib/bankruptcy-roadmap";
+import BankruptcyRoadmap from "@/components/BankruptcyRoadmap";
+import { buildGenericRoadmap } from "@/lib/generic-roadmap";
+import GenericRoadmap from "@/components/GenericRoadmap";
 import PiRoadmap from "@/components/PiRoadmap";
 import type { CaseFile, FactItem, Document, Profile, WizardType, ConsultRequest, RequestedAttachment, GovFormInstrument, Attachment } from "@/lib/types";
 import { isValidWizardType } from "@/lib/document-utils";
@@ -274,31 +282,69 @@ export default function ClientFileView({
   const matterText = `${caseFile.matter_subtype ?? ""} ${caseFile.summary ?? ""}`;
   const isFamilyMatter = looksLikeFamilyMatter(matterText);
   const isDebtMatter = looksLikeDebtMatter(matterText);
+  const isDefamationMatter = looksLikeDefamationMatter(matterText);
+  const isEmploymentMatter = looksLikeEmploymentMatter(matterText);
   const isPiMatter = looksLikePersonalInjuryMatter(matterText);
-  const familyRoadmap = !isAttorney
-    ? isFamilyMatter
+  const familyRoadmap =
+    !isAttorney && isFamilyMatter
       ? buildFamilyRoadmap({
           matterSubtype: caseFile.matter_subtype,
           matterText,
           facts: confirmed.map((f) => f.description),
           documents: documents.map((d) => ({ title: d.title, status: d.status })),
         })
-      : isPiMatter
-        ? null
-        : buildMatterRoadmap({
-            matterSubtype: caseFile.matter_subtype,
-            matterText,
-            facts: confirmed.map((f) => f.description),
-            documents: documents.map((d) => ({ title: d.title, status: d.status })),
-            hasStrategy: !!caseFile.legal_strategy,
-          })
-    : null;
+      : null;
+  const bankruptcyRoadmap =
+    !isAttorney && isDebtMatter
+      ? buildBankruptcyRoadmap({
+          matterText,
+          facts: confirmed.map((f) => f.description),
+          documents: documents.map((d) => ({ title: d.title, status: d.status })),
+        })
+      : null;
+  const employmentRoadmap =
+    !isAttorney && isEmploymentMatter
+      ? buildEmploymentRoadmap({
+          matterText,
+          facts: confirmed.map((f) => f.description),
+          documents: documents.map((d) => ({ title: d.title, status: d.status })),
+        })
+      : null;
   const piRoadmap =
     !isAttorney && isPiMatter
       ? buildPiRoadmap({
           matterText,
           facts: confirmed.map((f) => f.description),
           documents: documents.map((d) => ({ title: d.title, status: d.status })),
+        })
+      : null;
+  const matterRoadmapCandidate =
+    !isAttorney && !isFamilyMatter && !isDebtMatter && !isEmploymentMatter && !isPiMatter
+      ? buildMatterRoadmap({
+          matterSubtype: caseFile.matter_subtype,
+          matterText,
+          facts: confirmed.map((f) => f.description),
+          documents: documents.map((d) => ({ title: d.title, status: d.status })),
+          hasStrategy: !!caseFile.legal_strategy,
+        })
+      : null;
+  const matterRoadmap =
+    matterRoadmapCandidate && matterRoadmapCandidate.path !== "general"
+      ? matterRoadmapCandidate
+      : null;
+  const genericRoadmap =
+    !isAttorney && !isFamilyMatter && !isDebtMatter && !isEmploymentMatter && !isPiMatter && !matterRoadmap
+      ? buildGenericRoadmap({
+          hasSummary: Boolean(caseFile.summary),
+          matterTypeKnown: Boolean(caseFile.matter_type),
+          confirmedFactCount: confirmed.length,
+          openGapCount: gaps.length,
+          pendingUploadCount: requestedAttachments.filter((r) => r.status === "requested").length,
+          hasDocumentPlan:
+            (caseFile.legal_strategy?.document_plan?.length ?? 0) > 0 ||
+            (caseFile.legal_strategy?.recommended_wizards?.length ?? 0) > 0,
+          documents: documents.map((d) => ({ status: d.status, hasDraft: Boolean(d.draft_text) })),
+          consultActive: Boolean(consultRequest) && consultRequest?.status !== "cancelled",
         })
       : null;
 
@@ -601,8 +647,40 @@ export default function ClientFileView({
       {/* Family Law Roadmap — orients the family tools and documents below it */}
       {familyRoadmap && <FamilyRoadmap roadmap={familyRoadmap} />}
 
+      {/* Bankruptcy Roadmap — orients the debt/bankruptcy tools below it */}
+      {bankruptcyRoadmap && <BankruptcyRoadmap roadmap={bankruptcyRoadmap} />}
+
+      {/* Employment Roadmap — orients the employment tools below it */}
+      {employmentRoadmap && <EmploymentRoadmap roadmap={employmentRoadmap} />}
+
       {/* Personal Injury Roadmap — orients the PI tools below it */}
       {piRoadmap && <PiRoadmap roadmap={piRoadmap} />}
+
+      {/* Estate/HOA Matter Roadmap — authored depth for non-family practice areas */}
+      {matterRoadmap && <FamilyRoadmap roadmap={matterRoadmap} />}
+
+      {/* Generic Roadmap — Tier-1 fallback so every matter shows a roadmap */}
+      {genericRoadmap && <GenericRoadmap roadmap={genericRoadmap} />}
+
+      {/* Employment tools — employment matters only (client mode). */}
+      {!isAttorney && isEmploymentMatter && (
+        <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
+          <div className="lf-card-label">Employment Tools</div>
+          <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
+            Employment deadlines are short and unforgiving. Check what claim you may have and how much time you
+            have left, and — if you were handed a non-compete — see how much of it actually holds up in Texas.
+            General information, not legal advice.
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+            <Link href={`/employment/claim-check?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
+              Check my claim &amp; deadline →
+            </Link>
+            <Link href={`/employment/noncompete?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
+              Is my non-compete enforceable? →
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Debt-collection rights — debt matters only (client mode). */}
       {!isAttorney && isDebtMatter && (
@@ -632,10 +710,28 @@ export default function ClientFileView({
             <Link href={`/bankruptcy/means-test?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
               Run the means test →
             </Link>
+            <Link href={`/bankruptcy/exemptions?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
+              What would I keep? →
+            </Link>
             <Link href={`/bankruptcy/options?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
               Weigh my options →
             </Link>
           </div>
+        </div>
+      )}
+
+      {/* Defamation check — defamation matters only (client mode). */}
+      {!isAttorney && isDefamationMatter && (
+        <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
+          <div className="lf-card-label">Do You Have a Defamation Case?</div>
+          <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
+            Defamation is common online but tricky in the law. Get an honest read on whether you have a
+            claim — and learn the two things people miss: the short one-year deadline, and the anti-SLAPP
+            rule that can make you pay the other side&apos;s fees if you sue over public commentary.
+          </p>
+          <Link href={`/defamation/assess?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
+            Check my situation →
+          </Link>
         </div>
       )}
 

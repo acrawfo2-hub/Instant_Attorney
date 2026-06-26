@@ -19,6 +19,72 @@ import type { FreshnessItem } from "./scan.ts";
 
 export const LEGAL_FRESHNESS_ITEMS: FreshnessItem[] = [
   {
+    id: "employment-law-registry",
+    label: "Employment & labor law registry (EEOC deadlines, FLSA, non-compete)",
+    area: "employment",
+    volatility: "catalog",
+    currentValue:
+      "EEOC 300-day / TWC 180-day charge deadlines; FLSA overtime + exempt-salary thresholds; Tex. non-compete § 15.50; OWBPA severance timing",
+    sourceUrl: "https://www.eeoc.gov/time-limits-filing-charge",
+    verifiedOn: "2026-06-25",
+    reviewAfter: "2027-06-25",
+    notes:
+      "Code: lib/employment-statutes.ts (+ claim/non-compete assessments). The FLSA exempt-salary threshold and EEOC/NLRB guidance change more often than the statutes — re-check annually and after rulemaking.",
+  },
+  {
+    id: "tx-defamation-statutes",
+    label: "Texas defamation law registry (Ch. 73, TCPA Ch. 27, 1-yr SOL)",
+    area: "defamation",
+    volatility: "catalog",
+    currentValue:
+      "Ch. 73 (libel + Defamation Mitigation Act), Ch. 27 (anti-SLAPP/TCPA), § 16.002 (1-year SOL), § 230 platform immunity",
+    sourceUrl: "https://statutes.capitol.texas.gov/Docs/CP/htm/CP.73.htm",
+    verifiedOn: "2026-06-25",
+    reviewAfter: "2027-10-01",
+    nextExpectedChange: "2027-09-01",
+    notes:
+      "Code: lib/defamation-statutes.ts. The TCPA (anti-SLAPP) has been amended repeatedly — re-check after each Texas legislative session.",
+  },
+  {
+    id: "means-test-707b-thresholds",
+    label: "§ 707(b)(2) means-test presumption thresholds",
+    area: "bankruptcy",
+    volatility: "indexed-dollar",
+    currentValue: "Lower $10,275 / Upper $17,150, effective Apr 1, 2025",
+    sourceUrl: "https://www.justice.gov/ust/means-testing",
+    verifiedOn: "2026-06-24",
+    reviewAfter: "2027-06-24",
+    effectiveDate: "2025-04-01",
+    nextExpectedChange: "2028-04-01",
+    notes:
+      "Code: MEANS_TEST_THRESHOLDS in lib/bankruptcy-disposable-income.ts. Adjusted every 3 years on April 1.",
+  },
+  {
+    id: "irs-collection-financial-standards",
+    label: "IRS Collection Financial Standards (means-test expenses)",
+    area: "bankruptcy",
+    volatility: "indexed-dollar",
+    currentValue: "National + Local Standards (food/housing/transportation) — used as allowed-expense inputs",
+    sourceUrl: "https://www.irs.gov/businesses/small-businesses-self-employed/collection-financial-standards",
+    verifiedOn: "2026-06-24",
+    reviewAfter: "2027-04-01",
+    notes:
+      "Not encoded (county-specific, large). The full means-test step (lib/bankruptcy-disposable-income.ts) takes expenses as input; the tool links users here. IRS updates these about annually.",
+  },
+  {
+    id: "tx-personal-property-exemption-cap",
+    label: "Texas personal-property exemption cap (§ 42.001)",
+    area: "bankruptcy",
+    volatility: "statute",
+    currentValue: "$100,000 family / $50,000 single adult",
+    sourceUrl: "https://statutes.capitol.texas.gov/Docs/PR/htm/PR.42.htm",
+    verifiedOn: "2026-06-24",
+    reviewAfter: "2027-10-01",
+    nextExpectedChange: "2027-09-01",
+    notes:
+      "Code: TX_EXEMPTION_CAP in lib/bankruptcy-exemptions.ts. Statutory — changes only by amendment; re-check after each Texas legislative session.",
+  },
+  {
     id: "tx-means-test-median-income",
     label: "Texas median family income (Chapter 7 means test)",
     area: "bankruptcy",

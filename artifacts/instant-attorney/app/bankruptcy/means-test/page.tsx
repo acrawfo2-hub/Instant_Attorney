@@ -177,6 +177,15 @@ function MeansTest() {
             </p>
             <p style={{ fontSize: 14, color: "rgba(255,255,255,0.9)", lineHeight: 1.55, margin: "0 0 14px" }}>{result.guidance}</p>
 
+            {!result.belowMedian && (
+              <a
+                href={caseFileId ? `/bankruptcy/full-means-test?caseFileId=${caseFileId}` : "/bankruptcy/full-means-test"}
+                style={{ display: "inline-block", marginBottom: 14, fontSize: 13.5, fontWeight: 500, color: navy, background: gold, padding: "9px 14px", borderRadius: 8, textDecoration: "none" }}
+              >
+                Run the full means test (with expense deductions) →
+              </a>
+            )}
+
             {result.assumptions.length > 0 && (
               <ul style={{ margin: "0 0 14px", paddingLeft: 18, fontSize: 13, color: "rgba(255,255,255,0.78)", lineHeight: 1.55 }}>
                 {result.assumptions.map((a, i) => (
