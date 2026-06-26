@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
 
     if (userId && session.payment_status === "paid") {
       const db = createServiceClient();
+      const customerId = session.customer as string | null;
 
       if (plan === "consult") {
         // Phase 2 users buying a consult add-on must not have their plan overwritten.
@@ -30,18 +31,32 @@ export async function GET(req: NextRequest) {
             .from("subscriptions")
             .update({
               consult_credits: (existing.consult_credits ?? 0) + 1,
-              stripe_customer_id: session.customer as string,
+              ...(customerId ? { stripe_customer_id: customerId } : {}),
             })
             .eq("user_id", userId);
         } else {
+          // New consult-only subscriber — save stripe_customer_id so the billing
+          // portal is immediately usable (webhook may arrive after user lands).
           await db.from("subscriptions").upsert(
-            { user_id: userId, status: "active", plan, current_period_end: null },
+            {
+              user_id: userId,
+              status: "active",
+              plan,
+              current_period_end: null,
+              ...(customerId ? { stripe_customer_id: customerId } : {}),
+            },
             { onConflict: "user_id" }
           );
         }
       } else {
         await db.from("subscriptions").upsert(
-          { user_id: userId, status: "active", plan, current_period_end: null },
+          {
+            user_id: userId,
+            status: "active",
+            plan,
+            current_period_end: null,
+            ...(customerId ? { stripe_customer_id: customerId } : {}),
+          },
           { onConflict: "user_id" }
         );
       }

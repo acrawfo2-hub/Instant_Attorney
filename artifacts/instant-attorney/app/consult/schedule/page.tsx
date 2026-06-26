@@ -23,14 +23,18 @@ export default async function SchedulePage() {
     userId = user.id;
   }
 
-  // Subscription gate
+  // Subscription gate — allow either a consult plan OR a Phase II subscriber
+  // who purchased a consult add-on (consult_credits > 0).
   if (!BYPASS_AUTH) {
     const { data: sub } = await db
       .from("subscriptions")
-      .select("status, plan")
+      .select("status, plan, consult_credits")
       .eq("user_id", userId)
       .maybeSingle();
-    if (!sub || sub.plan !== "consult" || !["active"].includes(sub.status)) {
+    const isActive = !!sub && ["active", "trialing"].includes(sub.status ?? "");
+    const credits = (sub as { consult_credits?: number | null } | null)?.consult_credits ?? 0;
+    const hasConsultAccess = isActive && (sub?.plan === "consult" || credits > 0);
+    if (!hasConsultAccess) {
       redirect("/onboarding?step=payment&plan=consult");
     }
   }

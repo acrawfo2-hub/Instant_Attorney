@@ -39,6 +39,7 @@ const TONE: Record<Tone, { bg: string; border: string; fg: string; bar: string }
 export default function BillingMeter() {
   const [data, setData] = useState<BillingSummary | null>(null);
   const [busy, setBusy] = useState(false);
+  const [portalErr, setPortalErr] = useState<string | null>(null);
   const [editingLimit, setEditingLimit] = useState(false);
   const [limitInput, setLimitInput] = useState("");
 
@@ -64,10 +65,17 @@ export default function BillingMeter() {
 
   const openPortal = useCallback(async () => {
     setBusy(true);
+    setPortalErr(null);
     try {
       const res = await fetch("/api/billing/portal", { method: "POST" });
-      const body = await res.json();
-      if (body.url) window.location.href = body.url;
+      const body = await res.json().catch(() => ({}));
+      if (body.url) {
+        window.location.href = body.url;
+        return;
+      }
+      setPortalErr(body.error ?? "Couldn't open the billing portal. Please try again.");
+    } catch {
+      setPortalErr("Couldn't open the billing portal. Please try again.");
     } finally {
       setBusy(false);
     }
@@ -217,8 +225,11 @@ export default function BillingMeter() {
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10, alignItems: "center" }}>
         {(cta === "card" || data.blockReason === "topup_failed") && (
           <button onClick={openPortal} disabled={busy} style={btn(t.bar)}>
-            Update card
+            {busy ? "Opening…" : "Update card"}
           </button>
+        )}
+        {portalErr && (
+          <span style={{ fontSize: 12, color: "#991b1b", fontWeight: 500 }}>{portalErr}</span>
         )}
         {data.blockReason === "topup_failed" && (
           <button onClick={retry} disabled={busy} style={btnGhost(t.fg)}>
