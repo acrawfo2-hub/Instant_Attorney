@@ -27,6 +27,8 @@ paths = [
   "/api/agreements",
   "/api/consult",
   "/api/case-files",
+  "/api/financials",
+  "/api/account",
   "/api/usage",
   "/api/admin",
   "/consult",

@@ -4,14 +4,17 @@
 // module turns a family matter into a staged map — "here is the whole path, and
 // here is where you are" — so the unknown becomes navigable. It is decoupled and
 // read-only: it derives the stages and a best-effort "current stage" from the
-// matter text, the Living File facts, and the documents already on file. It
-// writes nothing and changes no document or wizard.
+// matter subtype, the matter text, the Living File facts, and documents on file.
+// It writes nothing and changes no document or wizard.
 //
-// Per-stage completion is tracked INDEPENDENTLY from light keyword signals (not
-// by assuming strict linear progress), so a stage is marked done only when there
-// is real evidence for it, and the "current" stage is simply the first one
-// without evidence. This keeps the map honest when someone does things out of
-// order. Fully unit-testable; no I/O.
+// Path detection prefers the structured matter_subtype field (set by the AI when
+// it classifies the intake) over free-text keyword scanning, so a user who says
+// "I want a modification" gets the right blueprint even if their summary is thin.
+//
+// Per-stage completion is tracked INDEPENDENTLY from broad signals (not by
+// assuming strict linear progress), so a stage is marked done only when there is
+// real evidence for it — including real-world language like "we already went to
+// mediation" or "the petition was filed last year". Fully unit-testable; no I/O.
 
 export type FamilyPath = "divorce" | "custody" | "modification" | "agreement" | "enforcement";
 
@@ -28,7 +31,8 @@ export interface RoadmapStage {
 }
 
 export interface FamilyRoadmap {
-  path: FamilyPath;
+  /** Path slug — string (not FamilyPath) so non-family roadmaps can share the renderer. */
+  path: string;
   pathLabel: string;
   /** True when the matter shows family-violence signals; surfaces a safety banner. */
   safety: boolean;
@@ -38,6 +42,8 @@ export interface FamilyRoadmap {
 }
 
 export interface FamilyRoadmapInput {
+  /** Matter subtype from the DB (matter_subtype column). Used as the primary path signal. */
+  matterSubtype?: string | null;
   /** Matter subtype + summary, or any free text describing the matter. */
   matterText?: string | null;
   /** Confirmed-fact descriptions from the Living File. */
@@ -74,7 +80,7 @@ const DONE_DOC_STATUSES = new Set(["approved", "delivered"]);
 function deriveSignals(input: FamilyRoadmapInput): Signals {
   const docs = input.documents ?? [];
   const facts = input.facts ?? [];
-  const text = [input.matterText ?? "", ...facts, ...docs.map((d) => d.title)]
+  const text = [input.matterSubtype ?? "", input.matterText ?? "", ...facts, ...docs.map((d) => d.title)]
     .join(" \n ")
     .toLowerCase();
   const has = (re: RegExp) => re.test(text);
@@ -84,24 +90,85 @@ function deriveSignals(input: FamilyRoadmapInput): Signals {
     docs.some((d) => re.test(d.title.toLowerCase()) && DONE_DOC_STATUSES.has(d.status));
 
   return {
-    hasPetition: docTitle(/petition|answer|waiver of service/),
-    hasTemporaryOrders: has(/temporary orders|temporary restraining|interim order/),
-    hasSupport: has(/child support/),
-    hasPossession: has(/possession schedule|parenting plan|standard possession/),
-    hasProperty: has(/property division|community estate|community-estate|property split/),
-    hasMediation: has(/mediation|mediated settlement|\bmsa\b|settlement agreement/),
-    hasFinalOrder: docDone(/final decree|final order|decree of divorce/) || has(/decree signed|order signed/),
-    hasParentage: has(/paternity|parentage|acknowledgment of paternity/),
-    hasDisclosure: has(/financial disclosure|asset disclosure|disclosure of assets|inventory and appraisement/),
-    hasDraftAgreement: docTitle(/premarital|prenup|marital property agreement|postnup/),
-    hasViolationLog: has(/violation log|each violation|arrearage|arrears|missed (visitation|possession|payment)/),
-    hasChange: has(/material (and substantial )?change|lost (my|the) job|relocat|moved away|new circumstances/),
+    // Catch both in-app document evidence AND real-world language ("already filed",
+    // "cause number", "the petition was filed last year").
+    hasPetition:
+      docTitle(/petition|answer|waiver of service/) ||
+      has(/already filed|petition (was|is|has been) filed|filed (the|a|my) petition|cause number|case number \d|served (with |the )?petition/),
+
+    hasTemporaryOrders:
+      has(/temporary orders|temporary restraining|interim order|\bTRO\b/) ||
+      has(/already have (a )?(temp|temporary|interim) order|temp orders (are|were|have been)|had temporary orders/),
+
+    hasSupport:
+      has(/child support/) ||
+      has(/support (was|is|has been) (set|established|ordered|calculated)/),
+
+    hasPossession:
+      has(/possession schedule|parenting plan|standard possession|spo\b/) ||
+      has(/possession (was|is|has been) (set|ordered|agreed)|schedule (was|is|has been) agreed/),
+
+    hasProperty:
+      has(/property division|community estate|community-estate|property split/) ||
+      has(/divided (the |our )?(property|estate|assets)|property (was|is|has been) divided|split (the |our )?(property|assets)/),
+
+    hasMediation:
+      has(/mediation|mediated settlement|\bmsa\b|settlement agreement/) ||
+      has(/(went to|had|completed|attended|scheduled) mediation|mediation (is|was) (done|complete|scheduled|finished)/),
+
+    hasFinalOrder:
+      docDone(/final decree|final order|decree of divorce/) ||
+      has(/decree signed|order signed|divorce (is|was) final|case (is|was) closed/) ||
+      has(/(already )?(divorced|finalized)|finalized (the|my) divorce|divorce (was|is) final/),
+
+    hasParentage:
+      has(/paternity|parentage|acknowledgment of paternity/) ||
+      has(/paternity (was|is|has been) (established|acknowledged|adjudicated)/),
+
+    hasDisclosure:
+      has(/financial disclosure|asset disclosure|disclosure of assets|inventory and appraisement/) ||
+      has(/disclosed (my |our )?(assets|finances|property)|financial (disclosure|affidavit)/),
+
+    hasDraftAgreement:
+      docTitle(/premarital|prenup|marital property agreement|postnup/) ||
+      has(/agreement (is|has been) drafted|drafted (the |a )?agreement/),
+
+    hasViolationLog:
+      has(/violation log|each violation|arrearage|arrears|missed (visitation|possession|payment)/) ||
+      has(/documented (every|each|the) violation|list of violations|log of missed/),
+
+    hasChange:
+      has(/material (and substantial )?change|lost (my|the) job|relocat|moved away|new circumstances/) ||
+      has(/job loss|income (dropped|decreased|changed)|remarried|child (started school|has special needs)/),
   };
 }
 
 // ── Path detection ────────────────────────────────────────────────────────────
 
-export function detectFamilyPath(matterText: string | null | undefined): FamilyPath {
+// Maps the matter_subtype field (written by the AI) to a FamilyPath, using
+// substring matching so minor AI phrasing variations still route correctly.
+function subtypeToFamilyPath(matterSubtype: string): FamilyPath | null {
+  const s = matterSubtype.toLowerCase().trim();
+  if (!s) return null;
+  if (/prenup|postnup|premarital|partition.and.exchange|marital.prop/.test(s)) return "agreement";
+  if (/enforce|contempt|arrears|arrearage/.test(s)) return "enforcement";
+  if (/modif/.test(s)) return "modification";
+  if (/custody|sapcr|parentage|paternity|conservator/.test(s) && !/divorce/.test(s)) return "custody";
+  if (/divorce/.test(s)) return "divorce";
+  return null;
+}
+
+export function detectFamilyPath(
+  matterText: string | null | undefined,
+  matterSubtype?: string | null,
+): FamilyPath {
+  // Prefer the structured DB field — it's what the AI explicitly classified.
+  if (matterSubtype) {
+    const fromSubtype = subtypeToFamilyPath(matterSubtype);
+    if (fromSubtype) return fromSubtype;
+  }
+
+  // Fall back to keyword scan on free text.
   const t = (matterText ?? "").toLowerCase();
   if (/prenup|postnup|premarital|marital property agreement|partition and exchange/.test(t)) return "agreement";
   if (/enforce|contempt|behind on (child )?support|denied (my )?(visitation|possession)|arrears/.test(t)) return "enforcement";
@@ -321,7 +388,7 @@ function enforcementStages(): StageBlueprint[] {
 }
 
 function blueprintsFor(path: FamilyPath, input: FamilyRoadmapInput): StageBlueprint[] {
-  const t = [(input.matterText ?? ""), ...(input.facts ?? [])].join(" ").toLowerCase();
+  const t = [input.matterSubtype ?? "", input.matterText ?? "", ...(input.facts ?? [])].join(" ").toLowerCase();
   switch (path) {
     case "divorce": {
       // Guard against negation ("no children") before the keyword check.
@@ -343,9 +410,12 @@ function blueprintsFor(path: FamilyPath, input: FamilyRoadmapInput): StageBluepr
 /**
  * Build a staged Family Law Roadmap with a best-effort "current" stage.
  * Deterministic and side-effect free.
+ *
+ * Pass `matterSubtype` (from the DB) to prefer the structured field over
+ * free-text keyword scanning for path detection.
  */
 export function buildFamilyRoadmap(input: FamilyRoadmapInput): FamilyRoadmap {
-  const path = detectFamilyPath(input.matterText);
+  const path = detectFamilyPath(input.matterText, input.matterSubtype);
   const signals = deriveSignals(input);
   const blueprints = blueprintsFor(path, input);
 
@@ -360,7 +430,11 @@ export function buildFamilyRoadmap(input: FamilyRoadmapInput): FamilyRoadmap {
     return { key: b.key, title: b.title, body: b.body, status, ...(b.tip ? { tip: b.tip } : {}) };
   });
 
-  const safetyText = [(input.matterText ?? ""), ...(input.facts ?? [])].join(" ").toLowerCase();
+  const safetyText = [
+    input.matterSubtype ?? "",
+    input.matterText ?? "",
+    ...(input.facts ?? []),
+  ].join(" ").toLowerCase();
   const safety = /family violence|domestic violence|abuse|protective order|afraid|unsafe|threatened/.test(safetyText);
 
   return {
