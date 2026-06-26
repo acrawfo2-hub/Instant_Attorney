@@ -86,6 +86,31 @@ export const LEGAL_FRESHNESS_ITEMS: FreshnessItem[] = [
     notes: "Code: lib/hoa-statutes.ts. Re-skim after each Texas legislative session.",
   },
   {
+    id: "tx-pi-statute-registry",
+    label: "Texas personal-injury statute registry",
+    area: "personal-injury",
+    volatility: "catalog",
+    currentValue:
+      "Ch. 16 limitations, Ch. 33 comparative negligence, Ch. 41 exemplary damages, Ch. 71 wrongful death, Ch. 74 med-mal, Ins. Code auto minimums",
+    sourceUrl: "https://statutes.capitol.texas.gov/Docs/CP/htm/CP.16.htm",
+    verifiedOn: "2026-06-26",
+    reviewAfter: "2027-10-01",
+    nextExpectedChange: "2027-09-01",
+    notes:
+      "Code: lib/pi-statutes.ts. Re-skim after each Texas legislative session; malpractice caps and repose are statute-driven.",
+  },
+  {
+    id: "tx-med-mal-non-economic-cap",
+    label: "Texas medical-malpractice non-economic damages cap (§ 74.301)",
+    area: "personal-injury",
+    volatility: "statute",
+    currentValue: "$250,000 per defendant physician / $500,000 overall (institutional defendants adjusted)",
+    sourceUrl: "https://statutes.capitol.texas.gov/Docs/CP/htm/CP.74.htm",
+    verifiedOn: "2026-06-26",
+    reviewAfter: "2028-06-26",
+    notes: "Code: tx-med-mal-cap in lib/pi-statutes.ts. Changes only by legislative amendment.",
+  },
+  {
     id: "gov-forms-catalog",
     label: "Government form registry (revisions + official URLs)",
     area: "forms",

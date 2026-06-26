@@ -47,6 +47,12 @@ export const PRACTICE_AREAS: PracticeArea[] = [
     starterPrompt: "I'm experiencing harassment at work.",
   },
   {
+    slug: "personal-injury",
+    label: "Personal Injury",
+    opener: `Hello — I'm really glad you reached out, and I want you to know: if you've been hurt, you have rights, and timing matters. I'm the Instant Attorney assistant, part of Crawford Law PLLC, and I help people work through personal-injury claims — car wrecks, slip-and-falls, medical malpractice, wrongful death, and dealing with insurance adjusters.\n\n${DISCLAIMER}\n\nFirst things first: if you were just injured, are you safe and have you gotten medical care? And if an insurance adjuster has contacted you — tell me about that too. What happened?`,
+    starterPrompt: "I was injured in a car accident and an insurance adjuster called me.",
+  },
+  {
     slug: "debt",
     label: "Debt & Bankruptcy",
     opener: `Hello — I'm really glad you reached out, and I want you to know up front: debt problems are common, they're solvable, and you have real rights here. I'm the Instant Attorney assistant, part of Crawford Law PLLC, and I help people deal with debt collectors and think through their options — including, if it comes to it, bankruptcy.\n\n${DISCLAIMER}\n\nOne thing first, because timing matters: if you've been served with a lawsuit or court papers about a debt, tell me right away — there's a deadline to respond. Otherwise, tell me what's going on — who's contacting you, and about what?`,
