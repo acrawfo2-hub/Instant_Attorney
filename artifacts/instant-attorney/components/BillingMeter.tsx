@@ -19,6 +19,10 @@ interface BillingSummary {
   hasPaymentMethod: boolean;
   lifetimeTopUps: number;
   lifetimeTopUpUsd: number;
+  graceOptIn: boolean;
+  graceBufferUsd: number;
+  graceRemainingUsd: number;
+  inGrace: boolean;
 }
 
 const usd = (n: number) => `$${n.toFixed(2)}`;
@@ -73,6 +77,20 @@ export default function BillingMeter() {
     setBusy(true);
     try {
       await fetch("/api/billing/retry-topup", { method: "POST" });
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  }, [refresh]);
+
+  const toggleGrace = useCallback(async (next: boolean) => {
+    setBusy(true);
+    try {
+      await fetch("/api/billing/grace", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ opt_in: next }),
+      });
       await refresh();
     } finally {
       setBusy(false);
@@ -139,6 +157,15 @@ export default function BillingMeter() {
     tone = "info";
     headline = `About ${usd(data.untilNextTopUpUsd)} of usage until your next ${usd(data.chargeUsd)} top-up.`;
     detail = "Top-ups are automatic up to your monthly limit.";
+  }
+
+  // Completion grace is holding a block open — reassure rather than alarm.
+  if (data.inGrace) {
+    tone = "info";
+    headline = "We're finishing your work — you can keep going.";
+    detail = `About ${usd(data.graceRemainingUsd)} of completion grace left. Your ${usd(
+      data.chargeUsd
+    )} top-up will be collected automatically once your card is sorted.`;
   }
 
   const t = TONE[tone];
@@ -231,6 +258,36 @@ export default function BillingMeter() {
           </span>
         )}
       </div>
+
+      {/* Completion-grace opt-in: finish in-flight documents past a block, pay next cycle. */}
+      <label
+        style={{
+          display: "flex",
+          gap: 8,
+          alignItems: "flex-start",
+          marginTop: 12,
+          paddingTop: 10,
+          borderTop: `1px solid ${t.border}`,
+          cursor: busy ? "default" : "pointer",
+          fontSize: 12.5,
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={data.graceOptIn}
+          disabled={busy}
+          onChange={(e) => toggleGrace(e.target.checked)}
+          style={{ marginTop: 2 }}
+        />
+        <span>
+          <strong>Never interrupt a document I'm working on.</strong>
+          <span style={{ display: "block", fontWeight: 400, opacity: 0.85, marginTop: 1 }}>
+            If a top-up is pending or your card needs attention, let documents already in progress
+            finish (up to {usd(data.graceBufferUsd)} of usage). You're billed for it on your next
+            top-up — nothing is waived.
+          </span>
+        </span>
+      </label>
     </div>
   );
 }
