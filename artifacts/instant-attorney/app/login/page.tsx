@@ -55,7 +55,7 @@ function LoginForm() {
         </div>
 
         <h1 className="auth-heading">Sign in to your account</h1>
-        <p className="auth-sub">Phase II · ACP-Protected Intake</p>
+        <p className="auth-sub">Phase II · Attorney-Client Privileged</p>
 
         {params.get("error") && (
           <div className="auth-error">Authentication failed. Please try again.</div>

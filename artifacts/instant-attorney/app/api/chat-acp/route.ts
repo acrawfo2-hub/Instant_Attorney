@@ -4,7 +4,7 @@ import { randomUUID } from "crypto";
 import { logTruncation } from "@/lib/truncation-logger";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { ACP_CHAT_SYSTEM_PROMPT, buildFileContext } from "@/lib/prompts";
-import { parseAndUpdateFile } from "@/lib/file-parser";
+import { parseAndUpdateFile, isCompleteFileUpdate } from "@/lib/file-parser";
 import { triggerPendingLookups } from "@/lib/gov-form-lookup";
 import { generateCaseTitle } from "@/lib/title-generator";
 import { toAnthropicBlock, processAttachment } from "@/lib/attachment-processor";
@@ -240,6 +240,17 @@ export async function POST(req: NextRequest) {
           const hasGovForms = fullResponse.includes("---GOVERNMENT FORMS---");
 
           if (hasLivingFile || hasStrategy || hasRequestedAttachments || hasGovForms) {
+            // Warn when the model emitted a FILE UPDATE opening marker but the
+            // closing marker is missing — parseAndUpdateFile will safely skip it,
+            // but log it so we can see how often truncation silently drops updates.
+            const hasFileUpdateBlock = fullResponse.includes("---FILE UPDATE---");
+            if (hasFileUpdateBlock && !isCompleteFileUpdate(fullResponse)) {
+              console.warn(
+                "[chat-acp] Living File block detected but incomplete (truncated?) — update skipped.",
+                { caseFileId: resolvedCaseFileId, responseLength: fullResponse.length }
+              );
+            }
+
             try {
               await parseAndUpdateFile(db, resolvedCaseFileId, userId, fullResponse);
 
