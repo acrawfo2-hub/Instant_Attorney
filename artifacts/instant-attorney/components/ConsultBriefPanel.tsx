@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { parsePreConsultMemo, type ConsultBriefSnapshot } from "@/lib/consult-brief";
+import ConsultWrapUpSection from "@/components/ConsultWrapUpSection";
+import type { ConsultRequestStatus } from "@/lib/types";
 
 function engagementClass(level: ConsultBriefSnapshot["engagement"]["level"]) {
   if (level === "high") return "cb-engagement-high";
@@ -16,19 +18,24 @@ function engagementLabel(level: ConsultBriefSnapshot["engagement"]["level"]) {
   return "Moderately engaged";
 }
 
+type BriefTab = "preparation" | "wrap-up";
+
 export default function ConsultBriefPanel({
   caseFileId,
   consultId,
+  consultStatus,
   initialMemo,
   autoGenerate = false,
 }: {
   caseFileId: string;
   consultId: string;
+  consultStatus: ConsultRequestStatus;
   initialMemo: string | null;
-  /** When true, generate AI memo automatically if none exists. */
   autoGenerate?: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const showWrapUp = consultStatus === "confirmed" || consultStatus === "completed";
+  const [expanded, setExpanded] = useState(showWrapUp);
+  const [tab, setTab] = useState<BriefTab>(showWrapUp ? "wrap-up" : "preparation");
   const [snapshot, setSnapshot] = useState<ConsultBriefSnapshot | null>(null);
   const [memo, setMemo] = useState<string | null>(initialMemo);
   const [loading, setLoading] = useState(false);
@@ -82,9 +89,9 @@ export default function ConsultBriefPanel({
   }, [loadSnapshot]);
 
   useEffect(() => {
-    if (!expanded || !autoGenerate || memo || generating) return;
+    if (tab !== "preparation" || !autoGenerate || memo || generating) return;
     void generateMemo();
-  }, [expanded, autoGenerate, memo, generating, generateMemo]);
+  }, [tab, autoGenerate, memo, generating, generateMemo]);
 
   const briefReady = Boolean(memo);
   const sections = memo ? parsePreConsultMemo(memo) : [];
@@ -99,10 +106,12 @@ export default function ConsultBriefPanel({
           aria-expanded={expanded}
         >
           <span className="cb-toggle-label">
-            Pre-consult brief
-            <span className={`cb-status ${briefReady ? "cb-status-ready" : generating ? "cb-status-generating" : "cb-status-pending"}`}>
-              {generating ? "Generating…" : briefReady ? "Ready" : "Pending"}
-            </span>
+            Consult workspace
+            {tab === "preparation" && (
+              <span className={`cb-status ${briefReady ? "cb-status-ready" : generating ? "cb-status-generating" : "cb-status-pending"}`}>
+                {generating ? "Generating…" : briefReady ? "Brief ready" : "Brief pending"}
+              </span>
+            )}
             {snapshot && !expanded && (
               <span className="cb-preview">
                 {snapshot.documents.requested > 0 && (
@@ -123,109 +132,134 @@ export default function ConsultBriefPanel({
 
       {expanded && (
         <div className="cb-body">
-          {loading && !snapshot && <div className="atty-ai-running">Loading case snapshot…</div>}
-          {error && <p className="atty-ai-error">{error}</p>}
-
-          {snapshot && (
-            <div className="cb-snapshot">
-              <div className="cb-snapshot-row">
-                <div className="cb-stat">
-                  <span className="cb-stat-label">Documents</span>
-                  <span className="cb-stat-value">
-                    {snapshot.documents.uploaded}/{Math.max(snapshot.documents.requested - snapshot.documents.waived, 0) || "—"}
-                    {snapshot.documents.requested > 0 ? " uploaded" : " on file"}
-                  </span>
-                </div>
-                <div className="cb-stat">
-                  <span className="cb-stat-label">Engagement</span>
-                  <span className={`cb-stat-value ${engagementClass(snapshot.engagement.level)}`}>
-                    {engagementLabel(snapshot.engagement.level)}
-                  </span>
-                </div>
-                {snapshot.timeline.currentStage && (
-                  <div className="cb-stat">
-                    <span className="cb-stat-label">Stage</span>
-                    <span className="cb-stat-value">{snapshot.timeline.currentStage}</span>
-                  </div>
-                )}
-              </div>
-
-              {snapshot.goals.length > 0 && (
-                <div className="cb-block">
-                  <div className="cb-block-title">Client goals</div>
-                  <ul className="cb-list">
-                    {snapshot.goals.slice(0, 3).map((g) => (
-                      <li key={g}>{g}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {snapshot.valueHints.length > 0 && (
-                <div className="cb-block">
-                  <div className="cb-block-title">Value signals</div>
-                  <ul className="cb-list">
-                    {snapshot.valueHints.map((v) => (
-                      <li key={v.label}>
-                        <strong>{v.label}:</strong> {v.range}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {snapshot.timeline.urgentNote && (
-                <div className="cb-urgent">{snapshot.timeline.urgentNote}</div>
-              )}
-
-              {snapshot.openGaps.length > 0 && (
-                <div className="cb-block">
-                  <div className="cb-block-title">Open gaps ({snapshot.openGaps.length})</div>
-                  <ul className="cb-list cb-list-muted">
-                    {snapshot.openGaps.map((g) => (
-                      <li key={g}>{g}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+          {showWrapUp && (
+            <div className="atty-panel-tabs">
+              <button
+                type="button"
+                className={`atty-panel-tab${tab === "preparation" ? " atty-panel-tab-active" : ""}`}
+                onClick={() => setTab("preparation")}
+              >
+                Preparation
+              </button>
+              <button
+                type="button"
+                className={`atty-panel-tab${tab === "wrap-up" ? " atty-panel-tab-active" : ""}`}
+                onClick={() => setTab("wrap-up")}
+              >
+                Wrap-up &amp; action plan
+              </button>
             </div>
           )}
 
-          <div className="cb-memo-section">
-            <div className="cb-memo-header">
-              <span className="cb-block-title">AI briefing memo</span>
-              <button
-                type="button"
-                className={`atty-ai-btn${memo ? " atty-ai-btn-done" : ""}`}
-                onClick={() => void generateMemo()}
-                disabled={generating}
-              >
-                {generating ? "Generating…" : memo ? "Refresh memo" : "Generate brief"}
-              </button>
-            </div>
-            {truncated && (
-              <p className="cb-truncation">Memo may be incomplete — output hit the token limit.</p>
-            )}
-            {generating && !memo && <div className="atty-ai-running">Generating pre-consult memo…</div>}
-            {!generating && memo && sections.length > 0 && (
-              <div className="cb-memo-sections">
-                {sections.map((s) => (
-                  <div key={s.title} className="cb-memo-block">
-                    <div className="cb-memo-block-title">{s.title}</div>
-                    <pre className="cb-memo-block-body">{s.body}</pre>
+          {tab === "wrap-up" && showWrapUp ? (
+            <ConsultWrapUpSection consultId={consultId} consultStatus={consultStatus} />
+          ) : (
+            <>
+              {loading && !snapshot && <div className="atty-ai-running">Loading case snapshot…</div>}
+              {error && <p className="atty-ai-error">{error}</p>}
+
+              {snapshot && (
+                <div className="cb-snapshot">
+                  <div className="cb-snapshot-row">
+                    <div className="cb-stat">
+                      <span className="cb-stat-label">Documents</span>
+                      <span className="cb-stat-value">
+                        {snapshot.documents.uploaded}/{Math.max(snapshot.documents.requested - snapshot.documents.waived, 0) || "—"}
+                        {snapshot.documents.requested > 0 ? " uploaded" : " on file"}
+                      </span>
+                    </div>
+                    <div className="cb-stat">
+                      <span className="cb-stat-label">Engagement</span>
+                      <span className={`cb-stat-value ${engagementClass(snapshot.engagement.level)}`}>
+                        {engagementLabel(snapshot.engagement.level)}
+                      </span>
+                    </div>
+                    {snapshot.timeline.currentStage && (
+                      <div className="cb-stat">
+                        <span className="cb-stat-label">Stage</span>
+                        <span className="cb-stat-value">{snapshot.timeline.currentStage}</span>
+                      </div>
+                    )}
                   </div>
-                ))}
+
+                  {snapshot.goals.length > 0 && (
+                    <div className="cb-block">
+                      <div className="cb-block-title">Client goals</div>
+                      <ul className="cb-list">
+                        {snapshot.goals.slice(0, 3).map((g) => (
+                          <li key={g}>{g}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {snapshot.valueHints.length > 0 && (
+                    <div className="cb-block">
+                      <div className="cb-block-title">Value signals</div>
+                      <ul className="cb-list">
+                        {snapshot.valueHints.map((v) => (
+                          <li key={v.label}>
+                            <strong>{v.label}:</strong> {v.range}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {snapshot.timeline.urgentNote && (
+                    <div className="cb-urgent">{snapshot.timeline.urgentNote}</div>
+                  )}
+
+                  {snapshot.openGaps.length > 0 && (
+                    <div className="cb-block">
+                      <div className="cb-block-title">Open gaps ({snapshot.openGaps.length})</div>
+                      <ul className="cb-list cb-list-muted">
+                        {snapshot.openGaps.map((g) => (
+                          <li key={g}>{g}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="cb-memo-section">
+                <div className="cb-memo-header">
+                  <span className="cb-block-title">AI briefing memo</span>
+                  <button
+                    type="button"
+                    className={`atty-ai-btn${memo ? " atty-ai-btn-done" : ""}`}
+                    onClick={() => void generateMemo()}
+                    disabled={generating}
+                  >
+                    {generating ? "Generating…" : memo ? "Refresh memo" : "Generate brief"}
+                  </button>
+                </div>
+                {truncated && (
+                  <p className="cb-truncation">Memo may be incomplete — output hit the token limit.</p>
+                )}
+                {generating && !memo && <div className="atty-ai-running">Generating pre-consult memo…</div>}
+                {!generating && memo && sections.length > 0 && (
+                  <div className="cb-memo-sections">
+                    {sections.map((s) => (
+                      <div key={s.title} className="cb-memo-block">
+                        <div className="cb-memo-block-title">{s.title}</div>
+                        <pre className="cb-memo-block-body">{s.body}</pre>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {!generating && memo && sections.length === 0 && (
+                  <pre className="atty-review-preformatted">{memo}</pre>
+                )}
+                {!generating && !memo && (
+                  <p className="atty-ai-empty">
+                    No briefing memo yet. Generate one to prepare for this consult.
+                  </p>
+                )}
               </div>
-            )}
-            {!generating && memo && sections.length === 0 && (
-              <pre className="atty-review-preformatted">{memo}</pre>
-            )}
-            {!generating && !memo && (
-              <p className="atty-ai-empty">
-                No briefing memo yet. Generate one to prepare for this consult.
-              </p>
-            )}
-          </div>
+            </>
+          )}
         </div>
       )}
     </div>

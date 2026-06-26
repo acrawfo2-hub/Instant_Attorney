@@ -97,12 +97,13 @@ function RequestCard({ row }: { row: ConsultRequestRow }) {
             <ConsultBriefPanel
               caseFileId={row.case_file_id}
               consultId={row.id}
+              consultStatus={row.status}
               initialMemo={row.case_files.pre_consult_memo}
               autoGenerate
             />
           )}
           <div className="atty-consult-actions">
-            <ConsultActions consult={row} clientName={clientName(row)} />
+            <ConsultActions consult={row} clientName={clientName(row)} showCompleteHint />
           </div>
         </>
       )}

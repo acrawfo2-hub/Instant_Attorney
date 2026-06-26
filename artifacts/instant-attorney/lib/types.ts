@@ -33,6 +33,30 @@ export interface Consult {
 
 export type ConsultRequestStatus = "pending" | "confirmed" | "attorney_proposed" | "cancelled" | "completed";
 
+export type ConsultDisposition =
+  | "retain_in_house"
+  | "refer_out"
+  | "limited_scope"
+  | "not_a_fit"
+  | "follow_up_needed";
+
+export type ConsultActionKind = "general" | "document";
+
+export interface ConsultActionItem {
+  id: string;
+  text: string;
+  kind: ConsultActionKind;
+}
+
+/** Attorney-editable wrap-up form (draft or submitted). */
+export interface ConsultWrapUp {
+  consultSummary: string;
+  disposition: ConsultDisposition | "";
+  referralNotes: string;
+  clientActions: ConsultActionItem[];
+  attorneyActions: ConsultActionItem[];
+}
+
 export interface ConsultRequest {
   id: string;
   user_id: string;
@@ -43,6 +67,10 @@ export interface ConsultRequest {
   attorney_proposed_time: string | null;
   client_phone: string | null;
   notes: string | null;
+  attorney_notes: string | null;
+  wrap_up_draft: ConsultWrapUp | null;
+  post_consult_plan: ConsultWrapUp | null;
+  wrap_up_submitted_at: string | null;
   created_at: string;
   updated_at: string;
 }

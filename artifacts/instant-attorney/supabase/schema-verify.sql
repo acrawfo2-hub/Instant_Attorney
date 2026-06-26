@@ -75,4 +75,8 @@ union all select 'financial_secure_ref', case when exists (
 union all select 'roadmap_snapshots', case when exists (
   select 1 from information_schema.tables where table_schema = 'public' and table_name = 'roadmap_snapshots'
 ) then 'OK' else 'MISSING' end
+union all select 'consult_requests.wrap_up_draft', case when exists (
+  select 1 from information_schema.columns
+  where table_schema = 'public' and table_name = 'consult_requests' and column_name = 'wrap_up_draft'
+) then 'OK' else 'MISSING' end
 order by object;

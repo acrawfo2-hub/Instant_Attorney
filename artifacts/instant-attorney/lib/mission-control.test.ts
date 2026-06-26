@@ -14,6 +14,7 @@ const baseFile: CaseFile = {
   status: "open",
   file_type: "standard",
   archive_at: null,
+  pre_consult_memo: null,
   legal_strategy: {
     summary: "Strategy",
     instruments: ["Demand Letter"],
@@ -104,4 +105,20 @@ test("shows attorney review link when doc pending", () => {
     mode: "attorney",
   });
   assert.match(board.actions[0]?.cta?.href ?? "", /\/attorney\/review\/d1/);
+});
+
+test("surfaces post-consult client actions at top priority", () => {
+  const board = computeMissionControl({
+    caseFile: baseFile,
+    documents: [],
+    facts: [],
+    consultClientActions: [
+      { id: "c1", text: "Upload photos of damage", kind: "document" },
+      { id: "c2", text: "Schedule follow-up with HR", kind: "general" },
+    ],
+  });
+  const consultActions = board.actions.filter((a) => a.id.startsWith("consult-action:"));
+  assert.equal(consultActions.length, 2);
+  assert.equal(consultActions[0].priority, 3);
+  assert.equal(consultActions[0].kind, "upload");
 });
