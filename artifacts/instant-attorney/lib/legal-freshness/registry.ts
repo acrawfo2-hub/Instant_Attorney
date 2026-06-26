@@ -140,6 +140,20 @@ export const LEGAL_FRESHNESS_ITEMS: FreshnessItem[] = [
       "Code: lib/family-statutes.ts. Re-skim after each Texas legislative session (regular sessions are odd years; most laws take effect Sept 1).",
   },
   {
+    id: "tx-lien-statute-registry",
+    label: "Texas property-lien registry (Ch. 41, 51, 52, 53; tax liens)",
+    area: "property-lien",
+    volatility: "catalog",
+    currentValue:
+      "Ch. 53 mechanic's liens, Ch. 52 judgment liens, Ch. 51 foreclosure, Ch. 41 homestead, state/federal tax liens, title encumbrances",
+    sourceUrl: "https://statutes.capitol.texas.gov/Docs/PR/htm/PR.53.htm",
+    verifiedOn: "2026-06-26",
+    reviewAfter: "2027-10-01",
+    nextExpectedChange: "2027-09-01",
+    notes:
+      "Code: lib/lien-statutes.ts + lib/lien-instruments.ts. Re-skim after each Texas legislative session; foreclosure and mechanic's-lien notice rules are statute-driven.",
+  },
+  {
     id: "tx-hoa-statute-registry",
     label: "Texas HOA / property-owners' statute registry (Prop. Code Ch. 209, 202)",
     area: "hoa",

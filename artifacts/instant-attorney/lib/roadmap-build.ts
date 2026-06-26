@@ -3,10 +3,12 @@ import { looksLikeDebtMatter } from "./debt-instruments.ts";
 import { looksLikeDefamationMatter } from "./defamation-instruments.ts";
 import { looksLikeEmploymentMatter } from "./employment-instruments.ts";
 import { looksLikePersonalInjuryMatter } from "./pi-instruments.ts";
+import { looksLikeLienMatter } from "./lien-instruments.ts";
 import { buildFamilyRoadmap } from "./family-roadmap.ts";
 import { buildBankruptcyRoadmap } from "./bankruptcy-roadmap.ts";
 import { buildEmploymentRoadmap } from "./employment-roadmap.ts";
 import { buildPiRoadmap } from "./pi-roadmap.ts";
+import { buildLienRoadmap } from "./lien-roadmap.ts";
 import { buildMatterRoadmap } from "./matter-roadmap.ts";
 import { buildGenericRoadmap } from "./generic-roadmap.ts";
 import { applyAssertionOverrides, parseRoadmapAssertions } from "./roadmap-assertions.ts";
@@ -134,6 +136,26 @@ export function resolveRoadmapForCase(input: RoadmapBuildInput): ResolvedRoadmap
     };
   }
 
+  if (looksLikeLienMatter(matterText)) {
+    const r = buildLienRoadmap({
+      matterText,
+      facts: factDescriptions,
+      documents: docSummaries,
+    });
+    const stages = withClientAssertions(r.stages, factDescriptions);
+    return {
+      blueprintKey: "property-lien",
+      blueprintVersion: ROADMAP_BLUEPRINT_VERSION,
+      label: "Your Roadmap",
+      pathLabel: r.pathLabel,
+      urgent: r.urgent,
+      urgentNote: r.urgentNote,
+      stages,
+      disclaimer: r.disclaimer,
+      currentStageKey: currentStageKey(stages),
+    };
+  }
+
   const matterCandidate = buildMatterRoadmap({
     matterSubtype: caseFile.matter_subtype,
     matterText,
@@ -230,5 +252,6 @@ export function detectMatterFlags(matterText: string) {
     isEmploymentMatter,
     // Workplace injuries can match both detectors ("injured" + "at work"); prefer employment.
     isPiMatter: looksLikePersonalInjuryMatter(matterText) && !isEmploymentMatter,
+    isLienMatter: looksLikeLienMatter(matterText),
   };
 }

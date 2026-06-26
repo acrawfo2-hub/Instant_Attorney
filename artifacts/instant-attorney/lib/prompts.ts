@@ -18,6 +18,11 @@ import { piStatutesForPrompt } from "./pi-statutes.ts";
 import { piInstrumentsForPrompt } from "./pi-instruments.ts";
 import { taxStatutesForPrompt } from "./tax-statutes.ts";
 import { taxInstrumentsForPrompt } from "./tax-instruments.ts";
+import {
+  lienStatutesForPrompt,
+  lienImpactGuideForPrompt,
+} from "./lien-statutes.ts";
+import { lienInstrumentsForPrompt } from "./lien-instruments.ts";
 
 // ── Free chat (Phase I) ──────────────────────────────────────────────────────
 
@@ -346,6 +351,33 @@ ${debtStatutesForPrompt()}
 
 When a document is warranted, choose the matching debt instrument preset below for its recipient/field guidance. IMPORTANT: in RECOMMENDED WIZARDS put ONLY the bare wizard type it drafts through (e.g. \`general_document\`, \`demand_letter\`, or \`complaint_letter\`) with no extra words — never the preset key or label, or the wizard card and handoff will not render. Name the specific instrument in NEXT ACTION and SUGGESTED INSTRUMENTS instead. The [HIGH-STAKES] answer-to-a-lawsuit instrument should set RECOMMEND_CONSULT: true.
 ${debtInstrumentsForPrompt()}
+
+PROPERTY LIENS, FORECLOSURE & TITLE ENCUMBRANCES — handle these as a first-class area. A lien is a legal claim against real property that can block a sale, force a foreclosure, or cloud title. Texas has several distinct lien types with different rules, deadlines, and owner impacts. HOA assessment liens are covered in the HOA section above; this block covers mechanic's liens, judgment liens, mortgage foreclosure, tax liens, and title defects.
+
+1. DEADLINE FIRST — FORECLOSURE IS FAST. Texas mortgage foreclosures are non-judicial: after notice, the trustee can sell on the first Tuesday of the month. Property tax foreclosure can reach homestead. Flag [URGENT:] when a sale date is set or within 30 days. Get reinstatement/payoff figures in writing immediately.
+
+2. IDENTIFY THE LIEN TYPE. Each type has different rules:
+   • Mechanic's/materialman's lien (Ch. 53) — unpaid contractor/sub/supplier; strict notice and filing deadlines; can be bonded off.
+   • Judgment lien (Ch. 52) — creditor won a lawsuit and recorded an abstract; homestead usually protected from forced sale for ordinary debts.
+   • Mortgage/deed of trust (Ch. 51) — voluntary lien; default → trustee's sale; cure/reinstate before sale day.
+   • Tax lien — property taxes and IRS debts CAN reach homestead; CDP hearing within 30 days of IRS Final Notice.
+   • Title encumbrance — any unreleased lien on a title commitment must be cleared to close.
+
+3. HOMESTEAD IS POWERFUL BUT NOT ABSOLUTE. Texas homestead law blocks most judgment creditors from forcing a sale — but NOT your mortgage, property taxes, home-equity loans, or a valid mechanic's lien for work on the home. Always ask: is this the homestead, and does THIS lien type fit a permitted exception?
+
+4. GATHER THE PAPER TRAIL EARLY. Request via ---REQUESTED ATTACHMENTS---: title commitment or county-records printout, the lien affidavit or notice of sale, deed of trust, payoff/reinstatement letters, and every notice received. Recording date, last-work date, and sale date drive most defenses.
+
+5. IMPACT FRAMING — explain what the lien means for THIS user: Can they lose the house? Can they sell or refinance? Do they owe more after foreclosure? Is the lien void for late notice? Use plain language; liens are terrifying and most people have never seen one.
+
+${lienImpactGuideForPrompt()}
+
+GROUND ON THE STATUTES BELOW. Reference the applicable section(s) by their plain meaning; never invent a citation. Watch sale dates, lien-filing windows, and cure deadlines above all.
+
+Texas property-lien statute reference (general legal information — the linked official text governs):
+${lienStatutesForPrompt()}
+
+When a document is warranted, choose the matching lien instrument preset below for its recipient/field guidance. IMPORTANT: in RECOMMENDED WIZARDS put ONLY the bare wizard type it drafts through (e.g. \`general_document\` or \`demand_letter\`) with no extra words — never the preset key or label, or the wizard card and handoff will not render. Name the specific instrument in NEXT ACTION and SUGGESTED INSTRUMENTS instead. Instruments marked [HIGH-STAKES] (foreclosure response, tax foreclosure) should set RECOMMEND_CONSULT: true.
+${lienInstrumentsForPrompt()}
 
 TAX CONTROVERSY & COLLECTION MATTERS — handle these as a first-class area, with a hard boundary: you do NOT prepare or file tax returns, optimize deductions, or compute tax liability. That is tax software / CPA territory. You help when tax problems are *legal* problems — IRS notices, audits, back taxes, levies, innocent spouse relief, penalty abatement, and tax identity theft.
 

@@ -60,3 +60,10 @@ test("tax opener scopes away return prep and leads with urgency", () => {
   assert.match(tax.opener, /not.*prepare|prepare or file/i);
   assert.match(tax.opener, /levy|audit|notice/i);
 });
+
+test("property-lien opener names lien types and foreclosure urgency", () => {
+  const lien = getPracticeArea("property-lien");
+  assert.ok(lien);
+  assert.match(lien.opener, /lien|foreclosure/i);
+  assert.match(lien.opener, /Texas/);
+});

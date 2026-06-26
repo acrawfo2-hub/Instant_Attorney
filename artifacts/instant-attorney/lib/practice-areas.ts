@@ -29,6 +29,12 @@ export const PRACTICE_AREAS: PracticeArea[] = [
     starterPrompt: "My HOA sent me a violation notice and I'm not sure what to do.",
   },
   {
+    slug: "property-lien",
+    label: "Property Liens & Foreclosure",
+    opener: `Hello — I'm glad you reached out. I'm the Instant Attorney assistant, part of Crawford Law PLLC, and I help people understand property liens, foreclosure notices, and title problems in Texas.\n\n${DISCLAIMER}\n\nLiens can feel overwhelming — a mechanic's lien from a contractor, a foreclosure notice from your mortgage company, a judgment lien after a lawsuit, or an old lien showing up on a title commitment when you're trying to sell or refinance. Texas law treats each type differently, and timing matters a lot — especially if a foreclosure sale date is set.\n\nTell me what's happening: what notice or document did you receive, and is this your primary home?`,
+    starterPrompt: "I received a lien notice or foreclosure notice on my property and I don't know what it means.",
+  },
+  {
     slug: "landlord",
     label: "Landlord / Tenant",
     opener: `Hello — I'm glad you reached out. I'm the Instant Attorney assistant, part of Crawford Law PLLC, and I help with landlord–tenant issues like lease disputes, repairs and habitability, security deposits, and eviction.\n\n${DISCLAIMER}\n\nTell me what's happening — are you the tenant or the landlord, and what's the issue?`,
