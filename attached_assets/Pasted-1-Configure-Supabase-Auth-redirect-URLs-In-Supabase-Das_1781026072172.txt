@@ -1,0 +1,51 @@
+1) Configure Supabase Auth redirect URLs
+In Supabase Dashboard → Authentication → URL Configuration:
+
+Set:
+
+Site URL = your canonical site (choose one domain; recommended: the one you want as primary)
+Then ensure the URL(s) used in your email templates are allowed. Since you’re redirecting confirmations to:
+
+https://instant-attorney.com/api/auth/callback
+https://www.instant-attorney.com/api/auth/callback
+You should add both of these as allowed redirect URLs (exact matches).
+
+If you don’t have additional redirect params in your template/code, the “Site URL” usually drives where /auth/confirm-style flows land. But since you’re explicitly sending confirmations to /api/auth/callback, you must allow that endpoint in the redirect allow list.
+
+(If you tell me whether your signup email template is still the default or customized, I can be 100% specific.)
+
+2) Confirm your /api/auth/callback handler matches the expected flow
+Your route needs to exchange the confirmation token into a session (using verifyOtp / exchangeCodeForSession depending on the flow Supabase uses for confirmation links).
+
+For typical email confirmation links, you’ll receive query params like token_hash and type=email.
+
+So inside app/api/auth/callback/route.ts you should:
+
+read token_hash and type from request.url
+create a server Supabase client (cookie-enabled)
+call supabase.auth.verifyOtp({ token_hash, type })
+redirect the user to an appropriate page (often / or /account)
+If you want, paste your current app/api/auth/callback/route.ts here and I’ll verify it against the correct token exchange.
+
+3) Ensure your server API route uses the cookie-based SSR client
+In App Router API routes, you typically need createServerClient from @supabase/ssr so Supabase can set auth cookies in the response.
+
+If you’re currently using a plain createClient (from @supabase/supabase-js) in the server route, it often causes “confirmation succeeded but user is not logged in” issues.
+
+4) Common failure causes (given your setup)
+Redirect URL mismatch
+Your email link sends the browser to /api/auth/callback, but the Supabase redirect allow list doesn’t include that exact URL(s).
+Callback route doesn’t actually verify the OTP
+The callback route might redirect without calling verifyOtp.
+Callback route uses wrong Supabase client / no cookies
+Cookies aren’t being set, so the session is missing after redirect.
+Quick follow-up (so I can give exact steps)
+Can you paste the code for:
+
+app/api/auth/callback/route.ts
+Then I’ll tell you exactly what to change (or confirm it’s correct) and what redirect URL entries to add (including whether you should add only one domain or both).
+
+
+
+Supabase AI may not always produce correct answers. Double check responses.
+

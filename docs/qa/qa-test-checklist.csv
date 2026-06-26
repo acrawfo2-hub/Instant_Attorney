@@ -1,0 +1,90 @@
+Test ID,Priority,Area,Test Case,Preconditions,Steps,Expected Result,Automatable,Automated By,Owner,Status,Notes
+A1,P0,Auth,Unauthenticated redirect to login,App running; Supabase configured; logged out,Visit /dashboard /chat /onboarding /wizard /attorney /admin while logged out,Redirect to /login?redirect=<path>,Yes,Playwright auth-redirects,QA,,Middleware AUTH_REQUIRED routes
+A2,P0,Auth,Guest-only redirect when logged in,Active client session,Visit /login and /register while logged in,Redirect to /dashboard,Yes,Playwright auth-login,QA,,Requires E2E credentials
+A3,P0,Auth,Login API success,Valid test account,POST /api/auth/login with email+password,200 response and session cookie set,Yes,Playwright auth-login / e2e.mjs,QA,,
+A4,P0,Auth,Login API failure,Known email wrong password,POST /api/auth/login with bad password,401 no session cookie,Yes,Playwright auth-login,QA,,
+A5,P1,Auth,Logout clears session,Logged in,POST /api/auth/logout then visit /dashboard,Redirect to login,Partial,Manual,QA,,No Playwright test yet
+A6,P1,Auth,Email confirm callback,New registration,Register → click confirm link → /api/auth/callback,Session established; lands onboarding,No,Manual,QA,,Needs real email inbox
+A7,P0,Auth,BYPASS_AUTH off in production,Production deploy,Inspect env vars,BYPASS_AUTH and NEXT_PUBLIC_BYPASS_AUTH not true,No,Manual,DevOps,,Critical security check
+A8,P0,Auth,Attorney role gate,Client (non-attorney) logged in,Visit /attorney,Redirect to /dashboard,Yes,Playwright auth-login,QA,,Page-level is_attorney check
+B1,P0,Onboarding,Step order enforced,New user post-confirm,Walk onboarding UI,Agreement → AI Consent → Subscribe in order,No,Manual,QA + Legal,,
+B2,P0,Onboarding,Representation agreement stored,Onboarding step 1,Sign agreement with typed name,Row in representation_agreements,Partial,Manual,QA,,
+B3,P0,Onboarding,AI consent stored,Onboarding step 2,Sign AI consent,Row in ai_consents,Partial,Manual,QA,,
+B4,P0,Onboarding,Stripe phase2 checkout,Stripe test mode,Complete Subscribe step with test card,Active subscription; /api/subscriptions/confirm works,No,Manual,QA,,Webhook required
+B5,P1,Onboarding,Consult-only plan path,Consult price configured,Choose consult plan at checkout,Consult flow enabled without ongoing sub,No,Manual,QA,,
+B6,P2,Onboarding,Bypass skips Stripe,Dev env only,BYPASS_AUTH=true,Onboarding skips Stripe UI,Partial,Manual,Dev,,Dev only
+B7,P0,Onboarding,Agreement copy accuracy,Legal review,Compare UI text to legal/01 and legal/02,Copy matches approved legal drafts,No,Manual,Legal,,
+C1,P0,Stripe,Checkout session created,Logged in user,POST /api/subscriptions/checkout,Returns Stripe checkout URL,Partial,Manual,QA,,Needs Stripe test keys
+C2,P0,Stripe,Webhook activates subscription,Webhook forwarding,Complete checkout; webhook fires,subscriptions.status = active,No,Manual,QA,,
+C3,P1,Stripe,Payment failed handling,Decline test card,Trigger failed payment,Appropriate sub status; AI may block,No,Manual,QA,,
+C4,P0,Stripe,Webhook idempotency,Stripe dashboard,Replay same webhook event,No duplicate side effects; stripe_webhook_events deduped,Partial,Manual,QA,,
+C5,P1,Stripe,Billing portal,Active subscriber,POST /api/billing/portal,Opens Stripe customer portal,No,Manual,QA,,
+D1,P0,Billing,Meter accrual on AI use,Active sub + topups enabled,Run ACP chat or wizard,usage_events incremented,Partial,Manual,QA,,
+D2,P0,Billing,Top-up threshold trigger,Meter near threshold,Accumulate usage past USAGE_TOPUP_THRESHOLD_USD,Stripe charge for USAGE_TOPUP_CHARGE_USD,No,Manual,QA,,Money path
+D3,P0,Billing,Monthly cap blocks AI,Cap at default $25,Exceed monthly top-up limit,getBillingGate returns limit_reached,No,Manual,QA,,
+D4,P0,Billing,Failed payment blocks AI,Decline card on top-up,Ledger status blocked,AI routes return billing gate error,No,Manual,QA,,
+D5,P0,Billing,Pending payment blocks AI,Top-up in flight,Ledger status pending,AI blocked with topup_pending,No,Manual,QA,,
+D6,P1,Billing,Retry top-up,Blocked after failure,POST /api/billing/retry-topup after fixing card,Gate clears; AI resumes,No,Manual,QA,,
+D7,P1,Billing,User adjusts spending cap,Logged in,POST /api/billing/limit,monthly_topup_limit_usd updated,Partial,Manual,QA,,
+D8,P1,Billing,Billing meter UI,Active usage,View dashboard BillingMeter,Shows meter threshold cap and block reason,No,Manual,QA,,
+D9,P2,Billing,Top-up disabled mode,USAGE_TOPUP_ENABLED=false,Use AI features,Meter only; no charges or blocks,Partial,Manual,Dev,,
+E1,P1,Free Chat,Anonymous access,No session,Visit /free-chat,Page loads; chat works,Yes,Playwright (future),QA,,
+E2,P2,Free Chat,Practice area opener,No session,Visit /free-chat?area=hoa,Correct opener displayed,No,Manual,QA,,
+E3,P0,Free Chat,No privileged data created,Anonymous session,Chat in free mode,No case_files or privileged records created,Partial,Manual,QA,,Critical compliance
+E4,P0,Free Chat,Phase I disclaimers,Anonymous session,Read free chat UI,No-privilege messaging visible,No,Manual,Legal,,
+F1,P0,ACP Chat,Subscription gate,Logged in no sub,POST /api/chat-acp,403 or subscription error,Partial,Manual,QA,,
+F2,P0,ACP Chat,Billing gate when blocked,Blocked ledger,POST /api/chat-acp while payment pending,Clear error; no AI spend,Partial,Manual,QA,,
+F3,P0,Living File,Complete FILE UPDATE applies,ACP session,Send complete ---FILE UPDATE--- block,Facts written to fact_items,Yes,CI Unit file-parser,QA,,
+F4,P0,Living File,Truncated FILE UPDATE rejected,ACP session,Send FILE UPDATE without ---END FILE---,No Living File data written,Yes,CI Unit file-parser,QA,,Regression guard
+F5,P1,Living File,Facts visible on dashboard,After intake,Open /dashboard/[id],FactsPanel shows parsed facts,No,Manual,QA,,
+F6,P1,Living File,Hypothetical vs fact kind,What-if applied,fact_items.kind distinguishes fact vs hypothetical,Correct kind in DB and UI,Yes,CI Unit what-if,QA,,
+F7,P1,Case Files,Archive and restore,Client with case file,Archive then restore via API,Status transitions correctly,Partial,Manual,QA,,
+G1,P1,Documents,Wizard pages load,Logged in subscribed,Visit each /wizard/[type],All 7 wizard types load,Partial,Manual,QA,,
+G2,P1,Documents,Wizard AI draft generation,Sub + case file + facts,POST /api/wizard,documents row with draft_text status=draft,Partial,e2e-t002,QA,,Costs API credits ~165s
+G3,P2,Documents,Save wizard answers,In-progress wizard,POST /api/wizard/save-answers,Answers persisted without full regen,Partial,Manual,QA,,
+G4,P0,Documents,Client reads own draft,Draft exists,GET /api/documents/lookup,200 with draft_text and status=draft,Yes,e2e-t002 / Playwright submit,QA,,
+G5,P0,Documents,Submit for attorney review,Draft document exists,POST /api/documents/[id]/submit,status=pending_review; submitted_at set,Yes,Playwright document-submit,QA,,P0 regression
+G6,P1,Documents,Attorney email on submit,RESEND configured,Submit document,Email to ATTORNEY_EMAIL,No,Manual,QA,,
+G7,P0,Documents,Attorney review page gate,Attorney logged in,Visit /attorney/review/[id],Page loads for attorney only,No,Manual,QA,,
+G8,P1,Documents,Approve document,Pending review doc,POST /api/documents/[id]/approve,status=approved; downloadable,No,Manual,QA + Attorney,,
+G9,P1,Documents,Second draft flow,Attorney review,Merge/second-draft APIs,parent_document_id chain preserved,Partial,Manual,Attorney,,
+G10,P1,Documents,Regenerate draft,Existing draft,POST /api/documents/[id]/regenerate,New draft created,Partial,Manual,QA,,
+G11,P1,Documents,Download docx,Approved doc,GET /api/documents/[id]/download,Valid .docx file opens in Word,No,Manual,QA,,Quality review
+G12,P0,Documents,Schema drift guard,Deployed DB,e2e.mjs schema check,parent_document_id and attorney_second_draft_prompt exist,Yes,CI Smoke e2e.mjs,QA,,Migration drift
+H1,P1,Attachments,Upload file,Client session,POST /api/attachments/upload,File in Supabase Storage,No,Manual,QA,,
+H2,P0,Security,Horizontal privilege - case files,Two client accounts,User A tries User B case file ID,403 or empty; no data leak,No,Manual,QA,,Two accounts required
+H3,P0,Security,Horizontal privilege - documents,Two client accounts,User A tries User B document submit/download,401/403/404,No,Manual,QA,,
+H4,P0,Security,API unauthorized,No session,Call protected API routes,401 Unauthorized,Partial,Playwright,QA,,
+H5,P0,Security,Service role not in client bundle,Production build,Inspect client JS bundles,SUPABASE_SERVICE_ROLE_KEY absent,Partial,Manual,DevOps,,
+H6,P0,Security,Stripe webhook signature,Stripe CLI,POST webhook with bad signature,Rejected,Partial,Manual,QA,,
+H7,P1,Security,Cron secret on archival,CRON_SECRET set,POST /api/admin/archives/run without header,401/403,Partial,Manual,QA,,
+I1,P1,Gov Forms,Form lookup by area,Case file with practice area,Navigate forms from case file,Correct government form surfaced,Yes,CI Unit gov-form,QA,,
+I2,P1,Gov Forms,Guided completion,Form instrument exists,PATCH /api/gov-forms/[id],Progress saved,Partial,Manual,QA,,
+J1,P2,What-If,Session create,Subscribed client,POST /api/what-if,Session created,Yes,CI Unit what-if,QA,,
+J2,P2,What-If,Apply hypothetical,Active what-if session,POST /api/what-if/apply,Hypothetical facts only; not real facts,Yes,CI Unit what-if,QA,,
+K1,P1,Consult,Request consult,Consult paid/active,POST /api/consult,consult_requests row created,No,Manual,QA,,
+K2,P1,Consult,Attorney queue,Attorney logged in,View /attorney,ConsultRequestQueue shows pending,No,Manual,Attorney,,
+L1,P1,Calculators,Bankruptcy means test,None,Run /bankruptcy/means-test with known inputs,Matches hand-calculated result,Yes,CI Unit bankruptcy-means-test,QA,,
+L2,P1,Calculators,Child support TX,None,Run /family/child-support with known inputs,Matches statute/cap expectations,Yes,CI Unit family-support-calc,QA,,
+L3,P1,Calculators,Property division,None,POST /api/family/property-division,Correct division output,Yes,CI Unit family-property-calc,QA,,
+L4,P1,Calculators,Possession schedule,None,POST /api/family/possession-schedule,Valid schedule output,Yes,CI Unit family-possession-calc,QA,,
+L5,P1,Calculators,Spousal maintenance,None,POST /api/family/maintenance,Correct maintenance calc,Yes,CI Unit family-maintenance-calc,QA,,
+L6,P1,Calculators,Debt collection rights,None,Use /debt/rights tool,Correct rights guidance,Yes,CI Unit debt-collection-rights,QA,,
+L7,P1,Calculators,HOA statutes,None,Lookup HOA statute data,Current statute references,Yes,CI Unit hoa-statutes,QA,,
+M1,P0,Attorney,Review queue SLA clock,Submitted doc exists,Open /attorney,ReviewSlaClock shows time to 48h deadline,No,Manual,Attorney,,
+M2,P1,Attorney,Client file view,Attorney session,Visit /attorney/client/[userId],Full transcript and document plan,No,Manual,Attorney,,
+N1,P1,Admin,Admin gate,Non-attorney,Visit /admin,Blocked or redirected,Partial,Manual,QA,,
+N2,P1,Archival,Archive encryption,ARCHIVE_ENCRYPTION_KEY set,Run archive job,Encrypted cold storage,Yes,CI Unit archive/crypto,QA,,
+N3,P1,Archival,Destruction notice period,Archive past retention,Cron destruction flow,Notice period honored before destroy,No,Manual,QA + Legal,,
+N4,P0,Archival,Client cannot read archives,Client session,Query matter_archives via API,No client access (RLS),No,Manual,QA,,
+O1,P1,Voice,Capability detection,Browser with mic,Load voice input,Graceful fallback if unsupported,Yes,CI Unit voice/capability,QA,,
+O2,P2,Voice,Transcription accuracy,Supported browser,Speak legal terms,Reasonable transcription,No,Manual,QA,,
+P1,P1,Non-functional,Wizard generation time,Subscribed client,Run full wizard,Progress UI during ~165s generation; no surprise timeout,No,Manual,QA,,
+P2,P2,Non-functional,Mobile responsive,Phone browser,Core flows: chat dashboard wizard,Usable layout,No,Manual,QA,,
+P3,P1,Non-functional,Legal freshness scan,Repo checkout,npm run freshness,No overdue legal data entries,Yes,CI legal-freshness.yml,QA,,
+P4,P0,Non-functional,Production build,CI or local,npm run build,Build succeeds without env errors beyond required public vars,Yes,CI typecheck+build,DevOps,,
+P5,P1,Non-functional,AI outage handling,Simulate API failure,Trigger Anthropic error,User-safe error message; no crash,No,Manual,QA,,
+P6,P0,Non-functional,App liveness,Deployed app,e2e.mjs GET /login,200-399 response,Yes,CI Smoke e2e.mjs,QA,,
+Q1,P0,Compliance,Phase I vs II privilege boundary,Both phases,Compare free-chat vs ACP messaging,Clear distinction in UI and behavior,No,Manual,Legal,,
+Q2,P0,Compliance,AI output legal accuracy,Attorney review,Review generated drafts,Attorney-approved quality,No,Manual,Attorney,,Cannot automate
+Q3,P1,Compliance,Pre-review draft labeling,Generated draft,Inspect wizard UI,Draft marked not for filing until approved,No,Manual,Legal,,

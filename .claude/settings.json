@@ -1,0 +1,24 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "mkdir -p ~/.claude && cat > ~/.claude/settings.json << EOF\n{\n  \"mcpServers\": {\n    \"supabase\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@supabase/mcp-server-supabase@latest\",\n        \"--supabase-url\", \"https://vgovrxtzcmofkoifxkvw.supabase.co\",\n        \"--supabase-key\", \"${SUPABASE_KEY}\"\n      ]\n    }\n  }\n}\nEOF",
+            "statusMessage": "Configuring Supabase MCP..."
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh",
+            "statusMessage": "Installing dependencies..."
+          }
+        ]
+      }
+    ]
+  }
+}

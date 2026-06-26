@@ -1,0 +1,203 @@
+Thanks—your callback route is very close. The biggest risk is usually not the logic itself, but how origin is computed/used in NextResponse.redirect(${origin}${next}) when the request passes through a proxy/CDN and origin may not match the real external domain.
+
+1) Fix the redirect base (stop relying on origin)
+On deployments, origin from new URL(request.url) can end up being the internal host or missing the correct scheme/host, which then breaks cookie/session continuity across redirects.
+
+Recommended: build the redirect URL from trusted request headers instead.
+
+In your GET, replace origin usage with a safer origin, e.g. x-forwarded-host and x-forwarded-proto:
+
+import
+ { NextRequest, NextResponse } 
+from
+ 
+"next/server"
+;
+import
+ { createClient } 
+from
+ 
+"@/lib/supabase/server"
+;
+import
+ 
+type
+ { EmailOtpType } 
+from
+ 
+"@supabase/supabase-js"
+;
+export
+ 
+async
+ 
+function
+ 
+GET
+(
+request: NextRequest
+) 
+{
+  
+const
+ { searchParams } = 
+new
+ URL(request.url);
+  
+const
+ code = searchParams.get(
+"code"
+);
+  
+const
+ token_hash = searchParams.get(
+"token_hash"
+);
+  
+const
+ 
+type
+ = searchParams.get(
+"type"
+) 
+as
+ EmailOtpType | 
+null
+;
+  
+const
+ next = searchParams.get(
+"next"
+) ?? 
+"/onboarding"
+;
+  
+const
+ forwardedHost = request.headers.get(
+"x-forwarded-host"
+);
+  
+const
+ forwardedProto = request.headers.get(
+"x-forwarded-proto"
+);
+  
+const
+ fallbackOrigin = 
+`
+${request.nextUrl.protocol}
+//
+${request.nextUrl.host}
+`
+;
+  
+const
+ origin = forwardedHost
+    ? 
+`
+${forwardedProto ?? 
+"https"
+}
+://
+${forwardedHost}
+`
+
+    : fallbackOrigin;
+  
+const
+ supabase = 
+await
+ createClient();
+  
+if
+ (code) {
+    
+const
+ { error } = 
+await
+ supabase.auth.exchangeCodeForSession(code);
+    
+if
+ (!error) 
+return
+ NextResponse.redirect(
+`
+${origin}
+${next}
+`
+);
+  }
+  
+if
+ (token_hash && 
+type
+) {
+    
+const
+ { error } = 
+await
+ supabase.auth.verifyOtp({ token_hash, 
+type
+ });
+    
+if
+ (!error) {
+      
+const
+ redirectTo = 
+type
+ === 
+"recovery"
+ ? 
+"/reset-password"
+ : next;
+      
+return
+ NextResponse.redirect(
+`
+${origin}
+${redirectTo}
+`
+);
+    }
+  }
+  
+return
+ NextResponse.redirect(
+`
+${origin}
+/login?error=auth_callback_failed`
+);
+}
+
+Why this matters for your two domains: If you sometimes redirect to the “wrong” host (or wrong scheme), Supabase cookies can be set for the wrong domain/host and the next page won’t see an authenticated session.
+
+2) Configure Supabase URL Configuration to allow your callback URL(s)
+Even though your code does the redirect itself, Supabase’s email confirmation link must be allowed to redirect back successfully.
+
+In Supabase Dashboard → Authentication → URL Configuration, make sure you have:
+
+Site URL set to a canonical domain (pick one you want to be “the” site)
+Allowed redirect URLs that match where Supabase is sending the user back.
+Given your callback route is:
+
+https://instant-attorney.com/api/auth/callback
+https://www.instant-attorney.com/api/auth/callback
+Add both as allowed redirect URLs (exact matches) if users may arrive via either domain.
+
+3) Your logic choice: keep both code + token_hash (good)
+Your route correctly supports:
+
+exchangeCodeForSession(code) (PKCE / OAuth-style)
+verifyOtp({ token_hash, type }) (email confirmation / recovery)
+So the core auth verification is correct.
+
+4) Test quickly to confirm the remaining issue type
+After updating redirect origin handling:
+
+Use browser devtools to confirm you land on the correct URL:
+the post-confirm redirect should be on the same domain you started with
+Then check cookies are present for your Supabase session after redirect (in Application/Storage → Cookies).
+If cookies are present but RLS denies, that’s a different problem; but with your existing RLS, the redirect-origin mismatch is the most common culprit for what you’re describing.
+
+If you paste your createClient() implementation in @/lib/supabase/server, I can also verify cookie attributes (domain/path/secure) are correct for both domains.
