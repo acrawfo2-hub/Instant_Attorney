@@ -16,6 +16,7 @@ export type UsageFeature =
   | "attorney_second_draft"
   | "attorney_merge"
   | "attorney_pre_consult"
+  | "roadmap_refresh"
   | "storage_upload";
 
 export type UsageCategory = "ai" | "storage" | "infra";

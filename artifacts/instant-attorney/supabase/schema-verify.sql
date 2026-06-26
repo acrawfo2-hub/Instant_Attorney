@@ -69,7 +69,10 @@ union all select 'usage_events', case when exists (
 union all select 'usage_period_totals', case when exists (
   select 1 from information_schema.tables where table_schema = 'public' and table_name = 'usage_period_totals'
 ) then 'OK' else 'MISSING' end
-union all select 'storage: case-attachments', case when exists (
-  select 1 from storage.buckets where id = 'case-attachments'
+union all select 'financial_secure_ref', case when exists (
+  select 1 from information_schema.tables where table_schema = 'public' and table_name = 'financial_secure_ref'
+) then 'OK' else 'MISSING' end
+union all select 'roadmap_snapshots', case when exists (
+  select 1 from information_schema.tables where table_schema = 'public' and table_name = 'roadmap_snapshots'
 ) then 'OK' else 'MISSING' end
 order by object;
