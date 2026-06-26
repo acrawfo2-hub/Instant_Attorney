@@ -21,7 +21,7 @@ test("slugs are unique", () => {
 
 test("covers the slugs the landing page links to", () => {
   // Tiles in app/page.tsx route to /free-chat?area=<slug>.
-  for (const slug of ["contract", "employment", "harassment", "business", "estate", "landlord", "hoa", "family", "personal-injury", "debt", "defamation", "nda", "other"]) {
+  for (const slug of ["contract", "employment", "harassment", "business", "estate", "landlord", "hoa", "family", "personal-injury", "debt", "tax", "defamation", "nda", "other"]) {
     assert.ok(isKnownPracticeArea(slug), `missing practice area: ${slug}`);
   }
 });
@@ -52,4 +52,11 @@ test("personal-injury opener leads with medical care and insurer caution", () =>
   assert.ok(pi);
   assert.match(pi.opener, /medical care|injured/i);
   assert.match(pi.opener, /insurance|adjuster/i);
+});
+
+test("tax opener scopes away return prep and leads with urgency", () => {
+  const tax = getPracticeArea("tax");
+  assert.ok(tax);
+  assert.match(tax.opener, /not.*prepare|prepare or file/i);
+  assert.match(tax.opener, /levy|audit|notice/i);
 });
