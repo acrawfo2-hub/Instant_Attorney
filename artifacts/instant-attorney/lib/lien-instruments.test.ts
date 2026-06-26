@@ -57,3 +57,8 @@ test("offline keyword fallback maps situations to instruments", () => {
   const fc = matchLienInstrumentsByText("notice of sale foreclosure").map((i) => i.key);
   assert.ok(fc.includes("mortgage_foreclosure_response"));
 });
+
+test("field hint includes required fields", () => {
+  assert.ok(lienInstrumentFieldHint("payoff_demand_letter")?.includes("Required fields:"));
+  assert.equal(lienInstrumentFieldHint("nope"), null);
+});
