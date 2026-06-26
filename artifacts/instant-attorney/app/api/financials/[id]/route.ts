@@ -80,12 +80,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     value_basis: b.value_basis ?? "client_estimate",
     valued_as_of: typeof b.valued_as_of === "string" && b.valued_as_of ? b.valued_as_of : null,
     source_attachment_id: sourceId,
+    // A client edit changes the facts, so it RE-OPENS verification: the item
+    // drops to document-supported (if a source is linked) or back to the
+    // client's estimate. Any prior attorney verification was of the old values,
+    // so it must not carry over — this protects the verify-before-you-swear gate.
+    provenance: ground.provenance,
+    verification_status: ground.verification_status,
     updated_at: new Date().toISOString(),
   };
-  if (owned.verificationStatus !== "attorney_verified") {
-    update.provenance = ground.provenance;
-    update.verification_status = ground.verification_status;
-  }
 
   const { data, error } = await owned.write.from("financial_items").update(update).eq("id", id).select(FIELDS).single();
   if (error) return NextResponse.json({ error: "Could not save the change." }, { status: 500 });
