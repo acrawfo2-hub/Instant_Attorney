@@ -404,6 +404,28 @@ export interface Document {
 }
 
 /**
+ * One immutable audit/snapshot row per document download (schema-stage27). Records
+ * what was delivered to the client — review status, watermark state, who pulled
+ * it, a SHA-256 of the exact bytes, and a pointer to the byte-for-byte archived
+ * .docx. Written service-role only; see lib/document-delivery.ts.
+ */
+export interface DocumentDelivery {
+  id: string;
+  document_id: string;
+  case_file_id: string;
+  user_id: string | null;
+  downloaded_by: string | null;
+  downloaded_by_is_attorney: boolean;
+  document_status: DocumentStatus | null;
+  watermarked: boolean;
+  content_sha256: string;
+  byte_size: number | null;
+  storage_bucket: string | null;
+  storage_path: string | null;
+  created_at: string;
+}
+
+/**
  * The most recent moment any fact item changed (created or updated), as a
  * millisecond timestamp, or null when there are none / no parseable timestamps.
  * Uses updated_at when present (it's bumped on gap answers and What-If revisions)

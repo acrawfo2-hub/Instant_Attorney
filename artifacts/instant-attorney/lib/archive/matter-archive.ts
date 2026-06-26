@@ -18,10 +18,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Document } from "@/lib/types";
 import { encryptArchive, decryptArchive, ENC_ALGO, ENC_KEY_VERSION, archiveEncryptionConfigured } from "./crypto";
 import { inferRetentionCategory, computeRetentionUntil, type RetentionCategory } from "./retention";
+import { DELIVERY_BUCKET } from "../document-delivery";
 
 const ARCHIVE_BUCKET = "matter-archives";
 const ATTACHMENT_BUCKET = "case-attachments";
-const BUNDLE_SCHEMA_VERSION = 1;
+// v2 adds document_deliveries (delivery audit trail) + their snapshot blobs.
+const BUNDLE_SCHEMA_VERSION = 2;
 
 function sha256(buf: Buffer): string {
   return createHash("sha256").update(buf).digest("hex");
@@ -50,6 +52,12 @@ interface MatterBundle {
   what_if_sessions: unknown[];
   form_instruments: unknown[];
   consult_requests: unknown[];
+  // Delivery audit rows (what was delivered, to whom, in what review state) plus
+  // the de-duplicated snapshot blobs they reference, so the byte-for-byte record
+  // survives cold archival rather than being orphaned in live storage. Optional
+  // for back-compat with v1 archives that predate the delivery trail.
+  document_deliveries?: Record<string, unknown>[];
+  document_delivery_blobs?: Array<{ storage_path: string; content_base64: string }>;
 }
 
 /** Gather every hot row + attachment byte for a matter into one bundle. */
@@ -67,7 +75,7 @@ export async function buildMatterBundle(
 
   const userId: string | null = caseFile.user_id ?? null;
 
-  const [profileRes, factsRes, msgsRes, docsRes, attRes, reqAttRes, whatIfRes, formRes, consultRes] =
+  const [profileRes, factsRes, msgsRes, docsRes, attRes, reqAttRes, whatIfRes, formRes, consultRes, deliveriesRes] =
     await Promise.all([
       userId ? serviceDb.from("profiles").select("id, email, full_name, phone").eq("id", userId).maybeSingle()
              : Promise.resolve({ data: null }),
@@ -79,6 +87,7 @@ export async function buildMatterBundle(
       serviceDb.from("what_if_sessions").select("*").eq("case_file_id", caseFileId),
       serviceDb.from("form_instruments").select("*").eq("case_file_id", caseFileId),
       serviceDb.from("consult_requests").select("*").eq("case_file_id", caseFileId),
+      serviceDb.from("document_deliveries").select("*").eq("case_file_id", caseFileId),
     ]);
 
   const attachmentsRaw = (attRes.data ?? []) as Array<Record<string, unknown>>;
@@ -105,6 +114,27 @@ export async function buildMatterBundle(
     documents.map((d) => ({ doc_type: d.doc_type as Document["doc_type"] }))
   );
 
+  // Delivery audit rows + their snapshot bytes. Snapshots are de-duplicated by
+  // hash in storage, so download each distinct path once rather than per row.
+  const documentDeliveries = (deliveriesRes.data ?? []) as Record<string, unknown>[];
+  const deliveryPaths = Array.from(
+    new Set(
+      documentDeliveries
+        .map((d) => d.storage_path as string | null)
+        .filter((p): p is string => !!p)
+    )
+  );
+  const document_delivery_blobs = (
+    await Promise.all(
+      deliveryPaths.map(async (storage_path) => {
+        const { data, error } = await serviceDb.storage.from(DELIVERY_BUCKET).download(storage_path);
+        if (error || !data) return null;
+        const buf = Buffer.from(await data.arrayBuffer());
+        return { storage_path, content_base64: buf.toString("base64") };
+      })
+    )
+  ).filter((b): b is { storage_path: string; content_base64: string } => b !== null);
+
   const bundle: MatterBundle = {
     schema_version: BUNDLE_SCHEMA_VERSION,
     firm: "Crawford Law PLLC",
@@ -119,6 +149,8 @@ export async function buildMatterBundle(
     what_if_sessions: whatIfRes.data ?? [],
     form_instruments: formRes.data ?? [],
     consult_requests: consultRes.data ?? [],
+    document_deliveries: documentDeliveries,
+    document_delivery_blobs,
   };
 
   return {
@@ -217,16 +249,21 @@ export async function archiveMatter(
     throw new Error(`Manifest write failed: ${manErr?.message}`);
   }
 
-  // Purge hot data. Attachment storage objects first (not cascade-covered),
-  // then the case_files row (cascades to fact_items, intake_messages,
-  // documents, attachments, requested_attachments, what_if_sessions,
-  // form_instruments). consult_requests/usage_events use ON DELETE SET NULL and
-  // are intentionally preserved (scheduling + billing records).
+  // Purge hot data. Storage objects first (not cascade-covered): attachment bytes
+  // and document-delivery snapshots. Then the case_files row (cascades to
+  // fact_items, intake_messages, documents, attachments, requested_attachments,
+  // what_if_sessions, form_instruments, and — via documents — document_deliveries).
+  // consult_requests/usage_events use ON DELETE SET NULL and are intentionally
+  // preserved (scheduling + billing records).
   const attachmentPaths = bundle.attachments
     .map((a) => a.storage_path as string | undefined)
     .filter((p): p is string => !!p);
   if (attachmentPaths.length) {
     await serviceDb.storage.from(ATTACHMENT_BUCKET).remove(attachmentPaths).catch(() => {});
+  }
+  const deliveryPaths = (bundle.document_delivery_blobs ?? []).map((b) => b.storage_path);
+  if (deliveryPaths.length) {
+    await serviceDb.storage.from(DELIVERY_BUCKET).remove(deliveryPaths).catch(() => {});
   }
   await serviceDb.from("case_files").delete().eq("id", caseFileId);
 

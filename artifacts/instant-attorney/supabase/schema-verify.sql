@@ -79,4 +79,27 @@ union all select 'consult_requests.wrap_up_draft', case when exists (
   select 1 from information_schema.columns
   where table_schema = 'public' and table_name = 'consult_requests' and column_name = 'wrap_up_draft'
 ) then 'OK' else 'MISSING' end
+union all select 'what_if_sessions', case when exists (
+  select 1 from information_schema.tables where table_schema = 'public' and table_name = 'what_if_sessions'
+) then 'OK' else 'MISSING' end
+union all select 'financial_items', case when exists (
+  select 1 from information_schema.tables where table_schema = 'public' and table_name = 'financial_items'
+) then 'OK' else 'MISSING' end
+union all select 'top_up_ledger', case when exists (
+  select 1 from information_schema.tables where table_schema = 'public' and table_name = 'top_up_ledger'
+) then 'OK' else 'MISSING' end
+union all select 'matter_archives', case when exists (
+  select 1 from information_schema.tables where table_schema = 'public' and table_name = 'matter_archives'
+) then 'OK' else 'MISSING' end
+union all select 'document_deliveries', case when exists (
+  select 1 from information_schema.tables where table_schema = 'public' and table_name = 'document_deliveries'
+) then 'OK' else 'MISSING' end
+union all select 'fact_items.kind', case when exists (
+  select 1 from information_schema.columns
+  where table_schema = 'public' and table_name = 'fact_items' and column_name = 'kind'
+) then 'OK' else 'MISSING' end
+union all select 'documents.facts_synced_at', case when exists (
+  select 1 from information_schema.columns
+  where table_schema = 'public' and table_name = 'documents' and column_name = 'facts_synced_at'
+) then 'OK' else 'MISSING' end
 order by object;
