@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import {
   applyAssertionOverrides,
   buildAssertionDescription,
-  completionPhrase,
   parseRoadmapAssertions,
 } from "./roadmap-assertions.ts";
 import type { RoadmapStage } from "./roadmap-types.ts";
@@ -14,17 +13,17 @@ const SAMPLE_STAGES: RoadmapStage[] = [
   { key: "final", title: "Final", body: "", status: "upcoming" },
 ];
 
-test("completionPhrase returns blueprint-specific signal text", () => {
-  const phrase = completionPhrase("family-divorce", "file");
-  assert.match(phrase.toLowerCase(), /petition/);
-  assert.match(completionPhrase("bankruptcy", "file").toLowerCase(), /petition/);
-});
-
-test("buildAssertionDescription embeds completion phrase for completed", () => {
-  const desc = buildAssertionDescription("file", "completed", "family-divorce");
+test("buildAssertionDescription records only the client's confirmation, no fabricated facts", () => {
+  const desc = buildAssertionDescription("file", "completed");
   assert.match(desc, /^Roadmap · file:/);
   assert.match(desc, /confirmed this step is complete/i);
-  assert.match(desc.toLowerCase(), /petition/);
+  // Must NOT invent specifics the client never stated (dates, cause numbers, etc.).
+  assert.doesNotMatch(desc.toLowerCase(), /petition|cause number|filed/);
+});
+
+test("buildAssertionDescription appends the client's own note verbatim", () => {
+  const desc = buildAssertionDescription("file", "completed", "We filed back in March");
+  assert.match(desc, /Note: We filed back in March$/);
 });
 
 test("parseRoadmapAssertions reads latest-style roadmap facts", () => {
