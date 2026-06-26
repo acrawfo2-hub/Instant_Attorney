@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { personDisplayName } from "@/lib/types";
 import type { ConsultRequest, CaseFile, Profile } from "@/lib/types";
 import ConsultActions from "@/components/ConsultActions";
+import ConsultBriefPanel from "@/components/ConsultBriefPanel";
 
 export type ConsultRequestRow = ConsultRequest & {
   profiles: Profile | null;
@@ -92,8 +93,17 @@ function RequestCard({ row }: { row: ConsultRequestRow }) {
             Scheduled for <strong>{fmtCST(row.confirmed_time)}</strong>
             {row.client_phone && <> · call {row.client_phone}</>}
           </div>
+          {row.case_file_id && row.case_files && (
+            <ConsultBriefPanel
+              caseFileId={row.case_file_id}
+              consultId={row.id}
+              consultStatus={row.status}
+              initialMemo={row.case_files.pre_consult_memo}
+              autoGenerate
+            />
+          )}
           <div className="atty-consult-actions">
-            <ConsultActions consult={row} clientName={clientName(row)} />
+            <ConsultActions consult={row} clientName={clientName(row)} showCompleteHint />
           </div>
         </>
       )}

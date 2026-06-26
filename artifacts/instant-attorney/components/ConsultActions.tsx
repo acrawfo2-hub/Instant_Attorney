@@ -19,9 +19,12 @@ function fmtCST(iso: string): string {
 export default function ConsultActions({
   consult,
   clientName,
+  showCompleteHint = false,
 }: {
   consult: ConsultRequest;
   clientName: string;
+  /** When true, hide direct mark-complete — wrap-up panel handles completion. */
+  showCompleteHint?: boolean;
 }) {
   const [status, setStatus] = useState(consult.status);
   const [confirmedTime, setConfirmedTime] = useState(consult.confirmed_time);
@@ -63,7 +66,12 @@ export default function ConsultActions({
       <div className="ca-confirmed">
         <span className="ca-badge ca-badge-confirmed">Confirmed</span>
         <span className="ca-time">{confirmedTime ? fmtCST(confirmedTime) : "—"}</span>
-        <button className="ca-btn-sm ca-btn-primary" onClick={() => act("complete")} disabled={loading}>Mark complete</button>
+        {!showCompleteHint && (
+          <button className="ca-btn-sm ca-btn-primary" onClick={() => act("complete")} disabled={loading}>Mark complete</button>
+        )}
+        {showCompleteHint && (
+          <span className="ca-wrap-hint">Complete via wrap-up above</span>
+        )}
         <button className="ca-btn-sm ca-btn-cancel" onClick={() => act("cancel")} disabled={loading}>Cancel</button>
         {error && <div className="ca-error">{error}</div>}
       </div>

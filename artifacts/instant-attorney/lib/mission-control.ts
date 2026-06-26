@@ -1,5 +1,6 @@
 import type {
   CaseFile,
+  ConsultActionItem,
   Document,
   FactItem,
   GovFormInstrument,
@@ -62,6 +63,8 @@ export interface MissionControlInput {
   requestedAttachments?: RequestedAttachment[];
   govForms?: GovFormInstrument[];
   mode?: "client" | "attorney";
+  /** Client to-dos from a completed consult wrap-up — surfaced at top priority. */
+  consultClientActions?: ConsultActionItem[];
 }
 
 const MAX_OPEN_ROWS = 5;
@@ -116,6 +119,7 @@ export function computeMissionControl(input: MissionControlInput): MissionContro
     requestedAttachments = [],
     govForms = [],
     mode = "client",
+    consultClientActions = [],
   } = input;
   const isAttorney = mode === "attorney";
   const id = caseFile.id;
@@ -123,6 +127,25 @@ export function computeMissionControl(input: MissionControlInput): MissionContro
   const hero = adjustHeroForWaiting(computeNextStep(caseFile, documents, facts));
 
   const actions: MissionAction[] = [];
+
+  // ── Tier 0: Post-consult client action items ────────────────────────────────
+  for (const [i, item] of consultClientActions.entries()) {
+    if (!item.text.trim()) continue;
+    actions.push({
+      id: `consult-action:${item.id}`,
+      kind: item.kind === "document" ? "upload" : "consult",
+      status: "open",
+      priority: 3 + i,
+      title: item.text.trim(),
+      reason: "From your consult with Andrew Crawford, Esq.",
+      cta: isAttorney
+        ? undefined
+        : item.kind === "document"
+          ? { label: "Upload →", href: "#attachments" }
+          : undefined,
+      jumpTo: item.kind === "document" ? "#attachments" : undefined,
+    });
+  }
   const canCreate =
     (caseFile.legal_strategy?.recommended_wizards ?? []).some((w) => coerceWizardType(w) !== null) ||
     (caseFile.legal_strategy?.instruments?.length ?? 0) > 0;

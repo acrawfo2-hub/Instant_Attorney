@@ -15,7 +15,8 @@ import { computeRoadmapFingerprint } from "@/lib/roadmap-fingerprint";
 import type { RoadmapAiOverlay } from "@/lib/roadmap-types";
 import RoadmapSpine from "@/components/RoadmapSpine";
 import RoadmapToolGroup from "@/components/RoadmapToolGroup";
-import type { CaseFile, FactItem, Document, Profile, WizardType, ConsultRequest, RequestedAttachment, GovFormInstrument, Attachment } from "@/lib/types";
+import PostConsultCard from "@/components/PostConsultCard";
+import type { CaseFile, FactItem, Document, Profile, WizardType, ConsultRequest, ConsultWrapUp, RequestedAttachment, GovFormInstrument, Attachment } from "@/lib/types";
 import { isValidWizardType } from "@/lib/document-utils";
 import { WIZARD_LABELS, docTypeLabel, personDisplayName, isDocumentOutOfDate, coerceWizardType } from "@/lib/types";
 
@@ -201,6 +202,8 @@ interface ClientFileViewProps {
   clientProfile?: Profile;
   consultRequest?: ConsultRequest | null;
   hasConsultSub?: boolean;
+  completedConsultWrapUp?: ConsultWrapUp | null;
+  completedConsultSubmittedAt?: string | null;
   roadmapOverlay?: RoadmapAiOverlay;
 }
 
@@ -216,6 +219,8 @@ export default function ClientFileView({
   clientProfile,
   consultRequest,
   hasConsultSub = false,
+  completedConsultWrapUp = null,
+  completedConsultSubmittedAt = null,
   roadmapOverlay = {},
 }: ClientFileViewProps) {
   const childrenByParent = childDocuments.reduce<Record<string, Document[]>>((acc, child) => {
@@ -328,6 +333,7 @@ export default function ClientFileView({
     requestedAttachments,
     govForms,
     mode,
+    consultClientActions: completedConsultWrapUp?.clientActions ?? [],
   });
 
   return (
@@ -403,6 +409,14 @@ export default function ClientFileView({
           </div>
         );
       })()}
+
+      {/* Post-consult action plan — client mode */}
+      {!isAttorney && completedConsultWrapUp && (
+        <PostConsultCard
+          wrapUp={completedConsultWrapUp}
+          submittedAt={completedConsultSubmittedAt}
+        />
+      )}
 
       {/* Mission Control — ranked actions + hero next step; strategy & instruments remain below */}
       <MissionControlBoard
