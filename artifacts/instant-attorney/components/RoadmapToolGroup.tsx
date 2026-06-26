@@ -7,7 +7,7 @@ export default function RoadmapToolGroup({
   sectionId,
   blueprintKey,
   currentStageKey,
-  hasConsult,
+  children,
 }: {
   sectionId: string;
   blueprintKey: string;

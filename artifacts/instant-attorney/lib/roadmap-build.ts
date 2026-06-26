@@ -9,6 +9,7 @@ import { buildEmploymentRoadmap } from "./employment-roadmap";
 import { buildPiRoadmap } from "./pi-roadmap";
 import { buildMatterRoadmap } from "./matter-roadmap";
 import { buildGenericRoadmap } from "./generic-roadmap";
+import { applyAssertionOverrides, parseRoadmapAssertions } from "./roadmap-assertions";
 import type { ResolvedRoadmap, RoadmapStage } from "./roadmap-types";
 import { ROADMAP_BLUEPRINT_VERSION } from "./roadmap-types";
 import type { CaseFile, ConsultRequest, Document, FactItem, RequestedAttachment } from "./types";
@@ -23,6 +24,14 @@ export interface RoadmapBuildInput {
 
 function currentStageKey(stages: RoadmapStage[]): string | null {
   return stages.find((s) => s.status === "current")?.key ?? null;
+}
+
+function withClientAssertions(
+  stages: RoadmapStage[],
+  factDescriptions: string[],
+): RoadmapStage[] {
+  const assertions = parseRoadmapAssertions(factDescriptions);
+  return applyAssertionOverrides(stages, assertions);
 }
 
 /** Resolve the Tier-1/Tier-2 roadmap for a case file (deterministic, no I/O). */
@@ -41,6 +50,7 @@ export function resolveRoadmapForCase(input: RoadmapBuildInput): ResolvedRoadmap
       facts: factDescriptions,
       documents: docSummaries,
     });
+    const stages = withClientAssertions(r.stages, factDescriptions);
     return {
       blueprintKey: `family-${r.path}`,
       blueprintVersion: ROADMAP_BLUEPRINT_VERSION,
@@ -48,9 +58,9 @@ export function resolveRoadmapForCase(input: RoadmapBuildInput): ResolvedRoadmap
       pathLabel: r.pathLabel,
       safety: r.safety,
       safetyNote: r.safetyNote,
-      stages: r.stages,
+      stages,
       disclaimer: r.disclaimer,
-      currentStageKey: currentStageKey(r.stages),
+      currentStageKey: currentStageKey(stages),
     };
   }
 
@@ -60,13 +70,14 @@ export function resolveRoadmapForCase(input: RoadmapBuildInput): ResolvedRoadmap
       facts: factDescriptions,
       documents: docSummaries,
     });
+    const stages = withClientAssertions(r.stages, factDescriptions);
     return {
       blueprintKey: "bankruptcy",
       blueprintVersion: ROADMAP_BLUEPRINT_VERSION,
       label: "Your Roadmap — Debt Relief",
-      stages: r.stages,
+      stages,
       disclaimer: r.disclaimer,
-      currentStageKey: currentStageKey(r.stages),
+      currentStageKey: currentStageKey(stages),
     };
   }
 
@@ -76,13 +87,14 @@ export function resolveRoadmapForCase(input: RoadmapBuildInput): ResolvedRoadmap
       facts: factDescriptions,
       documents: docSummaries,
     });
+    const stages = withClientAssertions(r.stages, factDescriptions);
     return {
       blueprintKey: "employment",
       blueprintVersion: ROADMAP_BLUEPRINT_VERSION,
       label: "Your Roadmap — Employment",
-      stages: r.stages,
+      stages,
       disclaimer: r.disclaimer,
-      currentStageKey: currentStageKey(r.stages),
+      currentStageKey: currentStageKey(stages),
     };
   }
 
@@ -92,6 +104,7 @@ export function resolveRoadmapForCase(input: RoadmapBuildInput): ResolvedRoadmap
       facts: factDescriptions,
       documents: docSummaries,
     });
+    const stages = withClientAssertions(r.stages, factDescriptions);
     return {
       blueprintKey: "personal-injury",
       blueprintVersion: ROADMAP_BLUEPRINT_VERSION,
@@ -99,9 +112,9 @@ export function resolveRoadmapForCase(input: RoadmapBuildInput): ResolvedRoadmap
       pathLabel: r.pathLabel,
       urgent: r.urgent,
       urgentNote: r.urgentNote,
-      stages: r.stages,
+      stages,
       disclaimer: r.disclaimer,
-      currentStageKey: currentStageKey(r.stages),
+      currentStageKey: currentStageKey(stages),
     };
   }
 
@@ -114,14 +127,15 @@ export function resolveRoadmapForCase(input: RoadmapBuildInput): ResolvedRoadmap
   });
 
   if (matterCandidate.path !== "general") {
+    const stages = withClientAssertions(matterCandidate.stages, factDescriptions);
     return {
       blueprintKey: `matter-${matterCandidate.path}`,
       blueprintVersion: ROADMAP_BLUEPRINT_VERSION,
       label: "Your Roadmap",
       pathLabel: matterCandidate.pathLabel,
-      stages: matterCandidate.stages,
+      stages,
       disclaimer: matterCandidate.disclaimer,
-      currentStageKey: currentStageKey(matterCandidate.stages),
+      currentStageKey: currentStageKey(stages),
     };
   }
 
@@ -138,13 +152,14 @@ export function resolveRoadmapForCase(input: RoadmapBuildInput): ResolvedRoadmap
     consultActive: Boolean(consultRequest) && consultRequest?.status !== "cancelled",
   });
 
+  const stages = withClientAssertions(r.stages, factDescriptions);
   return {
     blueprintKey: "generic",
     blueprintVersion: ROADMAP_BLUEPRINT_VERSION,
     label: r.label,
-    stages: r.stages,
+    stages,
     disclaimer: r.disclaimer,
-    currentStageKey: currentStageKey(r.stages),
+    currentStageKey: currentStageKey(stages),
   };
 }
 

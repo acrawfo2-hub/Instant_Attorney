@@ -133,7 +133,11 @@ export async function POST(req: NextRequest) {
 
   const overlay = parseRoadmapOverlayFromModel(text);
 
-  await recordAiFromMessage(userId, response);
+  await recordAiFromMessage(db, response, {
+    userId,
+    caseFileId,
+    feature: "roadmap_refresh",
+  });
 
   const now = new Date().toISOString();
   const { error: upsertError } = await db.from("roadmap_snapshots").upsert(

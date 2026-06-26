@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import type { RoadmapAiOverlay, RoadmapStage } from "@/lib/roadmap-types";
+import type { RoadmapAssertion } from "@/lib/roadmap-assertions";
 
 function StageDot({ status, number }: { status: RoadmapStage["status"]; number: number }) {
   return (
@@ -27,6 +28,9 @@ export interface RoadmapPanelProps {
   safetyNote?: string;
   urgent?: boolean;
   urgentNote?: string;
+  correctionsEnabled?: boolean;
+  caseFileId?: string;
+  onAssert?: (stageKey: string, assertion: RoadmapAssertion, note?: string) => Promise<void>;
 }
 
 export default function RoadmapPanel({
@@ -39,9 +43,16 @@ export default function RoadmapPanel({
   safetyNote,
   urgent,
   urgentNote,
+  correctionsEnabled = false,
+  caseFileId,
+  onAssert,
 }: RoadmapPanelProps) {
   const [showAll, setShowAll] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [busyStage, setBusyStage] = useState<string | null>(null);
+  const [disputeStage, setDisputeStage] = useState<string | null>(null);
+  const [disputeNote, setDisputeNote] = useState("");
+  const [toast, setToast] = useState<string | null>(null);
 
   const navy = "var(--brand-navy)";
   const gold = "var(--brand-gold)";
@@ -51,12 +62,30 @@ export default function RoadmapPanel({
 
   const title = pathLabel ? `${label} — ${pathLabel}` : label;
   const emphasize = new Set(overlay?.emphasize_stages ?? []);
+  const canCorrect = correctionsEnabled && Boolean(caseFileId) && Boolean(onAssert);
 
   function isStageOpen(stage: RoadmapStage): boolean {
     if (showAll) return true;
     if (stage.status === "current") return true;
     if (emphasize.has(stage.key)) return true;
     return Boolean(expanded[stage.key]);
+  }
+
+  async function handleAssert(stageKey: string, assertion: RoadmapAssertion, note?: string) {
+    if (!onAssert || busyStage) return;
+    setBusyStage(stageKey);
+    try {
+      await onAssert(stageKey, assertion, note);
+      setDisputeStage(null);
+      setDisputeNote("");
+      setToast("Map updated — your correction is saved.");
+      window.setTimeout(() => setToast(null), 4000);
+    } catch {
+      setToast("Could not save your correction. Please try again.");
+      window.setTimeout(() => setToast(null), 4000);
+    } finally {
+      setBusyStage(null);
+    }
   }
 
   return (
@@ -76,6 +105,12 @@ export default function RoadmapPanel({
         Here&apos;s the whole path and where you are right now. Steps can overlap or repeat — use it as a map,
         not a deadline.
       </p>
+
+      {toast && (
+        <p className="lf-roadmap-toast" role="status">
+          {toast}
+        </p>
+      )}
 
       {safety && safetyNote && (
         <div
@@ -122,6 +157,8 @@ export default function RoadmapPanel({
           const open = isStageOpen(stage);
           const aiNote = overlay?.stage_notes?.[stage.key];
           const collapsed = !open && stage.status !== "current";
+          const isBusy = busyStage === stage.key;
+          const showDisputeForm = disputeStage === stage.key;
 
           return (
             <li
@@ -170,6 +207,75 @@ export default function RoadmapPanel({
                       <p style={{ fontSize: 12.5, lineHeight: 1.5, color: textMd, margin: "8px 0 0", padding: "8px 10px", background: "rgba(26,43,74,0.05)", borderRadius: 6 }}>
                         {aiNote}
                       </p>
+                    )}
+                    {canCorrect && (
+                      <div className="lf-roadmap-corrections">
+                        {(stage.status === "current" || stage.status === "upcoming") && (
+                          <button
+                            type="button"
+                            className="lf-roadmap-correct-btn"
+                            disabled={isBusy}
+                            onClick={() => handleAssert(stage.key, "completed")}
+                          >
+                            {isBusy ? "Saving…" : "I've already done this"}
+                          </button>
+                        )}
+                        {(stage.status === "current" || stage.status === "done") && !showDisputeForm && (
+                          <button
+                            type="button"
+                            className="lf-roadmap-correct-btn lf-roadmap-correct-btn-muted"
+                            disabled={isBusy}
+                            onClick={() => {
+                              setDisputeStage(stage.key);
+                              setDisputeNote("");
+                            }}
+                          >
+                            This isn&apos;t right
+                          </button>
+                        )}
+                        {showDisputeForm && (
+                          <div className="lf-roadmap-dispute-form">
+                            <label className="lf-roadmap-dispute-label" htmlFor={`roadmap-dispute-${stage.key}`}>
+                              What&apos;s off? (optional)
+                            </label>
+                            <textarea
+                              id={`roadmap-dispute-${stage.key}`}
+                              className="lf-roadmap-dispute-input"
+                              rows={2}
+                              value={disputeNote}
+                              onChange={(e) => setDisputeNote(e.target.value)}
+                              placeholder="e.g. We haven't filed yet — still gathering documents"
+                            />
+                            <div className="lf-roadmap-dispute-actions">
+                              <button
+                                type="button"
+                                className="lf-roadmap-correct-btn"
+                                disabled={isBusy}
+                                onClick={() =>
+                                  handleAssert(
+                                    stage.key,
+                                    stage.status === "done" ? "not_yet" : "dispute",
+                                    disputeNote || undefined,
+                                  )
+                                }
+                              >
+                                {isBusy ? "Saving…" : "Update map"}
+                              </button>
+                              <button
+                                type="button"
+                                className="lf-roadmap-correct-btn lf-roadmap-correct-btn-muted"
+                                disabled={isBusy}
+                                onClick={() => {
+                                  setDisputeStage(null);
+                                  setDisputeNote("");
+                                }}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </>
                 )}
