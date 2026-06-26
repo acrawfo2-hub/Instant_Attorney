@@ -12,9 +12,12 @@ import { placeholderFields } from "@/lib/wizard-parsing";
 import { computeMissionControl } from "@/lib/mission-control";
 import { looksLikeFamilyMatter } from "@/lib/family-instruments";
 import { looksLikeDebtMatter } from "@/lib/debt-instruments";
+import { looksLikePersonalInjuryMatter } from "@/lib/pi-instruments";
 import { buildFamilyRoadmap } from "@/lib/family-roadmap";
 import { buildMatterRoadmap } from "@/lib/matter-roadmap";
+import { buildPiRoadmap } from "@/lib/pi-roadmap";
 import FamilyRoadmap from "@/components/FamilyRoadmap";
+import PiRoadmap from "@/components/PiRoadmap";
 import type { CaseFile, FactItem, Document, Profile, WizardType, ConsultRequest, RequestedAttachment, GovFormInstrument, Attachment } from "@/lib/types";
 import { isValidWizardType } from "@/lib/document-utils";
 import { WIZARD_LABELS, docTypeLabel, personDisplayName, isDocumentOutOfDate, coerceWizardType } from "@/lib/types";
@@ -271,6 +274,7 @@ export default function ClientFileView({
   const matterText = `${caseFile.matter_subtype ?? ""} ${caseFile.summary ?? ""}`;
   const isFamilyMatter = looksLikeFamilyMatter(matterText);
   const isDebtMatter = looksLikeDebtMatter(matterText);
+  const isPiMatter = looksLikePersonalInjuryMatter(matterText);
   const familyRoadmap = !isAttorney
     ? isFamilyMatter
       ? buildFamilyRoadmap({
@@ -279,14 +283,24 @@ export default function ClientFileView({
           facts: confirmed.map((f) => f.description),
           documents: documents.map((d) => ({ title: d.title, status: d.status })),
         })
-      : buildMatterRoadmap({
-          matterSubtype: caseFile.matter_subtype,
+      : isPiMatter
+        ? null
+        : buildMatterRoadmap({
+            matterSubtype: caseFile.matter_subtype,
+            matterText,
+            facts: confirmed.map((f) => f.description),
+            documents: documents.map((d) => ({ title: d.title, status: d.status })),
+            hasStrategy: !!caseFile.legal_strategy,
+          })
+    : null;
+  const piRoadmap =
+    !isAttorney && isPiMatter
+      ? buildPiRoadmap({
           matterText,
           facts: confirmed.map((f) => f.description),
           documents: documents.map((d) => ({ title: d.title, status: d.status })),
-          hasStrategy: !!caseFile.legal_strategy,
         })
-    : null;
+      : null;
 
   // The client has "brought in a document" once at least one upload exists that
   // didn't fail to store. Document Review only makes sense against a real
@@ -587,6 +601,9 @@ export default function ClientFileView({
       {/* Family Law Roadmap — orients the family tools and documents below it */}
       {familyRoadmap && <FamilyRoadmap roadmap={familyRoadmap} />}
 
+      {/* Personal Injury Roadmap — orients the PI tools below it */}
+      {piRoadmap && <PiRoadmap roadmap={piRoadmap} />}
+
       {/* Debt-collection rights — debt matters only (client mode). */}
       {!isAttorney && isDebtMatter && (
         <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
@@ -697,6 +714,48 @@ export default function ClientFileView({
           </p>
           <Link href={`/family/maintenance?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
             Check spousal maintenance →
+          </Link>
+        </div>
+      )}
+
+      {/* PI claim guide — personal injury matters only (client mode). */}
+      {!isAttorney && isPiMatter && (
+        <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
+          <div className="lf-card-label">Injury Claim Playbook</div>
+          <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
+            Insurers move fast — often before you know your rights. See what an expert Texas PI attorney would
+            tell you: your rights, the steps to take, and the traps to avoid (especially recorded statements).
+          </p>
+          <Link href={`/personal-injury/rights?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
+            See your playbook &amp; next steps →
+          </Link>
+        </div>
+      )}
+
+      {/* PI limitations screener — personal injury matters only (client mode). */}
+      {!isAttorney && isPiMatter && (
+        <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
+          <div className="lf-card-label">Check Your Filing Deadline</div>
+          <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
+            Texas generally gives you two years to sue for an injury — but malpractice timing is different.
+            Run a free limitations screener from your incident date; we&apos;ll save it to this file.
+          </p>
+          <Link href={`/personal-injury/sol?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
+            Check limitations deadline →
+          </Link>
+        </div>
+      )}
+
+      {/* Comparative fault impact — personal injury matters only (client mode). */}
+      {!isAttorney && isPiMatter && (
+        <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
+          <div className="lf-card-label">How Fault Affects Recovery</div>
+          <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
+            If the insurer says you were partly at fault, see how Texas modified comparative negligence (§ 33.001)
+            affects your net recovery — saved to this file.
+          </p>
+          <Link href={`/personal-injury/fault?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
+            Calculate fault impact →
           </Link>
         </div>
       )}
