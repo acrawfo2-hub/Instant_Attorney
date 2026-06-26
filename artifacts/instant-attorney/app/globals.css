@@ -7100,3 +7100,129 @@ mark.atty-placeholder {
   flex-wrap: wrap;
 }
 
+/* ── Consult brief panel (attorney pre-consult) ─────────────────────────── */
+.cb-panel {
+  margin-top: 12px;
+  border: 1px solid var(--brand-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+}
+.cb-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid transparent;
+}
+.cb-panel:has(.cb-body) .cb-panel-header { border-bottom-color: var(--brand-border); }
+.cb-toggle {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+  font-family: var(--font-dm-sans, "DM Sans"), sans-serif;
+}
+.cb-toggle-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand-text-dk);
+}
+.cb-chevron { color: var(--brand-text-md); font-size: 12px; }
+.cb-status {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 0.5px solid var(--brand-border);
+}
+.cb-status-ready { color: #34c759; border-color: rgba(52, 199, 89, 0.35); background: rgba(52, 199, 89, 0.08); }
+.cb-status-pending { color: var(--brand-text-md); }
+.cb-status-generating { color: var(--brand-gold); border-color: rgba(200, 169, 110, 0.35); }
+.cb-preview {
+  display: flex;
+  gap: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--brand-text-md);
+}
+.cb-full-file-link {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--brand-gold);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.cb-full-file-link:hover { text-decoration: underline; }
+.cb-body { padding: 12px; display: flex; flex-direction: column; gap: 14px; }
+.cb-snapshot { display: flex; flex-direction: column; gap: 12px; }
+.cb-snapshot-row { display: flex; flex-wrap: wrap; gap: 12px; }
+.cb-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 120px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--brand-border);
+}
+.cb-stat-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--brand-text-md); }
+.cb-stat-value { font-size: 13px; font-weight: 600; color: var(--brand-text-dk); }
+.cb-engagement-high { color: #34c759; }
+.cb-engagement-moderate { color: var(--brand-gold); }
+.cb-engagement-low { color: #ff9f0a; }
+.cb-block-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--brand-text-md); margin-bottom: 6px; }
+.cb-list { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.5; color: var(--brand-text-dk); }
+.cb-list-muted { color: var(--brand-text-md); }
+.cb-urgent {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #ff9f0a;
+  background: rgba(255, 159, 10, 0.08);
+  border: 1px solid rgba(255, 159, 10, 0.25);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+.cb-memo-section { display: flex; flex-direction: column; gap: 10px; }
+.cb-memo-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.cb-memo-sections { display: flex; flex-direction: column; gap: 10px; }
+.cb-memo-block {
+  border: 1px solid var(--brand-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.cb-memo-block-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--brand-gold);
+  padding: 8px 12px;
+  background: rgba(200, 169, 110, 0.08);
+  border-bottom: 1px solid var(--brand-border);
+}
+.cb-memo-block-body {
+  font-family: var(--font-dm-sans, "DM Sans"), sans-serif;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--brand-text-dk);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.cb-truncation { font-size: 12px; color: #ff9f0a; margin: 0; }
+

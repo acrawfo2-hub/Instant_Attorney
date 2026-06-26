@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { notifyClientConsultConfirmed } from "@/lib/notify";
+import { generatePreConsultMemo } from "@/lib/pre-consult-generate";
 import { BYPASS_USER_ID } from "@/lib/types";
 import type { ConsultRequest, Profile } from "@/lib/types";
 
@@ -112,6 +113,14 @@ export async function PATCH(
     } catch (e) {
       console.error("[consult] notify error", e);
     }
+  }
+
+  if ((action === "confirm" || action === "accept") && (updated as ConsultRequest).case_file_id) {
+    const result = updated as ConsultRequest;
+    const serviceDb = createServiceClient();
+    void generatePreConsultMemo(serviceDb, result.case_file_id!, userId).catch((e) => {
+      console.error("[consult] pre-consult brief generation error", e);
+    });
   }
 
   return NextResponse.json(updated);
