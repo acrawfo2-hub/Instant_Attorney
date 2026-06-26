@@ -10,10 +10,10 @@ import {
 const AS_OF = new Date("2026-06-01T12:00:00");
 
 test("general PI: two years from incident", () => {
-  const r = screenPiSol({ incidentDate: "2024-07-01", claimType: "auto_accident" }, AS_OF);
-  assert.equal(r.filingDeadline, "2026-07-01");
+  const r = screenPiSol({ incidentDate: "2024-10-01", claimType: "auto_accident" }, AS_OF);
+  assert.equal(r.filingDeadline, "2026-10-01");
   assert.equal(r.expired, false);
-  assert.ok(r.daysRemaining > 0);
+  assert.ok(r.daysRemaining > 90 && r.daysRemaining <= 180);
   assert.equal(r.urgency, "warning");
 });
 
@@ -25,7 +25,9 @@ test("expired deadline is flagged", () => {
 });
 
 test("critical urgency inside 90 days", () => {
-  const r = screenPiSol({ incidentDate: "2024-04-15", claimType: "premises" }, AS_OF);
+  const r = screenPiSol({ incidentDate: "2024-07-16", claimType: "premises" }, AS_OF);
+  assert.equal(r.expired, false);
+  assert.ok(r.daysRemaining > 0 && r.daysRemaining <= 90);
   assert.equal(r.urgency, "critical");
 });
 

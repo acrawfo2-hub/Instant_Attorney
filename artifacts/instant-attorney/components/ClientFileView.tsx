@@ -284,7 +284,8 @@ export default function ClientFileView({
   const isDebtMatter = looksLikeDebtMatter(matterText);
   const isDefamationMatter = looksLikeDefamationMatter(matterText);
   const isEmploymentMatter = looksLikeEmploymentMatter(matterText);
-  const isPiMatter = looksLikePersonalInjuryMatter(matterText);
+  // Workplace injuries can match both detectors ("injured" + "at work"); prefer employment.
+  const isPiMatter = looksLikePersonalInjuryMatter(matterText) && !isEmploymentMatter;
   const familyRoadmap =
     !isAttorney && isFamilyMatter
       ? buildFamilyRoadmap({
@@ -338,7 +339,7 @@ export default function ClientFileView({
           hasSummary: Boolean(caseFile.summary),
           matterTypeKnown: Boolean(caseFile.matter_type),
           confirmedFactCount: confirmed.length,
-          openGapCount: gaps.length,
+          openGapCount: realGaps.length,
           pendingUploadCount: requestedAttachments.filter((r) => r.status === "requested").length,
           hasDocumentPlan:
             (caseFile.legal_strategy?.document_plan?.length ?? 0) > 0 ||

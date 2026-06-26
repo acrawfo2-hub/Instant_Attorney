@@ -84,7 +84,7 @@ function deriveSignals(input: MatterRoadmapInput): MatterSignals {
       has(/(went to|had|completed|attended|scheduled) (mediation|arbitration)/),
 
     hasResolved:
-      docDone(/.*/) ||
+      docDone(/settlement|release|decree|judgment|final order|stipulation|dismissal|resolution agreement/) ||
       has(/settled|resolved|paid in full|refund.*received|case.*closed|judgment.*granted|won.*case|dismissed/),
 
     hasGovDocs:

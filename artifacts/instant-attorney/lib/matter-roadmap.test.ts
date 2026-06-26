@@ -87,6 +87,15 @@ test("EEOC charge fact advances employment roadmap past agency stage", () => {
   assert.equal(agency.status, "done");
 });
 
+test("unrelated approved document does not mark employment matter resolved", () => {
+  const rm = buildMatterRoadmap({
+    matterSubtype: "wrongful termination",
+    documents: [{ title: "Engagement Letter", status: "approved" }],
+  });
+  const resolve = rm.stages.find((s) => s.key === "resolve")!;
+  assert.notEqual(resolve.status, "done");
+});
+
 // ── Estate roadmap ────────────────────────────────────────────────────────────
 
 test("fresh estate matter starts at inventory stage", () => {

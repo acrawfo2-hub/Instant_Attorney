@@ -311,7 +311,19 @@ async function triggerTopUp(serviceDb: SupabaseClient, ledger: LedgerRow): Promi
     .select()
     .single();
 
-  if (chargeErr || !charge) return; // unique violation — charge already exists
+  if (chargeErr || !charge) {
+    // Unique violation — another caller already created the charge for this cycle.
+    if (chargeErr?.code === "23505") return;
+    // Transient insert failure — release the ledger claim so billing isn't stuck pending.
+    await serviceDb
+      .from("top_up_ledger")
+      .update({ status: "ok", updated_at: new Date().toISOString() })
+      .eq("user_id", ledger.user_id)
+      .eq("status", "pending")
+      .eq("cycle_id", cycleId);
+    console.error("[topup] charge insert failed, released pending claim:", chargeErr);
+    return;
+  }
 
   // Dev / no-Stripe path: simulate a successful top-up so local flows continue.
   if (BYPASS_AUTH) {
