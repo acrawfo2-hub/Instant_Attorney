@@ -282,6 +282,12 @@ export default function OnboardingPage() {
             </p>
             <div className="ob-agreement-text">{AI_CONSENT}</div>
 
+            <p className="ob-philosophy-link">
+              <a href="/legal/ai-philosophy" target="_blank" rel="noopener noreferrer">
+                Read our full AI philosophy statement →
+              </a>
+            </p>
+
             <label className="ob-checkbox-label">
               <input
                 type="checkbox"

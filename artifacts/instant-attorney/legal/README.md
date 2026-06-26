@@ -21,6 +21,7 @@ Andrew Crawford, Esq. · Licensed in **Texas and Illinois**.
 | 5 | `05-billing-and-refund-disclosure.md` | Stand-alone, clear-and-conspicuous pre-purchase auto-renewal + usage-charge + no-refund disclosure (auto-renewal-law / negative-option compliance). |
 | 6 | `06-legal-disclaimers.md` | Site-wide disclaimers, advertising/bar disclosures, no-advice/no-privilege notices, jurisdiction limits. |
 | 7 | `07-document-retention-and-destruction-policy.md` | Ethics-aligned client file retention schedule, access/export rights, and destruction process (replaces the 30-day deletion). |
+| 8 | `08-ai-philosophy-statement.md` | Public-facing AI philosophy statement: why we use AI, attorney-in-the-loop, limitations, confidentiality, access to justice, and ethical commitments (Op. 705 aligned). Rendered at `/legal/ai-philosophy`. |
 
 ## What the app actually does (the facts these drafts must match)
 
@@ -53,3 +54,4 @@ Andrew Crawford, Esq. · Licensed in **Texas and Illinois**.
 
 - Documents **1 and 2** are the click-to-sign agreements presented during onboarding (`app/onboarding/page.tsx`) and recorded by `POST /api/agreements`. Update the version string there when text is finalized.
 - Documents **3–6** are intended to be linked (footer + checkout) and acknowledged at sign-up; they are not yet rendered as in-app pages — wiring them in is a follow-up once text is approved.
+- Document **8** is rendered at `/legal/ai-philosophy` and linked from the landing footer, onboarding AI consent step, and free chat. Treat as draft until attorney approval.

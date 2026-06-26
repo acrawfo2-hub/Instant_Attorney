@@ -384,6 +384,13 @@ export default function FreeChatPage() {
           >
             Upgrade to Phase II for privileged intake
           </button>
+          <span className="fc-input-hint-sep">·</span>
+          <button
+            className="fc-input-upgrade-link"
+            onClick={() => router.push("/legal/ai-philosophy")}
+          >
+            How we use AI
+          </button>
         </p>
       </div>
     </div>
