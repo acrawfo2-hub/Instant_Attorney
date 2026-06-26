@@ -41,6 +41,10 @@ interface LedgerRow {
   monthly_topup_limit_usd: number | null;
   month_topup_usd: number;
   block_reason: "limit_reached" | "topup_failed" | null;
+  // Opt-in completion grace (schema-stage21).
+  grace_opt_in: boolean;
+  grace_buffer_usd: number | null;
+  grace_anchor_usd: number | null;
 }
 
 export type BlockReason = "topup_pending" | "topup_failed" | "limit_reached";
@@ -52,6 +56,10 @@ export interface BillingGate {
   status: "ok" | "pending" | "blocked" | "exempt" | "disabled";
   meterUsd: number;
   thresholdUsd: number;
+  /** True when the call is being allowed on opt-in completion grace, not normal "ok". */
+  grace?: boolean;
+  /** USD of completion-grace COGS still available before the hard stop. */
+  graceRemainingUsd?: number;
 }
 
 /** Everything the customer-facing billing UI needs in one read. */
@@ -75,6 +83,14 @@ export interface BillingSummary {
   hasPaymentMethod: boolean;
   lifetimeTopUps: number;
   lifetimeTopUpUsd: number;
+  /** Customer has enabled completion grace ("finish my documents, charge later"). */
+  graceOptIn: boolean;
+  /** Bounded ceiling (USD of COGS) the customer may overdraw past a block. */
+  graceBufferUsd: number;
+  /** USD of that buffer still available right now (full buffer when not blocked). */
+  graceRemainingUsd: number;
+  /** True when a block is currently being held open by completion grace. */
+  inGrace: boolean;
 }
 
 function currentMonthStartISO(): string {
@@ -103,6 +119,47 @@ function limitFor(ledger: LedgerRow, cfg: ReturnType<typeof getBillingConfig>): 
   return ledger.monthly_topup_limit_usd === null
     ? cfg.defaultMonthlyLimitUsd
     : Number(ledger.monthly_topup_limit_usd);
+}
+
+/** The grace ceiling in effect for a ledger (per-user override or config default). */
+function graceBufferFor(ledger: LedgerRow, cfg: ReturnType<typeof getBillingConfig>): number {
+  return ledger.grace_buffer_usd === null || ledger.grace_buffer_usd === undefined
+    ? cfg.graceBufferUsd
+    : Number(ledger.grace_buffer_usd);
+}
+
+export interface GraceDecision {
+  /** True when completion grace still has room to allow a blocked call through. */
+  allowed: boolean;
+  /** USD of COGS already consumed past the block. */
+  graceUsedUsd: number;
+  /** USD of grace still available before the hard stop. */
+  graceRemainingUsd: number;
+}
+
+/**
+ * Pure completion-grace math. Given the current meter, the anchor captured when
+ * the ledger entered a blocking state, the buffer size, and whether the customer
+ * opted in, decide whether a blocked call may still proceed. Exposure is bounded:
+ * grace is allowed only while consumption past the anchor stays under the buffer.
+ */
+export function evaluateGrace(params: {
+  optIn: boolean;
+  meterUsd: number;
+  anchorUsd: number | null;
+  bufferUsd: number;
+}): GraceDecision {
+  // A missing anchor means "just entered the block" — measure from the meter now.
+  const anchor = params.anchorUsd === null || params.anchorUsd === undefined
+    ? params.meterUsd
+    : params.anchorUsd;
+  const graceUsedUsd = roundUsd(Math.max(0, params.meterUsd - anchor));
+  const graceRemainingUsd = roundUsd(Math.max(0, params.bufferUsd - graceUsedUsd));
+  return {
+    allowed: params.optIn && graceUsedUsd < params.bufferUsd,
+    graceUsedUsd,
+    graceRemainingUsd,
+  };
 }
 
 /** True when this user should never be metered, charged, or blocked. */
@@ -199,6 +256,9 @@ async function triggerTopUp(serviceDb: SupabaseClient, ledger: LedgerRow): Promi
       .update({
         status: "blocked",
         block_reason: "limit_reached",
+        // Anchor completion grace at the meter as it enters the block so opted-in
+        // customers can finish in-flight work within the bounded buffer.
+        grace_anchor_usd: ledger.meter_usd,
         updated_at: new Date().toISOString(),
       })
       .eq("user_id", ledger.user_id)
@@ -221,9 +281,16 @@ async function triggerTopUp(serviceDb: SupabaseClient, ledger: LedgerRow): Promi
   }
 
   // Layer 1: conditional claim. Only one concurrent caller flips ok→pending.
+  // Anchor completion grace here too: a 'pending' top-up blocks the gate, and an
+  // opted-in customer should be able to finish work while the charge settles. A
+  // subsequent pending→blocked (card failure) keeps this same anchor.
   const { data: claimed } = await serviceDb
     .from("top_up_ledger")
-    .update({ status: "pending", updated_at: new Date().toISOString() })
+    .update({
+      status: "pending",
+      grace_anchor_usd: ledger.meter_usd,
+      updated_at: new Date().toISOString(),
+    })
     .eq("user_id", ledger.user_id)
     .eq("status", "ok")
     .eq("cycle_id", cycleId)
@@ -376,6 +443,10 @@ async function applySuccessfulTopUp(
       month_topup_usd: roundUsd(effectiveMonthSpend(ledger) + amountUsd),
       allowance_period_start: rolled ? currentMonthStartISO() : ledger.allowance_period_start,
       allowance_used_usd: rolled ? 0 : Number(ledger.allowance_used_usd),
+      // Back to serving normally — reset the grace anchor so the next block
+      // starts a fresh bounded buffer. Any grace consumed was just collected as
+      // part of the carried-forward meter.
+      grace_anchor_usd: null,
       updated_at: new Date().toISOString(),
     })
     .eq("user_id", userId);
@@ -468,17 +539,31 @@ export async function getBillingGate(userId: string): Promise<BillingGate> {
   const ledger = await loadLedger(serviceDb, userId);
   const meterUsd = Number(ledger.meter_usd);
 
-  if (ledger.status === "pending") {
-    return { allowed: false, reason: "topup_pending", status: "pending", meterUsd, thresholdUsd: cfg.thresholdUsd };
-  }
-  if (ledger.status === "blocked") {
-    return {
-      allowed: false,
-      reason: ledger.block_reason ?? "topup_failed",
-      status: "blocked",
+  if (ledger.status === "pending" || ledger.status === "blocked") {
+    const reason: BlockReason =
+      ledger.status === "pending" ? "topup_pending" : ledger.block_reason ?? "topup_failed";
+
+    // Completion grace: an opted-in customer may overdraw a bounded amount of
+    // COGS past the block so an in-flight document still finishes. The overshoot
+    // stays on the meter and is collected on the next successful top-up.
+    const grace = evaluateGrace({
+      optIn: ledger.grace_opt_in,
       meterUsd,
-      thresholdUsd: cfg.thresholdUsd,
-    };
+      anchorUsd: ledger.grace_anchor_usd,
+      bufferUsd: graceBufferFor(ledger, cfg),
+    });
+    if (grace.allowed) {
+      return {
+        allowed: true,
+        status: ledger.status,
+        meterUsd,
+        thresholdUsd: cfg.thresholdUsd,
+        grace: true,
+        graceRemainingUsd: grace.graceRemainingUsd,
+      };
+    }
+
+    return { allowed: false, reason, status: ledger.status, meterUsd, thresholdUsd: cfg.thresholdUsd };
   }
   return { allowed: true, status: "ok", meterUsd, thresholdUsd: cfg.thresholdUsd };
 }
@@ -510,6 +595,10 @@ export async function getBillingSummary(userId: string): Promise<BillingSummary>
       hasPaymentMethod: true,
       lifetimeTopUps: 0,
       lifetimeTopUpUsd: 0,
+      graceOptIn: false,
+      graceBufferUsd: cfg.graceBufferUsd,
+      graceRemainingUsd: cfg.graceBufferUsd,
+      inGrace: false,
     };
   }
 
@@ -519,12 +608,23 @@ export async function getBillingSummary(userId: string): Promise<BillingSummary>
   const limit = limitFor(ledger, cfg);
   const ctx = await resolvePaymentContext(serviceDb, userId);
 
+  const blocked = ledger.status === "pending" || ledger.status === "blocked";
+  const graceBufferUsd = graceBufferFor(ledger, cfg);
+  const grace = evaluateGrace({
+    optIn: ledger.grace_opt_in,
+    meterUsd,
+    anchorUsd: ledger.grace_anchor_usd,
+    bufferUsd: graceBufferUsd,
+  });
+
   return {
     ...base,
     exempt: false,
     status: ledger.status,
     blockReason: ledger.status === "pending" ? "topup_pending" : ledger.block_reason,
-    allowed: ledger.status === "ok",
+    // Allowed when serving normally OR when completion grace is currently holding
+    // a block open for an opted-in customer.
+    allowed: ledger.status === "ok" || (blocked && grace.allowed),
     meterUsd,
     untilNextTopUpUsd: roundUsd(Math.max(0, cfg.thresholdUsd - meterUsd)),
     monthlyLimitUsd: limit,
@@ -534,6 +634,11 @@ export async function getBillingSummary(userId: string): Promise<BillingSummary>
     hasPaymentMethod: !("error" in ctx),
     lifetimeTopUps: Number(ledger.total_topups),
     lifetimeTopUpUsd: Number(ledger.total_topup_usd),
+    graceOptIn: ledger.grace_opt_in,
+    graceBufferUsd,
+    // When blocked, show what's left of the buffer; otherwise the full buffer.
+    graceRemainingUsd: blocked ? grace.graceRemainingUsd : graceBufferUsd,
+    inGrace: blocked && grace.allowed,
   };
 }
 
@@ -566,6 +671,7 @@ export async function setMonthlyLimit(userId: string, limitUsd: number): Promise
         status: "ok",
         block_reason: null,
         cycle_id: randomUUID(),
+        grace_anchor_usd: null,
         updated_at: new Date().toISOString(),
       })
       .eq("user_id", userId);
@@ -576,6 +682,22 @@ export async function setMonthlyLimit(userId: string, limitUsd: number): Promise
     }
   }
 
+  return getBillingSummary(userId);
+}
+
+/**
+ * Toggle opt-in completion grace for a customer. When enabled, a blocked ledger
+ * (pending / failed / limit reached) will still serve AI requests up to the
+ * bounded grace buffer so an in-flight document can finish; the overshoot is
+ * collected on the next successful top-up.
+ */
+export async function setGraceOptIn(userId: string, optIn: boolean): Promise<BillingSummary> {
+  const serviceDb = createServiceClient();
+  await loadLedger(serviceDb, userId); // ensure a ledger row exists
+  await serviceDb
+    .from("top_up_ledger")
+    .update({ grace_opt_in: optIn, updated_at: new Date().toISOString() })
+    .eq("user_id", userId);
   return getBillingSummary(userId);
 }
 
@@ -598,6 +720,7 @@ export async function retryTopUp(userId: string): Promise<BillingGate> {
       status: "ok",
       block_reason: null,
       cycle_id: randomUUID(),
+      grace_anchor_usd: null,
       updated_at: new Date().toISOString(),
     })
     .eq("user_id", userId);
