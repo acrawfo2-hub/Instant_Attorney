@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { getPracticeArea } from "@/lib/practice-areas";
+import { detectFinancialDisclosure, freeChatFinanceNotice } from "@/lib/financial-disclosure-detector";
 
 type Role = "user" | "assistant";
 
@@ -72,6 +73,7 @@ export default function FreeChatPage() {
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([INITIAL_MESSAGE]);
   const [input, setInput] = useState("");
+  const [financeNotice, setFinanceNotice] = useState(false);
   const [loading, setLoading] = useState(false);
   const [streamingText, setStreamingText] = useState("");
   const [chatTruncated, setChatTruncated] = useState(false);
@@ -110,6 +112,10 @@ export default function FreeChatPage() {
     e.preventDefault();
     const text = input.trim();
     if (!text || loading) return;
+
+    // Non-blocking nudge: this free chat isn't privileged, so keep detailed
+    // finances out of it. We never stop the send — just surface a gentle notice.
+    if (detectFinancialDisclosure(text).triggered) setFinanceNotice(true);
 
     const userMessage: Message = { role: "user", content: text };
     const nextMessages = [...messages, userMessage];
@@ -316,6 +322,33 @@ export default function FreeChatPage() {
 
       {/* INPUT AREA */}
       <div className="fc-input-area">
+        {financeNotice && (
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              alignItems: "flex-start",
+              background: "rgba(200,169,110,0.12)",
+              border: "1px solid rgba(200,169,110,0.4)",
+              borderRadius: 10,
+              padding: "10px 12px",
+              margin: "0 0 10px",
+              fontSize: 12.5,
+              color: "var(--brand-text-md)",
+              lineHeight: 1.5,
+            }}
+          >
+            <span style={{ flex: 1 }}>
+              {freeChatFinanceNotice()}{" "}
+              <button onClick={() => router.push("/register")} style={{ background: "none", border: "none", color: "var(--brand-navy)", fontWeight: 700, cursor: "pointer", padding: 0, textDecoration: "underline" }}>
+                Start Phase II
+              </button>
+            </span>
+            <button onClick={() => setFinanceNotice(false)} aria-label="Dismiss" style={{ background: "none", border: "none", color: "var(--brand-text-lt)", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0 }}>
+              ×
+            </button>
+          </div>
+        )}
         <form className="fc-input-form" onSubmit={sendMessage}>
           <textarea
             ref={textareaRef}

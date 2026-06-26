@@ -17,6 +17,7 @@ import {
   requiresNoSecretsAck,
   type Range,
 } from "@/lib/financial-picture";
+import { detectGaps, type FinancialMatterArea } from "@/lib/financial-schedules";
 import type {
   FinancialItem,
   FinancialCategory,
@@ -66,6 +67,7 @@ interface FormState {
   value_basis: ValueBasis;
   valued_as_of: string;
   acquisition_note: string;
+  source_attachment_id: string;
 }
 
 const blankForm: FormState = {
@@ -79,6 +81,7 @@ const blankForm: FormState = {
   value_basis: "client_estimate",
   valued_as_of: "",
   acquisition_note: "",
+  source_attachment_id: "",
 };
 
 const PARTNER_ROLE_LABEL: Record<PartnerRole, string> = {
@@ -94,6 +97,8 @@ export default function FinancialPicture({
   disclosureAcked,
   context: initialContext,
   isFamilyLaw,
+  area,
+  attachments,
   backHref,
 }: {
   caseFileId: string;
@@ -101,6 +106,8 @@ export default function FinancialPicture({
   disclosureAcked: boolean;
   context: Context;
   isFamilyLaw: boolean;
+  area: FinancialMatterArea;
+  attachments: { id: string; file_name: string }[];
   backHref: string;
 }) {
   const [acked, setAcked] = useState(disclosureAcked);
@@ -114,12 +121,14 @@ export default function FinancialPicture({
   const [ctxSaved, setCtxSaved] = useState(false);
 
   const summary = useMemo(() => summarizeFinancialPicture(items), [items]);
+  const gapReport = useMemo(() => detectGaps(area, items), [area, items]);
+  const attachmentName = useMemo(() => new Map(attachments.map((a) => [a.id, a.file_name])), [attachments]);
   const roles = allowedPartnerRoles(isFamilyLaw);
   const needNoSecrets = requiresNoSecretsAck(ctx.representation_scope, ctx.partner_role);
 
-  function startAdd() {
+  function startAdd(category?: FinancialCategory) {
     setErr(null);
-    setForm({ ...blankForm });
+    setForm({ ...blankForm, ...(category ? { category } : {}) });
   }
   function startEdit(it: FinancialItem) {
     setErr(null);
@@ -135,6 +144,7 @@ export default function FinancialPicture({
       value_basis: it.value_basis,
       valued_as_of: it.valued_as_of ?? "",
       acquisition_note: it.acquisition_note ?? "",
+      source_attachment_id: it.source_attachment_id ?? "",
     });
   }
 
@@ -273,7 +283,7 @@ export default function FinancialPicture({
       <div style={card}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
           <h2 style={cardTitle}>Assets, debts &amp; income</h2>
-          {!form && <button onClick={startAdd} style={btnPrimary}>+ Add item</button>}
+          {!form && <button onClick={() => startAdd()} style={btnPrimary}>+ Add item</button>}
         </div>
 
         {form && (
@@ -319,7 +329,18 @@ export default function FinancialPicture({
               <Field label="How / when acquired (helps characterize it)" span2>
                 <input value={form.acquisition_note} onChange={(e) => setForm({ ...form, acquisition_note: e.target.value })} placeholder="e.g. bought 2019 during marriage; $40k down from my inheritance" style={input} />
               </Field>
+              {attachments.length > 0 && (
+                <Field label="Backing document (optional — a much stronger source)" span2>
+                  <select value={form.source_attachment_id} onChange={(e) => setForm({ ...form, source_attachment_id: e.target.value })} style={input}>
+                    <option value="">None — this is my estimate</option>
+                    {attachments.map((a) => <option key={a.id} value={a.id}>{a.file_name}</option>)}
+                  </select>
+                </Field>
+              )}
             </div>
+            <p style={{ fontSize: 11.5, color: textLt, margin: "8px 0 0" }}>
+              No document? No problem — give your best estimate and keep going. You never have to stop here.
+            </p>
             {err && <p style={{ color: "#b91c1c", fontSize: 12.5, margin: "8px 0 0" }}>{err}</p>}
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
               <button onClick={saveItem} disabled={busy} style={btnPrimary}>{busy ? "Saving…" : form.id ? "Save changes" : "Add item"}</button>
@@ -354,6 +375,9 @@ export default function FinancialPicture({
                           <span style={{ fontSize: 10.5, fontWeight: 700, color: vb.color, background: vb.bg, padding: "1px 7px", borderRadius: 999 }}>{vb.label}</span>
                         </div>
                         {it.acquisition_note && <div style={{ fontSize: 12, color: textLt, marginTop: 3 }}>{it.acquisition_note}</div>}
+                        {it.source_attachment_id && attachmentName.get(it.source_attachment_id) && (
+                          <div style={{ fontSize: 11.5, color: "#3a5e86", marginTop: 3 }}>📎 {attachmentName.get(it.source_attachment_id)}</div>
+                        )}
                       </div>
                       <div style={{ textAlign: "right", flexShrink: 0 }}>
                         <div style={{ fontSize: 13.5, fontWeight: 600, color: navy, fontVariantNumeric: "tabular-nums" }}>{fmtRange({ low: it.value_low ?? 0, high: it.value_high ?? 0 })}</div>
@@ -369,6 +393,52 @@ export default function FinancialPicture({
             </div>
           )
         )}
+      </div>
+
+      {/* Gaps — suggestions that help, never blockers */}
+      {(gapReport.gaps.length > 0 || gapReport.inferences.length > 0) && (
+        <div style={card}>
+          <h2 style={cardTitle}>What might be worth adding</h2>
+          <p style={{ fontSize: 12.5, color: textLt, margin: "2px 0 12px" }}>
+            Suggestions only — you can keep going either way.{" "}
+            {gapReport.requiredTotal > 0 ? `${gapReport.requiredCovered}/${gapReport.requiredTotal} key categories covered.` : ""}
+          </p>
+          {gapReport.gaps.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {gapReport.gaps.map((g) => (
+                <button
+                  key={g.key}
+                  onClick={() => startAdd(g.suggestCategory)}
+                  style={{ ...btnGhost, borderColor: g.required ? gold : border, display: "inline-flex", flexDirection: "column", alignItems: "flex-start", gap: 1, textAlign: "left", padding: "7px 12px" }}
+                >
+                  <span style={{ fontWeight: 600 }}>+ {g.label}</span>
+                  <span style={{ fontSize: 10.5, color: textLt, fontWeight: 400 }}>{g.hint}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {gapReport.inferences.length > 0 && (
+            <ul style={{ margin: "12px 0 0", paddingLeft: 16, fontSize: 12.5, color: textMd, lineHeight: 1.5 }}>
+              {gapReport.inferences.map((inf, i) => <li key={i}>{inf.message}</li>)}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {/* Always push forward — estimates are enough; never stall on facts */}
+      <div style={{ ...card, background: navy, border: "none" }}>
+        <div style={{ fontSize: 15.5, fontWeight: 600, fontFamily: serif, marginBottom: 4, color: "var(--brand-cream-heading)" }}>
+          Don&apos;t wait on perfect numbers
+        </div>
+        <p style={{ fontSize: 13, lineHeight: 1.55, margin: "0 0 12px", color: "var(--brand-cream-text)" }}>
+          Estimates are enough to move forward. We&apos;ll mark what&apos;s still your estimate and verify it before anything is signed — so you never have to stall here.
+        </p>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <Link href={`/chat?caseFileId=${caseFileId}`} style={{ ...btnPrimary, textDecoration: "none" }}>Get my documents drafted →</Link>
+          <Link href="/dashboard" style={{ background: "transparent", color: "var(--brand-cream-heading)", border: "1px solid rgba(255,255,255,0.3)", borderRadius: 7, padding: "8px 16px", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>
+            Talk to the attorney →
+          </Link>
+        </div>
       </div>
 
       <p style={{ fontSize: 12, color: textLt, lineHeight: 1.5, margin: "0 2px" }}>

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { BYPASS_USER_ID } from "@/lib/types";
 import type { FinancialItem } from "@/lib/types";
-import { looksLikeFamilyMatter } from "@/lib/family-instruments";
+import { detectFinancialArea } from "@/lib/financial-schedules";
 import AccountMenu from "@/components/AccountMenu";
 import FinancialPicture from "@/components/FinancialPicture";
 
@@ -40,15 +40,15 @@ export default async function FinancialsPage({ params }: { params: Promise<{ id:
 
   if (!caseFile || caseFile.user_id !== userId) notFound();
 
-  const { data: itemRows } = await db
-    .from("financial_items")
-    .select(ITEM_FIELDS)
-    .eq("case_file_id", id)
-    .neq("status", "removed")
-    .order("created_at", { ascending: true });
+  const [{ data: itemRows }, { data: attachmentRows }] = await Promise.all([
+    db.from("financial_items").select(ITEM_FIELDS).eq("case_file_id", id).neq("status", "removed").order("created_at", { ascending: true }),
+    db.from("attachments").select("id, file_name").eq("case_file_id", id).eq("status", "ready").order("created_at", { ascending: false }),
+  ]);
 
   const items = (itemRows ?? []) as FinancialItem[];
-  const isFamilyLaw = looksLikeFamilyMatter(caseFile.matter_subtype ?? "");
+  const attachments = (attachmentRows ?? []) as { id: string; file_name: string }[];
+  const area = detectFinancialArea(caseFile.matter_subtype ?? "");
+  const isFamilyLaw = area === "family";
   const backHref = `/dashboard/${id}`;
   const title = caseFile.title || "Your file";
 
@@ -81,6 +81,8 @@ export default async function FinancialsPage({ params }: { params: Promise<{ id:
             joint_no_secrets_ack: !!caseFile.joint_no_secrets_ack,
           }}
           isFamilyLaw={isFamilyLaw}
+          area={area}
+          attachments={attachments}
           backHref={backHref}
         />
       </main>

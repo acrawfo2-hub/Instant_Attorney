@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { BYPASS_USER_ID, type FinancialItem } from "@/lib/types";
-import { validateFinancialItemInput } from "@/lib/financial-picture";
+import { validateFinancialItemInput, provenanceForSource } from "@/lib/financial-picture";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
@@ -40,6 +40,17 @@ async function resolveOwnedCase(caseFileId: string): Promise<OwnedCase | { error
 const FIELDS =
   "id, case_file_id, user_id, category, label, acquisition_note, owner, characterization, exempt_status, value_low, value_high, value_basis, valued_as_of, provenance, verification_status, source_attachment_id, phase_collected, privileged, red_flags, needs_attorney_review, status, superseded_by, created_at, updated_at";
 
+/** Validate that a referenced source attachment exists and belongs to this case. */
+async function resolveSourceAttachment(owned: OwnedCase, raw: unknown): Promise<string | null> {
+  if (typeof raw !== "string" || !raw) return null;
+  const { data } = await owned.write
+    .from("attachments")
+    .select("id, case_file_id")
+    .eq("id", raw)
+    .maybeSingle();
+  return data && data.case_file_id === owned.caseFile.id ? data.id : null;
+}
+
 /** List the active financial items for a case. */
 export async function GET(req: NextRequest) {
   const caseFileId = req.nextUrl.searchParams.get("caseFileId") ?? "";
@@ -72,6 +83,10 @@ export async function POST(req: NextRequest) {
   const errors = validateFinancialItemInput(b);
   if (errors.length) return NextResponse.json({ error: errors[0], errors }, { status: 400 });
 
+  // Optional source document — a stronger source of truth, never required.
+  const sourceId = await resolveSourceAttachment(owned, b.source_attachment_id);
+  const ground = provenanceForSource(!!sourceId);
+
   const toNum = (v: unknown) => (v === undefined || v === null || v === "" ? null : Number(v));
   const row = {
     case_file_id: owned.caseFile.id,
@@ -86,10 +101,12 @@ export async function POST(req: NextRequest) {
     value_high: toNum(b.value_high),
     value_basis: b.value_basis ?? "client_estimate",
     valued_as_of: typeof b.valued_as_of === "string" && b.valued_as_of ? b.valued_as_of : null,
-    // Provenance/verification are never client-set: a new item is an assertion
-    // until a document or the attorney confirms it.
-    provenance: "client_asserted",
-    verification_status: "unverified",
+    source_attachment_id: sourceId,
+    // Provenance/verification follow the source: a linked document makes it
+    // document-supported; otherwise it's the client's estimate. Attorney
+    // verification (the top tier) is set later in the review queue.
+    provenance: ground.provenance,
+    verification_status: ground.verification_status,
     phase_collected: "phase_2_privileged",
     privileged: true,
   };

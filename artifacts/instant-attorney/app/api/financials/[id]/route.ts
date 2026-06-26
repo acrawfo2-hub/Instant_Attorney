@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { BYPASS_USER_ID, type FinancialItem } from "@/lib/types";
-import { validateFinancialItemInput } from "@/lib/financial-picture";
+import { validateFinancialItemInput, provenanceForSource } from "@/lib/financial-picture";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
@@ -20,12 +20,16 @@ async function resolveOwnedItem(itemId: string) {
     userId = user.id;
   }
   const write = createServiceClient();
-  const { data: item } = await write.from("financial_items").select("id, case_file_id, user_id").eq("id", itemId).maybeSingle();
+  const { data: item } = await write
+    .from("financial_items")
+    .select("id, case_file_id, user_id, verification_status")
+    .eq("id", itemId)
+    .maybeSingle();
   if (!item || item.user_id !== userId) return { error: "Not found", status: 404 } as const;
   // Confirm the case is still owned by this user.
   const { data: cf } = await write.from("case_files").select("user_id").eq("id", item.case_file_id).maybeSingle();
   if (!cf || cf.user_id !== userId) return { error: "Not found", status: 404 } as const;
-  return { userId, write, itemId } as const;
+  return { userId, write, itemId, caseFileId: item.case_file_id as string, verificationStatus: item.verification_status as string } as const;
 }
 
 /** Edit an item's user-supplied fields (never its provenance/verification). */
@@ -40,6 +44,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const errors = validateFinancialItemInput(b);
   if (errors.length) return NextResponse.json({ error: errors[0], errors }, { status: 400 });
 
+  // Optional source document. Re-linking refreshes the document-supported tier,
+  // but never downgrades an item the attorney has already verified.
+  let sourceId: string | null = null;
+  if (typeof b.source_attachment_id === "string" && b.source_attachment_id) {
+    const { data: att } = await owned.write
+      .from("attachments")
+      .select("id, case_file_id")
+      .eq("id", b.source_attachment_id)
+      .maybeSingle();
+    if (att && att.case_file_id === owned.caseFileId) sourceId = att.id;
+  }
+  const ground = provenanceForSource(!!sourceId);
+
   const toNum = (v: unknown) => (v === undefined || v === null || v === "" ? null : Number(v));
   // Allowlist of client-editable columns only.
   const update: Record<string, unknown> = {
@@ -53,8 +70,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     value_high: toNum(b.value_high),
     value_basis: b.value_basis ?? "client_estimate",
     valued_as_of: typeof b.valued_as_of === "string" && b.valued_as_of ? b.valued_as_of : null,
+    source_attachment_id: sourceId,
     updated_at: new Date().toISOString(),
   };
+  if (owned.verificationStatus !== "attorney_verified") {
+    update.provenance = ground.provenance;
+    update.verification_status = ground.verification_status;
+  }
 
   const { data, error } = await owned.write.from("financial_items").update(update).eq("id", id).select(FIELDS).single();
   if (error) return NextResponse.json({ error: "Could not save the change." }, { status: 500 });

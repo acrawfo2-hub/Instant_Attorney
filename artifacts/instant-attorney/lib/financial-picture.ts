@@ -16,6 +16,7 @@ import type {
   ExemptStatus,
   ValueBasis,
   VerificationStatus,
+  FinancialProvenance,
   PartnerRole,
   RepresentationScope,
 } from "./types.ts";
@@ -253,6 +254,20 @@ export function verificationExceedsCeiling(
   partnerRole: PartnerRole | undefined
 ): boolean {
   return VERIFICATION_RANK[status] > VERIFICATION_RANK[maxVerificationFor(owner, partnerRole)];
+}
+
+// ── Document grounding ───────────────────────────────────────────────────────
+// Linking a figure to an uploaded statement/appraisal/deed makes it a much
+// better source of truth — but it is always OPTIONAL and never blocks progress.
+// A linked item rises to "document-supported"; an unlinked one stays the client's
+// estimate. Neither stops the client from continuing toward a consult or drafting.
+export function provenanceForSource(hasSource: boolean): {
+  provenance: FinancialProvenance;
+  verification_status: VerificationStatus;
+} {
+  return hasSource
+    ? { provenance: "document_extracted", verification_status: "doc_supported" }
+    : { provenance: "client_asserted", verification_status: "unverified" };
 }
 
 // ── Validation ───────────────────────────────────────────────────────────────
