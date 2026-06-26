@@ -6,12 +6,13 @@ import {
   AlignmentType,
   Packer,
   BorderStyle,
+  Header,
   Table,
   TableRow,
   TableCell,
   WidthType,
 } from "docx";
-import type { CaseFile, FactItem, Profile, WizardType } from "./types";
+import type { CaseFile, DocumentStatus, FactItem, Profile, WizardType } from "./types";
 import { placeholderFields } from "./wizard-parsing";
 
 // Build a safe Content-Disposition value for a .docx download. HTTP headers must
@@ -117,6 +118,73 @@ async function pack(doc: Document): Promise<Buffer> {
   return Buffer.from(await Packer.toBuffer(doc));
 }
 
+// ── Pre-review watermark ──────────────────────────────────────────────────────
+// AI Philosophy §4.2 and Terms of Service §7 require that every AI-generated
+// document is watermarked/labeled as a pre-review draft — and that it must not be
+// filed, signed, served, or relied upon — *until* a licensed attorney approves
+// it. The word "until" is the contract: the watermark is a signal of review
+// status, present before approval and gone once approved. We render it both as a
+// repeating page header (so it appears on EVERY page, not just the last) and as a
+// closing footer line, so it cannot be missed by reading or printing only part of
+// the document.
+
+// A document is past the watermark stage only once an attorney has approved it
+// (or it has been delivered as approved). Every earlier state — pre_warmed,
+// draft, pending_review, changes_requested — is a pre-review draft.
+export function isAttorneyApproved(status: DocumentStatus | null | undefined): boolean {
+  return status === "approved" || status === "delivered";
+}
+
+const DRAFT_BANNER_HEADLINE = "DRAFT — NOT REVIEWED OR APPROVED BY AN ATTORNEY";
+const DRAFT_BANNER_DETAIL =
+  "Do not file, sign, serve, or rely on this document until a licensed attorney approves it.";
+
+// Repeating per-page header banner for pre-review drafts. Lives in the page
+// margin, so it prints on every page above the body content.
+function draftWatermarkHeader(): Header {
+  return new Header({
+    children: [
+      new Paragraph({
+        children: [new TextRun({ text: DRAFT_BANNER_HEADLINE, bold: true, color: "CC0000", size: 18 })],
+        alignment: AlignmentType.CENTER,
+      }),
+      new Paragraph({
+        children: [new TextRun({ text: DRAFT_BANNER_DETAIL, italics: true, color: "CC0000", size: 16 })],
+        alignment: AlignmentType.CENTER,
+        border: { bottom: { style: BorderStyle.SINGLE, size: 1, color: "CC0000" } },
+      }),
+    ],
+  });
+}
+
+// Section `headers` entry for a draft, or undefined once approved (no watermark).
+function draftSectionHeaders(approved: boolean): { default: Header } | undefined {
+  return approved ? undefined : { default: draftWatermarkHeader() };
+}
+
+// Closing footer line for a pre-review draft. Returns nothing once approved.
+function draftFooterParagraphs(approved: boolean, jurisdiction?: string | null): Paragraph[] {
+  if (approved) return [];
+  return [
+    new Paragraph({ text: "" }),
+    new Paragraph({
+      border: { top: { style: BorderStyle.SINGLE, size: 1 } },
+      text: "",
+    }),
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: `${DRAFT_BANNER_HEADLINE} · ${DRAFT_BANNER_DETAIL} · Crawford Law PLLC · ${new Date().toLocaleDateString()} · ${jurisdiction ?? "TX"}`,
+          bold: true,
+          size: 16,
+          color: "CC0000",
+        }),
+      ],
+      alignment: AlignmentType.CENTER,
+    }),
+  ];
+}
+
 // ── Intake Summary ───────────────────────────────────────────────────────────
 
 async function generateIntakeSummary({ wizardData, caseFile, facts, profile }: DocGenInput): Promise<Buffer> {
@@ -125,6 +193,9 @@ async function generateIntakeSummary({ wizardData, caseFile, facts, profile }: D
 
   const doc = new Document({
     sections: [{
+      // Generated at submission — always a pre-review draft until an attorney
+      // approves it, so the per-page watermark always applies here.
+      headers: { default: draftWatermarkHeader() },
       children: [
         ...firmHeader(),
         new Paragraph({ text: "CLIENT INTAKE SUMMARY", heading: HeadingLevel.HEADING_1, alignment: AlignmentType.CENTER }),
@@ -200,6 +271,9 @@ async function generateIntakeSummary({ wizardData, caseFile, facts, profile }: D
 async function generateDemandLetter({ wizardData }: DocGenInput): Promise<Buffer> {
   const doc = new Document({
     sections: [{
+      // Generated at submission — always a pre-review draft until an attorney
+      // approves it, so the per-page watermark always applies here.
+      headers: { default: draftWatermarkHeader() },
       children: [
         ...firmHeader(),
         body(new Date().toLocaleDateString()),
@@ -252,6 +326,9 @@ async function generateDemandLetter({ wizardData }: DocGenInput): Promise<Buffer
 async function generateComplaintLetter({ wizardData }: DocGenInput): Promise<Buffer> {
   const doc = new Document({
     sections: [{
+      // Generated at submission — always a pre-review draft until an attorney
+      // approves it, so the per-page watermark always applies here.
+      headers: { default: draftWatermarkHeader() },
       children: [
         ...firmHeader(),
         body(new Date().toLocaleDateString()),
@@ -314,6 +391,9 @@ async function generateComplaintLetter({ wizardData }: DocGenInput): Promise<Buf
 async function generateDraftContract({ wizardData }: DocGenInput): Promise<Buffer> {
   const doc = new Document({
     sections: [{
+      // Generated at submission — always a pre-review draft until an attorney
+      // approves it, so the per-page watermark always applies here.
+      headers: { default: draftWatermarkHeader() },
       children: [
         ...firmHeader(),
         new Paragraph({ text: str(wizardData.contract_type).toUpperCase(), heading: HeadingLevel.HEADING_1, alignment: AlignmentType.CENTER }),
@@ -393,6 +473,9 @@ async function generateDraftContract({ wizardData }: DocGenInput): Promise<Buffe
 async function generateDraftWaiver({ wizardData }: DocGenInput): Promise<Buffer> {
   const doc = new Document({
     sections: [{
+      // Generated at submission — always a pre-review draft until an attorney
+      // approves it, so the per-page watermark always applies here.
+      headers: { default: draftWatermarkHeader() },
       children: [
         ...firmHeader(),
         new Paragraph({ text: str(wizardData.waiver_type).toUpperCase(), heading: HeadingLevel.HEADING_1, alignment: AlignmentType.CENTER }),
@@ -436,6 +519,9 @@ async function generateWillsTrusts({ wizardData }: DocGenInput): Promise<Buffer>
 
   const doc = new Document({
     sections: [{
+      // Generated at submission — always a pre-review draft until an attorney
+      // approves it, so the per-page watermark always applies here.
+      headers: { default: draftWatermarkHeader() },
       children: [
         ...firmHeader(),
         new Paragraph({ text: instrument.toUpperCase(), heading: HeadingLevel.HEADING_1, alignment: AlignmentType.CENTER }),
@@ -495,6 +581,9 @@ async function generateWillsTrusts({ wizardData }: DocGenInput): Promise<Buffer>
 async function generateDocReview({ wizardData }: DocGenInput): Promise<Buffer> {
   const doc = new Document({
     sections: [{
+      // Generated at submission — always a pre-review draft until an attorney
+      // approves it, so the per-page watermark always applies here.
+      headers: { default: draftWatermarkHeader() },
       children: [
         ...firmHeader(),
         new Paragraph({ text: "DOCUMENT REVIEW ANALYSIS", heading: HeadingLevel.HEADING_1, alignment: AlignmentType.CENTER }),
@@ -674,8 +763,13 @@ export async function generateDocxFromText(
   // Nullable on purpose: the attorney download path reads the document under the
   // attorney's session, and RLS on case_files can return null for a client's row
   // even when the document row comes back. A null here must never crash the build.
-  caseFile: { matter_subtype?: string | null; jurisdiction?: string | null } | null
+  caseFile: { matter_subtype?: string | null; jurisdiction?: string | null } | null,
+  // Drives the pre-review watermark. Anything other than an attorney-approved
+  // status (including a null/unknown status) is treated as a pre-review draft and
+  // is watermarked — fail safe, never silently un-watermarked.
+  status: DocumentStatus | null = null
 ): Promise<Buffer> {
+  const approved = isAttorneyApproved(status);
   const lines = draftText.split("\n");
 
   const children: (Paragraph | Table)[] = [
@@ -763,27 +857,12 @@ export async function generateDocxFromText(
     children.push(new Paragraph({ children: inlineRuns(trimmed) }));
   }
 
-  // Footer
-  children.push(
-    new Paragraph({ text: "" }),
-    new Paragraph({
-      border: { top: { style: BorderStyle.SINGLE, size: 1 } },
-      text: "",
-    }),
-    new Paragraph({
-      children: [
-        new TextRun({
-          text: `DRAFT — FOR ATTORNEY REVIEW ONLY · Crawford Law PLLC · ${new Date().toLocaleDateString()} · ${caseFile?.jurisdiction ?? "TX"} · Not for distribution`,
-          italics: true,
-          size: 16,
-          color: "888888",
-        }),
-      ],
-      alignment: AlignmentType.CENTER,
-    })
-  );
+  // Pre-review draft footer (removed once an attorney approves the document).
+  children.push(...draftFooterParagraphs(approved, caseFile?.jurisdiction));
 
-  const doc = new Document({ sections: [{ children }] });
+  const doc = new Document({
+    sections: [{ headers: draftSectionHeaders(approved), children }],
+  });
   return pack(doc);
 }
 

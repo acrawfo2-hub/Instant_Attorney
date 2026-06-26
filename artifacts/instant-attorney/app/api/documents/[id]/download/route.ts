@@ -63,7 +63,11 @@ export async function GET(
 
   let buffer: Buffer;
   try {
-    buffer = await generateDocxFromText(doc.title, text, (caseFile as CaseFile) ?? null);
+    // Pass the document status so the renderer watermarks pre-review drafts and
+    // drops the watermark once an attorney has approved the document (AI
+    // Philosophy §4.2, Terms §7). A child (critical_review/second_draft) carries
+    // its own status, set to "approved" alongside its parent on approval.
+    buffer = await generateDocxFromText(doc.title, text, (caseFile as CaseFile) ?? null, doc.status);
   } catch (err) {
     console.error("[documents/download] docx generation error:", err);
     return NextResponse.json({ error: "Could not build the document file" }, { status: 500 });
