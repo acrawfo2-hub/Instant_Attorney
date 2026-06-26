@@ -21,7 +21,7 @@ test("slugs are unique", () => {
 
 test("covers the slugs the landing page links to", () => {
   // Tiles in app/page.tsx route to /free-chat?area=<slug>.
-  for (const slug of ["contract", "employment", "harassment", "business", "estate", "landlord", "hoa", "family", "personal-injury", "debt", "nda", "other"]) {
+  for (const slug of ["contract", "employment", "harassment", "business", "estate", "landlord", "hoa", "family", "personal-injury", "debt", "defamation", "nda", "other"]) {
     assert.ok(isKnownPracticeArea(slug), `missing practice area: ${slug}`);
   }
 });

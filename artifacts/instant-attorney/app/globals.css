@@ -6695,3 +6695,117 @@ mark.atty-placeholder {
   color: var(--brand-text-lt);
 }
 
+/* Live roadmap spine — progressive disclosure */
+.lf-roadmap-show-all {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--brand-navy);
+  background: transparent;
+  border: 1px solid var(--brand-border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.lf-roadmap-show-all:hover {
+  background: rgba(26, 43, 74, 0.05);
+}
+.lf-roadmap-stage-toggle {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--brand-navy);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.lf-roadmap-tool-collapsed {
+  margin-bottom: 12px;
+}
+.lf-roadmap-tool-collapsed-summary {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand-text-md);
+  cursor: pointer;
+  padding: 10px 14px;
+  border: 1px dashed var(--brand-border);
+  border-radius: 8px;
+  list-style: none;
+}
+.lf-roadmap-tool-collapsed-summary::-webkit-details-marker { display: none; }
+.lf-roadmap-tool-collapsed-hint {
+  font-weight: 400;
+  color: var(--brand-text-lt);
+}
+.lf-roadmap-tool-collapsed-body {
+  margin-top: 8px;
+}
+
+.lf-roadmap-toast {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1d5237;
+  background: #e3f1e8;
+  border: 1px solid rgba(45, 122, 79, 0.35);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 0 0 14px;
+}
+.lf-roadmap-corrections {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  align-items: flex-start;
+}
+.lf-roadmap-correct-btn {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--brand-navy);
+  background: rgba(200, 169, 110, 0.18);
+  border: 1px solid rgba(200, 169, 110, 0.55);
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.lf-roadmap-correct-btn:hover:not(:disabled) {
+  background: rgba(200, 169, 110, 0.3);
+}
+.lf-roadmap-correct-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.lf-roadmap-correct-btn-muted {
+  background: transparent;
+  border-color: var(--brand-border);
+}
+.lf-roadmap-dispute-form {
+  width: 100%;
+  margin-top: 4px;
+}
+.lf-roadmap-dispute-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--brand-text-md);
+  margin-bottom: 4px;
+}
+.lf-roadmap-dispute-input {
+  width: 100%;
+  font-size: 13px;
+  line-height: 1.45;
+  border: 1px solid var(--brand-border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  resize: vertical;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+.lf-roadmap-dispute-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+

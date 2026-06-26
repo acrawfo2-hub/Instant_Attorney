@@ -10,14 +10,11 @@ import CancelDocButton from "@/components/CancelDocButton";
 import FactsPanel from "@/components/FactsPanel";
 import { placeholderFields } from "@/lib/wizard-parsing";
 import { computeMissionControl } from "@/lib/mission-control";
-import { looksLikeFamilyMatter } from "@/lib/family-instruments";
-import { looksLikeDebtMatter } from "@/lib/debt-instruments";
-import { looksLikePersonalInjuryMatter } from "@/lib/pi-instruments";
-import { buildFamilyRoadmap } from "@/lib/family-roadmap";
-import { buildMatterRoadmap } from "@/lib/matter-roadmap";
-import { buildPiRoadmap } from "@/lib/pi-roadmap";
-import FamilyRoadmap from "@/components/FamilyRoadmap";
-import PiRoadmap from "@/components/PiRoadmap";
+import { detectMatterFlags, resolveRoadmapForCase } from "@/lib/roadmap-build";
+import { computeRoadmapFingerprint } from "@/lib/roadmap-fingerprint";
+import type { RoadmapAiOverlay } from "@/lib/roadmap-types";
+import RoadmapSpine from "@/components/RoadmapSpine";
+import RoadmapToolGroup from "@/components/RoadmapToolGroup";
 import type { CaseFile, FactItem, Document, Profile, WizardType, ConsultRequest, RequestedAttachment, GovFormInstrument, Attachment } from "@/lib/types";
 import { isValidWizardType } from "@/lib/document-utils";
 import { WIZARD_LABELS, docTypeLabel, personDisplayName, isDocumentOutOfDate, coerceWizardType } from "@/lib/types";
@@ -204,6 +201,7 @@ interface ClientFileViewProps {
   clientProfile?: Profile;
   consultRequest?: ConsultRequest | null;
   hasConsultSub?: boolean;
+  roadmapOverlay?: RoadmapAiOverlay;
 }
 
 export default function ClientFileView({
@@ -218,6 +216,7 @@ export default function ClientFileView({
   clientProfile,
   consultRequest,
   hasConsultSub = false,
+  roadmapOverlay = {},
 }: ClientFileViewProps) {
   const childrenByParent = childDocuments.reduce<Record<string, Document[]>>((acc, child) => {
     if (!child.parent_document_id) return acc;
@@ -272,35 +271,35 @@ export default function ClientFileView({
   // Surface the child-support estimator only on family matters, detected by
   // reusing the family-instrument keyword matcher over the matter's own text.
   const matterText = `${caseFile.matter_subtype ?? ""} ${caseFile.summary ?? ""}`;
-  const isFamilyMatter = looksLikeFamilyMatter(matterText);
-  const isDebtMatter = looksLikeDebtMatter(matterText);
-  const isPiMatter = looksLikePersonalInjuryMatter(matterText);
-  const familyRoadmap = !isAttorney
-    ? isFamilyMatter
-      ? buildFamilyRoadmap({
-          matterSubtype: caseFile.matter_subtype,
-          matterText,
-          facts: confirmed.map((f) => f.description),
-          documents: documents.map((d) => ({ title: d.title, status: d.status })),
-        })
-      : isPiMatter
-        ? null
-        : buildMatterRoadmap({
-            matterSubtype: caseFile.matter_subtype,
-            matterText,
-            facts: confirmed.map((f) => f.description),
-            documents: documents.map((d) => ({ title: d.title, status: d.status })),
-            hasStrategy: !!caseFile.legal_strategy,
-          })
+  const { isFamilyMatter, isDebtMatter, isDefamationMatter, isEmploymentMatter, isPiMatter } =
+    detectMatterFlags(matterText);
+
+  const resolvedRoadmap = !isAttorney
+    ? resolveRoadmapForCase({
+        caseFile,
+        facts,
+        documents,
+        requestedAttachments,
+        consultRequest: consultRequest ?? null,
+      })
     : null;
-  const piRoadmap =
-    !isAttorney && isPiMatter
-      ? buildPiRoadmap({
-          matterText,
-          facts: confirmed.map((f) => f.description),
-          documents: documents.map((d) => ({ title: d.title, status: d.status })),
+
+  const roadmapFingerprint =
+    resolvedRoadmap
+      ? computeRoadmapFingerprint({
+          caseFile,
+          facts,
+          documents,
+          requestedAttachments,
+          consultRequest: consultRequest ?? null,
+          attachmentCount: attachments.length,
         })
-      : null;
+      : "";
+
+  const hasActiveConsult =
+    Boolean(consultRequest) &&
+    consultRequest?.status !== "cancelled" &&
+    consultRequest?.status !== "completed";
 
   // The client has "brought in a document" once at least one upload exists that
   // didn't fail to store. Document Review only makes sense against a real
@@ -411,6 +410,16 @@ export default function ClientFileView({
         caseFileId={caseFile.id}
         mode={mode}
       />
+
+      {resolvedRoadmap && (
+        <RoadmapSpine
+          resolved={resolvedRoadmap}
+          initialOverlay={roadmapOverlay}
+          fingerprint={roadmapFingerprint}
+          caseFileId={caseFile.id}
+          hasConsult={hasActiveConsult || hasConsultSub}
+        />
+      )}
 
       {/* Attorney banner */}
       {isAttorney && clientProfile && (
@@ -598,14 +607,39 @@ export default function ClientFileView({
         </div>
       )}
 
-      {/* Family Law Roadmap — orients the family tools and documents below it */}
-      {familyRoadmap && <FamilyRoadmap roadmap={familyRoadmap} />}
-
-      {/* Personal Injury Roadmap — orients the PI tools below it */}
-      {piRoadmap && <PiRoadmap roadmap={piRoadmap} />}
+      {/* Employment tools — employment matters only (client mode). */}
+      {!isAttorney && isEmploymentMatter && resolvedRoadmap && (
+        <RoadmapToolGroup
+          sectionId="employment-tools"
+          blueprintKey={resolvedRoadmap.blueprintKey}
+          currentStageKey={resolvedRoadmap.currentStageKey}
+        >
+        <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
+          <div className="lf-card-label">Employment Tools</div>
+          <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
+            Employment deadlines are short and unforgiving. Check what claim you may have and how much time you
+            have left, and — if you were handed a non-compete — see how much of it actually holds up in Texas.
+            General information, not legal advice.
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+            <Link href={`/employment/claim-check?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
+              Check my claim &amp; deadline →
+            </Link>
+            <Link href={`/employment/noncompete?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
+              Is my non-compete enforceable? →
+            </Link>
+          </div>
+        </div>
+        </RoadmapToolGroup>
+      )}
 
       {/* Debt-collection rights — debt matters only (client mode). */}
-      {!isAttorney && isDebtMatter && (
+      {!isAttorney && isDebtMatter && resolvedRoadmap && (
+        <RoadmapToolGroup
+          sectionId="debt-rights"
+          blueprintKey={resolvedRoadmap.blueprintKey}
+          currentStageKey={resolvedRoadmap.currentStageKey}
+        >
         <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
           <div className="lf-card-label">Know Your Debt-Collection Rights</div>
           <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
@@ -617,10 +651,16 @@ export default function ClientFileView({
             See your rights &amp; next steps →
           </Link>
         </div>
+        </RoadmapToolGroup>
       )}
 
       {/* Bankruptcy tools — debt matters only (client mode). */}
-      {!isAttorney && isDebtMatter && (
+      {!isAttorney && isDebtMatter && resolvedRoadmap && (
+        <RoadmapToolGroup
+          sectionId="bankruptcy-tools"
+          blueprintKey={resolvedRoadmap.blueprintKey}
+          currentStageKey={resolvedRoadmap.currentStageKey}
+        >
         <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
           <div className="lf-card-label">Weighing Bankruptcy?</div>
           <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
@@ -632,15 +672,45 @@ export default function ClientFileView({
             <Link href={`/bankruptcy/means-test?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
               Run the means test →
             </Link>
+            <Link href={`/bankruptcy/exemptions?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
+              What would I keep? →
+            </Link>
             <Link href={`/bankruptcy/options?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
               Weigh my options →
             </Link>
           </div>
         </div>
+        </RoadmapToolGroup>
+      )}
+
+      {/* Defamation check — defamation matters only (client mode). */}
+      {!isAttorney && isDefamationMatter && resolvedRoadmap && (
+        <RoadmapToolGroup
+          sectionId="defamation"
+          blueprintKey={resolvedRoadmap.blueprintKey}
+          currentStageKey={resolvedRoadmap.currentStageKey}
+        >
+        <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
+          <div className="lf-card-label">Do You Have a Defamation Case?</div>
+          <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
+            Defamation is common online but tricky in the law. Get an honest read on whether you have a
+            claim — and learn the two things people miss: the short one-year deadline, and the anti-SLAPP
+            rule that can make you pay the other side&apos;s fees if you sue over public commentary.
+          </p>
+          <Link href={`/defamation/assess?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
+            Check my situation →
+          </Link>
+        </div>
+        </RoadmapToolGroup>
       )}
 
       {/* What-If Game — pressure-test this matter (client mode only) */}
-      {!isAttorney && (
+      {!isAttorney && resolvedRoadmap && (
+        <RoadmapToolGroup
+          sectionId="what-if"
+          blueprintKey={resolvedRoadmap.blueprintKey}
+          currentStageKey={resolvedRoadmap.currentStageKey}
+        >
         <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
           <div className="lf-card-label">Think a Few Steps Ahead</div>
           <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
@@ -653,11 +723,17 @@ export default function ClientFileView({
             Play the What-If Game →
           </Link>
         </div>
+        </RoadmapToolGroup>
       )}
 
       {/* Child-support estimator — family matters only (client mode). Saves a
           guideline estimate into this file so a support order/decree seeds from it. */}
-      {!isAttorney && isFamilyMatter && (
+      {!isAttorney && isFamilyMatter && resolvedRoadmap && (
+        <RoadmapToolGroup
+          sectionId="family-child-support"
+          blueprintKey={resolvedRoadmap.blueprintKey}
+          currentStageKey={resolvedRoadmap.currentStageKey}
+        >
         <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
           <div className="lf-card-label">Estimate Child Support</div>
           <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
@@ -669,11 +745,17 @@ export default function ClientFileView({
             Estimate child support →
           </Link>
         </div>
+        </RoadmapToolGroup>
       )}
 
       {/* Property-division estimator — family matters only (client mode). Saves a
           guideline community-estate split into this file so a decree seeds from it. */}
-      {!isAttorney && isFamilyMatter && (
+      {!isAttorney && isFamilyMatter && resolvedRoadmap && (
+        <RoadmapToolGroup
+          sectionId="family-property"
+          blueprintKey={resolvedRoadmap.blueprintKey}
+          currentStageKey={resolvedRoadmap.currentStageKey}
+        >
         <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
           <div className="lf-card-label">Estimate the Property Split</div>
           <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
@@ -686,10 +768,16 @@ export default function ClientFileView({
             Estimate the property split →
           </Link>
         </div>
+        </RoadmapToolGroup>
       )}
 
       {/* Possession-schedule generator — family matters only (client mode). */}
-      {!isAttorney && isFamilyMatter && (
+      {!isAttorney && isFamilyMatter && resolvedRoadmap && (
+        <RoadmapToolGroup
+          sectionId="family-possession"
+          blueprintKey={resolvedRoadmap.blueprintKey}
+          currentStageKey={resolvedRoadmap.currentStageKey}
+        >
         <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
           <div className="lf-card-label">See Your Possession Schedule</div>
           <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
@@ -701,10 +789,16 @@ export default function ClientFileView({
             Show the possession schedule →
           </Link>
         </div>
+        </RoadmapToolGroup>
       )}
 
       {/* Spousal-maintenance screen — family matters only (client mode). */}
-      {!isAttorney && isFamilyMatter && (
+      {!isAttorney && isFamilyMatter && resolvedRoadmap && (
+        <RoadmapToolGroup
+          sectionId="family-maintenance"
+          blueprintKey={resolvedRoadmap.blueprintKey}
+          currentStageKey={resolvedRoadmap.currentStageKey}
+        >
         <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
           <div className="lf-card-label">Check Spousal Maintenance</div>
           <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
@@ -716,10 +810,16 @@ export default function ClientFileView({
             Check spousal maintenance →
           </Link>
         </div>
+        </RoadmapToolGroup>
       )}
 
       {/* PI claim guide — personal injury matters only (client mode). */}
-      {!isAttorney && isPiMatter && (
+      {!isAttorney && isPiMatter && resolvedRoadmap && (
+        <RoadmapToolGroup
+          sectionId="pi-rights"
+          blueprintKey={resolvedRoadmap.blueprintKey}
+          currentStageKey={resolvedRoadmap.currentStageKey}
+        >
         <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
           <div className="lf-card-label">Injury Claim Playbook</div>
           <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
@@ -730,10 +830,16 @@ export default function ClientFileView({
             See your playbook &amp; next steps →
           </Link>
         </div>
+        </RoadmapToolGroup>
       )}
 
       {/* PI limitations screener — personal injury matters only (client mode). */}
-      {!isAttorney && isPiMatter && (
+      {!isAttorney && isPiMatter && resolvedRoadmap && (
+        <RoadmapToolGroup
+          sectionId="pi-sol"
+          blueprintKey={resolvedRoadmap.blueprintKey}
+          currentStageKey={resolvedRoadmap.currentStageKey}
+        >
         <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
           <div className="lf-card-label">Check Your Filing Deadline</div>
           <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
@@ -744,10 +850,16 @@ export default function ClientFileView({
             Check limitations deadline →
           </Link>
         </div>
+        </RoadmapToolGroup>
       )}
 
       {/* Comparative fault impact — personal injury matters only (client mode). */}
-      {!isAttorney && isPiMatter && (
+      {!isAttorney && isPiMatter && resolvedRoadmap && (
+        <RoadmapToolGroup
+          sectionId="pi-fault"
+          blueprintKey={resolvedRoadmap.blueprintKey}
+          currentStageKey={resolvedRoadmap.currentStageKey}
+        >
         <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
           <div className="lf-card-label">How Fault Affects Recovery</div>
           <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
@@ -758,6 +870,7 @@ export default function ClientFileView({
             Calculate fault impact →
           </Link>
         </div>
+        </RoadmapToolGroup>
       )}
 
       {/* Document Wizards — client mode only */}
