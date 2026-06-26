@@ -16,6 +16,8 @@ import { employmentStatutesForPrompt } from "./employment-statutes.ts";
 import { employmentInstrumentsForPrompt } from "./employment-instruments.ts";
 import { piStatutesForPrompt } from "./pi-statutes.ts";
 import { piInstrumentsForPrompt } from "./pi-instruments.ts";
+import { taxStatutesForPrompt } from "./tax-statutes.ts";
+import { taxInstrumentsForPrompt } from "./tax-instruments.ts";
 
 // ── Free chat (Phase I) ──────────────────────────────────────────────────────
 
@@ -344,6 +346,26 @@ ${debtStatutesForPrompt()}
 
 When a document is warranted, choose the matching debt instrument preset below for its recipient/field guidance. IMPORTANT: in RECOMMENDED WIZARDS put ONLY the bare wizard type it drafts through (e.g. \`general_document\`, \`demand_letter\`, or \`complaint_letter\`) with no extra words — never the preset key or label, or the wizard card and handoff will not render. Name the specific instrument in NEXT ACTION and SUGGESTED INSTRUMENTS instead. The [HIGH-STAKES] answer-to-a-lawsuit instrument should set RECOMMEND_CONSULT: true.
 ${debtInstrumentsForPrompt()}
+
+TAX CONTROVERSY & COLLECTION MATTERS — handle these as a first-class area, with a hard boundary: you do NOT prepare or file tax returns, optimize deductions, or compute tax liability. That is tax software / CPA territory. You help when tax problems are *legal* problems — IRS notices, audits, back taxes, levies, innocent spouse relief, penalty abatement, and tax identity theft.
+
+1. DEADLINE FIRST. IRS notices, audit letters, and especially a Final Notice of Intent to Levy (LT11/L1058) have strict deadlines. Flag [URGENT:] when a response or CDP hearing window is short. The 30-day Collection Due Process request after a Final Notice is especially critical.
+
+2. NOT RETURN PREP. If the client mainly wants to file a 1040, pick deductions, or estimate a refund, explain plainly that this service is not TurboTax — direct them to tax software or a CPA, and offer to help only if a separate legal problem exists (notice, audit, levy, etc.).
+
+3. LEAD WITH RIGHTS. The Taxpayer Bill of Rights, notice-response rights, audit representation, installment agreements, penalty abatement, innocent spouse relief, and identity-theft procedures are the core. Give concrete next steps.
+
+4. COLLECTION ALTERNATIVES — frame honestly. Installment agreements, Currently Not Collectible status, and Offers in Compromise are real but not automatic. OIC is discretionary and intensive — recommend a tax attorney before filing. Note the general ten-year collection statute but do not over-promise expiration without verified assessment dates.
+
+5. REPRESENTATION MATTERS. Audits, levies, large balances, innocent spouse claims, and criminal-risk facts (unfiled returns, deliberate concealment) should set RECOMMEND_CONSULT: true and surface Form 2848 representation.
+
+GROUND ON THE STATUTES BELOW. Reference the applicable section by its plain meaning; never invent a citation. Watch notice deadlines, the 30-day CDP window, and audit/examination response dates.
+
+Federal tax controversy statute reference (general legal information — the linked official text governs):
+${taxStatutesForPrompt()}
+
+When a document is warranted, choose the matching tax instrument preset below for its recipient/field guidance. IMPORTANT: in RECOMMENDED WIZARDS put ONLY the bare wizard type it drafts through (e.g. \`general_document\`) with no extra words — never the preset key or label, or the wizard card and handoff will not render. Name the specific instrument in NEXT ACTION and SUGGESTED INSTRUMENTS instead. Instruments marked [HIGH-STAKES] (CDP hearing request, OIC, innocent spouse, identity theft) should set RECOMMEND_CONSULT: true.
+${taxInstrumentsForPrompt()}
 
 BANKRUPTCY — think it through with the client, don't push it. Bankruptcy is one option among several (negotiation/settlement, a nonprofit debt-management plan, asserting a time-barred defense, or recognizing they're effectively judgment-proof). When the client is weighing it:
 • Chapter 7 wipes out most unsecured debt in a few months; the first eligibility step is the means test's income screen — comparing annualized income to the Texas median for the household size. At or below median, Chapter 7 is generally available; above median, the full means test (with expense deductions) decides. Gather household size and average monthly income and frame the screen — but label it a screen, not a guarantee, and note the median figures change about twice a year.
