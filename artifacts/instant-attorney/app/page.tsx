@@ -1,43 +1,31 @@
-"use client";
-
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { LEGAL_NAV_LINKS } from "@/lib/legal/nav";
 
 export default function LandingPage() {
-  const router = useRouter();
-
-  function go(path: string) {
-    router.push(path);
-  }
-
-  function scrollTo(id: string) {
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
-  }
-
   return (
     <>
       {/* NAV */}
       <nav className="lp-nav">
-        <button className="lp-logo" onClick={() => go("/free-chat")}>
+        <Link className="lp-logo" href="/free-chat">
           <div className="lp-logo-icon">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
             </svg>
           </div>
           Instant-Attorney
-        </button>
+        </Link>
         <div className="lp-nav-links">
           <a href="#phases">Plans</a>
           <a href="#practice-areas">Practice Areas</a>
           <a href="#acp-limits">Privilege</a>
         </div>
         <div className="lp-nav-right">
-          <button className="lp-btn-signin" onClick={() => go("/login")}>
+          <Link className="lp-btn-signin" href="/login">
             Sign In
-          </button>
-          <button className="lp-btn-nav" onClick={() => go("/free-chat")}>
+          </Link>
+          <Link className="lp-btn-nav" href="/free-chat">
             Start for Free
-          </button>
+          </Link>
         </div>
       </nav>
 
@@ -60,25 +48,25 @@ export default function LandingPage() {
           document, or a live consult, we help you arrive informed, prepared, and in control.
         </p>
         <div className="lp-hero-cta">
-          <button className="lp-btn-hero" onClick={() => go("/free-chat")}>
+          <Link className="lp-btn-hero" href="/free-chat">
             Start for Free &rarr;
-          </button>
-          <button className="lp-btn-ghost" onClick={() => scrollTo("phases")}>
+          </Link>
+          <a className="lp-btn-ghost" href="#phases">
             See the Plans
-          </button>
+          </a>
         </div>
         <div className="lp-hero-micro-links">
-          <button className="lp-micro-link" onClick={() => go("/free-chat")}>
+          <Link className="lp-micro-link" href="/free-chat">
             Get general legal guidance · Free
-          </button>
+          </Link>
           <span className="lp-micro-divider">·</span>
-          <button className="lp-micro-link" onClick={() => go("/register?upgrade=phase2")}>
+          <Link className="lp-micro-link" href="/register?upgrade=phase2">
             Review or generate legal documents with attorney review (target 48 hr) · $9.99/mo + usage-based top-ups
-          </button>
+          </Link>
           <span className="lp-micro-divider">·</span>
-          <button className="lp-micro-link" onClick={() => go("/register?upgrade=consult")}>
+          <Link className="lp-micro-link" href="/register?upgrade=consult">
             Book a consult · $49.99
-          </button>
+          </Link>
         </div>
       </section>
 
@@ -130,12 +118,12 @@ export default function LandingPage() {
               </div>
             </div>
             <div className="lp-phase-footer">
-              <button
+              <Link
                 className="lp-phase-btn lp-phase-btn-free"
-                onClick={() => go("/free-chat")}
+                href="/free-chat"
               >
                 Start for Free
-              </button>
+              </Link>
             </div>
           </div>
 
@@ -201,12 +189,12 @@ export default function LandingPage() {
               </div>
             </div>
             <div className="lp-phase-footer">
-              <button
+              <Link
                 className="lp-phase-btn lp-phase-btn-mid"
-                onClick={() => go("/register?upgrade=phase2")}
+                href="/register?upgrade=phase2"
               >
                 Start Phase II — $9.99/mo
-              </button>
+              </Link>
             </div>
           </div>
 
@@ -249,12 +237,12 @@ export default function LandingPage() {
               </ul>
             </div>
             <div className="lp-phase-footer">
-              <button
+              <Link
                 className="lp-phase-btn lp-phase-btn-top"
-                onClick={() => go("/register?upgrade=consult")}
+                href="/register?upgrade=consult"
               >
                 Book a Consult for $49.99
-              </button>
+              </Link>
             </div>
           </div>
         </div>
@@ -274,7 +262,7 @@ export default function LandingPage() {
         </p>
 
         <div className="lp-areas-grid">
-          <div className="lp-area-tile" onClick={() => go("/free-chat?area=contract")}>
+          <Link className="lp-area-tile" href="/free-chat?area=contract">
             <div className="lp-area-icon">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -286,9 +274,9 @@ export default function LandingPage() {
             </div>
             <div className="lp-area-name">Contracts</div>
             <div className="lp-area-desc">Review, draft, or dispute a contract of any kind.</div>
-          </div>
+          </Link>
 
-          <div className="lp-area-tile" onClick={() => go("/free-chat?area=employment")}>
+          <Link className="lp-area-tile" href="/free-chat?area=employment">
             <div className="lp-area-icon">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
@@ -299,9 +287,9 @@ export default function LandingPage() {
             <div className="lp-area-desc">
               Fired without cause, retaliation, or discrimination.
             </div>
-          </div>
+          </Link>
 
-          <div className="lp-area-tile" onClick={() => go("/free-chat?area=harassment")}>
+          <Link className="lp-area-tile" href="/free-chat?area=harassment">
             <div className="lp-area-icon">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
@@ -311,9 +299,9 @@ export default function LandingPage() {
             <div className="lp-area-desc">
               Workplace harassment, hostile environment, or retaliation claims.
             </div>
-          </div>
+          </Link>
 
-          <div className="lp-area-tile" onClick={() => go("/free-chat?area=business")}>
+          <Link className="lp-area-tile" href="/free-chat?area=business">
             <div className="lp-area-icon">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
@@ -322,9 +310,9 @@ export default function LandingPage() {
             </div>
             <div className="lp-area-name">Business Formation</div>
             <div className="lp-area-desc">LLC, corporation, partnership — set up correctly.</div>
-          </div>
+          </Link>
 
-          <div className="lp-area-tile" onClick={() => go("/free-chat?area=estate")}>
+          <Link className="lp-area-tile" href="/free-chat?area=estate">
             <div className="lp-area-icon">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
@@ -334,9 +322,9 @@ export default function LandingPage() {
             <div className="lp-area-desc">
               Wills, trusts, powers of attorney, and estate planning.
             </div>
-          </div>
+          </Link>
 
-          <div className="lp-area-tile" onClick={() => go("/free-chat?area=landlord")}>
+          <Link className="lp-area-tile" href="/free-chat?area=landlord">
             <div className="lp-area-icon">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
@@ -347,9 +335,9 @@ export default function LandingPage() {
             <div className="lp-area-desc">
               Lease disputes, eviction, security deposits, habitability.
             </div>
-          </div>
+          </Link>
 
-          <div className="lp-area-tile" onClick={() => go("/free-chat?area=hoa")}>
+          <Link className="lp-area-tile" href="/free-chat?area=hoa">
             <div className="lp-area-icon">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M3 21h18" />
@@ -364,9 +352,9 @@ export default function LandingPage() {
             <div className="lp-area-desc">
               Violation notices, fines, records requests, liens, and selective enforcement.
             </div>
-          </div>
+          </Link>
 
-          <div className="lp-area-tile" onClick={() => go("/free-chat?area=family")}>
+          <Link className="lp-area-tile" href="/free-chat?area=family">
             <div className="lp-area-icon">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -379,9 +367,9 @@ export default function LandingPage() {
             <div className="lp-area-desc">
               Divorce, child custody and support, modifications, and protective orders.
             </div>
-          </div>
+          </Link>
 
-          <div className="lp-area-tile" onClick={() => go("/free-chat?area=personal-injury")}>
+          <Link className="lp-area-tile" href="/free-chat?area=personal-injury">
             <div className="lp-area-icon">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2" />
@@ -395,9 +383,9 @@ export default function LandingPage() {
             <div className="lp-area-desc">
               Car wrecks, slip-and-falls, malpractice, wrongful death — know your rights and deadlines.
             </div>
-          </div>
+          </Link>
 
-          <div className="lp-area-tile" onClick={() => go("/free-chat?area=debt")}>
+          <Link className="lp-area-tile" href="/free-chat?area=debt">
             <div className="lp-area-icon">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="12" y1="1" x2="12" y2="23" />
@@ -408,9 +396,9 @@ export default function LandingPage() {
             <div className="lp-area-desc">
               Stop abusive collection, answer a debt lawsuit, know your Texas exemptions, weigh bankruptcy.
             </div>
-          </div>
+          </Link>
 
-          <div className="lp-area-tile" onClick={() => go("/free-chat?area=defamation")}>
+          <Link className="lp-area-tile" href="/free-chat?area=defamation">
             <div className="lp-area-icon">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
@@ -420,9 +408,9 @@ export default function LandingPage() {
             <div className="lp-area-desc">
               False statements online or off — libel, slander, reviews. Know the 1-year deadline and your options.
             </div>
-          </div>
+          </Link>
 
-          <div className="lp-area-tile" onClick={() => go("/free-chat?area=nda")}>
+          <Link className="lp-area-tile" href="/free-chat?area=nda">
             <div className="lp-area-icon">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
@@ -433,9 +421,9 @@ export default function LandingPage() {
             <div className="lp-area-desc">
               Non-disclosure agreements, non-competes, liability waivers.
             </div>
-          </div>
+          </Link>
 
-          <div className="lp-area-tile" onClick={() => go("/free-chat?area=other")}>
+          <Link className="lp-area-tile" href="/free-chat?area=other">
             <div className="lp-area-icon">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="10" />
@@ -447,7 +435,7 @@ export default function LandingPage() {
             <div className="lp-area-desc">
               Not sure where it fits? Start the free chat — we&apos;ll figure it out together.
             </div>
-          </div>
+          </Link>
         </div>
 
         <div className="lp-areas-strategy-strip">
@@ -554,13 +542,13 @@ export default function LandingPage() {
             <p className="lp-pillar-text">
               No AI-generated draft is delivered to a client without attorney review. This is
               a Texas ethics requirement, not a product choice.{" "}
-              <button
+              <Link
                 type="button"
                 className="lp-inline-link"
-                onClick={() => go("/legal/ai-philosophy")}
+                href="/legal/ai-philosophy"
               >
                 Read our AI philosophy →
-              </button>
+              </Link>
             </p>
           </div>
           <div className="lp-pillar">
@@ -654,18 +642,18 @@ export default function LandingPage() {
         </p>
 
         <div className="lp-privilege-cta">
-          <button
+          <Link
             className="lp-btn-privilege-primary"
-            onClick={() => go("/register?upgrade=phase2")}
+            href="/register?upgrade=phase2"
           >
             Start Phase II — $9.99/mo
-          </button>
-          <button
+          </Link>
+          <Link
             className="lp-btn-privilege-ghost"
-            onClick={() => go("/free-chat")}
+            href="/free-chat"
           >
             Start Free First
-          </button>
+          </Link>
         </div>
 
         <div className="lp-acp-limits">
@@ -713,9 +701,9 @@ export default function LandingPage() {
         <p className="lp-cta-sub">
           Start with the free chat. No account required. No commitment. Just clarity.
         </p>
-        <button className="lp-btn-cta" onClick={() => go("/free-chat")}>
+        <Link className="lp-btn-cta" href="/free-chat">
           Start for Free &rarr;
-        </button>
+        </Link>
       </section>
 
       {/* FOOTER */}

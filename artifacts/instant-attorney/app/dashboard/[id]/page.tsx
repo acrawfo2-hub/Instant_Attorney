@@ -2,12 +2,20 @@ import { redirect, notFound } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { CaseFile, FactItem, BYPASS_USER_ID } from "@/lib/types";
+import { parseRoadmapOverlay } from "@/lib/roadmap-snapshot";
+import { CaseFile, FactItem, BYPASS_USER_ID, personDisplayName } from "@/lib/types";
 import type { Document, ConsultRequest, ConsultWrapUp, RequestedAttachment, GovFormInstrument, Attachment } from "@/lib/types";
 import { normalizeWrapUp } from "@/lib/consult-wrap-up";
 import ClientFileView from "@/components/ClientFileView";
 import AccountMenu from "@/components/AccountMenu";
-import { parseRoadmapOverlay } from "@/lib/roadmap-snapshot";
+import {
+  CASE_FILE_DETAIL_COLUMNS,
+  FACT_ITEM_COLUMNS,
+  DOCUMENT_LIST_COLUMNS,
+  ATTACHMENT_STATUS_COLUMNS,
+  REQUESTED_ATTACHMENT_COLUMNS,
+  FORM_INSTRUMENT_COLUMNS,
+} from "@/lib/file-detail-selects";
 import type { RoadmapAiOverlay } from "@/lib/roadmap-types";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
@@ -27,18 +35,18 @@ async function getData(caseFileId: string) {
     userId = user.id;
   }
 
-  const [{ data: caseFile }, { data: facts }, { data: documents }, { data: consultRow }, { data: completedConsultRow }, { data: subRow }, { data: requestedRows }, { data: formRows }, { data: attachmentRows }, { data: roadmapSnap }] = await Promise.all([
+  const [{ data: caseFile }, { data: facts }, { data: documents }, { data: consultRow }, { data: completedConsultRow }, { data: subRow }, { data: requestedRows }, { data: formRows }, { data: attachmentRows }, { data: roadmapSnap }, { data: profileRow }] = await Promise.all([
     db.from("case_files")
-      .select("*")
+      .select(CASE_FILE_DETAIL_COLUMNS)
       .eq("id", caseFileId)
       .eq("user_id", userId)
       .single(),
     db.from("fact_items")
-      .select("*")
+      .select(FACT_ITEM_COLUMNS)
       .eq("case_file_id", caseFileId)
       .order("created_at", { ascending: true }),
     db.from("documents")
-      .select("*")
+      .select(DOCUMENT_LIST_COLUMNS)
       .eq("case_file_id", caseFileId)
       .order("created_at", { ascending: false }),
     db.from("consult_requests")
@@ -64,24 +72,29 @@ async function getData(caseFileId: string) {
       .maybeSingle(),
     db
       .from("requested_attachments")
-      .select("*")
+      .select(REQUESTED_ATTACHMENT_COLUMNS)
       .eq("case_file_id", caseFileId)
       .order("created_at", { ascending: true }),
     db
       .from("form_instruments")
-      .select("*")
+      .select(FORM_INSTRUMENT_COLUMNS)
       .eq("case_file_id", caseFileId)
       .neq("status", "dismissed")
       .order("created_at", { ascending: true }),
     db
       .from("attachments")
-      .select("*")
+      .select(ATTACHMENT_STATUS_COLUMNS)
       .eq("case_file_id", caseFileId)
       .order("created_at", { ascending: true }),
     db
       .from("roadmap_snapshots")
       .select("ai_overlay")
       .eq("case_file_id", caseFileId)
+      .maybeSingle(),
+    db
+      .from("profiles")
+      .select("full_name, email")
+      .eq("id", userId)
       .maybeSingle(),
   ]);
 
@@ -111,6 +124,11 @@ async function getData(caseFileId: string) {
     govForms: (formRows ?? []) as GovFormInstrument[],
     attachments: (attachmentRows ?? []) as Attachment[],
     roadmapOverlay: parseRoadmapOverlay(roadmapSnap?.ai_overlay) as RoadmapAiOverlay,
+    accountEmail: profileRow?.email ?? "",
+    accountName: personDisplayName(
+      { full_name: profileRow?.full_name, email: profileRow?.email },
+      profileRow?.email ?? "Account",
+    ),
   };
 }
 
@@ -126,7 +144,7 @@ export default async function FileDetailPage({
   const result = await getData(id);
   if (!result) notFound();
 
-  const { caseFile, facts, documents, childDocuments, consultRequest, hasConsultSub, completedConsultWrapUp, completedConsultSubmittedAt, requestedAttachments, govForms, attachments, roadmapOverlay } = result;
+  const { caseFile, facts, documents, childDocuments, consultRequest, hasConsultSub, completedConsultWrapUp, completedConsultSubmittedAt, requestedAttachments, govForms, attachments, roadmapOverlay, accountName, accountEmail } = result;
 
   const title = caseFile.title
     || (caseFile.matter_subtype ? caseFile.matter_subtype.replace(/_/g, " ") : null)
@@ -162,7 +180,7 @@ export default async function FileDetailPage({
               <polyline points="9 18 15 12 9 6" />
             </svg>
           </Link>
-          <AccountMenu />
+          <AccountMenu name={accountName} email={accountEmail} />
         </div>
       </header>
 
