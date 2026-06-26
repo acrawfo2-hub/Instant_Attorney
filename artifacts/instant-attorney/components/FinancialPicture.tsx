@@ -30,6 +30,8 @@ import type {
   PartnerRole,
   RepresentationScope,
   VerificationStatus,
+  SecureRefMeta,
+  SecureRefKind,
 } from "@/lib/types";
 
 const gold = "var(--brand-gold)";
@@ -101,6 +103,8 @@ export default function FinancialPicture({
   isFamilyLaw,
   area,
   attachments,
+  secureRefs,
+  vaultEnabled,
   backHref,
 }: {
   caseFileId: string;
@@ -110,6 +114,8 @@ export default function FinancialPicture({
   isFamilyLaw: boolean;
   area: FinancialMatterArea;
   attachments: { id: string; file_name: string }[];
+  secureRefs: SecureRefMeta[];
+  vaultEnabled: boolean;
   backHref: string;
 }) {
   const [acked, setAcked] = useState(disclosureAcked);
@@ -122,10 +128,54 @@ export default function FinancialPicture({
   const [ctxBusy, setCtxBusy] = useState(false);
   const [ctxSaved, setCtxSaved] = useState(false);
 
+  const [refs, setRefs] = useState<SecureRefMeta[]>(secureRefs);
+  const [refForm, setRefForm] = useState<{ itemId: string; kind: SecureRefKind; value: string } | null>(null);
+  const [refBusy, setRefBusy] = useState(false);
+
   const summary = useMemo(() => summarizeFinancialPicture(items), [items]);
   const readiness = useMemo(() => swornFilingReadiness(items), [items]);
   const gapReport = useMemo(() => detectGaps(area, items), [area, items]);
   const attachmentName = useMemo(() => new Map(attachments.map((a) => [a.id, a.file_name])), [attachments]);
+  const refsByItem = useMemo(() => {
+    const m = new Map<string, SecureRefMeta[]>();
+    for (const r of refs) m.set(r.financial_item_id, [...(m.get(r.financial_item_id) ?? []), r]);
+    return m;
+  }, [refs]);
+
+  async function addRef() {
+    if (!refForm || !refForm.value.trim()) return;
+    setRefBusy(true);
+    try {
+      const res = await fetch(`/api/financials/${refForm.itemId}/secure-ref`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: refForm.kind, value: refForm.value.trim() }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok && body.ref) {
+        setRefs((prev) => [...prev, body.ref as SecureRefMeta]);
+        setRefForm(null);
+      }
+    } finally {
+      setRefBusy(false);
+    }
+  }
+  async function deleteRef(refId: string) {
+    setRefs((prev) => prev.filter((r) => r.id !== refId));
+    try {
+      await fetch(`/api/financials/secure-ref/${refId}`, { method: "DELETE" });
+    } catch {
+      /* optimistic */
+    }
+  }
+
+  const REF_KIND_LABEL: Record<SecureRefKind, string> = {
+    ssn: "SSN",
+    account_number: "Account #",
+    routing_number: "Routing #",
+    policy_number: "Policy #",
+    other: "ID",
+  };
   const roles = allowedPartnerRoles(isFamilyLaw);
   const needNoSecrets = requiresNoSecretsAck(ctx.representation_scope, ctx.partner_role);
 
@@ -397,6 +447,33 @@ export default function FinancialPicture({
                                 <span aria-hidden="true">⚑</span>
                                 <span>{f.message}</span>
                               </div>
+                            ))}
+                          </div>
+                        )}
+                        {/* Encrypted identifier vault (M5) — only redacted last4 ever shows */}
+                        {(vaultEnabled || (refsByItem.get(it.id)?.length ?? 0) > 0) && (
+                          <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+                            {(refsByItem.get(it.id) ?? []).map((r) => (
+                              <span key={r.id} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, color: "#3a5e86", background: "rgba(70,110,160,0.1)", borderRadius: 999, padding: "2px 8px" }}>
+                                🔒 {REF_KIND_LABEL[r.kind]} ••{r.last4} <span style={{ color: textLt }}>encrypted</span>
+                                <button onClick={() => deleteRef(r.id)} aria-label="Remove identifier" style={{ background: "none", border: "none", color: textLt, cursor: "pointer", padding: 0, fontSize: 13, lineHeight: 1 }}>×</button>
+                              </span>
+                            ))}
+                            {vaultEnabled && (refForm?.itemId === it.id ? (
+                              <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                                <select value={refForm.kind} onChange={(e) => setRefForm({ ...refForm, kind: e.target.value as SecureRefKind })} style={{ ...input, width: "auto", padding: "4px 6px" }}>
+                                  <option value="account_number">Account #</option>
+                                  <option value="ssn">SSN</option>
+                                  <option value="routing_number">Routing #</option>
+                                  <option value="policy_number">Policy #</option>
+                                  <option value="other">Other</option>
+                                </select>
+                                <input value={refForm.value} onChange={(e) => setRefForm({ ...refForm, value: e.target.value })} placeholder="full number (stored encrypted)" style={{ ...input, width: 180, padding: "4px 8px" }} />
+                                <button onClick={addRef} disabled={refBusy} style={{ ...btnPrimary, padding: "5px 11px", fontSize: 12 }}>Save</button>
+                                <button onClick={() => setRefForm(null)} style={linkBtn}>Cancel</button>
+                              </span>
+                            ) : (
+                              <button onClick={() => setRefForm({ itemId: it.id, kind: "account_number", value: "" })} style={{ ...linkBtn, color: "#3a5e86" }}>🔒 Add account #/SSN</button>
                             ))}
                           </div>
                         )}

@@ -6,7 +6,7 @@ import {
   swornFilingReadiness,
   labelFor,
 } from "@/lib/financial-picture";
-import type { FinancialItem, VerificationStatus } from "@/lib/types";
+import type { FinancialItem, VerificationStatus, SecureRefMeta, SecureRefKind } from "@/lib/types";
 
 const gold = "var(--brand-gold)";
 const navy = "var(--brand-navy)";
@@ -28,13 +28,40 @@ const VERIF: Record<VerificationStatus, { label: string; bg: string; color: stri
   attorney_verified: { label: "Verified", bg: "rgba(45,122,79,0.14)", color: "#2d7a4f" },
 };
 
+const REF_KIND_LABEL: Record<SecureRefKind, string> = {
+  ssn: "SSN",
+  account_number: "Account #",
+  routing_number: "Routing #",
+  policy_number: "Policy #",
+  other: "ID",
+};
+
 export default function AttorneyFinancialReview({
   initialItems,
+  secureRefs,
 }: {
   initialItems: FinancialItem[];
+  secureRefs: SecureRefMeta[];
 }) {
   const [items, setItems] = useState<FinancialItem[]>(initialItems);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [revealed, setRevealed] = useState<Record<string, string>>({});
+
+  const refsByItem = useMemo(() => {
+    const m = new Map<string, SecureRefMeta[]>();
+    for (const r of secureRefs) m.set(r.financial_item_id, [...(m.get(r.financial_item_id) ?? []), r]);
+    return m;
+  }, [secureRefs]);
+
+  async function reveal(refId: string) {
+    if (revealed[refId]) {
+      setRevealed((prev) => { const n = { ...prev }; delete n[refId]; return n; });
+      return;
+    }
+    const res = await fetch(`/api/attorney/financials/secure-ref/${refId}`);
+    const body = await res.json().catch(() => ({}));
+    if (res.ok && body.value) setRevealed((prev) => ({ ...prev, [refId]: body.value }));
+  }
 
   const summary = useMemo(() => summarizeFinancialPicture(items), [items]);
   const readiness = useMemo(() => swornFilingReadiness(items), [items]);
@@ -110,6 +137,19 @@ export default function AttorneyFinancialReview({
                 </div>
                 <div style={{ textAlign: "right", flexShrink: 0, fontSize: 14, fontWeight: 600, color: navy }}>{fmt(it.value_low, it.value_high)}</div>
               </div>
+
+              {(refsByItem.get(it.id)?.length ?? 0) > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                  {(refsByItem.get(it.id) ?? []).map((r) => (
+                    <span key={r.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "#3a5e86", background: "rgba(70,110,160,0.1)", borderRadius: 999, padding: "2px 9px" }}>
+                      🔒 {REF_KIND_LABEL[r.kind]} {revealed[r.id] ? <strong style={{ color: textDk, fontVariantNumeric: "tabular-nums" }}>{revealed[r.id]}</strong> : <>••{r.last4}</>}
+                      <button onClick={() => reveal(r.id)} style={{ background: "none", border: "none", color: "#3a5e86", cursor: "pointer", padding: 0, fontWeight: 600, fontSize: 11.5 }}>
+                        {revealed[r.id] ? "hide" : "reveal"}
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
 
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
                 <button disabled={busyId === it.id || it.verification_status === "attorney_verified"} onClick={() => act(it.id, { verification_status: "attorney_verified" })} style={btnSm(it.verification_status === "attorney_verified")}>Mark verified</button>

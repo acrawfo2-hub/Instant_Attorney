@@ -2,7 +2,7 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { personDisplayName } from "@/lib/types";
-import type { FinancialItem } from "@/lib/types";
+import type { FinancialItem, SecureRefMeta } from "@/lib/types";
 import AccountMenu from "@/components/AccountMenu";
 import AttorneyFinancialReview from "@/components/AttorneyFinancialReview";
 
@@ -30,6 +30,14 @@ export default async function AttorneyFinancialsPage({ params }: { params: Promi
   ]);
 
   const items = (itemRows ?? []) as FinancialItem[];
+  let secureRefs: SecureRefMeta[] = [];
+  if (items.length > 0) {
+    const { data: refRows } = await db
+      .from("financial_secure_ref")
+      .select("id, financial_item_id, kind, last4, created_at")
+      .in("financial_item_id", items.map((i) => i.id));
+    secureRefs = (refRows ?? []) as SecureRefMeta[];
+  }
   const clientName = personDisplayName(clientProfile, "Client");
 
   return (
@@ -50,7 +58,7 @@ export default async function AttorneyFinancialsPage({ params }: { params: Promi
       </header>
 
       <main className="lf-main">
-        <AttorneyFinancialReview initialItems={items} />
+        <AttorneyFinancialReview initialItems={items} secureRefs={secureRefs} />
       </main>
     </div>
   );

@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { BYPASS_USER_ID, type FinancialItem } from "@/lib/types";
 import { validateFinancialItemInput, provenanceForSource } from "@/lib/financial-picture";
 import { scanItemRedFlags, flagsNeedAttorney } from "@/lib/financial-red-flags";
+import { redactPII } from "@/lib/pii-redaction";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
@@ -88,8 +89,12 @@ export async function POST(req: NextRequest) {
   const sourceId = await resolveSourceAttachment(owned, b.source_attachment_id);
   const ground = provenanceForSource(!!sourceId);
 
-  const label = String(b.label).trim();
-  const acquisitionNote = typeof b.acquisition_note === "string" && b.acquisition_note.trim() ? b.acquisition_note.trim() : null;
+  // Redact any identifiers the client typed into free text — these fields never
+  // hold a raw SSN/account number. The label always shows a redacted form; raw
+  // identifiers go only to the encrypted vault (financial_secure_ref).
+  const label = redactPII(String(b.label).trim()).text;
+  const rawNote = typeof b.acquisition_note === "string" && b.acquisition_note.trim() ? b.acquisition_note.trim() : null;
+  const acquisitionNote = rawNote ? redactPII(rawNote).text : null;
   // Scan for concealment / fraudulent-transfer signals and escalate (never block).
   const redFlags = scanItemRedFlags({ label, acquisition_note: acquisitionNote });
 

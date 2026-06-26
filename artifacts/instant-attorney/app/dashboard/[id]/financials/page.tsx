@@ -4,6 +4,8 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { BYPASS_USER_ID } from "@/lib/types";
 import type { FinancialItem } from "@/lib/types";
 import { detectFinancialArea } from "@/lib/financial-schedules";
+import { vaultConfigured } from "@/lib/secure-vault";
+import type { SecureRefMeta } from "@/lib/types";
 import AccountMenu from "@/components/AccountMenu";
 import FinancialPicture from "@/components/FinancialPicture";
 
@@ -47,6 +49,19 @@ export default async function FinancialsPage({ params }: { params: Promise<{ id:
 
   const items = (itemRows ?? []) as FinancialItem[];
   const attachments = (attachmentRows ?? []) as { id: string; file_name: string }[];
+
+  // Vault metadata (redacted last4 only) — read via service role since the
+  // secure-ref table has no client RLS; ownership was verified above.
+  let secureRefs: SecureRefMeta[] = [];
+  if (items.length > 0) {
+    const svc = createServiceClient();
+    const { data: refRows } = await svc
+      .from("financial_secure_ref")
+      .select("id, financial_item_id, kind, last4, created_at")
+      .in("financial_item_id", items.map((i) => i.id));
+    secureRefs = (refRows ?? []) as SecureRefMeta[];
+  }
+
   const area = detectFinancialArea(caseFile.matter_subtype ?? "");
   const isFamilyLaw = area === "family";
   const backHref = `/dashboard/${id}`;
@@ -83,6 +98,8 @@ export default async function FinancialsPage({ params }: { params: Promise<{ id:
           isFamilyLaw={isFamilyLaw}
           area={area}
           attachments={attachments}
+          secureRefs={secureRefs}
+          vaultEnabled={vaultConfigured()}
           backHref={backHref}
         />
       </main>

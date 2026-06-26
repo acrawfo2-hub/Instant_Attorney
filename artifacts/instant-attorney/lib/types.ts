@@ -208,6 +208,18 @@ export interface FinancialRedFlag {
   message: string;
 }
 
+// Encrypted identifier vault (Stage 24 / Milestone 5). The plaintext/ciphertext
+// never leave the server; clients only ever see this metadata.
+export type SecureRefKind = "ssn" | "account_number" | "routing_number" | "policy_number" | "other";
+export interface SecureRefMeta {
+  id: string;
+  financial_item_id: string;
+  kind: SecureRefKind;
+  /** Redacted tail only (e.g. "4321") — never the full value. */
+  last4: string | null;
+  created_at?: string;
+}
+
 export interface FinancialItem {
   id: string;
   case_file_id: string;
