@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import Link from "next/link";
 import type { RoadmapAiOverlay, RoadmapStage } from "@/lib/roadmap-types";
 import type { RoadmapAssertion } from "@/lib/roadmap-assertions";
 
@@ -31,6 +32,10 @@ export interface RoadmapPanelProps {
   correctionsEnabled?: boolean;
   caseFileId?: string;
   onAssert?: (stageKey: string, assertion: RoadmapAssertion, note?: string) => Promise<void>;
+  /** Whether the whole roadmap can be collapsed away (default true). */
+  collapsible?: boolean;
+  /** Where the "talk to the attorney" affordance points. */
+  consultHref?: string;
 }
 
 export default function RoadmapPanel({
@@ -46,6 +51,8 @@ export default function RoadmapPanel({
   correctionsEnabled = false,
   caseFileId,
   onAssert,
+  collapsible = true,
+  consultHref = "/consult/schedule",
 }: RoadmapPanelProps) {
   const [showAll, setShowAll] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -53,6 +60,36 @@ export default function RoadmapPanel({
   const [disputeStage, setDisputeStage] = useState<string | null>(null);
   const [disputeNote, setDisputeNote] = useState("");
   const [toast, setToast] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState(false);
+
+  // Persist the client's collapse preference per file. Initialised after mount so
+  // server and first client render agree (no hydration mismatch); a client who
+  // hid the roadmap before sees a brief expand before it folds, which is fine.
+  const storageKey = caseFileId ? `lf-roadmap-collapsed:${caseFileId}` : null;
+  useEffect(() => {
+    if (!collapsible || !storageKey || typeof window === "undefined") return;
+    try {
+      if (window.localStorage.getItem(storageKey) === "1") setCollapsed(true);
+    } catch {
+      /* ignore */
+    }
+  }, [collapsible, storageKey]);
+
+  function toggleCollapsed() {
+    setCollapsed((prev) => {
+      const next = !prev;
+      if (storageKey && typeof window !== "undefined") {
+        try {
+          window.localStorage.setItem(storageKey, next ? "1" : "0");
+        } catch {
+          /* ignore */
+        }
+      }
+      return next;
+    });
+  }
+
+  const currentStage = stages.find((s) => s.status === "current");
 
   const navy = "var(--brand-navy)";
   const gold = "var(--brand-gold)";
@@ -92,18 +129,44 @@ export default function RoadmapPanel({
     <div className="lf-card lf-card-full lf-roadmap-spine" style={{ borderLeft: `3px solid ${gold}` }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
         <div className="lf-card-label">{title}</div>
-        <button
-          type="button"
-          className="lf-roadmap-show-all"
-          onClick={() => setShowAll((v) => !v)}
-          aria-pressed={showAll}
-        >
-          {showAll ? "Guided view" : "Show everything"}
-        </button>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          {!collapsed && (
+            <button
+              type="button"
+              className="lf-roadmap-show-all"
+              onClick={() => setShowAll((v) => !v)}
+              aria-pressed={showAll}
+            >
+              {showAll ? "Guided view" : "Show everything"}
+            </button>
+          )}
+          {collapsible && (
+            <button
+              type="button"
+              className="lf-roadmap-show-all"
+              onClick={toggleCollapsed}
+              aria-expanded={!collapsed}
+            >
+              {collapsed ? "Show roadmap" : "Hide"}
+            </button>
+          )}
+        </div>
       </div>
+
+      {collapsed ? (
+        <p className="lf-wizard-hint" style={{ margin: "6px 0 0" }}>
+          {currentStage ? (
+            <>
+              You are here: <strong>{currentStage.title}</strong>.{" "}
+            </>
+          ) : null}
+          A general guide to how a matter like yours usually unfolds — open it whenever it&apos;s useful.
+        </p>
+      ) : (
+        <>
       <p className="lf-wizard-hint" style={{ marginBottom: 16 }}>
-        Here&apos;s the whole path and where you are right now. Steps can overlap or repeat — use it as a map,
-        not a deadline.
+        Here&apos;s the whole path and where you are right now. This is a general guide, not an exact
+        formula — steps can overlap, repeat, or not apply to your exact situation.
       </p>
 
       {toast && (
@@ -285,8 +348,27 @@ export default function RoadmapPanel({
         })}
       </ol>
 
-      <p style={{ fontSize: 12, lineHeight: 1.5, color: textLt, margin: "14px 2px 0", borderTop: `1px solid ${border}`, paddingTop: 12 }}>
+      <p style={{ fontSize: 12, lineHeight: 1.5, color: textLt, margin: "14px 2px 0" }}>
         {disclaimer}
+      </p>
+        </>
+      )}
+
+      <p
+        style={{
+          fontSize: 12.5,
+          lineHeight: 1.5,
+          color: textMd,
+          margin: "12px 2px 0",
+          borderTop: `1px solid ${border}`,
+          paddingTop: 12,
+        }}
+      >
+        This is general legal information, not legal advice or a guarantee about how your matter will go —
+        your specific facts and deadlines control.{" "}
+        <Link href={consultHref} style={{ color: navy, fontWeight: 600, whiteSpace: "nowrap" }}>
+          Talk it through with Andrew Crawford, Esq. →
+        </Link>
       </p>
     </div>
   );

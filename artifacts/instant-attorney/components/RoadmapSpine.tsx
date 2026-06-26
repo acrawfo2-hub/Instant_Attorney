@@ -14,6 +14,7 @@ export default function RoadmapSpine({
   fingerprint,
   caseFileId,
   hasConsult,
+  consultHref = "/consult/schedule",
   refreshEnabled = true,
   correctionsEnabled = true,
 }: {
@@ -22,6 +23,7 @@ export default function RoadmapSpine({
   fingerprint: string;
   caseFileId: string;
   hasConsult: boolean;
+  consultHref?: string;
   refreshEnabled?: boolean;
   correctionsEnabled?: boolean;
 }) {
@@ -66,7 +68,7 @@ export default function RoadmapSpine({
         enabled={refreshEnabled}
         onRefreshed={setOverlay}
       />
-      <RoadmapConsultNudge overlay={overlay} hasConsult={hasConsult} />
+      <RoadmapConsultNudge overlay={overlay} hasConsult={hasConsult} consultHref={consultHref} />
       <RoadmapPanel
         label={resolved.label}
         pathLabel={resolved.pathLabel}
@@ -80,6 +82,7 @@ export default function RoadmapSpine({
         correctionsEnabled={correctionsEnabled}
         caseFileId={caseFileId}
         onAssert={handleAssert}
+        consultHref={consultHref}
       />
     </>
   );
