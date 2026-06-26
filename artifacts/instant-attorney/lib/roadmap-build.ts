@@ -1,18 +1,19 @@
-import { looksLikeFamilyMatter } from "./family-instruments";
-import { looksLikeDebtMatter } from "./debt-instruments";
-import { looksLikeDefamationMatter } from "./defamation-instruments";
-import { looksLikeEmploymentMatter } from "./employment-instruments";
-import { looksLikePersonalInjuryMatter } from "./pi-instruments";
-import { buildFamilyRoadmap } from "./family-roadmap";
-import { buildBankruptcyRoadmap } from "./bankruptcy-roadmap";
-import { buildEmploymentRoadmap } from "./employment-roadmap";
-import { buildPiRoadmap } from "./pi-roadmap";
-import { buildMatterRoadmap } from "./matter-roadmap";
-import { buildGenericRoadmap } from "./generic-roadmap";
-import { applyAssertionOverrides, parseRoadmapAssertions } from "./roadmap-assertions";
-import type { ResolvedRoadmap, RoadmapStage } from "./roadmap-types";
-import { ROADMAP_BLUEPRINT_VERSION } from "./roadmap-types";
-import type { CaseFile, ConsultRequest, Document, FactItem, RequestedAttachment } from "./types";
+import { looksLikeFamilyMatter } from "./family-instruments.ts";
+import { looksLikeDebtMatter } from "./debt-instruments.ts";
+import { looksLikeDefamationMatter } from "./defamation-instruments.ts";
+import { looksLikeEmploymentMatter } from "./employment-instruments.ts";
+import { looksLikePersonalInjuryMatter } from "./pi-instruments.ts";
+import { buildFamilyRoadmap } from "./family-roadmap.ts";
+import { buildBankruptcyRoadmap } from "./bankruptcy-roadmap.ts";
+import { buildEmploymentRoadmap } from "./employment-roadmap.ts";
+import { buildPiRoadmap } from "./pi-roadmap.ts";
+import { buildMatterRoadmap } from "./matter-roadmap.ts";
+import { buildGenericRoadmap } from "./generic-roadmap.ts";
+import { applyAssertionOverrides, parseRoadmapAssertions } from "./roadmap-assertions.ts";
+import { placeholderFields } from "./wizard-parsing.ts";
+import type { ResolvedRoadmap, RoadmapStage } from "./roadmap-types.ts";
+import { ROADMAP_BLUEPRINT_VERSION } from "./roadmap-types.ts";
+import type { CaseFile, ConsultRequest, Document, FactItem, RequestedAttachment } from "./types.ts";
 
 export interface RoadmapBuildInput {
   caseFile: CaseFile;
@@ -32,6 +33,21 @@ function withClientAssertions(
 ): RoadmapStage[] {
   const assertions = parseRoadmapAssertions(factDescriptions);
   return applyAssertionOverrides(stages, assertions);
+}
+
+/** Gaps tied to document placeholders are shown under each draft, not as open file gaps. */
+function countOpenGapsExcludingPlaceholders(
+  gaps: FactItem[],
+  documents: Document[],
+): number {
+  const placeholderLabelSet = new Set<string>();
+  for (const doc of documents) {
+    if (!doc.draft_text) continue;
+    for (const field of placeholderFields(doc.draft_text)) {
+      placeholderLabelSet.add(field.label.toLowerCase());
+    }
+  }
+  return gaps.filter((g) => !placeholderLabelSet.has(g.description.toLowerCase())).length;
 }
 
 /** Resolve the Tier-1/Tier-2 roadmap for a case file (deterministic, no I/O). */
@@ -143,7 +159,7 @@ export function resolveRoadmapForCase(input: RoadmapBuildInput): ResolvedRoadmap
     hasSummary: Boolean(caseFile.summary),
     matterTypeKnown: Boolean(caseFile.matter_type),
     confirmedFactCount: confirmed.length,
-    openGapCount: gaps.length,
+    openGapCount: countOpenGapsExcludingPlaceholders(gaps, documents),
     pendingUploadCount: requestedAttachments.filter((x) => x.status === "requested").length,
     hasDocumentPlan:
       (caseFile.legal_strategy?.document_plan?.length ?? 0) > 0 ||
@@ -206,11 +222,13 @@ export function toolStageForSection(section: string, blueprintKey: string): stri
 }
 
 export function detectMatterFlags(matterText: string) {
+  const isEmploymentMatter = looksLikeEmploymentMatter(matterText);
   return {
     isFamilyMatter: looksLikeFamilyMatter(matterText),
     isDebtMatter: looksLikeDebtMatter(matterText),
     isDefamationMatter: looksLikeDefamationMatter(matterText),
-    isEmploymentMatter: looksLikeEmploymentMatter(matterText),
-    isPiMatter: looksLikePersonalInjuryMatter(matterText),
+    isEmploymentMatter,
+    // Workplace injuries can match both detectors ("injured" + "at work"); prefer employment.
+    isPiMatter: looksLikePersonalInjuryMatter(matterText) && !isEmploymentMatter,
   };
 }

@@ -3,7 +3,7 @@
 // facts with a `Roadmap · {stageKey}:` prefix so they are auditable and
 // fingerprint the file for AI refresh.
 
-import type { RoadmapStage } from "./roadmap-types";
+import type { RoadmapStage } from "./roadmap-types.ts";
 
 export type RoadmapAssertion = "completed" | "not_yet" | "dispute";
 

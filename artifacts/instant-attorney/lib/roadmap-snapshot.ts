@@ -1,5 +1,5 @@
-import type { RoadmapAiOverlay, RoadmapSnapshotRow } from "./roadmap-types";
-import { ROADMAP_SNAPSHOT_MAX_AGE_MS } from "./roadmap-types";
+import type { RoadmapAiOverlay, RoadmapSnapshotRow } from "./roadmap-types.ts";
+import { ROADMAP_SNAPSHOT_MAX_AGE_MS } from "./roadmap-types.ts";
 
 export function parseRoadmapOverlay(raw: unknown): RoadmapAiOverlay {
   if (!raw || typeof raw !== "object") return {};

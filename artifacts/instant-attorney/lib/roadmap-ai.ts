@@ -1,4 +1,4 @@
-import type { ResolvedRoadmap, RoadmapAiOverlay } from "./roadmap-types";
+import type { ResolvedRoadmap, RoadmapAiOverlay } from "./roadmap-types.ts";
 
 const OVERLAY_JSON_BLOCK = /---ROADMAP OVERLAY---\s*([\s\S]*?)\s*---END ROADMAP OVERLAY---/;
 

@@ -1,5 +1,5 @@
 import { createHash } from "crypto";
-import type { CaseFile, ConsultRequest, Document, FactItem, RequestedAttachment } from "./types";
+import type { CaseFile, ConsultRequest, Document, FactItem, RequestedAttachment } from "./types.ts";
 
 export interface RoadmapFingerprintInput {
   caseFile: Pick<
