@@ -469,3 +469,21 @@ on conflict (id) do nothing;
 -- ═══════════════════════════════════════════════════════════════════════════
 alter table consult_requests
   add column if not exists fee_estimate_draft jsonb;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Stage 29 — existing-counsel intake
+-- ═══════════════════════════════════════════════════════════════════════════
+alter table case_files
+  add column if not exists counsel_intake_at timestamptz,
+  add column if not exists has_existing_counsel boolean,
+  add column if not exists existing_counsel_name text,
+  add column if not exists counsel_engagement_goal text
+    check (
+      counsel_engagement_goal is null
+      or counsel_engagement_goal in (
+        'understand_situation',
+        'document_review',
+        'prepare_for_meeting',
+        'second_opinion'
+      )
+    );

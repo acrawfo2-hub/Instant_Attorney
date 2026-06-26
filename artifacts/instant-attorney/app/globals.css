@@ -7404,3 +7404,147 @@ mark.atty-placeholder {
   vertical-align: middle;
 }
 
+/* ── Existing counsel intake ─────────────────────────────────────────────── */
+.lf-card-label-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.lf-card-label-row .lf-card-label { margin-bottom: 0; }
+.ec-edit-btn {
+  background: none;
+  border: none;
+  color: var(--brand-navy);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+  flex-shrink: 0;
+}
+.ec-form { display: flex; flex-direction: column; gap: 14px; }
+.ec-form-compact { gap: 10px; }
+.ec-disclosure {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--brand-text-md);
+  margin: 0;
+  padding: 10px 12px;
+  background: rgba(70, 110, 160, 0.08);
+  border-radius: 8px;
+  border: 1px solid rgba(70, 110, 160, 0.2);
+}
+.ec-question {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--brand-text-dk);
+  margin: 0;
+}
+.ec-choice-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ec-btn {
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.ec-btn-primary {
+  background: var(--brand-navy);
+  color: var(--brand-white);
+}
+.ec-btn-secondary {
+  background: var(--brand-white);
+  color: var(--brand-navy);
+  border-color: var(--brand-border);
+}
+.ec-btn-ghost {
+  background: transparent;
+  color: var(--brand-text-md);
+  border-color: var(--brand-border);
+}
+.ec-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.ec-details { display: flex; flex-direction: column; gap: 12px; }
+.ec-goal-list { display: flex; flex-direction: column; gap: 8px; }
+.ec-goal-option {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  gap: 2px 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--brand-border);
+  border-radius: 8px;
+  cursor: pointer;
+  background: var(--brand-white);
+}
+.ec-goal-option input { grid-row: 1 / span 2; margin-top: 3px; }
+.ec-goal-selected { border-color: var(--brand-navy); background: rgba(26, 39, 68, 0.04); }
+.ec-goal-label { font-size: 13px; font-weight: 600; color: var(--brand-text-dk); }
+.ec-goal-desc { grid-column: 2; font-size: 12px; color: var(--brand-text-md); line-height: 1.45; }
+.ec-field { display: flex; flex-direction: column; gap: 4px; }
+.ec-field-label { font-size: 12px; color: var(--brand-text-md); }
+.ec-input {
+  border: 1px solid var(--brand-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 14px;
+}
+.ec-error { color: #b42318; font-size: 12px; margin: 0; }
+.ec-cancel {
+  background: none;
+  border: none;
+  color: var(--brand-text-lt);
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+  align-self: flex-start;
+  padding: 0;
+}
+.ec-summary-goal { font-size: 13px; color: var(--brand-text-md); margin: 6px 0 0; }
+.ec-summary-note { font-size: 12px; color: var(--brand-text-lt); margin: 8px 0 0; }
+.ec-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(10, 16, 28, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.ec-modal {
+  background: var(--brand-white);
+  border-radius: 14px;
+  max-width: 520px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 24px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+}
+.ec-modal-title {
+  font-family: var(--font-playfair), Georgia, serif;
+  font-size: 22px;
+  margin: 0 0 8px;
+  color: var(--brand-navy);
+}
+.ec-modal-sub {
+  font-size: 13px;
+  color: var(--brand-text-md);
+  margin: 0 0 16px;
+  line-height: 1.5;
+}
+.ec-chat-banner {
+  padding: 10px 16px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: rgba(200, 169, 110, 0.85);
+  background: rgba(70, 110, 160, 0.12);
+  border-bottom: 1px solid rgba(70, 110, 160, 0.25);
+}

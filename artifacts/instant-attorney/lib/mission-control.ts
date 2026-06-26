@@ -128,6 +128,51 @@ export function computeMissionControl(input: MissionControlInput): MissionContro
 
   const actions: MissionAction[] = [];
 
+  // ── Tier 0a: Existing-counsel intake incomplete ─────────────────────────────
+  if (!isAttorney && !caseFile.counsel_intake_at) {
+    actions.push({
+      id: "counsel:intake",
+      kind: "consult",
+      status: "open",
+      priority: 2,
+      title: "Tell us if another attorney is involved",
+      reason: "Helps us scope this file correctly and stay in the right lane",
+      cta: { label: "Answer →", href: "#existing-counsel" },
+      jumpTo: "#existing-counsel",
+    });
+  }
+
+  // ── Tier 0b: Goal-specific nudges when client has existing counsel ──────────
+  if (!isAttorney && caseFile.has_existing_counsel && caseFile.counsel_engagement_goal) {
+    const goal = caseFile.counsel_engagement_goal;
+    if (goal === "second_opinion" || goal === "prepare_for_meeting") {
+      actions.push({
+        id: "counsel:consult",
+        kind: "consult",
+        status: "open",
+        priority: 4,
+        title: goal === "second_opinion" ? "Book a scoped second-opinion consult" : "Book a consult to prep for your attorney meeting",
+        reason: "Live time with Andrew Crawford, Esq. works well for this goal",
+        cta: { label: "Schedule →", href: "/consult/schedule" },
+      });
+    }
+    if (goal === "document_review") {
+      const docReviewHref = `/wizard/doc_review?caseFileId=${id}`;
+      if (!isDuplicateHref(docReviewHref, hero)) {
+        actions.push({
+          id: "counsel:doc-review",
+          kind: "document",
+          status: "open",
+          priority: 5,
+          title: "Start your document review",
+          reason: "You asked for a limited document review with attorney oversight",
+          cta: { label: "Start →", href: docReviewHref },
+          jumpTo: "#documents",
+        });
+      }
+    }
+  }
+
   // ── Tier 0: Post-consult client action items ────────────────────────────────
   for (const [i, item] of consultClientActions.entries()) {
     if (!item.text.trim()) continue;

@@ -12,17 +12,24 @@ import { recordAiFromMessage, recordStorageUpload } from "@/lib/usage-tracker";
 import { getBillingGate } from "@/lib/topup";
 import { maxOutputTokensFor, limitSignalMetadata } from "@/lib/token-limits";
 import { BYPASS_USER_ID } from "@/lib/types";
-import type { CaseFile, FactItem, Attachment, RequestedAttachment } from "@/lib/types";
+import type { CaseFile, FactItem, Attachment, RequestedAttachment, CounselEngagementGoal } from "@/lib/types";
+import { buildCounselContextPatch, persistCounselContext } from "@/lib/existing-counsel-persist";
 
 const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney, maxRetries: 4 });
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
 export async function POST(req: NextRequest) {
-  const { messages, caseFileId, pendingAttachment, fileType } = await req.json() as {
+  const { messages, caseFileId, pendingAttachment, fileType, counselContext } = await req.json() as {
     messages: Array<{ role: string; content: string }>;
     caseFileId?: string;
     fileType?: "standard" | "quick_consult";
     pendingAttachment?: { data: string; mimeType: string; fileName: string };
+    counselContext?: {
+      has_existing_counsel: boolean;
+      unsure?: boolean;
+      existing_counsel_name?: string;
+      counsel_engagement_goal?: CounselEngagementGoal | null;
+    };
   };
 
   if (!Array.isArray(messages) || messages.length === 0) {
@@ -98,6 +105,28 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Failed to create case file" }, { status: 500 });
       }
       resolvedCaseFileId = created.id;
+    }
+  }
+
+  // Apply counsel intake from the pre-chat modal when the file has not recorded it yet.
+  if (counselContext && resolvedCaseFileId) {
+    const { data: intakeRow } = await db
+      .from("case_files")
+      .select("counsel_intake_at")
+      .eq("id", resolvedCaseFileId)
+      .maybeSingle();
+
+    if (!intakeRow?.counsel_intake_at) {
+      const built = buildCounselContextPatch(counselContext);
+      if (!("error" in built)) {
+        await persistCounselContext(
+          db,
+          resolvedCaseFileId,
+          userId,
+          built,
+          counselContext.has_existing_counsel === true
+        );
+      }
     }
   }
 
