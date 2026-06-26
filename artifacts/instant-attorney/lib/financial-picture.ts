@@ -224,6 +224,43 @@ export function summarizeFinancialPicture(items: FinancialItem[]): FinancialSumm
   };
 }
 
+// ── Verify-before-you-swear gate ─────────────────────────────────────────────
+// The ONE hard gate in the system, and only for documents signed under oath
+// (bankruptcy schedules, the family Inventory & Appraisement). Everywhere else,
+// estimates are fine and the client keeps moving. To finalize a sworn filing,
+// every active item must be attorney-verified and no red flag may be open.
+export interface SwornReadiness {
+  ready: boolean;
+  total: number;
+  attorneyVerified: number;
+  docSupported: number;
+  unverified: number;
+  /** Items not yet attorney-verified — what still has to be confirmed. */
+  pending: FinancialItem[];
+  /** Items carrying an unresolved red flag or attorney-review flag. */
+  openFlagCount: number;
+}
+
+export function swornFilingReadiness(items: FinancialItem[]): SwornReadiness {
+  const active = items.filter((it) => it.status === "active");
+  const pending = active.filter((it) => it.verification_status !== "attorney_verified");
+  const attorneyVerified = active.filter((it) => it.verification_status === "attorney_verified").length;
+  const docSupported = active.filter((it) => it.verification_status === "doc_supported").length;
+  const unverified = active.filter((it) => it.verification_status === "unverified").length;
+  const openFlagCount = active.filter(
+    (it) => it.needs_attorney_review || (Array.isArray(it.red_flags) && it.red_flags.length > 0)
+  ).length;
+  return {
+    ready: active.length > 0 && pending.length === 0 && openFlagCount === 0,
+    total: active.length,
+    attorneyVerified,
+    docSupported,
+    unverified,
+    pending,
+    openFlagCount,
+  };
+}
+
 // ── Partner-relationship guard ───────────────────────────────────────────────
 // A partner who is the adverse party (family law) or a non-client third party
 // has not consented and owes us no records — so anything the CLIENT reports about

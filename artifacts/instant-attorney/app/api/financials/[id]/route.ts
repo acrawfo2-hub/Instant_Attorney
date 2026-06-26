@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { BYPASS_USER_ID, type FinancialItem } from "@/lib/types";
 import { validateFinancialItemInput, provenanceForSource } from "@/lib/financial-picture";
+import { scanItemRedFlags, flagsNeedAttorney } from "@/lib/financial-red-flags";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
@@ -57,12 +58,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
   const ground = provenanceForSource(!!sourceId);
 
+  const label = String(b.label).trim();
+  const acquisitionNote = typeof b.acquisition_note === "string" && b.acquisition_note.trim() ? b.acquisition_note.trim() : null;
+  const redFlags = scanItemRedFlags({ label, acquisition_note: acquisitionNote });
+
   const toNum = (v: unknown) => (v === undefined || v === null || v === "" ? null : Number(v));
   // Allowlist of client-editable columns only.
   const update: Record<string, unknown> = {
     category: b.category,
-    label: String(b.label).trim(),
-    acquisition_note: typeof b.acquisition_note === "string" && b.acquisition_note.trim() ? b.acquisition_note.trim() : null,
+    label,
+    acquisition_note: acquisitionNote,
+    red_flags: redFlags,
+    needs_attorney_review: flagsNeedAttorney(redFlags),
     owner: b.owner ?? "client",
     characterization: b.characterization ?? "mixed_or_unknown",
     exempt_status: b.exempt_status ?? "unknown",

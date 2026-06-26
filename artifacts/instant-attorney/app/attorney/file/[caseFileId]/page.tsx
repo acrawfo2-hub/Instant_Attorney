@@ -101,6 +101,9 @@ export default async function AttorneyFilePage({
         </div>
 
         <div className="lf-header-right">
+          <Link href={`/attorney/file/${caseFileId}/financials`} className="lf-logout-btn">
+            Financials
+          </Link>
           <Link href="/attorney" className="lf-begin-btn">
             Dashboard
           </Link>

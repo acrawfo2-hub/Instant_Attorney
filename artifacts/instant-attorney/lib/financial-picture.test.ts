@@ -9,6 +9,8 @@ import {
   allowedPartnerRoles,
   requiresNoSecretsAck,
   categoryKind,
+  swornFilingReadiness,
+  provenanceForSource,
   FINANCIAL_DISCLOSURE_STANDARD,
   CATEGORY_OPTIONS,
 } from "./financial-picture.ts";
@@ -133,6 +135,35 @@ test("validation catches the common mistakes and accepts a good item", () => {
   assert.ok(errs.some((e) => /description/i.test(e)));
   assert.ok(errs.some((e) => /low value can't be greater/i.test(e)));
   assert.ok(validateFinancialItemInput({ category: "vehicle", label: "x", valued_as_of: "not-a-date" }).some((e) => /valid date/i.test(e)));
+});
+
+test("document grounding raises the tier; no document keeps it the client's estimate", () => {
+  assert.deepEqual(provenanceForSource(true), { provenance: "document_extracted", verification_status: "doc_supported" });
+  assert.deepEqual(provenanceForSource(false), { provenance: "client_asserted", verification_status: "unverified" });
+});
+
+test("sworn-filing gate requires every item attorney-verified with no open flags", () => {
+  // Not ready: an unverified item and an open flag both block.
+  const notReady = swornFilingReadiness([
+    item({ verification_status: "attorney_verified" }),
+    item({ verification_status: "doc_supported" }),
+    item({ verification_status: "unverified", needs_attorney_review: true }),
+  ]);
+  assert.equal(notReady.ready, false);
+  assert.equal(notReady.pending.length, 2);
+  assert.ok(notReady.openFlagCount >= 1);
+
+  // Ready: all attorney-verified, no flags.
+  const ready = swornFilingReadiness([
+    item({ verification_status: "attorney_verified" }),
+    item({ verification_status: "attorney_verified" }),
+  ]);
+  assert.equal(ready.ready, true);
+  assert.equal(ready.pending.length, 0);
+  assert.equal(ready.attorneyVerified, 2);
+
+  // An empty picture is never "ready" to swear.
+  assert.equal(swornFilingReadiness([]).ready, false);
 });
 
 test("the disclosure standard covers honesty, no-concealment, verification, the partner, and privilege", () => {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { BYPASS_USER_ID, type FinancialItem } from "@/lib/types";
 import { validateFinancialItemInput, provenanceForSource } from "@/lib/financial-picture";
+import { scanItemRedFlags, flagsNeedAttorney } from "@/lib/financial-red-flags";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
@@ -87,13 +88,18 @@ export async function POST(req: NextRequest) {
   const sourceId = await resolveSourceAttachment(owned, b.source_attachment_id);
   const ground = provenanceForSource(!!sourceId);
 
+  const label = String(b.label).trim();
+  const acquisitionNote = typeof b.acquisition_note === "string" && b.acquisition_note.trim() ? b.acquisition_note.trim() : null;
+  // Scan for concealment / fraudulent-transfer signals and escalate (never block).
+  const redFlags = scanItemRedFlags({ label, acquisition_note: acquisitionNote });
+
   const toNum = (v: unknown) => (v === undefined || v === null || v === "" ? null : Number(v));
   const row = {
     case_file_id: owned.caseFile.id,
     user_id: owned.userId,
     category: b.category,
-    label: String(b.label).trim(),
-    acquisition_note: typeof b.acquisition_note === "string" && b.acquisition_note.trim() ? b.acquisition_note.trim() : null,
+    label,
+    acquisition_note: acquisitionNote,
     owner: b.owner ?? "client",
     characterization: b.characterization ?? "mixed_or_unknown",
     exempt_status: b.exempt_status ?? "unknown",
@@ -109,6 +115,8 @@ export async function POST(req: NextRequest) {
     verification_status: ground.verification_status,
     phase_collected: "phase_2_privileged",
     privileged: true,
+    red_flags: redFlags,
+    needs_attorney_review: flagsNeedAttorney(redFlags),
   };
 
   const { data, error } = await owned.write.from("financial_items").insert(row).select(FIELDS).single();

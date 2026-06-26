@@ -15,8 +15,10 @@ import {
   partnerReportOnly,
   allowedPartnerRoles,
   requiresNoSecretsAck,
+  swornFilingReadiness,
   type Range,
 } from "@/lib/financial-picture";
+import { redFlagGuidance } from "@/lib/financial-red-flags";
 import { detectGaps, type FinancialMatterArea } from "@/lib/financial-schedules";
 import type {
   FinancialItem,
@@ -121,6 +123,7 @@ export default function FinancialPicture({
   const [ctxSaved, setCtxSaved] = useState(false);
 
   const summary = useMemo(() => summarizeFinancialPicture(items), [items]);
+  const readiness = useMemo(() => swornFilingReadiness(items), [items]);
   const gapReport = useMemo(() => detectGaps(area, items), [area, items]);
   const attachmentName = useMemo(() => new Map(attachments.map((a) => [a.id, a.file_name])), [attachments]);
   const roles = allowedPartnerRoles(isFamilyLaw);
@@ -240,6 +243,15 @@ export default function FinancialPicture({
           {summary.needsReviewCount > 0 ? ` · ${summary.needsReviewCount} flagged for attorney review` : ""}
         </div>
       </div>
+
+      {/* Concealment guidance — shown when anything is flagged. Educates and
+          escalates; it never stops the client from continuing. */}
+      {summary.redFlagCount > 0 && (
+        <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 12, padding: "14px 16px" }}>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: "#991b1b", marginBottom: 4 }}>A quick, important note</div>
+          <p style={{ fontSize: 12.5, color: "#7f1d1d", lineHeight: 1.55, margin: 0 }}>{redFlagGuidance()}</p>
+        </div>
+      )}
 
       {/* Representation context */}
       <div style={card}>
@@ -378,6 +390,16 @@ export default function FinancialPicture({
                         {it.source_attachment_id && attachmentName.get(it.source_attachment_id) && (
                           <div style={{ fontSize: 11.5, color: "#3a5e86", marginTop: 3 }}>📎 {attachmentName.get(it.source_attachment_id)}</div>
                         )}
+                        {Array.isArray(it.red_flags) && it.red_flags.length > 0 && (
+                          <div style={{ marginTop: 5, display: "grid", gap: 3 }}>
+                            {it.red_flags.map((f, i) => (
+                              <div key={i} style={{ fontSize: 11.5, color: "#991b1b", display: "flex", gap: 5, alignItems: "flex-start" }}>
+                                <span aria-hidden="true">⚑</span>
+                                <span>{f.message}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       <div style={{ textAlign: "right", flexShrink: 0 }}>
                         <div style={{ fontSize: 13.5, fontWeight: 600, color: navy, fontVariantNumeric: "tabular-nums" }}>{fmtRange({ low: it.value_low ?? 0, high: it.value_high ?? 0 })}</div>
@@ -421,6 +443,26 @@ export default function FinancialPicture({
             <ul style={{ margin: "12px 0 0", paddingLeft: 16, fontSize: 12.5, color: textMd, lineHeight: 1.5 }}>
               {gapReport.inferences.map((inf, i) => <li key={i}>{inf.message}</li>)}
             </ul>
+          )}
+        </div>
+      )}
+
+      {/* Sworn-filing readiness — informational, the one real gate (and only for
+          documents signed under oath). Never blocks general progress. */}
+      {summary.counts.total > 0 && (
+        <div style={card}>
+          <h2 style={cardTitle}>Before you sign anything under oath</h2>
+          <p style={{ fontSize: 12.5, color: textLt, margin: "2px 0 10px" }}>
+            You can keep building your plan now. But a sworn filing — like a bankruptcy schedule or a divorce inventory — can only be finalized once your attorney has verified each item.
+          </p>
+          {readiness.ready ? (
+            <div style={{ fontSize: 13, color: "#15803d", fontWeight: 600 }}>✓ All {readiness.total} items are attorney-verified — ready to finalize a sworn filing.</div>
+          ) : (
+            <div style={{ fontSize: 12.5, color: textMd }}>
+              <strong>{readiness.attorneyVerified}</strong> of <strong>{readiness.total}</strong> items attorney-verified.{" "}
+              {readiness.pending.length > 0 && <>{readiness.pending.length} still need verification.</>}{" "}
+              {readiness.openFlagCount > 0 && <span style={{ color: "#991b1b" }}>{readiness.openFlagCount} flagged for attorney review.</span>}
+            </div>
           )}
         </div>
       )}
