@@ -3,7 +3,7 @@
 import { use, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import type { Attachment, Document } from "@/lib/types";
+import type { Attachment, Document, DocumentComment } from "@/lib/types";
 import { docTypeLabel, personDisplayName } from "@/lib/types";
 import AccountMenu from "@/components/AccountMenu";
 
@@ -125,6 +125,9 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
   const [generatingSecondDraft, setGeneratingSecondDraft] = useState(false);
   const [aiError, setAiError] = useState("");
   const [secondDraftMessage, setSecondDraftMessage] = useState("");
+  const [comments, setComments] = useState<DocumentComment[]>([]);
+  const [newComment, setNewComment] = useState("");
+  const [commentBusy, setCommentBusy] = useState(false);
   const [fitnessWarning, setFitnessWarning] = useState<{
     rationale: string;
     recommendedType: string | null;
@@ -156,10 +159,60 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
       if (data.review_status === "reviewing" || data.review_status === "merging") {
         startPolling();
       }
+      loadComments();
     } else {
       setError("Document not found or access denied");
     }
     setLoading(false);
+  }
+
+  async function loadComments() {
+    const res = await fetch(`/api/attorney/documents/${id}/comments`);
+    if (res.ok) {
+      const data = (await res.json()) as { comments: DocumentComment[] };
+      setComments(data.comments ?? []);
+    }
+  }
+
+  async function addComment() {
+    const text = newComment.trim();
+    if (!text || commentBusy) return;
+    setCommentBusy(true);
+    try {
+      const res = await fetch(`/api/attorney/documents/${id}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body: text }),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { comment: DocumentComment };
+        setComments((prev) => [...prev, data.comment]);
+        setNewComment("");
+      }
+    } finally {
+      setCommentBusy(false);
+    }
+  }
+
+  async function toggleCommentResolved(comment: DocumentComment) {
+    const res = await fetch(`/api/attorney/documents/${id}/comments/${comment.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ resolved: !comment.resolved }),
+    });
+    if (res.ok) {
+      const data = (await res.json()) as { comment: DocumentComment };
+      setComments((prev) => prev.map((c) => (c.id === data.comment.id ? data.comment : c)));
+    }
+  }
+
+  async function deleteComment(commentId: string) {
+    const res = await fetch(`/api/attorney/documents/${id}/comments/${commentId}`, {
+      method: "DELETE",
+    });
+    if (res.ok) {
+      setComments((prev) => prev.filter((c) => c.id !== commentId));
+    }
   }
 
   function startPolling() {
@@ -483,10 +536,63 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
             </section>
           )}
 
+          <div className="atty-comments-workspace">
+            <h2>Comments &amp; Concerns</h2>
+            <p className="atty-second-draft-hint">
+              Private notes on this draft. Open comments are automatically folded into the next 2nd-draft generation. Mark a comment resolved once it&apos;s addressed to drop it from future revisions.
+            </p>
+            <ul className="atty-comment-list">
+              {comments.length === 0 && (
+                <li className="atty-comment-empty">No comments yet.</li>
+              )}
+              {comments.map((c) => (
+                <li
+                  key={c.id}
+                  className={`atty-comment ${c.resolved ? "atty-comment-resolved" : ""}`}
+                >
+                  <span className="atty-comment-body">{c.body}</span>
+                  <span className="atty-comment-actions">
+                    <button
+                      type="button"
+                      className="atty-comment-link"
+                      onClick={() => toggleCommentResolved(c)}
+                    >
+                      {c.resolved ? "Reopen" : "Resolve"}
+                    </button>
+                    <button
+                      type="button"
+                      className="atty-comment-link atty-comment-delete"
+                      onClick={() => deleteComment(c.id)}
+                    >
+                      Delete
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <div className="atty-comment-compose">
+              <textarea
+                className="atty-comment-input"
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                rows={2}
+                placeholder="Add a comment or concern about this draft…"
+              />
+              <button
+                type="button"
+                className="atty-btn"
+                onClick={addComment}
+                disabled={commentBusy || !newComment.trim()}
+              >
+                {commentBusy ? "Adding…" : "Add Comment"}
+              </button>
+            </div>
+          </div>
+
           <div className="atty-second-draft-workspace">
             <h2>Second Draft Instructions</h2>
             <p className="atty-second-draft-hint">
-              Private attorney input only — never shown to the client. Combined with the initial draft, critical review memo, and Living File to generate a refined second draft.
+              Private attorney input only — never shown to the client. Combined with the initial draft, critical review memo, open comments &amp; concerns above, and the Living File to generate a refined second draft.
             </p>
             <textarea
               className="atty-second-draft-textarea"

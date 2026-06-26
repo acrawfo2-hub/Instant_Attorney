@@ -586,6 +586,31 @@ export interface UsagePeriodTotal {
   updated_at: string;
 }
 
+// ── Direct attorney ⇆ client messaging (case_messages) ─────────────────────
+export type MessageSenderRole = "attorney" | "client";
+
+export interface CaseMessage {
+  id: string;
+  case_file_id: string;
+  user_id: string;        // the client who owns the case
+  sender_id: string | null;
+  sender_role: MessageSenderRole;
+  body: string;
+  read_at: string | null;
+  created_at: string;
+}
+
+// ── Attorney comments & concerns on a document (document_comments) ──────────
+export interface DocumentComment {
+  id: string;
+  document_id: string;
+  author_id: string | null;
+  body: string;
+  resolved: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 // The bypass user used in dev when BYPASS_AUTH=true
 export const BYPASS_USER_ID = "00000000-0000-0000-0000-000000000001";
 export const BYPASS_EMAIL = "test@instant-attorney.dev";
