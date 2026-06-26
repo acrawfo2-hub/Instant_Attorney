@@ -13,6 +13,7 @@ import { computeMissionControl } from "@/lib/mission-control";
 import { looksLikeFamilyMatter } from "@/lib/family-instruments";
 import { looksLikeDebtMatter } from "@/lib/debt-instruments";
 import { buildFamilyRoadmap } from "@/lib/family-roadmap";
+import { buildMatterRoadmap } from "@/lib/matter-roadmap";
 import FamilyRoadmap from "@/components/FamilyRoadmap";
 import type { CaseFile, FactItem, Document, Profile, WizardType, ConsultRequest, RequestedAttachment, GovFormInstrument, Attachment } from "@/lib/types";
 import { isValidWizardType } from "@/lib/document-utils";
@@ -270,14 +271,22 @@ export default function ClientFileView({
   const matterText = `${caseFile.matter_subtype ?? ""} ${caseFile.summary ?? ""}`;
   const isFamilyMatter = looksLikeFamilyMatter(matterText);
   const isDebtMatter = looksLikeDebtMatter(matterText);
-  const familyRoadmap =
-    !isAttorney && isFamilyMatter
+  const familyRoadmap = !isAttorney
+    ? isFamilyMatter
       ? buildFamilyRoadmap({
-          matterText: `${caseFile.matter_subtype ?? ""} ${caseFile.summary ?? ""}`,
+          matterSubtype: caseFile.matter_subtype,
+          matterText,
           facts: confirmed.map((f) => f.description),
           documents: documents.map((d) => ({ title: d.title, status: d.status })),
         })
-      : null;
+      : buildMatterRoadmap({
+          matterSubtype: caseFile.matter_subtype,
+          matterText,
+          facts: confirmed.map((f) => f.description),
+          documents: documents.map((d) => ({ title: d.title, status: d.status })),
+          hasStrategy: !!caseFile.legal_strategy,
+        })
+    : null;
 
   // The client has "brought in a document" once at least one upload exists that
   // didn't fail to store. Document Review only makes sense against a real

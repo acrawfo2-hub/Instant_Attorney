@@ -5,6 +5,77 @@ import {
   detectFamilyPath,
 } from "./family-roadmap.ts";
 
+// ── matterSubtype-based path detection ────────────────────────────────────────
+
+test("matterSubtype overrides text-based detection", () => {
+  // Subtype wins even when the free text says something different
+  assert.equal(detectFamilyPath("divorce with kids", "modification"), "modification");
+  assert.equal(detectFamilyPath("I need help", "sapcr"), "custody");
+  assert.equal(detectFamilyPath("", "enforcement"), "enforcement");
+  assert.equal(detectFamilyPath("", "prenuptial agreement"), "agreement");
+  assert.equal(detectFamilyPath("", "divorce"), "divorce");
+});
+
+test("matterSubtype handles AI phrasing variations (substrings)", () => {
+  assert.equal(detectFamilyPath(null, "divorce with children"), "divorce");
+  assert.equal(detectFamilyPath(null, "modifying child support order"), "modification");
+  assert.equal(detectFamilyPath(null, "enforce contempt arrears"), "enforcement");
+  assert.equal(detectFamilyPath(null, "custody and conservatorship"), "custody");
+  assert.equal(detectFamilyPath(null, "premarital agreement"), "agreement");
+});
+
+test("matterSubtype null falls back to text keyword scan", () => {
+  assert.equal(detectFamilyPath("motion to modify custody", null), "modification");
+  assert.equal(detectFamilyPath("prenup before wedding", null), "agreement");
+  assert.equal(detectFamilyPath("behind on support denied visitation", null), "enforcement");
+});
+
+test("buildFamilyRoadmap uses matterSubtype when provided", () => {
+  // Even if matterText says nothing useful, subtype should drive path
+  const rm = buildFamilyRoadmap({ matterSubtype: "enforcement", matterText: "" });
+  assert.equal(rm.path, "enforcement");
+  assert.ok(rm.stages.some((s) => s.key === "document"));
+  assert.ok(rm.stages.some((s) => s.key === "hearing"));
+});
+
+// ── Expanded signal detection ─────────────────────────────────────────────────
+
+test("real-world petition language marks file stage done", () => {
+  const rm = buildFamilyRoadmap({
+    matterText: "divorce with kids",
+    facts: ["The petition was filed last year (cause number 2024-12345)."],
+  });
+  const file = rm.stages.find((s) => s.key === "file")!;
+  assert.equal(file.status, "done");
+});
+
+test("real-world mediation language marks mediation stage done", () => {
+  const rm = buildFamilyRoadmap({
+    matterText: "divorce with kids",
+    facts: ["We went to mediation in February and reached an MSA."],
+  });
+  const med = rm.stages.find((s) => s.key === "mediation")!;
+  assert.equal(med.status, "done");
+});
+
+test("'divorce is final' language marks final stage done", () => {
+  const rm = buildFamilyRoadmap({
+    matterText: "divorce",
+    facts: ["The divorce was finalized in December."],
+  });
+  const final = rm.stages.find((s) => s.key === "final")!;
+  assert.equal(final.status, "done");
+});
+
+test("'already have temporary orders' marks temporary stage done", () => {
+  const rm = buildFamilyRoadmap({
+    matterText: "divorce with kids",
+    facts: ["We already have a temporary order in place covering custody and support."],
+  });
+  const temp = rm.stages.find((s) => s.key === "temporary")!;
+  assert.equal(temp.status, "done");
+});
+
 test("detectFamilyPath routes the major matter types", () => {
   assert.equal(detectFamilyPath("divorce with two kids"), "divorce");
   assert.equal(detectFamilyPath("we need a prenup before the wedding"), "agreement");
