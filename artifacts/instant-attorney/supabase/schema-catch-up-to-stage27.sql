@@ -463,3 +463,9 @@ create policy "attorneys_read_all_document_deliveries"
 insert into storage.buckets (id, name, public)
 values ('document-deliveries', 'document-deliveries', false)
 on conflict (id) do nothing;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Stage 28 — consult fee guidance draft
+-- ═══════════════════════════════════════════════════════════════════════════
+alter table consult_requests
+  add column if not exists fee_estimate_draft jsonb;

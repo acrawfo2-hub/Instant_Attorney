@@ -57,6 +57,16 @@ export interface ConsultWrapUp {
   attorneyActions: ConsultActionItem[];
 }
 
+/** Attorney-editable fee guidance draft (stored on consult_requests). */
+export interface ConsultFeeEstimateDraft {
+  version: 1;
+  attorneyNotes: string;
+  selectedPackageId: string | null;
+  customRange: { low: number; high: number } | null;
+  adjustmentNote: string;
+  updatedAt: string;
+}
+
 export interface ConsultRequest {
   id: string;
   user_id: string;
@@ -71,6 +81,7 @@ export interface ConsultRequest {
   wrap_up_draft: ConsultWrapUp | null;
   post_consult_plan: ConsultWrapUp | null;
   wrap_up_submitted_at: string | null;
+  fee_estimate_draft: ConsultFeeEstimateDraft | null;
   created_at: string;
   updated_at: string;
 }

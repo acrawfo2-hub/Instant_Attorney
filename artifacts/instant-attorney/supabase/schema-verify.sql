@@ -79,6 +79,10 @@ union all select 'consult_requests.wrap_up_draft', case when exists (
   select 1 from information_schema.columns
   where table_schema = 'public' and table_name = 'consult_requests' and column_name = 'wrap_up_draft'
 ) then 'OK' else 'MISSING' end
+union all select 'consult_requests.fee_estimate_draft', case when exists (
+  select 1 from information_schema.columns
+  where table_schema = 'public' and table_name = 'consult_requests' and column_name = 'fee_estimate_draft'
+) then 'OK' else 'MISSING' end
 union all select 'what_if_sessions', case when exists (
   select 1 from information_schema.tables where table_schema = 'public' and table_name = 'what_if_sessions'
 ) then 'OK' else 'MISSING' end

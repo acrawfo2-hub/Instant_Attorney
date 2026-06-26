@@ -7294,6 +7294,68 @@ mark.atty-placeholder {
 .cb-wrap-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .ca-wrap-hint { font-size: 12px; color: var(--brand-text-md); font-style: italic; }
 
+/* ── Consult fee guidance ─────────────────────────────────────────────────── */
+.cb-fee { display: flex; flex-direction: column; gap: 14px; }
+.cb-fee-ethics {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--brand-text-md);
+  background: rgba(255, 159, 10, 0.06);
+  border: 1px solid rgba(255, 159, 10, 0.2);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+.cb-fee-phone-text {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--brand-text-dk);
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(200, 169, 110, 0.08);
+  border: 1px solid rgba(200, 169, 110, 0.25);
+}
+.cb-fee-range { color: var(--brand-gold); }
+.cb-fee-packages { display: flex; flex-direction: column; gap: 8px; }
+.cb-fee-package {
+  text-align: left;
+  padding: 12px;
+  border: 1px solid var(--brand-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  font-family: inherit;
+  color: inherit;
+}
+.cb-fee-package:hover:not(:disabled) { border-color: rgba(200, 169, 110, 0.4); }
+.cb-fee-package-selected {
+  border-color: var(--brand-gold);
+  background: rgba(200, 169, 110, 0.08);
+}
+.cb-fee-package-rec { border-left: 3px solid var(--brand-gold); }
+.cb-fee-package-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.cb-fee-package-label { font-size: 13px; font-weight: 700; color: var(--brand-text-dk); }
+.cb-fee-package-range { font-size: 13px; font-weight: 700; color: var(--brand-gold); }
+.cb-fee-package-meta { font-size: 11px; color: var(--brand-text-md); margin-top: 4px; }
+.cb-fee-package-desc { font-size: 12px; color: var(--brand-text-md); margin: 6px 0 4px; }
+.cb-fee-hourly-line { font-size: 12px; color: var(--brand-text-md); margin: 4px 0 0; }
+.cb-fee-custom-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cb-fee-custom-input {
+  width: 100px;
+  padding: 8px 10px;
+  font-size: 13px;
+  border: 1px solid var(--brand-border);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--brand-text-dk);
+}
+
 /* ── Client post-consult card ─────────────────────────────────────────────── */
 .lf-post-consult {
   border-left: 3px solid var(--brand-gold);
