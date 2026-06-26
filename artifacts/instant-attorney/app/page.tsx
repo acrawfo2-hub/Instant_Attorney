@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { LEGAL_NAV_LINKS } from "@/lib/legal/nav";
 
 export default function LandingPage() {
   const router = useRouter();
@@ -552,7 +553,14 @@ export default function LandingPage() {
             <div className="lp-pillar-title">Attorney Always in Loop</div>
             <p className="lp-pillar-text">
               No AI-generated draft is delivered to a client without attorney review. This is
-              a Texas ethics requirement, not a product choice.
+              a Texas ethics requirement, not a product choice.{" "}
+              <button
+                type="button"
+                className="lp-inline-link"
+                onClick={() => go("/legal/ai-philosophy")}
+              >
+                Read our AI philosophy →
+              </button>
             </p>
           </div>
           <div className="lp-pillar">
@@ -712,7 +720,15 @@ export default function LandingPage() {
 
       {/* FOOTER */}
       <footer className="lp-footer">
-        <p className="lp-footer-legal">
+        <div>
+          <nav className="lp-footer-nav" aria-label="Legal">
+            {LEGAL_NAV_LINKS.map((link) => (
+              <a key={link.href} href={link.href}>
+                {link.label}
+              </a>
+            ))}
+          </nav>
+          <p className="lp-footer-legal">
           Instant-Attorney is a product of Crawford Law PLLC. Crawford Law PLLC is a Texas law firm
           licensed to practice in Texas and Illinois. Nothing on this website constitutes legal
           advice or creates an attorney-client relationship. Phase I general guidance is not legal
@@ -720,7 +736,8 @@ export default function LandingPage() {
           signed representation agreement. AI-generated drafts are watermarked pre-review and must
           not be filed or relied upon without attorney approval. Texas Bar #24148908.
           &nbsp;·&nbsp; www.instant-attorney.com
-        </p>
+          </p>
+        </div>
         <div className="lp-footer-logo serif">Instant-Attorney</div>
       </footer>
     </>
