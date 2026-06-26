@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { parsePreConsultMemo, type ConsultBriefSnapshot } from "@/lib/consult-brief";
 import ConsultWrapUpSection from "@/components/ConsultWrapUpSection";
+import ConsultFeeEstimateSection from "@/components/ConsultFeeEstimateSection";
 import type { ConsultRequestStatus } from "@/lib/types";
 
 function engagementClass(level: ConsultBriefSnapshot["engagement"]["level"]) {
@@ -18,7 +19,7 @@ function engagementLabel(level: ConsultBriefSnapshot["engagement"]["level"]) {
   return "Moderately engaged";
 }
 
-type BriefTab = "preparation" | "wrap-up";
+type BriefTab = "preparation" | "fee-guidance" | "wrap-up";
 
 export default function ConsultBriefPanel({
   caseFileId,
@@ -132,15 +133,22 @@ export default function ConsultBriefPanel({
 
       {expanded && (
         <div className="cb-body">
-          {showWrapUp && (
-            <div className="atty-panel-tabs">
-              <button
-                type="button"
-                className={`atty-panel-tab${tab === "preparation" ? " atty-panel-tab-active" : ""}`}
-                onClick={() => setTab("preparation")}
-              >
-                Preparation
-              </button>
+          <div className="atty-panel-tabs">
+            <button
+              type="button"
+              className={`atty-panel-tab${tab === "preparation" ? " atty-panel-tab-active" : ""}`}
+              onClick={() => setTab("preparation")}
+            >
+              Preparation
+            </button>
+            <button
+              type="button"
+              className={`atty-panel-tab${tab === "fee-guidance" ? " atty-panel-tab-active" : ""}`}
+              onClick={() => setTab("fee-guidance")}
+            >
+              Fee guidance
+            </button>
+            {showWrapUp && (
               <button
                 type="button"
                 className={`atty-panel-tab${tab === "wrap-up" ? " atty-panel-tab-active" : ""}`}
@@ -148,11 +156,13 @@ export default function ConsultBriefPanel({
               >
                 Wrap-up &amp; action plan
               </button>
-            </div>
-          )}
+            )}
+          </div>
 
           {tab === "wrap-up" && showWrapUp ? (
             <ConsultWrapUpSection consultId={consultId} consultStatus={consultStatus} />
+          ) : tab === "fee-guidance" ? (
+            <ConsultFeeEstimateSection consultId={consultId} consultStatus={consultStatus} />
           ) : (
             <>
               {loading && !snapshot && <div className="atty-ai-running">Loading case snapshot…</div>}
