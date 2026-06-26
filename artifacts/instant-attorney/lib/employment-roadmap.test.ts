@@ -17,7 +17,12 @@ test("a claim-assessment fact advances past 'document' and 'assess'", () => {
   const byKey = Object.fromEntries(rm.stages.map((s) => [s.key, s.status]));
   assert.equal(byKey["document"], "done");
   assert.equal(byKey["assess"], "done");
-  assert.equal(byKey["internal"], "current");
+  // 'internal' is listed before 'assess' but its own signal isn't met. Cascade-back
+  // keeps the spine monotone — it's marked done once the later 'assess' step is
+  // reached, so no check ever sits after the "you are here" marker — and the
+  // current action becomes the first genuinely-unmet step, the agency charge.
+  assert.equal(byKey["internal"], "done");
+  assert.equal(byKey["charge"], "current");
 });
 
 test("a filed charge advances to investigation; right-to-sue and lawsuit still ahead", () => {

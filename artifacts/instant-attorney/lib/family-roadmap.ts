@@ -16,6 +16,8 @@
 // real evidence for it — including real-world language like "we already went to
 // mediation" or "the petition was filed last year". Fully unit-testable; no I/O.
 
+import { assignStageStatuses } from "./roadmap-status.ts";
+
 export type FamilyPath = "divorce" | "custody" | "modification" | "agreement" | "enforcement";
 
 export type StageStatus = "done" | "current" | "upcoming";
@@ -418,17 +420,15 @@ export function buildFamilyRoadmap(input: FamilyRoadmapInput): FamilyRoadmap {
   const path = detectFamilyPath(input.matterText, input.matterSubtype);
   const signals = deriveSignals(input);
   const blueprints = blueprintsFor(path, input);
+  const statuses = assignStageStatuses(blueprints.map((b) => b.complete(signals)));
 
-  const completeFlags = blueprints.map((b) => b.complete(signals));
-  const firstIncomplete = completeFlags.findIndex((c) => !c);
-
-  const stages: RoadmapStage[] = blueprints.map((b, i) => {
-    let status: StageStatus;
-    if (completeFlags[i]) status = "done";
-    else if (i === firstIncomplete) status = "current";
-    else status = "upcoming";
-    return { key: b.key, title: b.title, body: b.body, status, ...(b.tip ? { tip: b.tip } : {}) };
-  });
+  const stages: RoadmapStage[] = blueprints.map((b, i) => ({
+    key: b.key,
+    title: b.title,
+    body: b.body,
+    status: statuses[i],
+    ...(b.tip ? { tip: b.tip } : {}),
+  }));
 
   const safetyText = [
     input.matterSubtype ?? "",

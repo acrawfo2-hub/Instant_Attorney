@@ -64,28 +64,51 @@ export function parseRoadmapAssertions(factDescriptions: string[]): Map<string, 
   return out;
 }
 
-/** Apply client corrections on top of signal-derived stage statuses. */
+/**
+ * Apply client corrections on top of signal-derived stage statuses.
+ *
+ * Two client signals bound the result:
+ *  - "not yet" / "this isn't right" sets a **cap**: the earliest stage the client
+ *    says they haven't reached. Nothing at or past it stays "done" — their
+ *    "I'm actually back here" overrides any inferred progress, and "you are here"
+ *    snaps back to it.
+ *  - "I've already done this" sets a **floor**: the furthest stage the client says
+ *    they've completed. Every stage up to it is marked done, so confirming an
+ *    out-of-order step advances "you are here" past it instead of stranding it
+ *    behind a checked-off step.
+ *
+ * If the two contradict (a completion claimed past a not-reached stage), the cap
+ * wins — the conservative "you are here" — so a "done" check never lands after the
+ * current marker.
+ */
 export function applyAssertionOverrides(
   stages: RoadmapStage[],
   assertions: Map<string, RoadmapAssertion>,
 ): RoadmapStage[] {
   if (assertions.size === 0) return stages;
 
-  const effectivelyDone = stages.map((stage) => {
-    const assertion = assertions.get(stage.key);
-    if (assertion === "completed") return true;
-    if (assertion === "not_yet" || assertion === "dispute") return false;
-    return stage.status === "done";
+  let cap = stages.length;
+  let floor = -1;
+  stages.forEach((stage, i) => {
+    const a = assertions.get(stage.key);
+    if ((a === "not_yet" || a === "dispute") && i < cap) cap = i;
+    if (a === "completed" && i > floor) floor = i;
+  });
+
+  const effectivelyDone = stages.map((stage, i) => {
+    if (i >= cap) return false; // not reached yet
+    if (i <= floor) return true; // client confirmed progress at least to here
+    return stage.status === "done"; // otherwise trust the signal-derived status
   });
 
   const firstIncomplete = effectivelyDone.findIndex((done) => !done);
 
-  return stages.map((stage, i) => {
-    let status: RoadmapStage["status"];
-    if (effectivelyDone[i]) status = "done";
-    else if (firstIncomplete === -1) status = "done";
-    else if (i === firstIncomplete) status = "current";
-    else status = "upcoming";
-    return { ...stage, status };
-  });
+  return stages.map((stage, i) => ({
+    ...stage,
+    status: effectivelyDone[i]
+      ? "done"
+      : i === firstIncomplete
+        ? "current"
+        : "upcoming",
+  }));
 }
