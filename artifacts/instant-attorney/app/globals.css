@@ -6695,3 +6695,50 @@ mark.atty-placeholder {
   color: var(--brand-text-lt);
 }
 
+/* Live roadmap spine — progressive disclosure */
+.lf-roadmap-show-all {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--brand-navy);
+  background: transparent;
+  border: 1px solid var(--brand-border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.lf-roadmap-show-all:hover {
+  background: rgba(26, 43, 74, 0.05);
+}
+.lf-roadmap-stage-toggle {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--brand-navy);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.lf-roadmap-tool-collapsed {
+  margin-bottom: 12px;
+}
+.lf-roadmap-tool-collapsed-summary {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand-text-md);
+  cursor: pointer;
+  padding: 10px 14px;
+  border: 1px dashed var(--brand-border);
+  border-radius: 8px;
+  list-style: none;
+}
+.lf-roadmap-tool-collapsed-summary::-webkit-details-marker { display: none; }
+.lf-roadmap-tool-collapsed-hint {
+  font-weight: 400;
+  color: var(--brand-text-lt);
+}
+.lf-roadmap-tool-collapsed-body {
+  margin-top: 8px;
+}
+

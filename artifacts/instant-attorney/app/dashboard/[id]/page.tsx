@@ -6,6 +6,8 @@ import { CaseFile, FactItem, BYPASS_USER_ID } from "@/lib/types";
 import type { Document, ConsultRequest, RequestedAttachment, GovFormInstrument, Attachment } from "@/lib/types";
 import ClientFileView from "@/components/ClientFileView";
 import AccountMenu from "@/components/AccountMenu";
+import { parseRoadmapOverlay } from "@/lib/roadmap-snapshot";
+import type { RoadmapAiOverlay } from "@/lib/roadmap-types";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
@@ -24,7 +26,7 @@ async function getData(caseFileId: string) {
     userId = user.id;
   }
 
-  const [{ data: caseFile }, { data: facts }, { data: documents }, { data: consultRow }, { data: subRow }, { data: requestedRows }, { data: formRows }, { data: attachmentRows }] = await Promise.all([
+  const [{ data: caseFile }, { data: facts }, { data: documents }, { data: consultRow }, { data: subRow }, { data: requestedRows }, { data: formRows }, { data: attachmentRows }, { data: roadmapSnap }] = await Promise.all([
     db.from("case_files")
       .select("*")
       .eq("id", caseFileId)
@@ -66,6 +68,11 @@ async function getData(caseFileId: string) {
       .select("*")
       .eq("case_file_id", caseFileId)
       .order("created_at", { ascending: true }),
+    db
+      .from("roadmap_snapshots")
+      .select("ai_overlay")
+      .eq("case_file_id", caseFileId)
+      .maybeSingle(),
   ]);
 
   if (!BYPASS_AUTH && (!subRow || !["active", "trialing", "bypass"].includes(subRow?.status ?? ""))) {
@@ -89,6 +96,7 @@ async function getData(caseFileId: string) {
     requestedAttachments: (requestedRows ?? []) as RequestedAttachment[],
     govForms: (formRows ?? []) as GovFormInstrument[],
     attachments: (attachmentRows ?? []) as Attachment[],
+    roadmapOverlay: parseRoadmapOverlay(roadmapSnap?.ai_overlay) as RoadmapAiOverlay,
   };
 }
 
@@ -104,7 +112,7 @@ export default async function FileDetailPage({
   const result = await getData(id);
   if (!result) notFound();
 
-  const { caseFile, facts, documents, childDocuments, consultRequest, hasConsultSub, requestedAttachments, govForms, attachments } = result;
+  const { caseFile, facts, documents, childDocuments, consultRequest, hasConsultSub, requestedAttachments, govForms, attachments, roadmapOverlay } = result;
 
   const title = caseFile.title
     || (caseFile.matter_subtype ? caseFile.matter_subtype.replace(/_/g, " ") : null)
@@ -156,6 +164,7 @@ export default async function FileDetailPage({
           mode="client"
           consultRequest={consultRequest}
           hasConsultSub={hasConsultSub}
+          roadmapOverlay={roadmapOverlay}
         />
       </main>
     </div>
