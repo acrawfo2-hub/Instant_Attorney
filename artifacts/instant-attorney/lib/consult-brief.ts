@@ -201,7 +201,7 @@ export function buildConsultBriefSnapshot(input: ConsultBriefInput): ConsultBrie
     summary: caseFile.summary,
     goals: caseFile.goals ?? [],
     timeline: {
-      currentStage: currentStage?.label ?? null,
+      currentStage: currentStage?.title ?? null,
       pathLabel: roadmap?.pathLabel ?? null,
       nextAction: caseFile.next_action,
       urgentNote: roadmap?.urgentNote ?? roadmap?.safetyNote ?? null,
