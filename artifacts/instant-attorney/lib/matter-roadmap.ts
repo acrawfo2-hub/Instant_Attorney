@@ -11,7 +11,8 @@
 //
 // Deterministic and side-effect free. Fully unit-testable; no I/O.
 
-import type { FamilyRoadmap, RoadmapStage, StageStatus } from "./family-roadmap.ts";
+import type { FamilyRoadmap, RoadmapStage } from "./family-roadmap.ts";
+import { assignStageStatuses } from "./roadmap-status.ts";
 
 export type MatterArea = "debt" | "hoa" | "employment" | "estate" | "general";
 
@@ -353,17 +354,15 @@ export function buildMatterRoadmap(input: MatterRoadmapInput): FamilyRoadmap {
   const area = detectMatterArea(input.matterSubtype, input.matterText);
   const signals = deriveSignals(input);
   const blueprints = blueprintsFor(area, input);
+  const statuses = assignStageStatuses(blueprints.map((b) => b.complete(signals)));
 
-  const completeFlags = blueprints.map((b) => b.complete(signals));
-  const firstIncomplete = completeFlags.findIndex((c) => !c);
-
-  const stages: RoadmapStage[] = blueprints.map((b, i) => {
-    let status: StageStatus;
-    if (completeFlags[i]) status = "done";
-    else if (i === firstIncomplete) status = "current";
-    else status = "upcoming";
-    return { key: b.key, title: b.title, body: b.body, status, ...(b.tip ? { tip: b.tip } : {}) };
-  });
+  const stages: RoadmapStage[] = blueprints.map((b, i) => ({
+    key: b.key,
+    title: b.title,
+    body: b.body,
+    status: statuses[i],
+    ...(b.tip ? { tip: b.tip } : {}),
+  }));
 
   return {
     path: area,

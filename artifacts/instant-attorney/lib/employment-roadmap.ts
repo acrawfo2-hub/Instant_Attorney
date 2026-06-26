@@ -7,6 +7,8 @@
 // completion is evidence-based, and prerequisite stages complete once a later one
 // is reached (the process is sequential). Mirrors lib/bankruptcy-roadmap.ts.
 
+import { assignStageStatuses } from "./roadmap-status.ts";
+
 export type StageStatus = "done" | "current" | "upcoming";
 
 export interface EmploymentStage {
@@ -117,16 +119,15 @@ const STAGES: Blueprint[] = [
  */
 export function buildEmploymentRoadmap(input: EmploymentRoadmapInput): EmploymentRoadmap {
   const signals = deriveSignals(input);
-  const completeFlags = STAGES.map((b) => b.complete(signals));
-  const firstIncomplete = completeFlags.findIndex((c) => !c);
+  const statuses = assignStageStatuses(STAGES.map((b) => b.complete(signals)));
 
-  const stages: EmploymentStage[] = STAGES.map((b, i) => {
-    let status: StageStatus;
-    if (completeFlags[i]) status = "done";
-    else if (i === firstIncomplete) status = "current";
-    else status = "upcoming";
-    return { key: b.key, title: b.title, body: b.body, status, ...(b.tip ? { tip: b.tip } : {}) };
-  });
+  const stages: EmploymentStage[] = STAGES.map((b, i) => ({
+    key: b.key,
+    title: b.title,
+    body: b.body,
+    status: statuses[i],
+    ...(b.tip ? { tip: b.tip } : {}),
+  }));
 
   return { stages, disclaimer: DISCLAIMER };
 }

@@ -80,3 +80,29 @@ test("placeholder gaps do not keep generic roadmap on build your file", () => {
   const buildFile = r!.stages.find((s) => s.key === "build_file");
   assert.equal(buildFile?.status, "done");
 });
+
+test("client corrections apply to the default (generic) roadmap, not just authored ones", () => {
+  const r = resolveRoadmapForCase({
+    caseFile: { ...baseFile, matter_subtype: "widget dispute", summary: "A contract over widgets" },
+    facts: [
+      {
+        id: "a1",
+        status: "confirmed",
+        description: "Roadmap · documents: Client confirmed this step is complete.",
+        kind: "fact",
+        created_at: "",
+        updated_at: "",
+      },
+    ],
+    documents: [],
+    requestedAttachments: [],
+    consultRequest: null,
+  });
+  assert.ok(r);
+  assert.equal(r!.blueprintKey, "generic");
+  // The client's "I've already done this" on a generic stage is honored: it and
+  // every earlier stage are done, and "you are here" advances past it.
+  assert.equal(r!.stages.find((s) => s.key === "documents")?.status, "done");
+  assert.equal(r!.stages.find((s) => s.key === "understand")?.status, "done");
+  assert.equal(r!.currentStageKey, "review");
+});

@@ -1,6 +1,11 @@
 import { createHash } from "crypto";
 import type { CaseFile, ConsultRequest, Document, FactItem, RequestedAttachment } from "./types.ts";
 
+// Only fields that actually feed the hash below are picked. Notably this does NOT
+// include caseFile.updated_at: that column bumps on essentially any write to the
+// case row, so hashing it would bust the snapshot on changes that don't affect the
+// roadmap at all — triggering a needless paid AI refresh on the next file open.
+// Every roadmap-material signal is captured explicitly here instead.
 export interface RoadmapFingerprintInput {
   caseFile: Pick<
     CaseFile,
@@ -9,12 +14,11 @@ export interface RoadmapFingerprintInput {
     | "summary"
     | "legal_strategy"
     | "financial_disclosure_acked_at"
-    | "updated_at"
   >;
-  facts: Pick<FactItem, "status" | "description" | "kind" | "updated_at">[];
-  documents: Pick<Document, "status" | "title" | "updated_at">[];
-  requestedAttachments: Pick<RequestedAttachment, "status" | "description">[];
-  consultRequest: Pick<ConsultRequest, "status" | "updated_at"> | null;
+  facts: Pick<FactItem, "status" | "description">[];
+  documents: Pick<Document, "status" | "title">[];
+  requestedAttachments: Pick<RequestedAttachment, "status">[];
+  consultRequest: Pick<ConsultRequest, "status"> | null;
   attachmentCount: number;
 }
 
@@ -53,7 +57,6 @@ export function computeRoadmapFingerprint(input: RoadmapFingerprintInput): strin
     input.consultRequest?.status ?? "none",
     String(input.attachmentCount),
     input.caseFile.financial_disclosure_acked_at ?? "",
-    input.caseFile.updated_at ?? "",
   ].join("\x1e");
 
   return createHash("sha256").update(payload).digest("hex");

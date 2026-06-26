@@ -432,6 +432,7 @@ export default function ClientFileView({
           fingerprint={roadmapFingerprint}
           caseFileId={caseFile.id}
           hasConsult={hasActiveConsult || hasConsultSub}
+          consultHref={hasConsultSub ? "/consult/schedule" : "/register?upgrade=consult"}
         />
       )}
 

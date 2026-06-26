@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unknown stage for this roadmap" }, { status: 400 });
   }
 
-  const description = buildAssertionDescription(stageKey, assertion, roadmap.blueprintKey, note || undefined);
+  const description = buildAssertionDescription(stageKey, assertion, note || undefined);
   const prefix = assertionFactPrefix(stageKey);
   const writeDb = BYPASS_AUTH ? db : createServiceClient();
 

@@ -7,9 +7,11 @@ import type { RoadmapAiOverlay } from "@/lib/roadmap-types";
 export default function RoadmapConsultNudge({
   overlay,
   hasConsult,
+  consultHref = "/consult/schedule",
 }: {
   overlay: RoadmapAiOverlay;
   hasConsult: boolean;
+  consultHref?: string;
 }) {
   if (!overlay.consult_recommended || hasConsult) return null;
 
@@ -32,7 +34,7 @@ export default function RoadmapConsultNudge({
         {overlay.consult_reason ||
           "An attorney can map your specific facts to deadlines and next steps — general information online cannot replace that."}
       </p>
-      <Link href="/consult/schedule" className="lf-inst-start-btn">
+      <Link href={consultHref} className="lf-inst-start-btn">
         Schedule a consult with Andrew Crawford, Esq. →
       </Link>
     </div>

@@ -14,6 +14,8 @@
 // genuinely sequential), so "current" is the first stage without evidence.
 // General legal information, not legal advice.
 
+import { assignStageStatuses } from "./roadmap-status.ts";
+
 export type StageStatus = "done" | "current" | "upcoming";
 
 export interface RoadmapStage {
@@ -135,16 +137,15 @@ const STAGES: Blueprint[] = [
  */
 export function buildGenericRoadmap(input: GenericRoadmapInput): GenericRoadmap {
   const signals = deriveSignals(input);
-  const completeFlags = STAGES.map((b) => b.complete(signals));
-  const firstIncomplete = completeFlags.findIndex((c) => !c);
+  const statuses = assignStageStatuses(STAGES.map((b) => b.complete(signals)));
 
-  const stages: RoadmapStage[] = STAGES.map((b, i) => {
-    let status: StageStatus;
-    if (completeFlags[i]) status = "done";
-    else if (i === firstIncomplete) status = "current";
-    else status = "upcoming";
-    return { key: b.key, title: b.title, body: b.body, status, ...(b.tip ? { tip: b.tip } : {}) };
-  });
+  const stages: RoadmapStage[] = STAGES.map((b, i) => ({
+    key: b.key,
+    title: b.title,
+    body: b.body,
+    status: statuses[i],
+    ...(b.tip ? { tip: b.tip } : {}),
+  }));
 
   return { label: "Your Roadmap", stages, disclaimer: DISCLAIMER };
 }

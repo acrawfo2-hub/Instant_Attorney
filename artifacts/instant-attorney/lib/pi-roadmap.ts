@@ -5,6 +5,8 @@
 // next. Evidence-based completion signals; writes nothing. Mirrors
 // lib/family-roadmap.ts.
 
+import { assignStageStatuses } from "./roadmap-status.ts";
+
 export type PiPath =
   | "auto_accident"
   | "premises"
@@ -216,17 +218,15 @@ export function buildPiRoadmap(input: PiRoadmapInput): PiRoadmap {
   const path = detectPiPath(input.matterText);
   const signals = deriveSignals(input);
   const blueprints = blueprintsFor(path);
+  const statuses = assignStageStatuses(blueprints.map((b) => b.complete(signals)));
 
-  const completeFlags = blueprints.map((b) => b.complete(signals));
-  const firstIncomplete = completeFlags.findIndex((c) => !c);
-
-  const stages: RoadmapStage[] = blueprints.map((b, i) => {
-    let status: StageStatus;
-    if (completeFlags[i]) status = "done";
-    else if (i === firstIncomplete) status = "current";
-    else status = "upcoming";
-    return { key: b.key, title: b.title, body: b.body, status, ...(b.tip ? { tip: b.tip } : {}) };
-  });
+  const stages: RoadmapStage[] = blueprints.map((b, i) => ({
+    key: b.key,
+    title: b.title,
+    body: b.body,
+    status: statuses[i],
+    ...(b.tip ? { tip: b.tip } : {}),
+  }));
 
   const urgentText = [(input.matterText ?? ""), ...(input.facts ?? [])].join(" ").toLowerCase();
   const urgent =

@@ -9,6 +9,8 @@
 // discharge), so a stage is "done" only with real evidence. Mirrors
 // lib/family-roadmap.ts.
 
+import { assignStageStatuses } from "./roadmap-status.ts";
+
 export type StageStatus = "done" | "current" | "upcoming";
 
 export interface BankruptcyStage {
@@ -125,16 +127,15 @@ const STAGES: Blueprint[] = [
  */
 export function buildBankruptcyRoadmap(input: BankruptcyRoadmapInput): BankruptcyRoadmap {
   const signals = deriveSignals(input);
-  const completeFlags = STAGES.map((b) => b.complete(signals));
-  const firstIncomplete = completeFlags.findIndex((c) => !c);
+  const statuses = assignStageStatuses(STAGES.map((b) => b.complete(signals)));
 
-  const stages: BankruptcyStage[] = STAGES.map((b, i) => {
-    let status: StageStatus;
-    if (completeFlags[i]) status = "done";
-    else if (i === firstIncomplete) status = "current";
-    else status = "upcoming";
-    return { key: b.key, title: b.title, body: b.body, status, ...(b.tip ? { tip: b.tip } : {}) };
-  });
+  const stages: BankruptcyStage[] = STAGES.map((b, i) => ({
+    key: b.key,
+    title: b.title,
+    body: b.body,
+    status: statuses[i],
+    ...(b.tip ? { tip: b.tip } : {}),
+  }));
 
   return { stages, disclaimer: DISCLAIMER };
 }
