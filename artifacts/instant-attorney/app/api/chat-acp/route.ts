@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { logTruncation } from "@/lib/truncation-logger";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { ACP_CHAT_SYSTEM_PROMPT, buildFileContext } from "@/lib/prompts";
+import { buildAcpSystemPrompt, buildFileContext } from "@/lib/prompts";
+import { detectAcpAreasFromContext } from "@/lib/acp-area-router";
 import { parseAndUpdateFile, isCompleteFileUpdate } from "@/lib/file-parser";
 import { triggerPendingLookups } from "@/lib/gov-form-lookup";
 import { generateCaseTitle } from "@/lib/title-generator";
@@ -49,21 +50,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { data: sub } = await db
-      .from("subscriptions")
-      .select("status")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    userId = user.id;
+
+    // The subscription check and the billing gate both depend only on the user
+    // id, so run them concurrently to shave a DB round-trip off the latency
+    // before the model stream can start.
+    const [{ data: sub }, gate] = await Promise.all([
+      db
+        .from("subscriptions")
+        .select("status")
+        .eq("user_id", user.id)
+        .maybeSingle(),
+      // Pre-call billing gate: block new AI spend while a top-up is pending/failed.
+      getBillingGate(user.id),
+    ]);
 
     const activeStatuses = ["active", "trialing", "bypass"];
     if (!sub || !activeStatuses.includes(sub.status)) {
       return NextResponse.json({ error: "Subscription required" }, { status: 403 });
     }
 
-    userId = user.id;
-
-    // Pre-call billing gate: block new AI spend while a top-up is pending/failed.
-    const gate = await getBillingGate(userId);
     if (!gate.allowed) {
       return NextResponse.json(
         {
@@ -181,27 +187,40 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Save the last user message text (save text content only). Capture its id so an
-  // inline screenshot uploaded below can be linked back to this exact message and
-  // reattached to the right bubble when the conversation is reloaded.
-  let userMessageId: string | null = null;
+  // Persist the last user message concurrently with the model stream rather than
+  // blocking time-to-first-token on the insert. Only the inline-screenshot path
+  // (after the stream) needs its id; the stream's finally awaits this promise
+  // before the response closes, so persistence is still guaranteed.
   const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
-  if (lastUserMsg) {
-    const textToSave = pendingAttachment
-      ? `[${pendingAttachment.fileName}]\n${lastUserMsg.content}`
-      : lastUserMsg.content;
-    const { data: insertedMsg } = await db
-      .from("intake_messages")
-      .insert({
-        case_file_id: resolvedCaseFileId,
-        user_id: userId,
-        role: "user",
-        content: textToSave,
-      })
-      .select("id")
-      .single();
-    userMessageId = insertedMsg?.id ?? null;
-  }
+  const userMessagePromise: Promise<string | null> = lastUserMsg
+    ? (async () => {
+        try {
+          const { data } = await db
+            .from("intake_messages")
+            .insert({
+              case_file_id: resolvedCaseFileId,
+              user_id: userId,
+              role: "user",
+              content: pendingAttachment
+                ? `[${pendingAttachment.fileName}]\n${lastUserMsg.content}`
+                : lastUserMsg.content,
+            })
+            .select("id")
+            .single();
+          return data?.id ?? null;
+        } catch (err) {
+          console.error("[chat-acp] failed to persist user message:", err);
+          return null;
+        }
+      })()
+    : Promise.resolve(null);
+
+  // Route the deep-dive practice-area modules: load only the law this matter
+  // implicates (detected from the conversation + case file) instead of all eight
+  // areas every turn. prompts.ts always includes the compact area index, so an
+  // as-yet-unmatched opening turn still degrades gracefully.
+  const detectedAreas = detectAcpAreasFromContext(messages, caseFile);
+  const acpSystemPrompt = buildAcpSystemPrompt(detectedAreas);
 
   // Stream from Anthropic
   const stream = anthropic.messages.stream({
@@ -210,7 +229,7 @@ export async function POST(req: NextRequest) {
     system: [
       {
         type: "text" as const,
-        text: ACP_CHAT_SYSTEM_PROMPT,
+        text: acpSystemPrompt,
         cache_control: { type: "ephemeral" as const },
       },
       ...(fileContext ? [{ type: "text" as const, text: fileContext }] : []),
@@ -253,6 +272,12 @@ export async function POST(req: NextRequest) {
             }) },
           });
         }
+
+        // The user-message insert was kicked off before the stream to keep it
+        // off time-to-first-token; await it here so its id is available for the
+        // screenshot path below and persistence is flushed before the response
+        // closes.
+        const userMessageId = await userMessagePromise;
 
         if (fullResponse) {
           await db.from("intake_messages").insert({
