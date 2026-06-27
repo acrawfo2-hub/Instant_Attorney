@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { logTruncation } from "@/lib/truncation-logger";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { ACP_CHAT_SYSTEM_PROMPT, buildFileContext } from "@/lib/prompts";
+import { buildAcpSystemPrompt, buildFileContext } from "@/lib/prompts";
+import { detectAcpAreasFromContext } from "@/lib/acp-area-router";
 import { parseAndUpdateFile, isCompleteFileUpdate } from "@/lib/file-parser";
 import { triggerPendingLookups } from "@/lib/gov-form-lookup";
 import { generateCaseTitle } from "@/lib/title-generator";
@@ -174,6 +175,13 @@ export async function POST(req: NextRequest) {
     userMessageId = insertedMsg?.id ?? null;
   }
 
+  // Route the deep-dive practice-area modules: load only the law this matter
+  // implicates (detected from the conversation + case file) instead of all eight
+  // areas every turn. prompts.ts always includes the compact area index, so an
+  // as-yet-unmatched opening turn still degrades gracefully.
+  const detectedAreas = detectAcpAreasFromContext(messages, caseFile);
+  const acpSystemPrompt = buildAcpSystemPrompt(detectedAreas);
+
   // Stream from Anthropic
   const stream = anthropic.messages.stream({
     model: "claude-sonnet-4-6",
@@ -181,7 +189,7 @@ export async function POST(req: NextRequest) {
     system: [
       {
         type: "text" as const,
-        text: ACP_CHAT_SYSTEM_PROMPT,
+        text: acpSystemPrompt,
         cache_control: { type: "ephemeral" as const },
       },
       ...(fileContext ? [{ type: "text" as const, text: fileContext }] : []),
