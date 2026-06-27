@@ -75,7 +75,7 @@ export async function POST(
     );
   }
 
-  const attorneyInstructions =
+  const freeTextInstructions =
     (typeof body.prompt === "string" ? body.prompt : null) ??
     parent.attorney_second_draft_prompt ??
     "";
@@ -86,6 +86,30 @@ export async function POST(
       updated_at: new Date().toISOString(),
     }).eq("id", id);
   }
+
+  // Fold the attorney's open (unresolved) comments & concerns into the revision
+  // instructions. These live in document_comments rather than the free-text
+  // prompt, so they accumulate across review passes without overwriting the
+  // saved prompt. Resolved comments are intentionally excluded.
+  const { data: openComments } = await db
+    .from("document_comments")
+    .select("body, created_at")
+    .eq("document_id", id)
+    .eq("resolved", false)
+    .order("created_at", { ascending: true });
+
+  const commentsBlock = (openComments ?? [])
+    .map((c, i) => `${i + 1}. ${c.body}`)
+    .join("\n");
+
+  const attorneyInstructions = [
+    freeTextInstructions.trim(),
+    commentsBlock
+      ? `COMMENTS & CONCERNS TO ADDRESS:\n${commentsBlock}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 
   const [{ data: caseFileRow }, { data: factRows }, { data: attRows }] = await Promise.all([
     db.from("case_files").select("*").eq("id", parent.case_file_id).single(),

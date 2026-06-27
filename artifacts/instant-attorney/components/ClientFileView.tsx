@@ -17,6 +17,7 @@ import type { RoadmapAiOverlay } from "@/lib/roadmap-types";
 import RoadmapSpine from "@/components/RoadmapSpine";
 import RoadmapToolGroup from "@/components/RoadmapToolGroup";
 import PostConsultCard from "@/components/PostConsultCard";
+import CaseChatPanel from "@/components/CaseChatPanel";
 import type { CaseFile, FactItem, Document, Profile, WizardType, ConsultRequest, ConsultWrapUp, RequestedAttachment, GovFormInstrument, Attachment } from "@/lib/types";
 import { isValidWizardType } from "@/lib/document-utils";
 import { WIZARD_LABELS, docTypeLabel, personDisplayName, isDocumentOutOfDate, coerceWizardType } from "@/lib/types";
@@ -1086,6 +1087,21 @@ export default function ClientFileView({
       <div className="lf-card lf-card-full" id="attachments">
         <div className="lf-card-label">Documents &amp; Attachments</div>
         <AttachmentPanel caseFileId={caseFile.id} />
+      </div>
+
+      {/* Direct message channel — client ⇆ attorney. Shown in both views so each
+          side sees the same thread. */}
+      <div className="lf-card lf-card-full">
+        <div className="lf-card-label">
+          {isAttorney ? "Messages with Client" : "Messages with Crawford Law"}
+        </div>
+        <CaseChatPanel
+          caseFileId={caseFile.id}
+          viewerRole={isAttorney ? "attorney" : "client"}
+          counterpartLabel={
+            isAttorney ? personDisplayName(clientProfile) : "Crawford Law"
+          }
+        />
       </div>
 
       {/* Attorney Assessment */}
