@@ -16,7 +16,16 @@ export async function POST(req: NextRequest) {
   const stream = client.messages.stream({
     model: "claude-sonnet-4-6",
     max_tokens: maxOutputTokensFor("claude-sonnet-4-6"),
-    system: FREE_CHAT_SYSTEM_PROMPT,
+    // Cache the static system prompt so multi-turn free chats pay ~10% on this
+    // prefix instead of resending ~1.8K tokens every turn. Free chat is
+    // non-privileged and the prompt carries no client-specific data.
+    system: [
+      {
+        type: "text" as const,
+        text: FREE_CHAT_SYSTEM_PROMPT,
+        cache_control: { type: "ephemeral" as const },
+      },
+    ],
     messages,
   });
 
