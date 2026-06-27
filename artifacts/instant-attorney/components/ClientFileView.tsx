@@ -8,6 +8,7 @@ import ReviewSlaClock from "@/components/ReviewSlaClock";
 import RegenerateDocButton from "@/components/RegenerateDocButton";
 import CancelDocButton from "@/components/CancelDocButton";
 import FactsPanel from "@/components/FactsPanel";
+import ExistingCounselCard from "@/components/ExistingCounselCard";
 import { placeholderFields } from "@/lib/wizard-parsing";
 import { computeMissionControl } from "@/lib/mission-control";
 import { detectMatterFlags, resolveRoadmapForCase } from "@/lib/roadmap-build";
@@ -483,6 +484,16 @@ export default function ClientFileView({
           {caseFile.next_action ?? "Continue intake to determine"}
         </div>
       </div>
+
+      {/* Existing counsel context */}
+      <ExistingCounselCard
+        caseFileId={caseFile.id}
+        counselIntakeAt={caseFile.counsel_intake_at}
+        hasExistingCounsel={caseFile.has_existing_counsel}
+        existingCounselName={caseFile.existing_counsel_name}
+        counselEngagementGoal={caseFile.counsel_engagement_goal}
+        mode={isAttorney ? "attorney" : "client"}
+      />
 
       {/* Case Summary */}
       {caseFile.summary && (

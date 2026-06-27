@@ -195,9 +195,22 @@ export interface CaseFile {
   joint_no_secrets_ack?: boolean;
   financial_disclosure_acked_at?: string | null;
   financial_disclosure_version?: string | null;
+  /** When the client completed the existing-counsel intake questionnaire. */
+  counsel_intake_at?: string | null;
+  /** null = not asked yet; false = no other attorney; true = has other counsel. */
+  has_existing_counsel?: boolean | null;
+  existing_counsel_name?: string | null;
+  counsel_engagement_goal?: CounselEngagementGoal | null;
   opened_at: string;
   updated_at: string;
 }
+
+/** Why a client with existing counsel is using Instant Attorney. */
+export type CounselEngagementGoal =
+  | "understand_situation"
+  | "document_review"
+  | "prepare_for_meeting"
+  | "second_opinion";
 
 // ── Financial Picture (asset-dependent matters) ──────────────────────────────
 // Milestone 1 of docs/financial-picture-spec.md. A structured sibling to

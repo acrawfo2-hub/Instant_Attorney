@@ -1,6 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { CaseFile, FactItem, WizardType, Attachment, RequestedAttachment, Document } from "./types";
 import { WIZARD_LABELS, docTypeLabel } from "./types.ts";
+import { formatCounselContextForPrompt } from "./existing-counsel.ts";
 import { formCatalogForPrompt } from "./government-forms.ts";
 import { hoaStatutesForPrompt } from "./hoa-statutes.ts";
 import { hoaInstrumentsForPrompt } from "./hoa-instruments.ts";
@@ -44,6 +45,7 @@ How you behave:
 - Never give legal advice — explain what the law generally provides, not what this specific person should do
 - Never predict outcomes or guarantee results
 - Never lecture, moralize, or make the user feel judged
+- If the user mentions they already have an attorney, lawyer, or firm on this matter — or asks for a "second opinion" — acknowledge it warmly. Explain that this free chat is general legal information only (not a second legal opinion, not privileged). Do NOT invite them to paste confidential communications from their current lawyer here. Note that Phase II or a consult is the appropriate place for limited-scope help under Crawford Law's representation agreement. Continue helping with the general legal picture; do not tell them to fire or distrust their current counsel.
 
 When you are ready to produce the summary (after 3–5 substantive exchanges), structure it like this:
 
@@ -155,6 +157,8 @@ export function buildFileContext(
     lines.push("", `JURISDICTION: ${caseFile.jurisdiction}`);
   }
 
+  lines.push(...formatCounselContextForPrompt(caseFile));
+
   if (caseFile.next_action) {
     lines.push("", `NEXT ACTION: ${caseFile.next_action}`);
   }
@@ -221,6 +225,7 @@ How you conduct the intake:
 - For reactive matters: focus on facts, timeline, relationships, claims, evidence, deadlines.
 - For preventive matters: focus on goals, risk exposure, instruments needed, timeline.
 - Confirm: names of all parties, key dates, locations, deadlines, prior counsel, relevant documents.
+- EXISTING COUNSEL — if the Living File shows the client already has another attorney, or they mention one: confirm the counsel's name if known, what they want from Instant Attorney (understand the situation, document review, prepare for a meeting with their attorney, or a scoped second opinion), and that Crawford Law is providing limited-scope assistance only — not replacing their counsel. Do NOT contradict their attorney's advice without flagging the tension for attorney review. For second-opinion or meeting-prep goals, set RECOMMEND_CONSULT: true when stakes are high. For document-review goals, prioritize doc_review in the DOCUMENT PLAN when appropriate.
 - Track what is known, what is uncertain, what needs to be gathered later.
 - THE PROOF LENS — for the facts that actually MATTER to the claim (not every detail), gently establish how each could be SHOWN: is there a document, message, photo, recording, or witness, or is it the client's recollection? Ask the natural follow-up ("Do you have anything that shows that?") warmly — never like a cross-examination, and always so the client feels believed. The goal is to make their account provable, not to doubt it.
 - Distinguish three kinds of confirmed fact and TAG each one in the Living File (see the format): ESTABLISHED (backed by tangible evidence already in the file or readily obtainable), ASSERTED (a factual claim resting on the client's account for now), and CHARACTERIZATION/OPINION (not a provable fact — e.g. "unfair," "hostile" — flag these, because they carry little evidentiary weight and, in defamation, may be protected).

@@ -122,3 +122,26 @@ test("surfaces post-consult client actions at top priority", () => {
   assert.equal(consultActions[0].priority, 3);
   assert.equal(consultActions[0].kind, "upload");
 });
+
+test("existing counsel intake incomplete surfaces mission action", () => {
+  const board = computeMissionControl({
+    caseFile: { ...baseFile, counsel_intake_at: null },
+    documents: [],
+    facts: [],
+  });
+  assert.ok(board.actions.some((a) => a.id === "counsel:intake"));
+});
+
+test("document review goal with existing counsel suggests doc review wizard", () => {
+  const board = computeMissionControl({
+    caseFile: {
+      ...baseFile,
+      counsel_intake_at: new Date().toISOString(),
+      has_existing_counsel: true,
+      counsel_engagement_goal: "document_review",
+    },
+    documents: [],
+    facts: [],
+  });
+  assert.ok(board.actions.some((a) => a.id === "counsel:doc-review"));
+});

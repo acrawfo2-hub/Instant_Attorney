@@ -5,8 +5,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { IntakeMessage, WIZARD_LABELS, LegalStrategy } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
 import QuickConsultModal from "@/components/QuickConsultModal";
+import ExistingCounselModal from "@/components/ExistingCounselModal";
+import type { ExistingCounselFormValue } from "@/components/ExistingCounselForm";
 import VoiceInputButton, { VoiceUnsupportedNote } from "@/components/VoiceInputButton";
 import AccountMenu from "@/components/AccountMenu";
+import { phase2ExistingCounselNotice } from "@/lib/existing-counsel";
+import type { CounselEngagementGoal } from "@/lib/types";
 
 type Msg = Pick<IntakeMessage, "role" | "content"> & {
   // Local-only: object URL for a screenshot the user attached to this turn, so the
@@ -133,6 +137,12 @@ function AcpChatInner() {
   const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [showQcModal, setShowQcModal] = useState(false);
+  const [showCounselModal, setShowCounselModal] = useState(false);
+  const [pendingCounselContext, setPendingCounselContext] = useState<ExistingCounselFormValue | null>(null);
+  const [existingCounselBanner, setExistingCounselBanner] = useState<{
+    name: string | null;
+    goal: CounselEngagementGoal | null;
+  } | null>(null);
   const [handoff, setHandoff] = useState<{ label: string; href: string } | null>(null);
   const [keepChatting, setKeepChatting] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -191,6 +201,61 @@ function AcpChatInner() {
       cancelled = true;
     };
   }, [urlCaseFileId]);
+
+  // ── Existing-counsel intake gate ─────────────────────────────────────────────
+  useEffect(() => {
+    if (urlCaseFileId) {
+      let cancelled = false;
+      (async () => {
+        const res = await fetch(`/api/case-files/${urlCaseFileId}/counsel-context`);
+        if (!res.ok) {
+          if (!cancelled) setShowCounselModal(true);
+          return;
+        }
+        const data = await res.json() as {
+          counsel_intake_at?: string | null;
+          has_existing_counsel?: boolean | null;
+          existing_counsel_name?: string | null;
+          counsel_engagement_goal?: CounselEngagementGoal | null;
+        };
+        if (cancelled) return;
+        if (data.counsel_intake_at) {
+          setShowCounselModal(false);
+          if (data.has_existing_counsel) {
+            setExistingCounselBanner({
+              name: data.existing_counsel_name ?? null,
+              goal: data.counsel_engagement_goal ?? null,
+            });
+          }
+        } else {
+          setShowCounselModal(true);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+    setShowCounselModal(true);
+  }, [urlCaseFileId]);
+
+  function handleCounselComplete(value: ExistingCounselFormValue) {
+    setShowCounselModal(false);
+    if (value.has_existing_counsel) {
+      setExistingCounselBanner({
+        name: value.existing_counsel_name?.trim() || null,
+        goal: value.counsel_engagement_goal,
+      });
+    } else {
+      setExistingCounselBanner(null);
+    }
+    if (!caseFileId && !urlCaseFileId) {
+      setPendingCounselContext(value);
+    }
+  }
+
+  function handleCounselSkip() {
+    setShowCounselModal(false);
+  }
 
   // ── Ready signal ───────────────────────────────────────────────────────────
   // The conversation reaches its handoff point once the attorney strategy has
@@ -276,7 +341,7 @@ function AcpChatInner() {
   async function sendMessage(e: FormEvent) {
     e.preventDefault();
     const text = input.trim();
-    if ((!text && !pendingAttachment) || loading) return;
+    if ((!text && !pendingAttachment) || loading || showCounselModal) return;
 
     const attachment = pendingAttachment;
 
@@ -316,6 +381,16 @@ function AcpChatInner() {
           caseFileId,
           ...(isQuickConsult ? { fileType: "quick_consult" } : {}),
           ...(attachment ? { pendingAttachment: { data: attachment.data, mimeType: attachment.mimeType, fileName: attachment.fileName } } : {}),
+          ...(pendingCounselContext
+            ? {
+                counselContext: {
+                  has_existing_counsel: pendingCounselContext.has_existing_counsel,
+                  unsure: pendingCounselContext.unsure,
+                  existing_counsel_name: pendingCounselContext.existing_counsel_name,
+                  counsel_engagement_goal: pendingCounselContext.counsel_engagement_goal,
+                },
+              }
+            : {}),
         }),
       });
 
@@ -370,6 +445,7 @@ function AcpChatInner() {
       }
       setMessages((prev) => [...prev, { role: "assistant", content: full }]);
       setStreamingText("");
+      setPendingCounselContext(null);
     } catch {
       setMessages((prev) => [
         ...prev,
@@ -452,6 +528,22 @@ function AcpChatInner() {
           </svg>
           This conversation is protected by attorney-client privilege pursuant to your signed Crawford Law representation agreement.
         </div>
+      )}
+
+      {/* EXISTING COUNSEL BANNER */}
+      {existingCounselBanner && (
+        <div className="ec-chat-banner">
+          {phase2ExistingCounselNotice(existingCounselBanner.name, existingCounselBanner.goal)}
+        </div>
+      )}
+
+      {/* EXISTING COUNSEL INTAKE MODAL */}
+      {showCounselModal && (
+        <ExistingCounselModal
+          caseFileId={caseFileId ?? urlCaseFileId}
+          onComplete={handleCounselComplete}
+          onSkip={handleCounselSkip}
+        />
       )}
 
       {/* QUICK CONSULT SAVE MODAL */}
