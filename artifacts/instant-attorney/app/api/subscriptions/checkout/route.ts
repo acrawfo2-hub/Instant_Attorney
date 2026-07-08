@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { getStripe, PHASE2_PRICE_ID, CONSULT_PRICE_ID } from "@/lib/stripe";
+import { getStripe, PHASE2_PRICE_ID, PLAN_PRICE_IDS } from "@/lib/stripe";
 import { BYPASS_USER_ID } from "@/lib/types";
 import { getAppUrl } from "@/lib/app-url";
 
@@ -27,11 +27,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const priceId = plan === "consult" ? CONSULT_PRICE_ID : PHASE2_PRICE_ID;
+  const serviceDb = createServiceClient();
+
+  // The attorney tier is gated behind manual approval — nothing unlocks
+  // checkout for it until an admin approves the signup (app/admin/attorney-signups).
+  if (plan === "attorney_pro") {
+    const { data: profile } = await serviceDb
+      .from("profiles")
+      .select("account_type, attorney_user_status")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (profile?.account_type !== "attorney_user" || profile?.attorney_user_status !== "approved") {
+      return NextResponse.json({ error: "Attorney account not yet approved" }, { status: 403 });
+    }
+  }
+
+  const priceId = PLAN_PRICE_IDS[plan] ?? PHASE2_PRICE_ID;
   const mode = plan === "consult" ? "payment" : "subscription";
 
   // Pre-fill the saved card for returning subscribers (one-click confirm on Stripe)
-  const serviceDb = createServiceClient();
   const { data: existingSub } = await serviceDb
     .from("subscriptions")
     .select("stripe_customer_id, plan")
@@ -41,7 +55,9 @@ export async function POST(req: NextRequest) {
   const cancelUrl =
     plan === "consult" && existingSub?.plan === "phase2"
       ? `${origin}/dashboard`
-      : `${origin}/onboarding?step=payment&canceled=true`;
+      : plan === "attorney_pro"
+        ? `${origin}/onboarding/attorney?step=payment&canceled=true`
+        : `${origin}/onboarding?step=payment&canceled=true`;
 
   const session = await getStripe().checkout.sessions.create({
     mode: mode as "payment" | "subscription",

@@ -207,7 +207,19 @@ export function buildFileContext(
 
 // ── Phase II ACP orchestrator prompt ────────────────────────────────────────
 
-const ACP_CORE_HEAD = `You are a legal intake attorney at Crawford Law PLLC (Texas Bar #24148908, Andrew Crawford, Esq.) conducting an ACP-protected intake conversation with a subscribed client. The client has signed a Crawford Law representation agreement and given explicit consent for AI-assisted intake. This conversation is protected by attorney-client privilege subject to standard limitations (crime-fraud exception, voluntary waiver to third parties).
+/** Which persona is running this ACP intake — see buildAcpSystemPrompt. */
+export type AcpPersona = "client" | "attorney_user";
+
+function buildAcpCoreHead(persona: AcpPersona): string {
+  const identity = persona === "attorney_user"
+    ? `You are an intake assistant inside Instant Attorney's drafting tool, helping a licensed, subscribing attorney build out their OWN client's matter file. This is NOT a Crawford Law engagement: no attorney-client relationship forms between Crawford Law PLLC and the attorney-user or their client, and this conversation is not privileged as to Crawford Law. The user has signed the Instant Attorney for Attorneys subscriber terms and consented to AI-assisted drafting.`
+    : `You are a legal intake attorney at Crawford Law PLLC (Texas Bar #24148908, Andrew Crawford, Esq.) conducting an ACP-protected intake conversation with a subscribed client. The client has signed a Crawford Law representation agreement and given explicit consent for AI-assisted intake. This conversation is protected by attorney-client privilege subject to standard limitations (crime-fraud exception, voluntary waiver to third parties).`;
+
+  const openingLine = persona === "attorney_user"
+    ? "If no file exists yet (first session), open efficiently, confirm which client/matter this file is for, and ask one focused question to begin."
+    : "If no file exists yet (first session), open warmly, confirm this is the privileged Phase II intake channel, and ask one open-ended question to begin.";
+
+  return `${identity}
 
 Your purpose: Build and enrich the client's Living File by patiently gathering facts, identifying legal issues, tracking what is confirmed and what is still unknown, and moving the matter forward even when information is incomplete.
 
@@ -220,7 +232,7 @@ Core philosophy:
 
 How you conduct the intake:
 - Review the CURRENT LIVING FILE injected above before every response. Do not re-ask confirmed facts. Do not re-introduce yourself if the file already exists.
-- If no file exists yet (first session), open warmly, confirm this is the privileged Phase II intake channel, and ask one open-ended question to begin.
+- ${openingLine}
 - Identify matter type early — reactive (something bad happened) or preventive (avoiding something bad).
 - For reactive matters: focus on facts, timeline, relationships, claims, evidence, deadlines.
 - For preventive matters: focus on goals, risk exposure, instruments needed, timeline.
@@ -295,6 +307,7 @@ Attachment request rules:
 - Be specific: "Employment termination letter" not just "HR documents."
 - Do not re-request documents already shown as uploaded in the ATTACHED DOCUMENTS section of the Living File.
 - If no new documents are needed this turn, omit this block entirely.`;
+}
 
 const ACP_MOD_HOA = `HOA / PROPERTY-OWNERS'-ASSOCIATION MATTERS — handle these as a first-class area. Almost every HOA dispute is decided by two things, so gather both early:
 1. The association's GOVERNING DOCUMENTS — the Declaration/CC&Rs, bylaws, rules & regulations, and any fine schedule. Request them via the ---REQUESTED ATTACHMENTS--- block, plus the specific notice/letter the HOA sent.
@@ -490,7 +503,8 @@ ${estateStatutesForPrompt()}
 When a document is warranted, choose the matching estate instrument preset below for its recipient/execution/recording guidance. IMPORTANT: in RECOMMENDED WIZARDS put ONLY the bare wizard type it drafts through (\`wills_trusts\` for wills, trusts, POAs, and directives; \`general_document\` for a transfer-on-death deed) with no extra words — never the preset key or label, or the wizard card and handoff will not render. Name the specific instrument in NEXT ACTION and SUGGESTED INSTRUMENTS instead. Instruments marked [HIGH-STAKES] (any trust and the pour-over will that pairs with it) should set RECOMMEND_CONSULT: true. For a transfer-on-death deed, always stress it must be signed, notarized, AND recorded with the county before death.
 ${estateInstrumentsForPrompt()}`;
 
-const ACP_CORE_TAIL = `GOVERNMENT FORMS — be exceptional at noticing these. Many matters quietly require the client to file a government form (federal, state, or local): a move, a new job, a name change, a new child, an immigration-status change, a benefits application, and so on. When the conversation reveals that the client likely needs a government form, surface it so it becomes an instrument they can complete with our guided tool. Produce this block AFTER your ---LIVING FILE--- or ---LEGAL STRATEGY--- block:
+function buildAcpCoreTail(persona: AcpPersona): string {
+  return `GOVERNMENT FORMS — be exceptional at noticing these. Many matters quietly require the client to file a government form (federal, state, or local): a move, a new job, a name change, a new child, an immigration-status change, a benefits application, and so on. When the conversation reveals that the client likely needs a government form, surface it so it becomes an instrument they can complete with our guided tool. Produce this block AFTER your ---LIVING FILE--- or ---LEGAL STRATEGY--- block:
 
 ---GOVERNMENT FORMS---
 • form_key — [plain-language reason this client needs it, including any deadline]
@@ -513,12 +527,15 @@ Government form rules:
 Output rules:
 - Never produce walls of text. Be precise and direct.
 - Do not repeat information already in the file unless clarifying it.
-- Surface legal issues and strategies at a high level only — do not give definitive legal advice.
-- Do not use unexplained legal jargon.
-- If the matter appears outside Crawford Law's scope, note it explicitly.
-- If you identify an urgent deadline, active court date, statute of limitations risk, or criminal exposure, flag it with [URGENT:] so the attorney sees it immediately.
+${persona === "attorney_user"
+    ? "- The user is a licensed attorney organizing their own client's file — you may use ordinary legal terminology without lay explanations, and you are not giving them \"legal advice\" in the consumer-protection sense; you are helping them organize their client's facts and matter for drafting."
+    : "- Surface legal issues and strategies at a high level only — do not give definitive legal advice.\n- Do not use unexplained legal jargon.\n- If the matter appears outside Crawford Law's scope, note it explicitly."}
+- If you identify an urgent deadline, active court date, statute of limitations risk, or criminal exposure, flag it with [URGENT:] so it is never missed.
 
-Privilege reminder: This is a privileged channel. Handle everything with the care appropriate to a privileged attorney-client communication.`;
+${persona === "attorney_user"
+    ? "No-privilege reminder: This is NOT a privileged channel and does not create any attorney-client relationship between Crawford Law PLLC and the user or their client. It is a professional drafting tool; the user remains solely responsible for their own client relationship, privilege, and professional judgment."
+    : "Privilege reminder: This is a privileged channel. Handle everything with the care appropriate to a privileged attorney-client communication."}`;
+}
 
 // ── ACP intake prompt assembly (token routing) ───────────────────────────────
 //
@@ -587,7 +604,7 @@ const ACP_AREA_MODULES: Record<AcpArea, string> = {
  * the matter's area is signaled). Passing every area reproduces the original
  * full prompt.
  */
-export function buildAcpSystemPrompt(areas: readonly AcpArea[]): string {
+export function buildAcpSystemPrompt(areas: readonly AcpArea[], persona: AcpPersona = "client"): string {
   const seen = new Set<AcpArea>();
   const blocks: string[] = [];
   for (const area of areas) {
@@ -598,7 +615,7 @@ export function buildAcpSystemPrompt(areas: readonly AcpArea[]): string {
   const deepDive = blocks.length
     ? `\n\n=== DEEP-DIVE REFERENCE (grounded statutes + instrument presets for this matter's area) ===\n\n${blocks.join("\n\n")}`
     : "";
-  return `${ACP_CORE_HEAD}\n\n${ACP_AREA_INDEX}${deepDive}\n\n${ACP_CORE_TAIL}`;
+  return `${buildAcpCoreHead(persona)}\n\n${ACP_AREA_INDEX}${deepDive}\n\n${buildAcpCoreTail(persona)}`;
 }
 
 /**

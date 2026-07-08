@@ -61,13 +61,13 @@ async function getData() {
       .maybeSingle(),
     db
       .from("profiles")
-      .select("full_name, email")
+      .select("full_name, email, account_type")
       .eq("id", userId)
       .maybeSingle(),
   ]);
 
   if (!BYPASS_AUTH && (!subRow || !["active", "trialing", "bypass"].includes(subRow.status ?? ""))) {
-    redirect("/onboarding");
+    redirect(profileRow?.account_type === "attorney_user" ? "/onboarding/attorney" : "/onboarding");
   }
 
   const files = (allFiles ?? []) as CaseFile[];

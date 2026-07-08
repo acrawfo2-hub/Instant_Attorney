@@ -24,13 +24,12 @@ export async function requireSubscription(): Promise<void> {
 
   if (!user) redirect("/login");
 
-  const { data: sub } = await db
-    .from("subscriptions")
-    .select("status")
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const [{ data: sub }, { data: profile }] = await Promise.all([
+    db.from("subscriptions").select("status").eq("user_id", user.id).maybeSingle(),
+    db.from("profiles").select("account_type").eq("id", user.id).maybeSingle(),
+  ]);
 
   if (!sub || !PHASE2_ACTIVE.includes(sub.status)) {
-    redirect("/onboarding");
+    redirect(profile?.account_type === "attorney_user" ? "/onboarding/attorney" : "/onboarding");
   }
 }

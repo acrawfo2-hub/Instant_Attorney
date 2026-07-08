@@ -73,7 +73,23 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  // Attorney-users draft for their own clients and are the reviewing attorney
+  // themselves — they never submit into Andrew Crawford's review queue.
+  const [isAttorneyUser, setIsAttorneyUser] = useState(false);
   const didInitRef = useRef(false);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/account/profile")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (active && data?.account_type === "attorney_user") setIsAttorneyUser(true);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Guided checklist: per-field answers + "anything else" note + update feedback
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -562,7 +578,11 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
       // round of questions, update the draft AND send it straight to the
       // attorney (placeholders and all). Previously answers only saved a local
       // "draft" the client had to separately submit — so progress looked lost.
-      await submitToAttorney();
+      // Attorney-users are the reviewing attorney for their own client's
+      // matter — there is no one to submit to, so just leave the draft updated.
+      if (!isAttorneyUser) {
+        await submitToAttorney();
+      }
     }
   }
 
@@ -870,7 +890,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
 
                   <div className="wiz-field wiz-field-note">
                     <label className="wiz-field-label" htmlFor="starter-extra">
-                      Anything else the attorney should know? (optional)
+                      {isAttorneyUser ? "Anything else to note? (optional)" : "Anything else the attorney should know? (optional)"}
                     </label>
                     <textarea
                       id="starter-extra"
@@ -912,9 +932,11 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
                 <div className="wiz-reassure" role="note">
                   <span className="wiz-reassure-icon">✓</span>
                   <div>
-                    <strong>It&apos;s okay to leave blanks.</strong> Your draft is ready now. Fill in
-                    what you know, then send it — Andrew Crawford, Esq. will fill in anything that&apos;s
-                    missing and follow up with you about it.
+                    {isAttorneyUser ? (
+                      <><strong>It&apos;s okay to leave blanks.</strong> Your draft is ready now. Fill in what you know, update the draft, and download it whenever you&apos;re ready — any remaining placeholders stay highlighted for you to finish.</>
+                    ) : (
+                      <><strong>It&apos;s okay to leave blanks.</strong> Your draft is ready now. Fill in what you know, then send it — Andrew Crawford, Esq. will fill in anything that&apos;s missing and follow up with you about it.</>
+                    )}
                   </div>
                 </div>
               )}
@@ -973,11 +995,18 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
                   <div className="wiz-checklist-head">
                     <h3 className="wiz-checklist-title">Finish your draft</h3>
                     <p className="wiz-checklist-sub">
-                      Fill in what you know — you don&apos;t have to answer everything.
-                      When you&apos;re done, click <strong>Update Draft &amp; Send to
-                      Attorney</strong>: we&apos;ll update your document and send it
-                      straight to Andrew Crawford, Esq. for review. Anything you leave
-                      blank stays as a highlighted placeholder for him to finalize.
+                      {isAttorneyUser ? (
+                        <>Fill in what you know — you don&apos;t have to answer everything.
+                        When you&apos;re done, click <strong>Update Draft</strong>: we&apos;ll
+                        update your document. Anything you leave blank stays as a highlighted
+                        placeholder for you to finish before you download it.</>
+                      ) : (
+                        <>Fill in what you know — you don&apos;t have to answer everything.
+                        When you&apos;re done, click <strong>Update Draft &amp; Send to
+                        Attorney</strong>: we&apos;ll update your document and send it
+                        straight to Andrew Crawford, Esq. for review. Anything you leave
+                        blank stays as a highlighted placeholder for him to finalize.</>
+                      )}
                     </p>
                     {blockingCount > 0 && (
                       <p className="wiz-checklist-count">
@@ -1027,7 +1056,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
 
                   <div className="wiz-field wiz-field-note">
                     <label className="wiz-field-label" htmlFor="fld-extra">
-                      Anything else the attorney should know? (optional)
+                      {isAttorneyUser ? "Anything else to note? (optional)" : "Anything else the attorney should know? (optional)"}
                     </label>
                     <textarea
                       id="fld-extra"
@@ -1058,9 +1087,11 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
                       ? "Updating draft…"
                       : submitting
                         ? "Sending to attorney…"
-                        : filledCount > 0
-                          ? `Update Draft & Send to Attorney (${filledCount} answer${filledCount > 1 ? "s" : ""}) →`
-                          : "Update Draft & Send to Attorney →"}
+                        : isAttorneyUser
+                          ? (filledCount > 0 ? `Update Draft (${filledCount} answer${filledCount > 1 ? "s" : ""}) →` : "Update Draft →")
+                          : filledCount > 0
+                            ? `Update Draft & Send to Attorney (${filledCount} answer${filledCount > 1 ? "s" : ""}) →`
+                            : "Update Draft & Send to Attorney →"}
                   </button>
                 </div>
               )}
@@ -1070,8 +1101,9 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
                 <div className="wiz-checklist wiz-checklist-complete">
                   <h3 className="wiz-checklist-title">Your draft looks complete</h3>
                   <p className="wiz-checklist-sub">
-                    We didn&apos;t find any remaining blanks. Review the document on the
-                    left, then send it to the attorney below.
+                    {isAttorneyUser
+                      ? "We didn't find any remaining blanks. Review the document on the left, then download it below."
+                      : "We didn't find any remaining blanks. Review the document on the left, then send it to the attorney below."}
                   </p>
                   {justUpdated && <div className="wiz-updated-confirm">Draft updated ✓</div>}
                 </div>
@@ -1082,38 +1114,52 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
               {/* Send as-is — for clients who have nothing to add and just want the
                   current draft in front of the attorney right now. If they HAVE
                   typed answers, this routes through handleSubmitAnswers first so
-                  those answers aren't lost. */}
+                  those answers aren't lost. Attorney-users have no attorney to
+                  send to, so they get a simple download prompt instead. */}
               {currentDraft && (
-                <div className="wiz-submit-area">
-                  <div className="wiz-attorney-framing">
-                    <p className="wiz-attorney-lead">Nothing to add?</p>
-                    <p className="wiz-attorney-body">
-                      You can send the current draft to Andrew Crawford, Esq. right
-                      now, exactly as it is. He&apos;ll fill in any highlighted blanks
-                      and follow up with you about anything he needs.
-                    </p>
+                isAttorneyUser ? (
+                  <div className="wiz-submit-area">
+                    <div className="wiz-attorney-framing">
+                      <p className="wiz-attorney-lead">Ready to use?</p>
+                      <p className="wiz-attorney-body">
+                        Download the current draft (.docx) from the button at the top of the
+                        page whenever you&apos;re ready. Any remaining highlighted placeholders
+                        are yours to finish before you use it with your client.
+                      </p>
+                    </div>
                   </div>
-                  <p className="wiz-submit-hint">
-                    {blockingCount > 0
-                      ? `${blockingCount} item${blockingCount > 1 ? "s" : ""} still blank — that's okay, the attorney will follow up on what's needed.`
-                      : "Sending starts the 48-hour attorney review clock."}
-                  </p>
-                  <button
-                    className="wiz-submit-btn"
-                    onClick={hasAnyInput ? handleSubmitAnswers : submitToAttorney}
-                    disabled={submitting || streaming || !documentId}
-                  >
-                    {submitting
-                      ? "Sending…"
-                      : streaming
-                        ? "Working…"
-                        : !documentId
-                          ? "Preparing draft…"
-                          : hasAnyInput
-                            ? "Update Draft & Send to Attorney →"
-                            : "Send Draft to Attorney As-Is →"}
-                  </button>
-                </div>
+                ) : (
+                  <div className="wiz-submit-area">
+                    <div className="wiz-attorney-framing">
+                      <p className="wiz-attorney-lead">Nothing to add?</p>
+                      <p className="wiz-attorney-body">
+                        You can send the current draft to Andrew Crawford, Esq. right
+                        now, exactly as it is. He&apos;ll fill in any highlighted blanks
+                        and follow up with you about anything he needs.
+                      </p>
+                    </div>
+                    <p className="wiz-submit-hint">
+                      {blockingCount > 0
+                        ? `${blockingCount} item${blockingCount > 1 ? "s" : ""} still blank — that's okay, the attorney will follow up on what's needed.`
+                        : "Sending starts the 48-hour attorney review clock."}
+                    </p>
+                    <button
+                      className="wiz-submit-btn"
+                      onClick={hasAnyInput ? handleSubmitAnswers : submitToAttorney}
+                      disabled={submitting || streaming || !documentId}
+                    >
+                      {submitting
+                        ? "Sending…"
+                        : streaming
+                          ? "Working…"
+                          : !documentId
+                            ? "Preparing draft…"
+                            : hasAnyInput
+                              ? "Update Draft & Send to Attorney →"
+                              : "Send Draft to Attorney As-Is →"}
+                    </button>
+                  </div>
+                )
               )}
             </>
           )}

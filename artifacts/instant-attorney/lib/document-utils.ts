@@ -315,6 +315,20 @@ export async function finalizeDocumentSubmission(
   docId: string,
   userId: string
 ): Promise<Document | null> {
+  // Attorney-user documents never enter Andrew Crawford's review queue — an
+  // attorney-user is the reviewing attorney for their own client's matter, so
+  // there is no one to submit to. Belt-and-suspenders: the wizard UI never
+  // calls this for attorney-user accounts, but reject here too in case
+  // something calls this path directly.
+  const { data: profile } = await db
+    .from("profiles")
+    .select("account_type")
+    .eq("id", userId)
+    .maybeSingle();
+  if (profile?.account_type === "attorney_user") {
+    return null;
+  }
+
   const { data: existing } = await db
     .from("documents")
     .select("id, status, submitted_at, parent_document_id")

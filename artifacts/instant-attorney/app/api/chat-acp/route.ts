@@ -137,13 +137,18 @@ export async function POST(req: NextRequest) {
   }
 
   // Load current file state + attachments for context injection
-  const [{ data: caseFileRow }, { data: factRows }, { data: attachmentRows }, { data: requestedRows }] =
+  const [{ data: caseFileRow }, { data: factRows }, { data: attachmentRows }, { data: requestedRows }, { data: profileRow }] =
     await Promise.all([
       db.from("case_files").select("*").eq("id", resolvedCaseFileId).single(),
       db.from("fact_items").select("*").eq("case_file_id", resolvedCaseFileId),
       db.from("attachments").select("*").eq("case_file_id", resolvedCaseFileId).eq("status", "ready"),
       db.from("requested_attachments").select("*").eq("case_file_id", resolvedCaseFileId),
+      db.from("profiles").select("account_type").eq("id", userId).maybeSingle(),
     ]);
+
+  // Attorney-users get a reframed intake persona (no privilege/representation
+  // language) — see buildAcpCoreHead/buildAcpCoreTail in lib/prompts.ts.
+  const acpPersona = profileRow?.account_type === "attorney_user" ? "attorney_user" as const : "client" as const;
 
   const caseFile = caseFileRow as CaseFile | null;
   const facts = (factRows ?? []) as FactItem[];
@@ -220,7 +225,7 @@ export async function POST(req: NextRequest) {
   // areas every turn. prompts.ts always includes the compact area index, so an
   // as-yet-unmatched opening turn still degrades gracefully.
   const detectedAreas = detectAcpAreasFromContext(messages, caseFile);
-  const acpSystemPrompt = buildAcpSystemPrompt(detectedAreas);
+  const acpSystemPrompt = buildAcpSystemPrompt(detectedAreas, acpPersona);
 
   // Stream from Anthropic
   const stream = anthropic.messages.stream({
