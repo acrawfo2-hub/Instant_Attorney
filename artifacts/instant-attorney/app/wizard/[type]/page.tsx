@@ -92,6 +92,17 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   // Document Review needs a real uploaded document; when none exists this gates
   // generation and shows an "upload first" screen instead of drafting.
   const [docReviewGated, setDocReviewGated] = useState(false);
+  // Improve My Draft needs the client's own uploaded document as the base to
+  // improve. Gates generation until one is picked or uploaded inline.
+  const [improveDraftGated, setImproveDraftGated] = useState(false);
+  const [existingDraftAttachments, setExistingDraftAttachments] = useState<{ id: string; file_name: string }[]>([]);
+  const [improveUploading, setImproveUploading] = useState(false);
+  const [improveUploadError, setImproveUploadError] = useState("");
+  const [improveDragOver, setImproveDragOver] = useState(false);
+  // The attachment id feeding the current "Improve My Draft" generation. A ref
+  // (not state) because runDrafter's fetch body reads it synchronously.
+  const baseAttachmentIdRef = useRef<string>("");
+  const improveFileInputRef = useRef<HTMLInputElement>(null);
   // Staged starter answers to fold in once the first draft is ready: those that
   // map to a unique placeholder are filled deterministically; the rest go to one
   // model refine pass. Captured at save time because runDrafter clears the form.
@@ -206,6 +217,25 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
       } catch {
         // If the check fails, fall through to normal generation rather than blocking.
       }
+    }
+
+    // 2c) Improve My Draft needs the client's own uploaded document as the base
+    //     to improve. Gate generation and let them pick an existing upload or
+    //     add a new one inline — never draft from a blank page for this type.
+    if (wizardType === "improve_draft" && caseFileId) {
+      try {
+        const res = await fetch(`/api/attachments?caseFileId=${encodeURIComponent(caseFileId)}`);
+        if (res.ok) {
+          const data = await res.json();
+          const docs = ((data.attachments ?? []) as { id: string; file_name: string; status: string; attachment_type: string }[])
+            .filter((a) => a.status === "ready" && a.attachment_type !== "screenshot");
+          setExistingDraftAttachments(docs);
+        }
+      } catch {
+        // If the lookup fails, the uploader is still shown — just no quick picks.
+      }
+      setImproveDraftGated(true);
+      return;
     }
 
     // 3) Generate the draft live now, and surface starter questions immediately so
@@ -328,6 +358,51 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
     setError("");
   }
 
+  // Kick off "Improve My Draft" generation now that a base attachment (existing
+  // or freshly uploaded) has been chosen. No starter questions for this type —
+  // the uploaded document itself is the input.
+  async function startImproveDraft(attachmentId: string) {
+    baseAttachmentIdRef.current = attachmentId;
+    setImproveDraftGated(false);
+    await runDrafter([], true);
+  }
+
+  async function uploadImproveDraftFile(file: File) {
+    setImproveUploadError("");
+    setImproveUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("caseFileId", caseFileId);
+      form.append("analyze", "true");
+      const res = await fetch("/api/attachments/upload", { method: "POST", body: form });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setImproveUploadError(data.error ?? "Upload failed");
+        return;
+      }
+      const data = await res.json();
+      await startImproveDraft(data.id);
+    } catch {
+      setImproveUploadError("Upload failed — please try again");
+    } finally {
+      setImproveUploading(false);
+    }
+  }
+
+  function handleImproveFileInput(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (file) uploadImproveDraftFile(file);
+  }
+
+  function handleImproveDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setImproveDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) uploadImproveDraftFile(file);
+  }
+
   async function runDrafter(history: Message[], isInit = false): Promise<boolean> {
     abortRef.current?.abort();
     const abort = new AbortController();
@@ -357,6 +432,8 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
           wizardType,
           documentId: documentId || undefined,
           instrument: instrumentParam || undefined,
+          baseAttachmentId: wizardType === "improve_draft" ? (baseAttachmentIdRef.current || undefined) : undefined,
+          isInit,
         }),
         signal: abort.signal,
       });
@@ -570,6 +647,80 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
           >
             Go to my file to upload →
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (improveDraftGated) {
+    return (
+      <div className="wiz-shell wiz-shell-v2">
+        <header className="wiz-header">
+          <button className="wiz-back" onClick={() => router.push("/dashboard")}>← Back to File</button>
+          <div className="wiz-title">
+            <span className="wiz-type-pill">{label}</span>
+          </div>
+        </header>
+        <div className="wiz-gate">
+          <div className="wiz-gate-icon">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+            </svg>
+          </div>
+          <h2 className="wiz-gate-title">Upload the draft you want us to improve</h2>
+          <p className="wiz-gate-msg">
+            We&apos;ll read your document and produce a materially better version —
+            tighter language, filled-in facts from your file, and any legal gaps flagged —
+            in the same drafting workspace as every other document.
+          </p>
+
+          {existingDraftAttachments.length > 0 && (
+            <div className="imp-existing-list">
+              {existingDraftAttachments.map((a) => (
+                <button
+                  key={a.id}
+                  className="imp-existing-item"
+                  onClick={() => startImproveDraft(a.id)}
+                  disabled={improveUploading}
+                >
+                  Use “{a.file_name}” →
+                </button>
+              ))}
+            </div>
+          )}
+
+          <input
+            ref={improveFileInputRef}
+            type="file"
+            accept=".pdf,.doc,.docx,.txt,.rtf"
+            style={{ display: "none" }}
+            onChange={handleImproveFileInput}
+          />
+
+          {improveUploading ? (
+            <div className="att-upload-zone att-upload-zone-busy">
+              <span className="att-uploading-msg">Uploading and starting your draft…</span>
+            </div>
+          ) : (
+            <div
+              className={`att-upload-zone${improveDragOver ? " att-upload-zone-over" : ""}`}
+              onDragOver={(e) => { e.preventDefault(); setImproveDragOver(true); }}
+              onDragLeave={() => setImproveDragOver(false)}
+              onDrop={handleImproveDrop}
+              onClick={() => improveFileInputRef.current?.click()}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); improveFileInputRef.current?.click(); } }}
+            >
+              <span className="att-drop-hint">
+                {improveDragOver ? "Drop your file here" : "Drag & drop your draft, or click to add"}
+              </span>
+              <span className="att-upload-hint">PDF, Word, or text · up to 25 MB</span>
+            </div>
+          )}
+
+          {improveUploadError && <p className="att-upload-error">{improveUploadError}</p>}
         </div>
       </div>
     );

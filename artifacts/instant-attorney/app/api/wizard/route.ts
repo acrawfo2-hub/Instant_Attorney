@@ -4,6 +4,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { DRAFTER_SYSTEM_PROMPT, WIZARD_FIELD_HINTS, buildFileContext } from "@/lib/prompts";
 import { parseAndUpdateFile, extractDraftText, syncDraftGapsToLivingFile, isCompleteFileUpdate } from "@/lib/file-parser";
 import { resolveWizardDocumentTarget, stampFactsSynced } from "@/lib/document-utils";
+import { loadAttachmentAsContentBlocks } from "@/lib/attachment-processor";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
 import { getBillingGate } from "@/lib/topup";
 import { BYPASS_USER_ID, WIZARD_LABELS } from "@/lib/types";
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
   if (!body || typeof body !== "object") {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
-  const { messages, caseFileId, wizardType, documentId, instrument, planKey } = body;
+  const { messages, caseFileId, wizardType, documentId, instrument, planKey, baseAttachmentId, isInit } = body;
   const planKeyStr = typeof planKey === "string" && planKey.trim() ? planKey.trim() : undefined;
 
   if (!Array.isArray(messages) || messages.length === 0) {
@@ -131,6 +132,28 @@ export async function POST(req: NextRequest) {
     ? instrument
     : WIZARD_LABELS[wizardType as WizardType];
 
+  // "Improve My Draft" feeds the client's own uploaded document verbatim into
+  // the initial call, instead of drafting from the Living File alone. Only the
+  // very first call needs this — follow-up turns build on the draft already in
+  // the conversation history via `messages`.
+  let anthropicMessages = sanitizedMessages;
+  if (wizardType === "improve_draft" && isInit && baseAttachmentId) {
+    const loaded = await loadAttachmentAsContentBlocks(writeDb, baseAttachmentId, caseFileId, userId);
+    if (loaded) {
+      const firstUserText = sanitizedMessages[0]?.content ?? "";
+      anthropicMessages = [
+        {
+          role: "user" as const,
+          content: [
+            ...(loaded.blocks as (Anthropic.ImageBlockParam | Anthropic.DocumentBlockParam | Anthropic.TextBlockParam)[]),
+            { type: "text" as const, text: `Uploaded file: ${loaded.fileName}\n\n${firstUserText}` },
+          ],
+        },
+        ...sanitizedMessages.slice(1),
+      ];
+    }
+  }
+
   // Stream server-side, then assemble the full message before responding.
   // Why streaming: the SDK refuses a *non-streaming* request whose max_tokens is
   // large enough to risk a >10-minute response (our full document ceiling is
@@ -158,7 +181,7 @@ export async function POST(req: NextRequest) {
           text: fileContext,
         },
       ],
-      messages: sanitizedMessages,
+      messages: anthropicMessages,
     });
     message = await stream.finalMessage();
   } catch (err) {
@@ -275,6 +298,7 @@ export async function POST(req: NextRequest) {
             init_response: fullResponse,
             ...(truncated ? { truncated: true } : {}),
             ...(planKeyStr ? { plan_key: planKeyStr } : {}),
+            ...(wizardType === "improve_draft" && baseAttachmentId ? { base_attachment_id: baseAttachmentId } : {}),
           },
           draft_text: draftText,
           status: "draft",

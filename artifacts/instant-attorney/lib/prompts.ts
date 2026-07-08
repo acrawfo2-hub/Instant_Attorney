@@ -357,8 +357,6 @@ ${debtStatutesForPrompt()}
 When a document is warranted, choose the matching debt instrument preset below for its recipient/field guidance. IMPORTANT: in RECOMMENDED WIZARDS put ONLY the bare wizard type it drafts through (e.g. \`general_document\`, \`demand_letter\`, or \`complaint_letter\`) with no extra words — never the preset key or label, or the wizard card and handoff will not render. Name the specific instrument in NEXT ACTION and SUGGESTED INSTRUMENTS instead. The [HIGH-STAKES] answer-to-a-lawsuit instrument should set RECOMMEND_CONSULT: true.
 ${debtInstrumentsForPrompt()}`;
 
-${debtInstrumentsForPrompt()}`;
-
 const ACP_MOD_LIEN = `PROPERTY LIENS, FORECLOSURE & TITLE ENCUMBRANCES — handle these as a first-class area. A lien is a legal claim against real property that can block a sale, force a foreclosure, or cloud title. Texas has several distinct lien types with different rules, deadlines, and owner impacts. HOA assessment liens are covered in the HOA section above; this block covers mechanic's liens, judgment liens, mortgage foreclosure, tax liens, and title defects.
 
 1. DEADLINE FIRST — FORECLOSURE IS FAST. Texas mortgage foreclosures are non-judicial: after notice, the trustee can sell on the first Tuesday of the month. Property tax foreclosure can reach homestead. Flag [URGENT:] when a sale date is set or within 30 days. Get reinstatement/payoff figures in writing immediately.
@@ -786,6 +784,20 @@ Required fields to gather (adapt to instrument):
 - Any exhibits, attachments, or enclosures referenced
 
 Opening: Read the "Document being drafted" line at the top of your context. Confirm what the instrument is and what you understand it to accomplish from the Living File. If you have enough to begin, produce the full draft immediately and then ask only for what is missing. Do not ask for information you already have from the file.`,
+
+  improve_draft: `${wizardBase(
+    "Improved Draft",
+    "The client has uploaded their own existing draft of a document. Produce a materially improved version of that same document — not a different document from scratch."
+  )}
+
+Your role in this wizard:
+- The client's uploaded draft is provided verbatim at the start of the conversation.
+- Treat it as the base document. Preserve its structure and defined terms where sound.
+- Tighten language, cut redundancy and legalese, and resolve blanks or weak spots using facts already confirmed in the Living File.
+- Never invent facts, parties, dates, or law. Use [[PLACEHOLDER]] for anything genuinely missing.
+- Produce the improved draft using the standard drafting output format (DRAFT READY / MISSING FACTS / FOLLOW-UP / FILE UPDATE).
+
+Opening: Read the uploaded draft carefully, then produce the full improved draft immediately.`,
 };
 
 // ── Wizard field hints (used by the drafter API to give document-specific guidance) ──
@@ -797,6 +809,7 @@ export const WIZARD_FIELD_HINTS: Record<WizardType, string> = {
   wills_trusts: `Required fields vary by instrument — identify the instrument first (will / pour-over will / revocable or special-needs trust / durable financial POA / medical POA / directive to physicians / declaration of guardian). For a WILL: testator full legal name, DOB, county/state of residence, independent executor and alternate, beneficiaries with shares, specific bequests, residuary clause, guardian for any minor children, and self-proving witness/notary execution. For a POA or medical directive: principal, agent and alternate, and the Texas statutory execution (notary or two witnesses). For a TRUST: settlor, trustee and successor, beneficiaries and any distribution ages, AND the funding list of assets to retitle into it — note that an unfunded trust does nothing and pair it with a pour-over will. Always state the correct Texas execution formalities for the specific instrument, and that a transfer-on-death deed must be recorded with the county before death.`,
   doc_review: `Required fields: document type, parties, document purpose/summary, favorable provisions, unfavorable provisions or missing protections, ambiguous language, red flags, recommended edits, fit to overall case strategy.`,
   general_document: `Required fields vary by instrument — identify instrument type from the "Document being drafted" line, then gather: all parties (full legal names, roles, addresses), specific purpose of the instrument, key facts and dates, governing jurisdiction, response/cure deadlines if applicable, who signs and who receives the document. Apply the correct legal format for this specific instrument type (letter, memo, filing, policy, notice, etc.).`,
+  improve_draft: `The client's own existing draft of this document is provided verbatim in the first message (an uploaded file). Treat it as the base to improve, not a blank page: identify its document type and purpose, preserve its structure and defined terms where sound, and produce a materially better version — tighten language, cut redundancy and legalese, resolve blanks using facts already confirmed in the Living File, and fix any legal gaps a senior attorney would catch. Never invent facts. Use [[PLACEHOLDER]] for anything genuinely missing.`,
 };
 
 // ── Drafter agent system prompt ──────────────────────────────────────────────
@@ -834,6 +847,8 @@ Your workflow on every call:
 4. Audit the draft for: missing party identity, capacity, authority, addresses, jurisdiction, key dates, consideration, required exhibits, execution formalities.
 5. Identify blocking vs. non-blocking gaps.
 6. Generate targeted follow-up questions — plain English, one concept each, ordered by severity.
+
+If the client's own existing draft of this document was provided verbatim above (e.g. an uploaded file), treat it as the base to improve — not a blank page. Preserve its structure and defined terms where sound, and produce a materially better version of that same document rather than a generic redraft from scratch.
 
 On the FIRST response (initial draft):
 Produce the full draft immediately. Do not ask questions before drafting. Show what you can draft, then ask only for what is missing.

@@ -94,6 +94,7 @@ const WIZARD_ICONS: Record<WizardType, string> = {
   wills_trusts: "⚖️",
   doc_review: "🔍",
   general_document: "📄",
+  improve_draft: "🪄",
 };
 
 function WizardCard({
@@ -916,6 +917,7 @@ export default function ClientFileView({
                 {recommendedWizards
                   .filter(isValidWizardType)
                   .filter((wType) => wType !== "doc_review" || hasUploadedDoc)
+                  .filter((wType) => wType !== "improve_draft")
                   .map((wType) => (
                   <WizardCard
                     key={wType}
@@ -923,6 +925,7 @@ export default function ClientFileView({
                     caseFileId={caseFile.id}
                   />
                 ))}
+                <WizardCard wizardType="improve_draft" caseFileId={caseFile.id} />
               </div>
             </>
           ) : (
@@ -942,6 +945,7 @@ export default function ClientFileView({
                     <span className="lf-wizard-label">Start a document now</span>
                   </div>
                 </Link>
+                <WizardCard wizardType="improve_draft" caseFileId={caseFile.id} />
                 <Link href={`/chat?caseFileId=${caseFile.id}`} className="lf-wizard-card">
                   <span className="lf-wizard-icon">💬</span>
                   <div className="lf-wizard-card-body">
