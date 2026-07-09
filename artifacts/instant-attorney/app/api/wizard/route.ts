@@ -158,6 +158,31 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Attorney-persona follow-ups: the drafter always re-renders the complete
+  // document on every turn, so resending the full conversation history means
+  // every prior assistant turn's full-document text gets resent again on
+  // every subsequent call — O(turns^2 * document size) input tokens over a
+  // multi-turn editing session. Since the saved draft already reflects every
+  // earlier edit, we don't need the history at all: send just the latest
+  // instruction, with the CURRENT saved draft injected fresh into the system
+  // prompt each call (same approach as the attorney chat-edit route).
+  let currentDraftContext = "";
+  if (drafterPersona === "attorney" && !isInit && documentId) {
+    const lastMsg = sanitizedMessages[sanitizedMessages.length - 1];
+    if (lastMsg?.role === "user") {
+      const { data: currentDoc } = await writeDb
+        .from("documents")
+        .select("draft_text")
+        .eq("id", documentId)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (currentDoc?.draft_text) {
+        currentDraftContext = `\n\n---CURRENT DRAFT (apply the requested change to this exact text)---\n${currentDoc.draft_text}\n---END CURRENT DRAFT---`;
+        anthropicMessages = [lastMsg];
+      }
+    }
+  }
+
   // Stream server-side, then assemble the full message before responding.
   // Why streaming: the SDK refuses a *non-streaming* request whose max_tokens is
   // large enough to risk a >10-minute response (our full document ceiling is
@@ -182,7 +207,7 @@ export async function POST(req: NextRequest) {
         },
         {
           type: "text" as const,
-          text: fileContext,
+          text: fileContext + currentDraftContext,
         },
       ],
       messages: anthropicMessages,

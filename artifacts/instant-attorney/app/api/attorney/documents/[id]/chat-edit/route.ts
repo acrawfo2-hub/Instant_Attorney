@@ -147,10 +147,31 @@ export async function POST(
   let childId: string;
   if (existingChild) {
     childId = existingChild.id;
-    await serviceDb.from("documents").update({
-      draft_text: draftText,
-      updated_at: new Date().toISOString(),
-    }).eq("id", existingChild.id);
+    // Check whether the update actually matched a row. The Opus second-draft
+    // pipeline (upsertSecondDraftChild) DELETES and re-INSERTs this same
+    // doc_type when it finishes, so a concurrent "Generate 2nd Draft" run can
+    // remove existingChild out from under us between our read and this write.
+    // Silently updating 0 rows while still overwriting the parent's
+    // denormalized copy below would corrupt it with text that isn't saved
+    // anywhere — so fail loudly instead of guessing.
+    const { data: updatedRows, error: updateErr } = await serviceDb
+      .from("documents")
+      .update({
+        draft_text: draftText,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", existingChild.id)
+      .select("id");
+    if (updateErr) {
+      console.error("[attorney/chat-edit] child update error:", updateErr.message);
+      return NextResponse.json({ error: "The edit couldn't be saved. Please try again." }, { status: 500 });
+    }
+    if (!updatedRows || updatedRows.length === 0) {
+      return NextResponse.json(
+        { error: "This document changed while your edit was being generated (a second draft may have just finished). Please try again." },
+        { status: 409 }
+      );
+    }
   } else {
     const { data: inserted, error: insertErr } = await serviceDb
       .from("documents")
@@ -167,6 +188,16 @@ export async function POST(
       .select("id")
       .single();
     if (insertErr || !inserted) {
+      // Unique violation (documents_parent_doctype_unique, schema-stage33) means
+      // a concurrent request (double-click, second tab, or the second-draft
+      // pipeline) already created the second-draft child first — don't silently
+      // create a duplicate, ask the caller to retry against the real one.
+      if (insertErr?.code === "23505") {
+        return NextResponse.json(
+          { error: "Another edit just started on this document. Please try again." },
+          { status: 409 }
+        );
+      }
       console.error("[attorney/chat-edit] child insert error:", insertErr?.message);
       return NextResponse.json({ error: "The edit was generated but couldn't be saved. Please try again." }, { status: 500 });
     }

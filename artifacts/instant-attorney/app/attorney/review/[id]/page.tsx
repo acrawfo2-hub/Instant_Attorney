@@ -360,12 +360,13 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
 
   async function sendChatEdit() {
     const text = chatInput.trim();
-    if (!text || chatSending) return;
+    // Never race the Opus second-draft pipeline: it deletes and re-inserts
+    // the same second-draft child this chat edits (see chat-edit/route.ts).
+    if (!text || chatSending || generatingSecondDraft || doc?.review_status === "merging") return;
     setChatSending(true);
     setChatError("");
     const nextMessages = [...chatMessages, { role: "user" as const, content: text }];
     setChatMessages(nextMessages);
-    setChatInput("");
     try {
       const res = await fetch(`/api/attorney/documents/${id}/chat-edit`, {
         method: "POST",
@@ -374,14 +375,23 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
       });
       const data = await res.json();
       if (!res.ok) {
+        // Don't clear the input on failure — the attorney shouldn't have to
+        // retype a lost edit request. A 409 means the document changed
+        // underneath us (e.g. the 2nd-draft pipeline just finished) — drop
+        // the now-stale user turn from the thread and refresh so the next
+        // attempt starts from the real current document.
+        setChatMessages(chatMessages);
         setChatError(data.error ?? "Edit failed");
+        if (res.status === 409) await load();
         return;
       }
+      setChatInput("");
       const parsed = parseDrafterResponse(data.text ?? "");
       const reply = parsed.questions.length ? parsed.questions.join(" ") : "Draft updated ✓";
       setChatMessages((prev) => [...prev, { role: "assistant", content: reply }]);
       await load();
     } catch {
+      setChatMessages(chatMessages);
       setChatError("Network error — please try again.");
     } finally {
       setChatSending(false);
@@ -604,10 +614,10 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
               <textarea
                 className="atty-comment-input"
                 value={chatInput}
-                disabled={chatSending}
+                disabled={chatSending || isMerging}
                 onChange={(e) => setChatInput(e.target.value)}
                 rows={2}
-                placeholder="Type the change you want…"
+                placeholder={isMerging ? "Wait for the 2nd draft generation to finish…" : "Type the change you want…"}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
@@ -619,11 +629,16 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
                 type="button"
                 className="atty-btn"
                 onClick={sendChatEdit}
-                disabled={chatSending || !chatInput.trim()}
+                disabled={chatSending || isMerging || !chatInput.trim()}
               >
                 {chatSending ? "Applying…" : "Send"}
               </button>
             </div>
+            {isMerging && (
+              <p className="atty-second-draft-hint">
+                Chat edits are paused while the 2nd draft is generating to avoid conflicting writes.
+              </p>
+            )}
             {chatError && <p className="atty-ai-error">{chatError}</p>}
           </div>
 

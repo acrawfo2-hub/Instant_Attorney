@@ -83,12 +83,27 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
 
   useEffect(() => {
     let active = true;
-    fetch("/api/account/profile")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (active && data?.account_type === "attorney_user") setIsAttorneyUser(true);
-      })
-      .catch(() => {});
+    // Determines whether this session gets the attorney persona at all
+    // (submit-vs-download flow, surgical vs full-rewrite edits) — a
+    // transient failure here must not silently strand a real attorney-user
+    // on the client-facing flow for the whole session, so retry a few times
+    // before giving up.
+    async function loadAccountType() {
+      for (let attempt = 0; attempt < 3 && active; attempt++) {
+        try {
+          const r = await fetch("/api/account/profile");
+          if (r.ok) {
+            const data = await r.json();
+            if (active && data?.account_type === "attorney_user") setIsAttorneyUser(true);
+            return;
+          }
+        } catch {
+          // fall through to retry
+        }
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+      }
+    }
+    loadAccountType();
     return () => {
       active = false;
     };
@@ -597,11 +612,15 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   async function sendChatEdit() {
     const text = chatInput.trim();
     if (!text || streaming) return;
-    setChatInput("");
     setJustUpdated(false);
     const userMsg: Message = { role: "user", content: text };
     const ok = await runDrafter([...messages, userMsg], false);
-    if (ok) setJustUpdated(true);
+    // Only clear on success — a failed send (timeout, 502) must never lose
+    // what the attorney typed; runDrafter already surfaces the error via `error`.
+    if (ok) {
+      setChatInput("");
+      setJustUpdated(true);
+    }
   }
 
   async function handleDownload() {

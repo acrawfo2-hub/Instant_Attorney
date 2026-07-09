@@ -29,6 +29,7 @@ const btn: React.CSSProperties = {
 export default function AttorneySignupAdminTable({ initial }: { initial: AttorneySignupRow[] }) {
   const [rows, setRows] = useState<AttorneySignupRow[]>(initial);
   const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     const res = await fetch("/api/admin/attorney-signups", { cache: "no-store" });
@@ -37,13 +38,21 @@ export default function AttorneySignupAdminTable({ initial }: { initial: Attorne
 
   const decide = useCallback(async (row: AttorneySignupRow, decision: "approved" | "rejected") => {
     setBusy(row.id);
+    setError(null);
     try {
-      await fetch("/api/admin/attorney-signups/decide", {
+      const res = await fetch("/api/admin/attorney-signups/decide", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: row.id, decision }),
       });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(`Couldn't ${decision === "approved" ? "approve" : "reject"} ${row.full_name ?? row.email}: ${body.error ?? `HTTP ${res.status}`}`);
+        return;
+      }
       await refresh();
+    } catch {
+      setError("Network error — please try again.");
     } finally {
       setBusy(null);
     }
@@ -54,6 +63,11 @@ export default function AttorneySignupAdminTable({ initial }: { initial: Attorne
       <div style={{ display: "flex", gap: 8, margin: "14px 0" }}>
         <button style={btn} disabled={!!busy} onClick={refresh}>Refresh</button>
       </div>
+      {error && (
+        <p style={{ fontSize: 12.5, color: "#991b1b", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 6, padding: "6px 10px", margin: "0 0 10px" }}>
+          {error}
+        </p>
+      )}
 
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
         <thead>

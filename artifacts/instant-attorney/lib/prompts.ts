@@ -844,8 +844,23 @@ export type DrafterPersona = "client" | "attorney";
 
 export function buildDrafterSystemPrompt(persona: DrafterPersona = "client"): string {
   const followUpInstructions = persona === "attorney"
-    ? `Apply ONLY the specific change(s) requested. Leave every other sentence, section, and defined term exactly as it was — do not restructure, do not rewrite unrelated language, do not "improve" anything that wasn't asked for. Then render the COMPLETE document (so the full text is always available for review and download), with just that change applied. If something about the request is genuinely ambiguous, or you notice a related issue worth flagging — the way a sharp junior associate would speak up rather than silently guessing — ask exactly ONE such question in the FOLLOW-UP block. If nothing needs asking, leave FOLLOW-UP empty. Never ask a question just to have one.`
+    ? `Apply ONLY the specific change(s) requested. Leave every other sentence, section, and defined term exactly as it was — do not restructure, do not rewrite unrelated language, do not "improve" anything that wasn't asked for. Then render the COMPLETE document (so the full text is always available for review and download), with just that change applied. If something about the request is genuinely ambiguous, or you notice a related issue worth flagging — the way a sharp junior associate would speak up rather than silently guessing — ask exactly ONE such question in the FOLLOW-UP block below. If nothing needs asking, leave FOLLOW-UP empty. Never ask a question just to have one.`
     : `Re-render the COMPLETE updated draft incorporating the new information. Do not just acknowledge the answer — show the improved document. Then show only the remaining open questions.`;
+
+  // The shared output-format template below must not contradict the
+  // follow-up rule above: the client persona's numbered 1-4 list invites the
+  // model to always produce several questions, which fights the attorney
+  // persona's "exactly ONE, or none" rule if left as a single shared template.
+  const followUpTemplate = persona === "attorney"
+    ? `---FOLLOW-UP---
+[Exactly ONE question, only if something is genuinely ambiguous or worth flagging — otherwise leave this block empty between the markers]
+---END FOLLOW-UP---`
+    : `---FOLLOW-UP---
+1. (Blocking) [Question — why it matters in one short phrase]
+2. (Blocking) [Question]
+3. (Important) [Question]
+4. (Helpful) [Question]
+---END FOLLOW-UP---`;
 
   return `You are a senior legal drafting assistant inside the Instant Attorney system for Crawford Law PLLC (Texas Bar #24148908). You receive a client's Living File as context and your sole job is to produce a polished, attorney-grade first draft of the requested legal instrument.
 
@@ -915,12 +930,7 @@ NON-BLOCKING:
 • [[PLACEHOLDER]] — What it is, can be added at execution
 ---END MISSING---
 
----FOLLOW-UP---
-1. (Blocking) [Question — why it matters in one short phrase]
-2. (Blocking) [Question]
-3. (Important) [Question]
-4. (Helpful) [Question]
----END FOLLOW-UP---
+${followUpTemplate}
 
 ---FILE UPDATE---
 DOCUMENT: [Document type]

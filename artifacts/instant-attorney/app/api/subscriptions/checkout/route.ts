@@ -42,7 +42,16 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const priceId = PLAN_PRICE_IDS[plan] ?? PHASE2_PRICE_ID;
+  // A recognized plan (phase2/consult/attorney_pro) with an EMPTY configured
+  // price must fail loudly, not silently fall back to phase2's price — that
+  // would checkout the caller at the wrong price instead of erroring. Only an
+  // unrecognized plan string falls back to phase2 (defensive, matches prior
+  // behavior for malformed input).
+  const priceId = plan in PLAN_PRICE_IDS ? PLAN_PRICE_IDS[plan] : PHASE2_PRICE_ID;
+  if (!priceId) {
+    console.error(`[subscriptions/checkout] no Stripe price configured for plan "${plan}"`);
+    return NextResponse.json({ error: "Checkout isn't available for this plan yet. Please contact support." }, { status: 500 });
+  }
   const mode = plan === "consult" ? "payment" : "subscription";
 
   // Pre-fill the saved card for returning subscribers (one-click confirm on Stripe)
