@@ -357,8 +357,6 @@ ${debtStatutesForPrompt()}
 When a document is warranted, choose the matching debt instrument preset below for its recipient/field guidance. IMPORTANT: in RECOMMENDED WIZARDS put ONLY the bare wizard type it drafts through (e.g. \`general_document\`, \`demand_letter\`, or \`complaint_letter\`) with no extra words — never the preset key or label, or the wizard card and handoff will not render. Name the specific instrument in NEXT ACTION and SUGGESTED INSTRUMENTS instead. The [HIGH-STAKES] answer-to-a-lawsuit instrument should set RECOMMEND_CONSULT: true.
 ${debtInstrumentsForPrompt()}`;
 
-${debtInstrumentsForPrompt()}`;
-
 const ACP_MOD_LIEN = `PROPERTY LIENS, FORECLOSURE & TITLE ENCUMBRANCES — handle these as a first-class area. A lien is a legal claim against real property that can block a sale, force a foreclosure, or cloud title. Texas has several distinct lien types with different rules, deadlines, and owner impacts. HOA assessment liens are covered in the HOA section above; this block covers mechanic's liens, judgment liens, mortgage foreclosure, tax liens, and title defects.
 
 1. DEADLINE FIRST — FORECLOSURE IS FAST. Texas mortgage foreclosures are non-judicial: after notice, the trustee can sell on the first Tuesday of the month. Property tax foreclosure can reach homestead. Flag [URGENT:] when a sale date is set or within 30 days. Get reinstatement/payoff figures in writing immediately.
