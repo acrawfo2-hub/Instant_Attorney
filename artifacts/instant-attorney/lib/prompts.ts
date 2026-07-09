@@ -833,7 +833,21 @@ export const WIZARD_FIELD_HINTS: Record<WizardType, string> = {
 // This is a separate agent from the intake orchestrator. It receives the full
 // Living File as injected context and immediately produces a near-final draft.
 
-export const DRAFTER_SYSTEM_PROMPT = `You are a senior legal drafting assistant inside the Instant Attorney system for Crawford Law PLLC (Texas Bar #24148908). You receive a client's Living File as context and your sole job is to produce a polished, attorney-grade first draft of the requested legal instrument.
+/**
+ * Which follow-up behavior the drafter uses. "client" re-renders the complete
+ * document on every follow-up (today's behavior, unchanged). "attorney" is
+ * for a licensed attorney working the document directly (an attorney-user's
+ * own wizard, or Andrew Crawford's chat-edit panel) — it makes a targeted
+ * edit instead of a full regeneration, the way a junior associate would.
+ */
+export type DrafterPersona = "client" | "attorney";
+
+export function buildDrafterSystemPrompt(persona: DrafterPersona = "client"): string {
+  const followUpInstructions = persona === "attorney"
+    ? `Apply ONLY the specific change(s) requested. Leave every other sentence, section, and defined term exactly as it was — do not restructure, do not rewrite unrelated language, do not "improve" anything that wasn't asked for. Then render the COMPLETE document (so the full text is always available for review and download), with just that change applied. If something about the request is genuinely ambiguous, or you notice a related issue worth flagging — the way a sharp junior associate would speak up rather than silently guessing — ask exactly ONE such question in the FOLLOW-UP block. If nothing needs asking, leave FOLLOW-UP empty. Never ask a question just to have one.`
+    : `Re-render the COMPLETE updated draft incorporating the new information. Do not just acknowledge the answer — show the improved document. Then show only the remaining open questions.`;
+
+  return `You are a senior legal drafting assistant inside the Instant Attorney system for Crawford Law PLLC (Texas Bar #24148908). You receive a client's Living File as context and your sole job is to produce a polished, attorney-grade first draft of the requested legal instrument.
 
 You are not a lawyer. You do not give legal advice. You draft documents and flag issues.
 
@@ -871,7 +885,7 @@ On the FIRST response (initial draft):
 Produce the full draft immediately. Do not ask questions before drafting. Show what you can draft, then ask only for what is missing.
 
 On FOLLOW-UP responses (after client answers a question):
-Re-render the COMPLETE updated draft incorporating the new information. Do not just acknowledge the answer — show the improved document. Then show only the remaining open questions.
+${followUpInstructions}
 
 WRITING STYLE — direct and concise (this is how Crawford Law writes, and concise drafting is the mark of sound legal reasoning):
 - Plain, direct language. One idea per sentence. Prefer short sentences.
@@ -926,6 +940,9 @@ Placeholder rules:
 - Cluster related placeholders logically so the client can answer one question and fill multiple spots.
 
 Quality standard: The document must be internally consistent, use defined terms correctly, and be complete enough that an attorney can do a meaningful review rather than a structural rewrite.`;
+}
+
+export const DRAFTER_SYSTEM_PROMPT = buildDrafterSystemPrompt("client");
 
 // ── Attorney review prompts ──────────────────────────────────────────────────
 

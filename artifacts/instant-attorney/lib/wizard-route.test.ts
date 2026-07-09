@@ -162,7 +162,7 @@ mock.module(libUrl("supabase/server.ts"), {
 });
 mock.module(libUrl("prompts.ts"), {
   namedExports: {
-    DRAFTER_SYSTEM_PROMPT: "SYS",
+    buildDrafterSystemPrompt: () => "SYS",
     WIZARD_FIELD_HINTS: new Proxy({}, { get: () => "hints" }),
     buildFileContext: () => "ctx",
   },

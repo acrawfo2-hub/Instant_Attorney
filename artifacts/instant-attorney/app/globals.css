@@ -6687,6 +6687,21 @@ mark.atty-placeholder {
   color: var(--brand-text-md);
   margin-bottom: 14px;
 }
+
+/* Ask for a change — attorney-user free-form chat edit */
+.wiz-chat-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #fdf8ec;
+  border: 1px solid var(--brand-border);
+  border-radius: var(--brand-r-md);
+  padding: 14px;
+  margin-bottom: 14px;
+}
+.wiz-chat-edit .wiz-field-label { margin: 0; }
+.wiz-chat-edit .wiz-field-hint { margin: 0 0 4px; }
+.wiz-chat-edit .wiz-send { align-self: flex-start; }
 .wiz-reassure strong { color: #1d5237; }
 .wiz-reassure-icon {
   display: inline-flex;
@@ -7647,6 +7662,11 @@ mark.atty-placeholder {
 .case-chat-error { color: #c44444; font-size: 12.5px; margin: 0; }
 
 /* ── Attorney comments & concerns on a document ── */
+.atty-chat-edit { margin-top: 20px; }
+.atty-chat-edit h2 { font-size: 16px; margin: 0; }
+.atty-chat-msg-user { background: var(--brand-cream); }
+.atty-chat-msg-assistant { background: #fdf8ec; border-color: rgba(201, 162, 39, 0.35); }
+
 .atty-comments-workspace { margin-top: 20px; }
 .atty-comment-list {
   list-style: none;

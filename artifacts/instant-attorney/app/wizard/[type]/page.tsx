@@ -76,6 +76,9 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   // Attorney-users draft for their own clients and are the reviewing attorney
   // themselves — they never submit into Andrew Crawford's review queue.
   const [isAttorneyUser, setIsAttorneyUser] = useState(false);
+  // Free-form "ask for a change" chat, available once a draft exists — this is
+  // the only way to keep editing once the checklist has no remaining blanks.
+  const [chatInput, setChatInput] = useState("");
   const didInitRef = useRef(false);
 
   useEffect(() => {
@@ -586,6 +589,21 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
     }
   }
 
+  // Free-form "ask for a change" edit — the attorney-user path to keep
+  // refining a draft once the checklist has no remaining blanks (or any time
+  // they'd rather just say what they want changed). The server applies a
+  // targeted edit instead of a full regeneration for attorney-user accounts
+  // (see buildDrafterSystemPrompt("attorney") in lib/prompts.ts).
+  async function sendChatEdit() {
+    const text = chatInput.trim();
+    if (!text || streaming) return;
+    setChatInput("");
+    setJustUpdated(false);
+    const userMsg: Message = { role: "user", content: text };
+    const ok = await runDrafter([...messages, userMsg], false);
+    if (ok) setJustUpdated(true);
+  }
+
   async function handleDownload() {
     if (!documentId || downloading) return;
     setDownloading(true);
@@ -938,6 +956,49 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
                       <><strong>It&apos;s okay to leave blanks.</strong> Your draft is ready now. Fill in what you know, then send it — Andrew Crawford, Esq. will fill in anything that&apos;s missing and follow up with you about it.</>
                     )}
                   </div>
+                </div>
+              )}
+
+              {/* Ask for a change — attorney-user only. A persistent chat, not a
+                  checklist: type what you want changed and get a targeted edit
+                  back, like directing a junior associate. This is the only edit
+                  path once the checklist below has no remaining blanks. */}
+              {currentDraft && isAttorneyUser && (
+                <div className="wiz-chat-edit">
+                  <label className="wiz-field-label" htmlFor="wiz-chat-input">Ask for a change</label>
+                  <p className="wiz-field-hint">
+                    e.g. &quot;Change the notice period to 60 days&quot; or &quot;Add a force majeure clause.&quot;
+                    Only what you ask for changes — everything else stays as-is.
+                  </p>
+                  <div className="wiz-field-input-row">
+                    <textarea
+                      id="wiz-chat-input"
+                      className="wiz-input"
+                      rows={2}
+                      value={chatInput}
+                      disabled={streaming}
+                      placeholder="Type the change you want…"
+                      onChange={(e) => setChatInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          sendChatEdit();
+                        }
+                      }}
+                    />
+                    <VoiceInputButton
+                      compact
+                      disabled={streaming}
+                      onTranscript={(t) => setChatInput((v) => appendDictation(v, t))}
+                    />
+                  </div>
+                  <button
+                    className="wiz-send"
+                    onClick={sendChatEdit}
+                    disabled={streaming || !chatInput.trim()}
+                  >
+                    {streaming ? "Updating draft…" : "Send →"}
+                  </button>
                 </div>
               )}
 

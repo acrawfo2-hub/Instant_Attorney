@@ -12,6 +12,7 @@ const FEATURE_LABELS: Record<string, string> = {
   attorney_review: "Attorney review",
   attorney_second_draft_fitness: "Second draft — fitness check",
   attorney_second_draft: "Attorney second draft (Opus)",
+  attorney_chat_edit: "Attorney chat edit",
   attorney_merge: "Attorney merge",
   attorney_pre_consult: "Pre-consult memo",
   attachment_analysis: "Attachment analysis",

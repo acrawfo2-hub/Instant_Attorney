@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { DRAFTER_SYSTEM_PROMPT, WIZARD_FIELD_HINTS, buildFileContext } from "@/lib/prompts";
+import { buildDrafterSystemPrompt, WIZARD_FIELD_HINTS, buildFileContext } from "@/lib/prompts";
 import { parseAndUpdateFile, extractDraftText, syncDraftGapsToLivingFile, isCompleteFileUpdate } from "@/lib/file-parser";
 import { resolveWizardDocumentTarget, stampFactsSynced } from "@/lib/document-utils";
 import { loadAttachmentAsContentBlocks } from "@/lib/attachment-processor";
@@ -113,12 +113,13 @@ export async function POST(req: NextRequest) {
   const writeDb = BYPASS_AUTH ? db : createServiceClient();
 
   // Load current file state — refreshed on every call so answers update the context
-  const [{ data: caseFileRow }, { data: factRows }, { data: attachmentRows }, { data: requestedRows }] =
+  const [{ data: caseFileRow }, { data: factRows }, { data: attachmentRows }, { data: requestedRows }, { data: profileRow }] =
     await Promise.all([
       db.from("case_files").select("*").eq("id", caseFileId).single(),
       db.from("fact_items").select("*").eq("case_file_id", caseFileId),
       db.from("attachments").select("*").eq("case_file_id", caseFileId).eq("status", "ready"),
       db.from("requested_attachments").select("*").eq("case_file_id", caseFileId),
+      db.from("profiles").select("account_type").eq("id", userId).maybeSingle(),
     ]);
 
   const caseFile = caseFileRow as CaseFile | null;
@@ -127,6 +128,9 @@ export async function POST(req: NextRequest) {
   const requestedAttachments = (requestedRows ?? []) as RequestedAttachment[];
   const fileContext = caseFile ? buildFileContext(caseFile, facts, attachments, requestedAttachments) : "";
   const fieldHints = WIZARD_FIELD_HINTS[wizardType as WizardType];
+  // Attorney-users get a targeted-edit follow-up behavior instead of a full
+  // regeneration on every turn — same prompt, different "on follow-up" rule.
+  const drafterPersona = profileRow?.account_type === "attorney_user" ? "attorney" as const : "client" as const;
 
   const documentLabel = (wizardType === "general_document" && instrument)
     ? instrument
@@ -169,7 +173,7 @@ export async function POST(req: NextRequest) {
       system: [
         {
           type: "text" as const,
-          text: DRAFTER_SYSTEM_PROMPT,
+          text: buildDrafterSystemPrompt(drafterPersona),
         },
         {
           type: "text" as const,

@@ -14,6 +14,7 @@ export type UsageFeature =
   | "attorney_review"
   | "attorney_second_draft_fitness"
   | "attorney_second_draft"
+  | "attorney_chat_edit"
   | "attorney_merge"
   | "attorney_pre_consult"
   | "roadmap_refresh"
