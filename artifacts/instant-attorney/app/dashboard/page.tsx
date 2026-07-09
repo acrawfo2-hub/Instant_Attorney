@@ -61,10 +61,18 @@ async function getData() {
       .maybeSingle(),
     db
       .from("profiles")
-      .select("full_name, email, account_type")
+      .select("full_name, email, account_type, is_attorney")
       .eq("id", userId)
       .maybeSingle(),
   ]);
+
+  // The reviewing attorney belongs on his review queue, never the client
+  // dashboard — bounce before the subscription check even runs (he isn't a
+  // paying subscriber). Defense in depth: /login already routes him straight
+  // to /attorney, this only matters for a direct nav or a stale bookmark.
+  if (!BYPASS_AUTH && profileRow?.is_attorney) {
+    redirect("/attorney");
+  }
 
   if (!BYPASS_AUTH && (!subRow || !["active", "trialing", "bypass"].includes(subRow.status ?? ""))) {
     redirect(profileRow?.account_type === "attorney_user" ? "/onboarding/attorney" : "/onboarding");

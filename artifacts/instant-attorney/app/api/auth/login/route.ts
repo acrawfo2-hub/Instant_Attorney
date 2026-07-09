@@ -9,11 +9,25 @@ export async function POST(request: NextRequest) {
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 401 });
   }
 
-  return NextResponse.json({ ok: true });
+  // Role-aware home: the reviewing attorney (Andrew Crawford) belongs on his
+  // review queue, never the client dashboard. Clients and attorney-users both
+  // land on /dashboard — it already redirects an unapproved/unsubscribed
+  // attorney-user to the right onboarding step (see app/dashboard/page.tsx).
+  let redirectTo = "/dashboard";
+  if (data.user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("is_attorney")
+      .eq("id", data.user.id)
+      .maybeSingle();
+    if (profile?.is_attorney) redirectTo = "/attorney";
+  }
+
+  return NextResponse.json({ ok: true, redirectTo });
 }
