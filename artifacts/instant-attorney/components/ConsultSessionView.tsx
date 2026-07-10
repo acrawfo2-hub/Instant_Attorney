@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AccountMenu from "@/components/AccountMenu";
+import ConsultNotepad from "@/components/ConsultNotepad";
 import type { CaseFile, ConsultNote, ConsultRecording, ConsultRequest, Profile } from "@/lib/types";
 
 type SessionMode = "client" | "attorney" | "reviewer";
@@ -141,18 +142,7 @@ export default function ConsultSessionView({
           )}
 
           {mode !== "client" && (
-            <div className="lf-card lf-card-full">
-              <div className="lf-card-label">Notes</div>
-              {notes.length === 0 ? (
-                <div className="lf-card-meta">No notes yet.</div>
-              ) : (
-                notes.map((n) => (
-                  <p key={n.id} className="lf-session-note">
-                    {n.body}
-                  </p>
-                ))
-              )}
-            </div>
+            <ConsultNotepad consultId={consult.id} initialNotes={notes} editable={mode === "attorney"} />
           )}
 
           {mode !== "client" && (

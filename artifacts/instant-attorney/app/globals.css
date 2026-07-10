@@ -5042,6 +5042,7 @@ mark.atty-placeholder {
   color: #b3261e;
   margin-top: 0.5rem;
 }
+.lf-notepad-compose { margin-top: 0.85rem; }
 
 .lf-consult-rec-badge-confirmed { background: rgba(52,199,89,0.12); border-color: rgba(52,199,89,0.3); color: #34c759; }
 .lf-consult-rec-badge-pending   { background: rgba(255,159,10,0.12); border-color: rgba(255,159,10,0.3); color: #ff9f0a; }
