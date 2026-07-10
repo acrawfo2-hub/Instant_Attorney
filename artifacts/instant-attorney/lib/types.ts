@@ -82,8 +82,40 @@ export interface ConsultRequest {
   post_consult_plan: ConsultWrapUp | null;
   wrap_up_submitted_at: string | null;
   fee_estimate_draft: ConsultFeeEstimateDraft | null;
+  session_started_at: string | null;
+  session_ended_at: string | null;
+  recording_consent_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/** Timestamped notepad entry kept during a live consult session. Attorney/reviewer only — not client-visible. */
+export interface ConsultNote {
+  id: string;
+  consult_request_id: string;
+  author_id: string | null;
+  body: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ConsultTranscriptStatus = "pending" | "processing" | "ready" | "failed";
+
+/** Audio recording of a consult, transcribed after the call. Attorney/reviewer only — not client-visible. */
+export interface ConsultRecording {
+  id: string;
+  consult_request_id: string;
+  recorded_by: string | null;
+  storage_bucket: string | null;
+  storage_path: string | null;
+  content_sha256: string | null;
+  duration_seconds: number | null;
+  byte_size: number | null;
+  transcript_status: ConsultTranscriptStatus;
+  transcript_text: string | null;
+  transcript_error: string | null;
+  recorded_at: string;
+  transcribed_at: string | null;
 }
 
 // All supported wizard types — add new ones here as wizards are built
