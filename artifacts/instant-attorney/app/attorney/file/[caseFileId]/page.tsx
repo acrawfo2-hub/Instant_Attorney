@@ -3,7 +3,7 @@ import Link from "next/link";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import ClientFileView from "@/components/ClientFileView";
 import AccountMenu from "@/components/AccountMenu";
-import type { CaseFile, FactItem, Document, Profile, RequestedAttachment, GovFormInstrument } from "@/lib/types";
+import type { CaseFile, FactItem, Document, Profile, RequestedAttachment, GovFormInstrument, ConsultRequest } from "@/lib/types";
 
 // Attorney view of a single client case file. Renders the exact same Living
 // File the client sees (legal strategy, instruments, fact cards, gov forms,
@@ -43,7 +43,7 @@ export default async function AttorneyFilePage({
   if (!caseFileRow) notFound();
   const caseFile = caseFileRow as CaseFile;
 
-  const [{ data: clientProfile }, { data: facts }, { data: documents }, { data: requestedRows }, { data: formRows }] =
+  const [{ data: clientProfile }, { data: facts }, { data: documents }, { data: requestedRows }, { data: formRows }, { data: consultRow }] =
     await Promise.all([
       db.from("profiles").select("*").eq("id", caseFile.user_id).single(),
       db
@@ -67,7 +67,17 @@ export default async function AttorneyFilePage({
         .eq("case_file_id", caseFileId)
         .neq("status", "dismissed")
         .order("created_at", { ascending: true }),
+      db
+        .from("consult_requests")
+        .select("*")
+        .eq("case_file_id", caseFileId)
+        .in("status", ["confirmed", "completed"])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
+
+  const consult = (consultRow as ConsultRequest | null) ?? null;
 
   const allDocs = (documents ?? []) as Document[];
   const topDocuments = allDocs.filter(
@@ -101,6 +111,11 @@ export default async function AttorneyFilePage({
         </div>
 
         <div className="lf-header-right">
+          {consult && (
+            <Link href={`/consult/${consult.id}/session`} className="lf-logout-btn">
+              {consult.status === "completed" ? "Consult Session" : "Join Consult"}
+            </Link>
+          )}
           <Link href={`/attorney/file/${caseFileId}/financials`} className="lf-logout-btn">
             Financials
           </Link>
