@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { requireViewer } from "@/lib/auth/require-attorney";
 import { personDisplayName } from "@/lib/types";
 import AccountMenu from "@/components/AccountMenu";
 import AttorneyTabNav from "@/components/AttorneyTabNav";
@@ -9,16 +9,11 @@ import AttorneyTabNav from "@/components/AttorneyTabNav";
 // (file view, document review, financials, per-client hub), which keep their
 // own contextual headers as-is.
 export default async function AttorneyTabsLayout({ children }: { children: React.ReactNode }) {
-  const auth = await createClient();
-  const {
-    data: { user },
-  } = await auth.auth.getUser();
-  if (!user) redirect("/login");
+  const { db, userId, isAttorney } = await requireViewer();
+  if (!isAttorney) redirect("/dashboard");
 
-  const { data: profile } = await auth.from("profiles").select("*").eq("id", user.id).single();
-  if (!profile?.is_attorney) redirect("/dashboard");
+  const { data: profile } = await db.from("profiles").select("*").eq("id", userId).single();
 
-  const db = createServiceClient();
   const [{ count: draftsCount }, { count: consultsCount }] = await Promise.all([
     db
       .from("documents")

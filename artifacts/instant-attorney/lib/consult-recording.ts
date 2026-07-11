@@ -51,14 +51,20 @@ export async function storeConsultRecording(
 
   if (error && /bucket.*not.*found|not.*found.*bucket|no such bucket/i.test(error.message)) {
     const { error: bucketErr } = await serviceDb.storage.createBucket(RECORDING_BUCKET, { public: false });
-    if (bucketErr && !/exist/i.test(bucketErr.message)) {
+    if (bucketErr && !/already exists/i.test(bucketErr.message)) {
       throw new Error(`Failed to create recording bucket: ${bucketErr.message}`);
     }
     ({ error } = await attempt());
   }
 
   // Same hash already archived (e.g. a retried upload) — reuse the object.
-  const alreadyStored = error && /exist|duplicate/i.test(error.message);
+  // Matched narrowly on Supabase Storage's actual duplicate-object message
+  // ("The resource already exists") rather than a loose /exist|duplicate/
+  // substring test, which could misclassify an unrelated error (e.g. a
+  // permissions/policy failure whose message happens to contain "exist") as
+  // a harmless conflict and silently record a row pointing at bytes that
+  // were never actually written.
+  const alreadyStored = error && /already exists/i.test(error.message);
   if (error && !alreadyStored) {
     throw new Error(`Failed to upload recording: ${error.message}`);
   }

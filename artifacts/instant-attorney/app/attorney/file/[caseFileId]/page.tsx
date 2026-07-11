@@ -1,6 +1,6 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { requireViewer } from "@/lib/auth/require-attorney";
 import ClientFileView from "@/components/ClientFileView";
 import CaseBrainstormChat from "@/components/CaseBrainstormChat";
 import AccountMenu from "@/components/AccountMenu";
@@ -34,20 +34,8 @@ export default async function AttorneyFilePage({
   const { view } = await searchParams;
   const isBrainstorm = view === "brainstorm";
 
-  const auth = await createClient();
-  const {
-    data: { user },
-  } = await auth.auth.getUser();
-  if (!user) redirect("/login");
-
-  const { data: viewer } = await auth
-    .from("profiles")
-    .select("is_attorney")
-    .eq("id", user.id)
-    .single();
-  if (!viewer?.is_attorney) redirect("/dashboard");
-
-  const db = createServiceClient();
+  const { db, isAttorney } = await requireViewer();
+  if (!isAttorney) redirect("/dashboard");
 
   const { data: caseFileRow } = await db
     .from("case_files")

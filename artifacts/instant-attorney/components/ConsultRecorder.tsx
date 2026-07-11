@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { detectVoiceCapability, readBrowserEnv } from "@/lib/voice/capability";
 import { blobToPcm16k, getTranscriber } from "@/lib/voice/transcriber";
 import type { ConsultRecording } from "@/lib/types";
@@ -86,6 +86,16 @@ export default function ConsultRecorder({ consultId, initialRecordings, hasConse
   const chunksRef = useRef<Blob[]>([]);
   const cleanupRef = useRef<(() => void) | null>(null);
   const startedAtRef = useRef<number>(0);
+
+  // Stop the mic/tab-share/AudioContext if the attorney navigates away while
+  // still recording — without this, leaving the page mid-capture (rather
+  // than clicking "Stop recording") leaves the mic indicator lit and the
+  // shared-tab capture running indefinitely.
+  useEffect(() => {
+    return () => {
+      cleanupRef.current?.();
+    };
+  }, []);
 
   const beginCapture = useCallback(async () => {
     setError(null);

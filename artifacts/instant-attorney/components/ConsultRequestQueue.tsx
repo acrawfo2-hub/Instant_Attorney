@@ -135,7 +135,14 @@ function CompletedCard({ row }: { row: ConsultRequestRow }) {
   );
 }
 
-export default function ConsultRequestQueue({ requests }: { requests: ConsultRequestRow[] }) {
+export default function ConsultRequestQueue({
+  requests,
+  moreCompleted = false,
+}: {
+  requests: ConsultRequestRow[];
+  /** True when the completed list was capped and older completed consults exist beyond it. */
+  moreCompleted?: boolean;
+}) {
   const pending = requests.filter((r) => r.status === "pending");
   const awaitingClient = requests.filter((r) => r.status === "attorney_proposed");
   const upcoming = requests
@@ -196,6 +203,11 @@ export default function ConsultRequestQueue({ requests }: { requests: ConsultReq
             Completed
             <span className="atty-count">{completed.length}</span>
           </div>
+          {moreCompleted && (
+            <div className="atty-empty">
+              Showing the {completed.length} most recent completed consults — older ones aren&apos;t listed here yet.
+            </div>
+          )}
           {completed.map((row) => <CompletedCard key={row.id} row={row} />)}
         </div>
       )}

@@ -1,17 +1,12 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { hasApplicableUpdate } from "@/lib/file-parser";
 import type { CaseBrainstormMessage } from "@/lib/types";
 
 interface Props {
   caseFileId: string;
   initialMessages: CaseBrainstormMessage[];
-}
-
-function hasProposedUpdate(content: string): boolean {
-  const livingFile = content.includes("---LIVING FILE---") && content.includes("---END FILE---");
-  const strategy = content.includes("---LEGAL STRATEGY---") && content.includes("---END STRATEGY---");
-  return livingFile || strategy;
 }
 
 function formatTimestamp(iso: string): string {
@@ -110,14 +105,19 @@ export default function CaseBrainstormChat({ caseFileId, initialMessages }: Prop
           <div key={m.id} className={`brainstorm-row brainstorm-row-${m.role}`}>
             <div className={`brainstorm-bubble brainstorm-bubble-${m.role}`}>
               <p>{m.content}</p>
-              {m.role === "assistant" && hasProposedUpdate(m.content) && (
+              {m.role === "assistant" && hasApplicableUpdate(m.content) && (
                 <div className="brainstorm-apply-row">
                   {m.applied_at ? (
                     <span className="brainstorm-applied-badge">Applied {formatTimestamp(m.applied_at)}</span>
                   ) : (
                     <button
                       className="atty-btn atty-btn-primary"
-                      disabled={applyingId === m.id}
+                      // Disabled while ANY apply is in flight, not just this
+                      // message's — applying two different messages'
+                      // proposed strategy/facts updates concurrently can
+                      // race on the same case_files row and silently clobber
+                      // one with the other.
+                      disabled={applyingId !== null}
                       onClick={() => applyUpdate(m.id)}
                     >
                       {applyingId === m.id ? "Applying…" : "Apply to Living File"}

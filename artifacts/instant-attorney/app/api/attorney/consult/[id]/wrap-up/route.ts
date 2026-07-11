@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { requireViewerForRoute } from "@/lib/auth/require-attorney";
 import {
   applyWrapUpToLivingFile,
   emptyWrapUp,
@@ -7,15 +8,9 @@ import {
   validateWrapUpForSubmit,
 } from "@/lib/consult-wrap-up";
 import { notifyClientConsultClosingReport } from "@/lib/notify";
-import { BYPASS_USER_ID } from "@/lib/types";
 import type { ConsultRequest, Profile } from "@/lib/types";
 
-const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
-
-async function loadConsult(
-  db: ReturnType<typeof createServiceClient>,
-  id: string,
-): Promise<ConsultRequest | null> {
+async function loadConsult(db: SupabaseClient, id: string): Promise<ConsultRequest | null> {
   const { data } = await db.from("consult_requests").select("*").eq("id", id).single();
   return (data as ConsultRequest | null) ?? null;
 }
@@ -25,20 +20,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const db = BYPASS_AUTH ? createServiceClient() : await createClient();
+  const viewer = await requireViewerForRoute();
+  if (viewer instanceof NextResponse) return viewer;
+  if (!viewer.isAttorney) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  let userId: string;
-  if (BYPASS_AUTH) {
-    userId = BYPASS_USER_ID;
-  } else {
-    const { data: { user }, error } = await (db as Awaited<ReturnType<typeof createClient>>).auth.getUser();
-    if (error || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    userId = user.id;
-    const { data: profile } = await db.from("profiles").select("is_attorney").eq("id", userId).single();
-    if (!profile?.is_attorney) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  const consult = await loadConsult(createServiceClient(), id);
+  const consult = await loadConsult(viewer.db, id);
   if (!consult) return NextResponse.json({ error: "Consult not found" }, { status: 404 });
 
   const draft = normalizeWrapUp(consult.wrap_up_draft ?? consult.post_consult_plan ?? emptyWrapUp());
@@ -57,25 +43,21 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const body = await req.json();
-  const db = BYPASS_AUTH ? createServiceClient() : await createClient();
+  const viewer = await requireViewerForRoute();
+  if (viewer instanceof NextResponse) return viewer;
+  if (!viewer.isAttorney) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  let userId: string;
-  if (BYPASS_AUTH) {
-    userId = BYPASS_USER_ID;
-  } else {
-    const { data: { user }, error } = await (db as Awaited<ReturnType<typeof createClient>>).auth.getUser();
-    if (error || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    userId = user.id;
-    const { data: profile } = await db.from("profiles").select("is_attorney").eq("id", userId).single();
-    if (!profile?.is_attorney) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const body = await req.json().catch(() => ({}));
+  const { db } = viewer;
 
-  const serviceDb = createServiceClient();
-  const consult = await loadConsult(serviceDb, id);
+  const consult = await loadConsult(db, id);
   if (!consult) return NextResponse.json({ error: "Consult not found" }, { status: 404 });
-  if (consult.status === "completed") {
-    return NextResponse.json({ error: "Consult already completed" }, { status: 400 });
+  // Gate on whether the CLOSEOUT REPORT was already sent, not on the consult's
+  // overall status — "End session" also sets status to "completed" (it's a
+  // separate lifecycle signal, see the session route), and that must not lock
+  // the attorney out of writing the report afterward.
+  if (consult.wrap_up_submitted_at) {
+    return NextResponse.json({ error: "Closeout report already sent" }, { status: 400 });
   }
 
   const wrapUp = body.wrapUp ? normalizeWrapUp(body.wrapUp) : undefined;
@@ -85,7 +67,7 @@ export async function PATCH(
   if (wrapUp) update.wrap_up_draft = wrapUp;
   if (attorneyNotes !== undefined) update.attorney_notes = attorneyNotes;
 
-  const { data: updated, error } = await serviceDb
+  const { data: updated, error } = await db
     .from("consult_requests")
     .update(update)
     .eq("id", id)
@@ -104,21 +86,17 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const body = await req.json();
+  const viewer = await requireViewerForRoute();
+  if (viewer instanceof NextResponse) return viewer;
+  if (!viewer.isAttorney) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  if (!BYPASS_AUTH) {
-    const db = await createClient();
-    const { data: { user }, error } = await db.auth.getUser();
-    if (error || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const { data: profile } = await db.from("profiles").select("is_attorney").eq("id", user.id).single();
-    if (!profile?.is_attorney) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const body = await req.json().catch(() => ({}));
+  const { db } = viewer;
 
-  const serviceDb = createServiceClient();
-  const consult = await loadConsult(serviceDb, id);
+  const consult = await loadConsult(db, id);
   if (!consult) return NextResponse.json({ error: "Consult not found" }, { status: 404 });
-  if (consult.status === "completed") {
-    return NextResponse.json({ error: "Consult already completed" }, { status: 400 });
+  if (consult.wrap_up_submitted_at) {
+    return NextResponse.json({ error: "Closeout report already sent" }, { status: 400 });
   }
   if (!consult.case_file_id) {
     return NextResponse.json({ error: "Link a case file before submitting wrap-up" }, { status: 400 });
@@ -131,17 +109,17 @@ export async function POST(
   }
 
   if (typeof body.attorneyNotes === "string") {
-    await serviceDb.from("consult_requests").update({
+    await db.from("consult_requests").update({
       attorney_notes: body.attorneyNotes,
       updated_at: new Date().toISOString(),
     }).eq("id", id);
   }
 
   try {
-    const updated = await applyWrapUpToLivingFile(serviceDb, consult, wrapUp);
+    const updated = await applyWrapUpToLivingFile(db, consult, wrapUp);
 
     try {
-      const { data: clientProfile } = await serviceDb
+      const { data: clientProfile } = await db
         .from("profiles")
         .select("*")
         .eq("id", updated.user_id)

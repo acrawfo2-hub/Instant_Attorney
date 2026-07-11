@@ -15,8 +15,18 @@ export async function POST(
   if (viewer instanceof NextResponse) return viewer;
   if (!viewer.isAttorney) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const { data: consult } = await viewer.db.from("consult_requests").select("id").eq("id", id).single();
+  const { data: consult } = await viewer.db
+    .from("consult_requests")
+    .select("id, recording_consent_at")
+    .eq("id", id)
+    .single();
   if (!consult) return NextResponse.json({ error: "Consult request not found" }, { status: 404 });
+  // The consent prompt in the UI is a courtesy, not the enforcement point —
+  // the server is what actually persists the recording, so it's what must
+  // refuse to do so without a logged consent timestamp.
+  if (!consult.recording_consent_at) {
+    return NextResponse.json({ error: "Recording consent has not been logged for this consult" }, { status: 403 });
+  }
 
   const contentType = req.headers.get("content-type") || "audio/webm";
   const durationHeader = req.headers.get("x-recording-duration");
