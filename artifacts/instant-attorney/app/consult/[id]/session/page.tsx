@@ -6,17 +6,17 @@ import type { ConsultRequest, CaseFile, Profile, ConsultNote, ConsultRecording }
 export const dynamic = "force-dynamic";
 
 // Companion surface for a live consult happening over Google Meet/Zoom — this
-// page never runs the call itself. It renders in one of three modes, all
+// page never runs the call itself. It renders in one of two modes, both
 // backed by the same consult_requests row:
 //   - "client":   the client who owns the consult. Sees only that a session
 //                 exists; notes/recording/transcript are attorney work
 //                 product, not client-visible (see schema-stage32).
-//   - "attorney": the attorney working the call (or about to). Live notepad
-//                 + recording controls once later phases land.
-//   - "reviewer": any attorney, once the session has ended — read-only replay
-//                 of notes/recording/transcript/closeout. There's no separate
-//                 reviewer role in the DB; every profile with is_attorney is
-//                 equally able to open a past session in reviewer mode.
+//   - "attorney": the attorney working with their own client. Always fully
+//                 editable — before, during, and after the call — so notes
+//                 can keep being added/corrected after "End session" too.
+//                 This is a solo/small-firm tool: the attorney who ran the
+//                 call is the only one who ever opens it, so there's no
+//                 separate read-only reviewer state to gate around.
 export default async function ConsultSessionPage({
   params,
 }: {
@@ -39,11 +39,7 @@ export default async function ConsultSessionPage({
     redirect(isAttorney ? "/attorney" : "/dashboard");
   }
 
-  const mode: "client" | "attorney" | "reviewer" = !isAttorney
-    ? "client"
-    : consult.session_ended_at || consult.status === "completed"
-      ? "reviewer"
-      : "attorney";
+  const mode: "client" | "attorney" = isAttorney ? "attorney" : "client";
 
   const [{ data: caseFileRow }, { data: clientProfileRow }, { data: noteRows }, { data: recordingRows }] =
     await Promise.all([

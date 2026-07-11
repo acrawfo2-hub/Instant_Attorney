@@ -1,11 +1,11 @@
 -- Instant Attorney — Stage 32: Consult live session (notepad + recording)
 -- Run AFTER schema-stage31-case-messages.sql in the Supabase SQL editor
 --
--- Backs the live consult session, viewable in "attorney as client" mode
--- (the attorney working the call) and "attorney as reviewer" mode (a
--- supervising attorney auditing after the fact) — both are just is_attorney()
--- profiles, so there is no separate reviewer role at the DB layer; the
--- distinction is made in the app.
+-- Backs the live consult session between an attorney and their own client
+-- (companion to a Google Meet/Zoom call, not a video/calling feature itself).
+-- Every is_attorney() profile has full read/write access — this is a
+-- solo/small-firm tool, not a supervisory review workflow, so there's no
+-- separate reviewer role at the DB or app layer.
 --
 -- Two pieces:
 --   * consult_notes      — timestamped notepad entries kept during the call.

@@ -7,7 +7,7 @@ import AccountMenu from "@/components/AccountMenu";
 import ConsultNotepad from "@/components/ConsultNotepad";
 import type { CaseFile, ConsultNote, ConsultRecording, ConsultRequest, Profile } from "@/lib/types";
 
-type SessionMode = "client" | "attorney" | "reviewer";
+type SessionMode = "client" | "attorney";
 
 interface Props {
   mode: SessionMode;
@@ -33,8 +33,7 @@ function formatConsultTime(iso: string | null): string {
 
 const MODE_BADGE: Record<SessionMode, string> = {
   client: "Consult",
-  attorney: "Live Session",
-  reviewer: "Session Review",
+  attorney: "Consult Session",
 };
 
 export default function ConsultSessionView({
@@ -114,7 +113,11 @@ export default function ConsultSessionView({
           {mode === "attorney" && (
             <div className="lf-card lf-card-full">
               <div className="lf-card-label">Session</div>
-              {consult.session_started_at ? (
+              {consult.session_started_at && consult.session_ended_at ? (
+                <div className="lf-card-meta">
+                  {formatConsultTime(consult.session_started_at)} – {formatConsultTime(consult.session_ended_at)}
+                </div>
+              ) : consult.session_started_at ? (
                 <>
                   <div className="lf-card-meta">Started {formatConsultTime(consult.session_started_at)}</div>
                   <button className="lf-begin-btn" disabled={pending} onClick={() => postAction("end")}>
@@ -127,17 +130,6 @@ export default function ConsultSessionView({
                 </button>
               )}
               {error && <div className="lf-session-error">{error}</div>}
-            </div>
-          )}
-
-          {mode === "reviewer" && (
-            <div className="lf-card lf-card-full">
-              <div className="lf-card-label">Session</div>
-              <div className="lf-card-meta">
-                {consult.session_started_at && consult.session_ended_at
-                  ? `${formatConsultTime(consult.session_started_at)} – ${formatConsultTime(consult.session_ended_at)}`
-                  : "Ended"}
-              </div>
             </div>
           )}
 

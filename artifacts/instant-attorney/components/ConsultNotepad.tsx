@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import type { KeyboardEvent } from "react";
 import type { ConsultNote } from "@/lib/types";
 
 interface Props {
   consultId: string;
   initialNotes: ConsultNote[];
-  /** Attorney mode gets an input + inline edit; reviewer mode is read-only. */
+  /** False only in client mode — the client never sees attorney notes. */
   editable: boolean;
 }
 
@@ -50,6 +51,24 @@ export default function ConsultNotepad({ consultId, initialNotes, editable }: Pr
     }
   }
 
+  // Enter submits/saves; Shift+Enter inserts a newline — lets the attorney
+  // fire off short notes without leaving the keyboard mid-call.
+  function handleComposeKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      addNote();
+    }
+  }
+
+  function handleEditKeyDown(e: KeyboardEvent<HTMLTextAreaElement>, noteId: string) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      saveEdit(noteId);
+    } else if (e.key === "Escape") {
+      setEditingId(null);
+    }
+  }
+
   async function saveEdit(noteId: string) {
     const body = editDraft.trim();
     if (!body) return;
@@ -85,6 +104,7 @@ export default function ConsultNotepad({ consultId, initialNotes, editable }: Pr
               className="atty-second-draft-textarea"
               value={editDraft}
               onChange={(e) => setEditDraft(e.target.value)}
+              onKeyDown={(e) => handleEditKeyDown(e, n.id)}
               rows={2}
               autoFocus
             />
@@ -122,7 +142,8 @@ export default function ConsultNotepad({ consultId, initialNotes, editable }: Pr
             className="atty-second-draft-textarea"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            placeholder="Add a note…"
+            onKeyDown={handleComposeKeyDown}
+            placeholder="Add a note… (Enter to save, Shift+Enter for a new line)"
             rows={3}
           />
           <div className="atty-second-draft-actions">
