@@ -5068,6 +5068,36 @@ mark.atty-placeholder {
   line-height: 1.5;
 }
 
+.lf-closeout-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+.lf-closeout-field { margin-bottom: 1rem; }
+.lf-closeout-field:last-of-type { margin-bottom: 0; }
+.lf-closeout-list-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.4rem;
+}
+.lf-closeout-input {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid var(--brand-border);
+  border-radius: var(--brand-r-md);
+  font-size: 13px;
+  font-family: inherit;
+  background: var(--brand-cream);
+  color: var(--brand-text-dk);
+  box-sizing: border-box;
+}
+.lf-closeout-input:disabled { opacity: 0.7; }
+.lf-closeout-kind { flex: 0 0 auto; width: 150px; }
+
 .lf-consult-rec-badge-confirmed { background: rgba(52,199,89,0.12); border-color: rgba(52,199,89,0.3); color: #34c759; }
 .lf-consult-rec-badge-pending   { background: rgba(255,159,10,0.12); border-color: rgba(255,159,10,0.3); color: #ff9f0a; }
 .lf-consult-rec-badge-proposed  { background: rgba(90,200,250,0.12); border-color: rgba(90,200,250,0.3); color: #5ac8fa; }
@@ -7424,6 +7454,11 @@ mark.atty-placeholder {
 }
 .lf-post-consult-referral { margin-bottom: 12px; }
 .lf-post-consult-referral p { font-size: 13px; line-height: 1.5; margin: 4px 0 0; }
+.lf-post-consult-strategy,
+.lf-post-consult-timeline,
+.lf-post-consult-documents { margin-bottom: 12px; }
+.lf-post-consult-strategy p,
+.lf-post-consult-timeline p { font-size: 13px; line-height: 1.5; margin: 4px 0 0; }
 .lf-post-consult-list {
   margin: 8px 0 0;
   padding-left: 20px;

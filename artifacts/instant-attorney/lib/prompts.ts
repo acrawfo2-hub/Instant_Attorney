@@ -953,6 +953,53 @@ CONSULT PRIORITIES:
 Keep each section tight. Andrew is reading this 5 minutes before the call. No fluff.`;
 }
 
+// Drafts the consult closeout report from the attorney's live notes and the
+// call transcript (when available). Output is parsed as JSON by
+// lib/consult-closeout-generate.ts and run through normalizeWrapUp(), which
+// safely coerces any missing/malformed field, so this only needs to get
+// Claude close to the shape — it doesn't need to be defensive on its own.
+export function buildConsultCloseoutPrompt(
+  caseFile: CaseFile,
+  facts: FactItem[],
+  notes: string[],
+  transcript: string | null
+): string {
+  const fileContext = buildFileContext(caseFile, facts);
+
+  const notesBlock = notes.length
+    ? notes.map((n) => `• ${n}`).join("\n")
+    : "(No notes were taken during the call.)";
+
+  const transcriptBlock = transcript
+    ? transcript
+    : "(No recording transcript is available — draft from the notes alone, and lean more conservative where notes are thin.)";
+
+  return `${fileContext}
+
+=== CONSULT NOTES (taken live by Andrew Crawford, Esq. during the call) ===
+${notesBlock}
+
+=== CONSULT TRANSCRIPT ===
+${transcriptBlock}
+
+---
+
+You are drafting the closeout report Andrew will review, edit, and send to the client after this consult. Produce ONLY a single JSON object — no prose before or after it, no markdown code fence — matching exactly this shape:
+
+{
+  "consultSummary": string,        // 2-4 sentences: what was discussed and the bottom line for the client
+  "strategyOverview": string,      // 2-4 sentences: the legal strategy and where the matter stands right now, in plain language for the client
+  "disposition": one of "retain_in_house" | "refer_out" | "limited_scope" | "not_a_fit" | "follow_up_needed",
+  "referralNotes": string,         // required if disposition is "refer_out"; otherwise ""
+  "expectedTimeline": string,      // 1-3 sentences: what happens next and roughly when
+  "expectedDocuments": [ { "text": string } ],   // documents the client should expect to RECEIVE from the firm (drafts, letters, agreements) — not things the client needs to provide
+  "clientActions": [ { "text": string, "kind": "general" | "document" } ],   // things the CLIENT needs to do; kind "document" means the client needs to provide/upload something
+  "attorneyActions": [ { "text": string, "kind": "general" | "document" } ]  // things ANDREW needs to do
+}
+
+Ground the disposition and every field in what was actually said — if the notes/transcript don't support a conclusion, write "follow_up_needed" and say so plainly rather than guessing. Keep it decision-ready, not padded: only include action items and expected documents that were actually discussed.`;
+}
+
 // Single source of truth: the review instructions live in DOC_REVIEW_SYSTEM_PROMPT
 // (used as the cached system prompt by the review route). This helper just pairs
 // them with the file/document context for any caller that wants one combined string.

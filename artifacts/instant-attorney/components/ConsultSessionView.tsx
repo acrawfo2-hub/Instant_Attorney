@@ -6,6 +6,7 @@ import Link from "next/link";
 import AccountMenu from "@/components/AccountMenu";
 import ConsultNotepad from "@/components/ConsultNotepad";
 import ConsultRecorder from "@/components/ConsultRecorder";
+import ConsultCloseoutEditor from "@/components/ConsultCloseoutEditor";
 import ClientFileView from "@/components/ClientFileView";
 import type {
   CaseFile,
@@ -187,6 +188,17 @@ export default function ConsultSessionView({
             </div>
           )}
         </div>
+
+        {mode === "attorney" && caseFile && (
+          <div className="lf-grid" style={{ marginTop: "1.5rem" }}>
+            <ConsultCloseoutEditor
+              consultId={consult.id}
+              initialWrapUp={consult.wrap_up_draft}
+              alreadySent={consult.status === "completed" && !!consult.wrap_up_submitted_at}
+              submittedAt={consult.wrap_up_submitted_at}
+            />
+          </div>
+        )}
       </main>
     </div>
   );

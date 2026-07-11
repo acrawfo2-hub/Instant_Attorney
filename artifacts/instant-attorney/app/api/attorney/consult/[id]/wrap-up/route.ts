@@ -6,8 +6,9 @@ import {
   normalizeWrapUp,
   validateWrapUpForSubmit,
 } from "@/lib/consult-wrap-up";
+import { notifyClientConsultClosingReport } from "@/lib/notify";
 import { BYPASS_USER_ID } from "@/lib/types";
-import type { ConsultRequest } from "@/lib/types";
+import type { ConsultRequest, Profile } from "@/lib/types";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
@@ -138,6 +139,20 @@ export async function POST(
 
   try {
     const updated = await applyWrapUpToLivingFile(serviceDb, consult, wrapUp);
+
+    try {
+      const { data: clientProfile } = await serviceDb
+        .from("profiles")
+        .select("*")
+        .eq("id", updated.user_id)
+        .single();
+      if (clientProfile) {
+        await notifyClientConsultClosingReport(updated, clientProfile as Profile, wrapUp);
+      }
+    } catch (e) {
+      console.error("[consult/wrap-up] notify error:", e);
+    }
+
     return NextResponse.json({ ok: true, consult: updated });
   } catch (err) {
     console.error("[consult/wrap-up] submit error:", err);

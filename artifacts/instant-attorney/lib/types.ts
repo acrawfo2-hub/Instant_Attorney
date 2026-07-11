@@ -51,8 +51,14 @@ export interface ConsultActionItem {
 /** Attorney-editable wrap-up form (draft or submitted). */
 export interface ConsultWrapUp {
   consultSummary: string;
+  /** Short overview of the legal strategy and where the matter stands. */
+  strategyOverview: string;
   disposition: ConsultDisposition | "";
   referralNotes: string;
+  /** What happens next and roughly when. */
+  expectedTimeline: string;
+  /** Documents the client should expect to RECEIVE from the firm — not things the client needs to provide (see clientActions for that). */
+  expectedDocuments: ConsultActionItem[];
   clientActions: ConsultActionItem[];
   attorneyActions: ConsultActionItem[];
 }

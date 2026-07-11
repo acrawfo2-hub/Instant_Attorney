@@ -14,6 +14,7 @@ const FEATURE_LABELS: Record<string, string> = {
   attorney_second_draft: "Attorney second draft (Opus)",
   attorney_merge: "Attorney merge",
   attorney_pre_consult: "Pre-consult memo",
+  attorney_consult_closeout: "Consult closeout draft",
   attachment_analysis: "Attachment analysis",
   chat_acp: "Intake chat",
 };
