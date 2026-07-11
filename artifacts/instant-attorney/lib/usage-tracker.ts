@@ -17,6 +17,7 @@ export type UsageFeature =
   | "attorney_merge"
   | "attorney_pre_consult"
   | "attorney_consult_closeout"
+  | "attorney_brainstorm"
   | "roadmap_refresh"
   | "storage_upload";
 

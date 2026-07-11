@@ -147,6 +147,20 @@ export type DocumentStatus =
   | "changes_requested"
   | "delivered";
 
+export type BrainstormMessageRole = "user" | "assistant";
+
+/** Attorney-only sounding-board chat scoped to a case file. Never client-visible. */
+export interface CaseBrainstormMessage {
+  id: string;
+  case_file_id: string;
+  author_id: string | null;
+  role: BrainstormMessageRole;
+  content: string;
+  /** Set once the attorney has applied this message's proposed Living File/strategy update, if any. */
+  applied_at: string | null;
+  created_at: string;
+}
+
 export interface Profile {
   id: string;
   email: string;

@@ -1,5 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
-import type { CaseFile, FactItem, WizardType, Attachment, RequestedAttachment, Document } from "./types";
+import type { CaseFile, FactItem, WizardType, Attachment, RequestedAttachment, Document, ConsultWrapUp } from "./types";
+import { CONSULT_DISPOSITION_LABELS } from "./consult-wrap-up.ts";
 import { WIZARD_LABELS, docTypeLabel } from "./types.ts";
 import { formatCounselContextForPrompt } from "./existing-counsel.ts";
 import { formCatalogForPrompt } from "./government-forms.ts";
@@ -998,6 +999,71 @@ You are drafting the closeout report Andrew will review, edit, and send to the c
 }
 
 Ground the disposition and every field in what was actually said — if the notes/transcript don't support a conclusion, write "follow_up_needed" and say so plainly rather than guessing. Keep it decision-ready, not padded: only include action items and expected documents that were actually discussed.`;
+}
+
+// Static system prompt for the attorney's private brainstorm chat (cached —
+// paired with buildBrainstormContext, which carries the per-file dynamic
+// grounding). Emits the SAME ---LIVING FILE---/---LEGAL STRATEGY--- block
+// format the client intake chat uses (lib/file-parser.ts parses either one),
+// so a proposed update can be applied with the exact same parser — the only
+// difference is the attorney explicitly applies it (see the brainstorm
+// apply route) rather than it writing automatically.
+export const BRAINSTORM_SYSTEM_PROMPT = `You are a sharp, candid associate at Crawford Law PLLC — Andrew Crawford, Esq.'s private sounding board for this one case. This conversation is INTERNAL ONLY: the client never sees it, and nothing said here is legal advice to anyone. Talk like a trusted colleague, not an assistant — push back when a theory is weak, name the risk Andrew hasn't said out loud yet, suggest the angle he hasn't considered, and ask the question that actually matters before he has to.
+
+Ground everything in the case context and (when present) the consult context provided below — never invent facts. If Andrew's intuition points somewhere the file doesn't yet support, say so plainly rather than validating it; if the consult surfaced something the file doesn't reflect yet, say that too.
+
+When — and only when — the two of you land on a concrete change to the Living File or the legal strategy worth recording, propose it using EXACTLY this format (the same one used elsewhere in this system, parsed by the same code):
+
+---LIVING FILE---
+MATTER TYPE: [reactive/preventive] — [subtype]
+JURISDICTION: [State name | Unconfirmed — defaulting to Texas]
+SUMMARY:
+[2–4 sentence current case summary]
+GOALS:
+• [Goal]
+CONFIRMED FACTS:
+• [Fact] — [established: what shows it | asserted: client's account | characterization/opinion]
+FACT GAPS:
+• [Gap]
+NEXT ACTION:
+[Single most important next step]
+---END FILE---
+
+---LEGAL STRATEGY---
+SUMMARY:
+[Plain-English strategy assessment]
+STRENGTHS:
+• [Strength]
+RISKS:
+• [Risk]
+SUGGESTED INSTRUMENTS:
+• [Instrument]
+RECOMMEND_CONSULT: [true | false]
+---END STRATEGY---
+
+Rules for these blocks:
+- Only include a block when you're actually proposing a change — most replies won't have one at all. Never emit one just to restate the status quo.
+- Each block you emit REPLACES that whole section of the file, so restate every field in full — including ones that aren't changing. Leaving a field out clears it; that's how the parser treats a fresh block.
+- Andrew reviews and explicitly applies every proposed block himself. Nothing you write here is saved automatically — say so if he seems to assume otherwise.`;
+
+/** Per-file grounding for the brainstorm chat: the same file context used elsewhere, plus the latest consult closeout when one exists. */
+export function buildBrainstormContext(
+  caseFile: CaseFile,
+  facts: FactItem[],
+  attachments: Attachment[],
+  requestedAttachments: RequestedAttachment[],
+  latestConsultWrapUp: ConsultWrapUp | null
+): string {
+  const fileContext = buildFileContext(caseFile, facts, attachments, requestedAttachments);
+  if (!latestConsultWrapUp) return fileContext;
+
+  const lines = ["", "=== LATEST CONSULT CLOSEOUT ==="];
+  if (latestConsultWrapUp.consultSummary) lines.push(`SUMMARY: ${latestConsultWrapUp.consultSummary}`);
+  if (latestConsultWrapUp.strategyOverview) lines.push(`STRATEGY AT TIME OF CONSULT: ${latestConsultWrapUp.strategyOverview}`);
+  if (latestConsultWrapUp.disposition) {
+    lines.push(`DISPOSITION: ${CONSULT_DISPOSITION_LABELS[latestConsultWrapUp.disposition]}`);
+  }
+  return `${fileContext}\n${lines.join("\n")}`;
 }
 
 // Single source of truth: the review instructions live in DOC_REVIEW_SYSTEM_PROMPT

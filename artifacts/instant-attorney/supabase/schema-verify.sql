@@ -120,4 +120,7 @@ union all select 'consult_requests.recording_consent_at', case when exists (
   select 1 from information_schema.columns
   where table_schema = 'public' and table_name = 'consult_requests' and column_name = 'recording_consent_at'
 ) then 'OK' else 'MISSING' end
+union all select 'case_brainstorm_messages', case when exists (
+  select 1 from information_schema.tables where table_schema = 'public' and table_name = 'case_brainstorm_messages'
+) then 'OK' else 'MISSING' end
 order by object;
