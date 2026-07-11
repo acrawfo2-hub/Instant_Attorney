@@ -1,10 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { personDisplayName } from "@/lib/types";
 import type { ConsultRequest, CaseFile, Profile } from "@/lib/types";
 import ConsultActions from "@/components/ConsultActions";
 import ConsultBriefPanel from "@/components/ConsultBriefPanel";
+import { CONSULT_DISPOSITION_LABELS } from "@/lib/consult-wrap-up";
 
 export type ConsultRequestRow = ConsultRequest & {
   profiles: Profile | null;
@@ -111,6 +113,28 @@ function RequestCard({ row }: { row: ConsultRequestRow }) {
   );
 }
 
+function CompletedCard({ row }: { row: ConsultRequestRow }) {
+  const dispositionLabel = row.post_consult_plan?.disposition
+    ? CONSULT_DISPOSITION_LABELS[row.post_consult_plan.disposition]
+    : null;
+
+  return (
+    <Link href={`/consult/${row.id}/session`} className="atty-consult-card atty-consult-card-link">
+      <div className="atty-consult-header">
+        <div>
+          <div className="atty-consult-client">{clientName(row)}</div>
+          <div className="atty-consult-matter">{matterLabel(row.case_files)}</div>
+        </div>
+        {dispositionLabel && <span className="ca-badge ca-badge-confirmed">{dispositionLabel}</span>}
+      </div>
+      <div className="atty-consult-times">
+        Held {row.confirmed_time ? fmtCST(row.confirmed_time) : "—"}
+        {row.wrap_up_submitted_at && " · report sent"}
+      </div>
+    </Link>
+  );
+}
+
 export default function ConsultRequestQueue({ requests }: { requests: ConsultRequestRow[] }) {
   const pending = requests.filter((r) => r.status === "pending");
   const awaitingClient = requests.filter((r) => r.status === "attorney_proposed");
@@ -118,6 +142,11 @@ export default function ConsultRequestQueue({ requests }: { requests: ConsultReq
     .filter((r) => r.status === "confirmed")
     .sort((a, b) =>
       new Date(a.confirmed_time ?? 0).getTime() - new Date(b.confirmed_time ?? 0).getTime());
+  const completed = requests
+    .filter((r) => r.status === "completed")
+    .sort((a, b) =>
+      new Date(b.wrap_up_submitted_at ?? b.confirmed_time ?? 0).getTime() -
+      new Date(a.wrap_up_submitted_at ?? a.confirmed_time ?? 0).getTime());
 
   if (!requests.length) {
     return <div className="atty-empty">No consult requests yet</div>;
@@ -160,6 +189,16 @@ export default function ConsultRequestQueue({ requests }: { requests: ConsultReq
           upcoming.map((row) => <RequestCard key={row.id} row={row} />)
         )}
       </div>
+
+      {completed.length > 0 && (
+        <div className="atty-consult-group">
+          <div className="atty-consult-group-title">
+            Completed
+            <span className="atty-count">{completed.length}</span>
+          </div>
+          {completed.map((row) => <CompletedCard key={row.id} row={row} />)}
+        </div>
+      )}
     </div>
   );
 }
