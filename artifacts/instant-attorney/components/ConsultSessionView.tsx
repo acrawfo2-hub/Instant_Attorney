@@ -5,7 +5,18 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AccountMenu from "@/components/AccountMenu";
 import ConsultNotepad from "@/components/ConsultNotepad";
-import type { CaseFile, ConsultNote, ConsultRecording, ConsultRequest, Profile } from "@/lib/types";
+import ClientFileView from "@/components/ClientFileView";
+import type {
+  CaseFile,
+  ConsultNote,
+  ConsultRecording,
+  ConsultRequest,
+  Profile,
+  FactItem,
+  Document,
+  RequestedAttachment,
+  GovFormInstrument,
+} from "@/lib/types";
 
 type SessionMode = "client" | "attorney";
 
@@ -16,6 +27,11 @@ interface Props {
   clientProfile: Profile | null;
   notes: ConsultNote[];
   recordings: ConsultRecording[];
+  facts: FactItem[];
+  documents: Document[];
+  childDocuments: Document[];
+  requestedAttachments: RequestedAttachment[];
+  govForms: GovFormInstrument[];
 }
 
 function formatConsultTime(iso: string | null): string {
@@ -43,6 +59,11 @@ export default function ConsultSessionView({
   clientProfile,
   notes,
   recordings,
+  facts,
+  documents,
+  childDocuments,
+  requestedAttachments,
+  govForms,
 }: Props) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -50,6 +71,7 @@ export default function ConsultSessionView({
 
   const backHref = mode === "client" ? "/dashboard" : caseFile ? `/attorney/file/${caseFile.id}` : "/attorney";
   const backLabel = mode === "client" ? "All Files" : "Back to file";
+  const showFile = mode === "attorney" && !!caseFile;
 
   const title =
     caseFile?.title ||
@@ -78,7 +100,7 @@ export default function ConsultSessionView({
   }
 
   return (
-    <div className="lf-shell">
+    <div className={`lf-shell${showFile ? " lf-session-wide" : ""}`}>
       <header className="lf-header">
         <Link href={backHref} className="lf-header-logo">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -98,57 +120,76 @@ export default function ConsultSessionView({
       </header>
 
       <main className="lf-main">
-        <div className="lf-grid">
-          <div className="lf-card lf-card-full">
-            <div className="lf-card-label">Scheduled time</div>
-            <div className="lf-card-value">{formatConsultTime(consult.confirmed_time)}</div>
-            {mode !== "client" && clientProfile && (
-              <div className="lf-card-meta">
-                {clientProfile.full_name ?? clientProfile.email}
-                {consult.client_phone ? ` · ${consult.client_phone}` : ""}
+        <div className={showFile ? "lf-session-layout" : undefined}>
+          <div className={showFile ? "lf-session-rail" : undefined}>
+            <div className="lf-grid">
+              <div className="lf-card lf-card-full">
+                <div className="lf-card-label">Scheduled time</div>
+                <div className="lf-card-value">{formatConsultTime(consult.confirmed_time)}</div>
+                {mode !== "client" && clientProfile && (
+                  <div className="lf-card-meta">
+                    {clientProfile.full_name ?? clientProfile.email}
+                    {consult.client_phone ? ` · ${consult.client_phone}` : ""}
+                  </div>
+                )}
               </div>
-            )}
+
+              {mode === "attorney" && (
+                <div className="lf-card lf-card-full">
+                  <div className="lf-card-label">Session</div>
+                  {consult.session_started_at && consult.session_ended_at ? (
+                    <div className="lf-card-meta">
+                      {formatConsultTime(consult.session_started_at)} – {formatConsultTime(consult.session_ended_at)}
+                    </div>
+                  ) : consult.session_started_at ? (
+                    <>
+                      <div className="lf-card-meta">Started {formatConsultTime(consult.session_started_at)}</div>
+                      <button className="lf-begin-btn" disabled={pending} onClick={() => postAction("end")}>
+                        {pending ? "Ending…" : "End session"}
+                      </button>
+                    </>
+                  ) : (
+                    <button className="lf-begin-btn" disabled={pending} onClick={() => postAction("start")}>
+                      {pending ? "Starting…" : "Start session"}
+                    </button>
+                  )}
+                  {error && <div className="lf-session-error">{error}</div>}
+                </div>
+              )}
+
+              {mode !== "client" && (
+                <ConsultNotepad consultId={consult.id} initialNotes={notes} editable={mode === "attorney"} />
+              )}
+
+              {mode !== "client" && (
+                <div className="lf-card lf-card-full">
+                  <div className="lf-card-label">Recording</div>
+                  {recordings.length === 0 ? (
+                    <div className="lf-card-meta">No recording yet.</div>
+                  ) : (
+                    recordings.map((r) => (
+                      <div key={r.id} className="lf-card-meta">
+                        {r.transcript_status === "ready" ? "Transcribed" : r.transcript_status}
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
-          {mode === "attorney" && (
-            <div className="lf-card lf-card-full">
-              <div className="lf-card-label">Session</div>
-              {consult.session_started_at && consult.session_ended_at ? (
-                <div className="lf-card-meta">
-                  {formatConsultTime(consult.session_started_at)} – {formatConsultTime(consult.session_ended_at)}
-                </div>
-              ) : consult.session_started_at ? (
-                <>
-                  <div className="lf-card-meta">Started {formatConsultTime(consult.session_started_at)}</div>
-                  <button className="lf-begin-btn" disabled={pending} onClick={() => postAction("end")}>
-                    {pending ? "Ending…" : "End session"}
-                  </button>
-                </>
-              ) : (
-                <button className="lf-begin-btn" disabled={pending} onClick={() => postAction("start")}>
-                  {pending ? "Starting…" : "Start session"}
-                </button>
-              )}
-              {error && <div className="lf-session-error">{error}</div>}
-            </div>
-          )}
-
-          {mode !== "client" && (
-            <ConsultNotepad consultId={consult.id} initialNotes={notes} editable={mode === "attorney"} />
-          )}
-
-          {mode !== "client" && (
-            <div className="lf-card lf-card-full">
-              <div className="lf-card-label">Recording</div>
-              {recordings.length === 0 ? (
-                <div className="lf-card-meta">No recording yet.</div>
-              ) : (
-                recordings.map((r) => (
-                  <div key={r.id} className="lf-card-meta">
-                    {r.transcript_status === "ready" ? "Transcribed" : r.transcript_status}
-                  </div>
-                ))
-              )}
+          {showFile && caseFile && (
+            <div className="lf-session-file">
+              <ClientFileView
+                caseFile={caseFile}
+                facts={facts}
+                documents={documents}
+                childDocuments={childDocuments}
+                requestedAttachments={requestedAttachments}
+                govForms={govForms}
+                mode="attorney"
+                clientProfile={clientProfile ?? undefined}
+              />
             </div>
           )}
         </div>

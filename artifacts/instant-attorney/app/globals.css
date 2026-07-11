@@ -5044,6 +5044,24 @@ mark.atty-placeholder {
 }
 .lf-notepad-compose { margin-top: 0.85rem; }
 
+/* Wider shell so the notepad rail and the embedded Living File both have
+   room — the default lf-main max-width is sized for a single Living File. */
+.lf-session-wide .lf-main { max-width: 1500px; }
+
+.lf-session-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 400px) 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .lf-session-layout { grid-template-columns: 1fr; }
+}
+.lf-session-rail { position: sticky; top: 1rem; }
+@media (max-width: 900px) {
+  .lf-session-rail { position: static; }
+}
+
 .lf-consult-rec-badge-confirmed { background: rgba(52,199,89,0.12); border-color: rgba(52,199,89,0.3); color: #34c759; }
 .lf-consult-rec-badge-pending   { background: rgba(255,159,10,0.12); border-color: rgba(255,159,10,0.3); color: #ff9f0a; }
 .lf-consult-rec-badge-proposed  { background: rgba(90,200,250,0.12); border-color: rgba(90,200,250,0.3); color: #5ac8fa; }
