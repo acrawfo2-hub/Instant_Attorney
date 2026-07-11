@@ -5061,6 +5061,12 @@ mark.atty-placeholder {
 @media (max-width: 900px) {
   .lf-session-rail { position: static; }
 }
+.lf-session-consent {
+  border-left: 3px solid var(--brand-gold);
+  padding-left: 0.85rem;
+  font-size: 13px;
+  line-height: 1.5;
+}
 
 .lf-consult-rec-badge-confirmed { background: rgba(52,199,89,0.12); border-color: rgba(52,199,89,0.3); color: #34c759; }
 .lf-consult-rec-badge-pending   { background: rgba(255,159,10,0.12); border-color: rgba(255,159,10,0.3); color: #ff9f0a; }

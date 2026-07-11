@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AccountMenu from "@/components/AccountMenu";
 import ConsultNotepad from "@/components/ConsultNotepad";
+import ConsultRecorder from "@/components/ConsultRecorder";
 import ClientFileView from "@/components/ClientFileView";
 import type {
   CaseFile,
@@ -161,19 +162,12 @@ export default function ConsultSessionView({
                 <ConsultNotepad consultId={consult.id} initialNotes={notes} editable={mode === "attorney"} />
               )}
 
-              {mode !== "client" && (
-                <div className="lf-card lf-card-full">
-                  <div className="lf-card-label">Recording</div>
-                  {recordings.length === 0 ? (
-                    <div className="lf-card-meta">No recording yet.</div>
-                  ) : (
-                    recordings.map((r) => (
-                      <div key={r.id} className="lf-card-meta">
-                        {r.transcript_status === "ready" ? "Transcribed" : r.transcript_status}
-                      </div>
-                    ))
-                  )}
-                </div>
+              {mode === "attorney" && (
+                <ConsultRecorder
+                  consultId={consult.id}
+                  initialRecordings={recordings}
+                  hasConsent={!!consult.recording_consent_at}
+                />
               )}
             </div>
           </div>

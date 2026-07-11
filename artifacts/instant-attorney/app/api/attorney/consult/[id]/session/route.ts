@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireViewerForRoute } from "@/lib/auth/require-attorney";
 import type { ConsultRequest } from "@/lib/types";
 
-// Attorney-only start/end of a confirmed consult's live session. This is what
-// flips the shared session page from "attorney" (live working view) into
-// "reviewer" (read-only, once the call has ended).
+// Attorney-only state transitions on a confirmed consult's live session:
+// starting/ending it (timestamps shown on the session page) and logging
+// one-time recording consent before the first recording is made.
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -16,7 +16,7 @@ export async function POST(
 
   const { db } = viewer;
   const { action } = await req.json();
-  if (action !== "start" && action !== "end") {
+  if (action !== "start" && action !== "end" && action !== "consent") {
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   }
 
@@ -37,6 +37,9 @@ export async function POST(
     }
     // Idempotent — starting an already-started session just returns it as-is.
     update = { session_started_at: consult.session_started_at ?? new Date().toISOString() };
+  } else if (action === "consent") {
+    // Idempotent — only stamps the first time; re-confirming doesn't move it.
+    update = { recording_consent_at: consult.recording_consent_at ?? new Date().toISOString() };
   } else {
     if (!consult.session_started_at) {
       return NextResponse.json({ error: "Session has not been started" }, { status: 400 });
