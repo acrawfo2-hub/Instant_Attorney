@@ -9,6 +9,8 @@ import ConsultStatusCard from "@/components/ConsultStatusCard";
 import AccountMenu from "@/components/AccountMenu";
 import BillingMeter from "@/components/BillingMeter";
 import ConsultCheckoutButton from "@/components/ConsultCheckoutButton";
+import ResumeMatterBanner from "@/components/ResumeMatterBanner";
+import { toMatterSwitcherItem } from "@/lib/matter-switcher";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 const MAX_ACTIVE_FILES = 10;
@@ -407,6 +409,10 @@ export default async function DashboardPage() {
 
         {consult && consult.status !== "cancelled" && consult.status !== "completed" && (
           <ConsultStatusCard consult={consult} />
+        )}
+
+        {sortedActive.length >= 2 && (
+          <ResumeMatterBanner matters={sortedActive.map(toMatterSwitcherItem)} />
         )}
 
         {/* Active files */}
