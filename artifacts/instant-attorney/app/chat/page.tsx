@@ -236,6 +236,7 @@ function AcpChatInner() {
       };
     }
     setShowCounselModal(true);
+    return undefined;
   }, [urlCaseFileId]);
 
   function handleCounselComplete(value: ExistingCounselFormValue) {
