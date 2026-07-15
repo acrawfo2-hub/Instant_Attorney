@@ -20,7 +20,7 @@ export const dynamic = "force-dynamic";
 // backed by the same consult_requests row:
 //   - "client":   the client who owns the consult. Sees only that a session
 //                 exists; notes/recording/transcript are attorney work
-//                 product, not client-visible (see schema-stage32).
+//                 product, not client-visible (see schema-stage35).
 //   - "attorney": the attorney working with their own client. Always fully
 //                 editable — before, during, and after the call — so notes
 //                 can keep being added/corrected after "End session" too.

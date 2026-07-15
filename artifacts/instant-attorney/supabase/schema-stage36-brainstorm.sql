@@ -1,5 +1,5 @@
--- Instant Attorney — Stage 33: Attorney brainstorm chat
--- Run AFTER schema-stage32-consult-session.sql in the Supabase SQL editor
+-- Instant Attorney — Stage 36: Attorney brainstorm chat
+-- Run AFTER schema-stage35-consult-session.sql in the Supabase SQL editor
 --
 -- A private, attorney-only sounding-board chat scoped to a case file — not
 -- the client-facing intake chat (intake_messages), and never visible to the

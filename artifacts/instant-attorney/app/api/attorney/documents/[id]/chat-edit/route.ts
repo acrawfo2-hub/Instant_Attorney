@@ -188,7 +188,7 @@ export async function POST(
       .select("id")
       .single();
     if (insertErr || !inserted) {
-      // Unique violation (documents_parent_doctype_unique, schema-stage33) means
+      // Unique violation (documents_parent_doctype_unique, schema-stage34) means
       // a concurrent request (double-click, second tab, or the second-draft
       // pipeline) already created the second-draft child first — don't silently
       // create a duplicate, ask the caller to retry against the real one.

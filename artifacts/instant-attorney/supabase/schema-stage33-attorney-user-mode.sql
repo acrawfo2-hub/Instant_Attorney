@@ -1,5 +1,5 @@
--- Instant Attorney — Stage 32: Attorney-user mode
--- Run AFTER schema-stage31-case-messages.sql in the Supabase SQL editor
+-- Instant Attorney — Stage 33: Attorney-user mode
+-- Run AFTER schema-stage32-pdf-templates.sql in the Supabase SQL editor
 --
 -- Adds a third account persona alongside the ordinary lay "client" and the
 -- firm's own reviewing attorney (profiles.is_attorney, unchanged): an

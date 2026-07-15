@@ -1,5 +1,5 @@
--- Instant Attorney — Stage 32: Consult live session (notepad + recording)
--- Run AFTER schema-stage31-case-messages.sql in the Supabase SQL editor
+-- Instant Attorney — Stage 35: Consult live session (notepad + recording)
+-- Run AFTER schema-stage34-security-hardening.sql in the Supabase SQL editor
 --
 -- Backs the live consult session between an attorney and their own client
 -- (companion to a Google Meet/Zoom call, not a video/calling feature itself).

@@ -1,6 +1,6 @@
--- Instant Attorney — Stage 33: security hardening (profile self-elevation +
+-- Instant Attorney — Stage 34: security hardening (profile self-elevation +
 -- concurrent-write races surfaced by a QA pass on the attorney-user/chat-edit work)
--- Run AFTER schema-stage32-attorney-user-mode.sql in the Supabase SQL editor
+-- Run AFTER schema-stage33-attorney-user-mode.sql in the Supabase SQL editor
 --
 -- Security fix. "users_update_own_profile" (schema.sql) is a plain
 -- `for update using (auth.uid() = id)` policy with no column restriction.

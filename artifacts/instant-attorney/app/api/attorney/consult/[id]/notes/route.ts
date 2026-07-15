@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireViewerForRoute } from "@/lib/auth/require-attorney";
 
 // Attorney-only notepad entries for a live consult session. Not exposed to
-// the client — see schema-stage32-consult-session.sql.
+// the client — see schema-stage35-consult-session.sql.
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
