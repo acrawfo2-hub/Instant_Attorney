@@ -11,6 +11,14 @@ import FactsPanel from "@/components/FactsPanel";
 import ExistingCounselCard from "@/components/ExistingCounselCard";
 import { placeholderFields } from "@/lib/wizard-parsing";
 import { computeMissionControl } from "@/lib/mission-control";
+import {
+  isFullDepthState,
+  isPrepMode,
+  jurisdictionFromCaseFileText,
+  jurisdictionNotice,
+  prepModeBadgeLabel,
+  stateBarReferralUrl,
+} from "@/lib/jurisdiction";
 import { detectMatterFlags, resolveRoadmapForCase } from "@/lib/roadmap-build";
 import { computeRoadmapFingerprint } from "@/lib/roadmap-fingerprint";
 import type { RoadmapAiOverlay } from "@/lib/roadmap-types";
@@ -341,6 +349,38 @@ export default function ClientFileView({
 
   return (
     <div className="lf-grid">
+      {/* Local Counsel Prep badge — non-Texas matters */}
+      {!isAttorney && (() => {
+        const raw = caseFile.jurisdiction?.trim() || null;
+        if (!raw || /unconfirmed/i.test(raw)) return null;
+        const code = jurisdictionFromCaseFileText(raw);
+        // Texas → full depth (no prep banner). Anything else confirmed → Prep.
+        if (isFullDepthState(code) || /^texas$|^tx$/i.test(raw)) return null;
+        const showPrep = code ? isPrepMode(code) : true;
+        if (!showPrep) return null;
+        return (
+          <div className="lf-card lf-card-full lf-prep-banner" role="status">
+            <div className="lf-prep-banner-inner">
+              <div className="lf-prep-banner-text">
+                <span className="lf-prep-badge">{prepModeBadgeLabel(code ?? raw)}</span>
+                <span className="lf-prep-desc">
+                  {jurisdictionNotice(code ?? raw) ??
+                    "You are in Local Counsel Prep mode — we help organize your file for a lawyer licensed in your state."}
+                </span>
+              </div>
+              <a
+                href={stateBarReferralUrl(code ?? raw)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="lf-consult-btn"
+              >
+                Find local counsel →
+              </a>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Consult status / CTA — client mode only; pinned to the very top */}
       {!isAttorney && (() => {
         const cr = consultRequest;

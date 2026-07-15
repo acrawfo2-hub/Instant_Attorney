@@ -11,6 +11,7 @@ import BillingMeter from "@/components/BillingMeter";
 import ConsultCheckoutButton from "@/components/ConsultCheckoutButton";
 import ResumeMatterBanner from "@/components/ResumeMatterBanner";
 import { toMatterSwitcherItem } from "@/lib/matter-switcher";
+import { isPrepMode, jurisdictionNotice } from "@/lib/jurisdiction";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 const MAX_ACTIVE_FILES = 10;
@@ -63,7 +64,7 @@ async function getData() {
       .maybeSingle(),
     db
       .from("profiles")
-      .select("full_name, email, account_type, is_attorney")
+      .select("full_name, email, account_type, is_attorney, home_state")
       .eq("id", userId)
       .maybeSingle(),
   ]);
@@ -94,16 +95,17 @@ async function getData() {
     accountEmail || "Account",
   );
 
-  return { activeFiles, archivedFiles, totalPendingDocs, consult, hasConsultSub, accountName, accountEmail };
+  return { activeFiles, archivedFiles, totalPendingDocs, consult, hasConsultSub, accountName, accountEmail, homeState: profileRow?.home_state ?? null };
 }
 
 export default async function DashboardPage() {
   const hdrs = await headers();
   const isBypass = hdrs.get("x-bypass-auth") === "true" || BYPASS_AUTH;
 
-  const { activeFiles, archivedFiles, totalPendingDocs, consult, hasConsultSub, accountName, accountEmail } = await getData();
+  const { activeFiles, archivedFiles, totalPendingDocs, consult, hasConsultSub, accountName, accountEmail, homeState } = await getData();
   const atLimit = activeFiles.length >= MAX_ACTIVE_FILES;
   const hasFiles = activeFiles.length > 0;
+  const prepMode = isPrepMode(homeState);
 
   // Single open matter → land on the Living File (Mission Control / Next Step),
   // not a chat-forward file list. Chat remains the intake surface from inside the file.
@@ -221,6 +223,15 @@ export default async function DashboardPage() {
 
         {/* Self-service tools — optional, collapsed once the client has a file so
             the file's strategy / gaps / next steps stay front and center. */}
+        {prepMode && (
+          <div className="ob-jurisdiction-banner" role="status" style={{ marginBottom: 16 }}>
+            {jurisdictionNotice(homeState)}
+            <p className="ob-jurisdiction-banner-sub">
+              Texas-specific calculators below are labeled for reference only — they are not
+              authoritative for your state. Prefer your Living File Prep handoff.
+            </p>
+          </div>
+        )}
         <details className="dash-toolbox" {...(!hasFiles ? { open: true } : {})}>
           <summary className="dash-toolbox-summary">
             <span className="dash-toolbox-summary-main">

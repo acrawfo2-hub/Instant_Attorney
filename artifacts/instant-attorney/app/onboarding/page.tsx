@@ -285,16 +285,16 @@ export default function OnboardingPage() {
                 ))}
               </select>
               <p className="ob-field-hint">
-                Crawford Law PLLC is licensed in Texas and Illinois. This helps us stay inside that lane.
+                Full Instant Attorney depth is built for Texas. Other states (including Illinois for now)
+                use Local Counsel Prep — you are still welcome; we organize your file for a local attorney.
               </p>
               {jurisdictionMsg && (
                 <div className="ob-jurisdiction-banner" role="alert">
                   {jurisdictionMsg}
                   {outOfJurisdiction && (
                     <p className="ob-jurisdiction-banner-sub">
-                      You may continue for general information and tools, but we cannot form a
-                      representation relationship for an out-of-jurisdiction matter. Please engage
-                      local counsel for advice and filings where you live.
+                      You can continue. Phase II will run in Prep mode: facts, timelines, and questions for
+                      your local lawyer — not {homeState}-specific legal advice from Crawford Law.
                     </p>
                   )}
                 </div>
@@ -310,7 +310,7 @@ export default function OnboardingPage() {
               />
               I have read and agree to the Crawford Law PLLC Representation Agreement
               {outOfJurisdiction
-                ? " (I understand the firm is licensed in Texas and Illinois only)"
+                ? " (I understand full depth is Texas-first; my matter will use Local Counsel Prep)"
                 : ""}
             </label>
 

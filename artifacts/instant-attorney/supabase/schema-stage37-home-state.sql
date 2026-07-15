@@ -10,7 +10,7 @@ alter table profiles
   add column if not exists home_state text;
 
 comment on column profiles.home_state is
-  'US state/territory code (or OTHER). Used for UPL notices; TX and IL are licensed.';
+  'US state/territory code (or OTHER). TX = full Instant Attorney depth; all other states use Local Counsel Prep mode.';
 
 -- Extend the column-scoped UPDATE grant from stage34 so clients can save this
 -- field through the profile API (service-role writes also work for onboarding).

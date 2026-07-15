@@ -32,9 +32,9 @@ test("parseProvabilityTag: no tag", () => {
   assert.equal(p.displayText, "Plain fact with no tag");
 });
 
-test("jurisdiction: TX and IL are licensed", () => {
+test("jurisdiction: TX is full depth; IL and others are Prep", () => {
   assert.equal(isLicensedState("TX"), true);
-  assert.equal(isLicensedState("il"), true);
+  assert.equal(isLicensedState("il"), false);
   assert.equal(isLicensedState("CA"), false);
   assert.equal(normalizeStateCode(" ny "), "NY");
   assert.ok(jurisdictionNotice("CA"));

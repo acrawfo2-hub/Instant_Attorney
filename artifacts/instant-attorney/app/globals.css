@@ -8282,3 +8282,40 @@ mark.atty-placeholder {
   }
   .matter-switcher { max-width: 100%; }
 }
+
+/* ── Local Counsel Prep banner ─────────────────────────────────────────────── */
+.lf-prep-banner {
+  border-color: rgba(180, 52, 31, 0.28) !important;
+  background: rgba(180, 52, 31, 0.06);
+}
+.lf-prep-banner-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.lf-prep-banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+.lf-prep-badge {
+  display: inline-block;
+  width: fit-content;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a3a1f;
+  background: rgba(180, 52, 31, 0.12);
+  border-radius: 4px;
+  padding: 2px 8px;
+}
+.lf-prep-desc {
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--brand-text-md);
+}

@@ -168,6 +168,7 @@ export default function FreeChatPage() {
             role: m.role,
             content: m.content,
           })),
+          homeState,
         }),
       });
 
@@ -260,8 +261,8 @@ export default function FreeChatPage() {
         <div className="fc-jurisdiction-gate" role="dialog" aria-label="Select your state">
           <p className="fc-jurisdiction-title">Where is your matter primarily located?</p>
           <p className="fc-jurisdiction-sub">
-            Crawford Law PLLC is licensed in Texas and Illinois. General information is available everywhere;
-            representation is not.
+            Full Instant Attorney depth is built for Texas. Other states use Local Counsel Prep —
+            we help you organize your file and hand off to a lawyer licensed where you are.
           </p>
           <select
             className="fc-jurisdiction-select"

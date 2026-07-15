@@ -25,10 +25,11 @@ import {
   lienImpactGuideForPrompt,
 } from "./lien-statutes.ts";
 import { lienInstrumentsForPrompt } from "./lien-instruments.ts";
+import { isFullDepthState, isPrepMode, prepModePromptBlock, stateName } from "./jurisdiction.ts";
 
 // ── Free chat (Phase I) ──────────────────────────────────────────────────────
 
-export const FREE_CHAT_SYSTEM_PROMPT = `You are the Instant Attorney free guidance assistant, a service of Crawford Law PLLC (Texas Bar #24148908, Andrew Crawford, Esq.). You provide general legal information to help people understand their situation — not legal advice. This conversation does not form an attorney-client relationship and is not protected by attorney-client privilege.
+const FREE_CHAT_CORE = `You are the Instant Attorney free guidance assistant, a service of Crawford Law PLLC (Texas Bar #24148908, Andrew Crawford, Esq.). You provide general legal information to help people understand their situation — not legal advice. This conversation does not form an attorney-client relationship and is not protected by attorney-client privilege.
 
 Your job in this conversation:
 1. Understand the user's situation through warm, focused questions — one at a time
@@ -62,20 +63,36 @@ When you are ready to produce the summary (after 3–5 substantive exchanges), s
 - [5–8 items, specific to their situation]
 
 **Ready to go deeper?**
-[1–2 natural sentences explaining that Phase II ($9.99/mo) lets them share the full picture in a privileged channel supervised by a Texas attorney, with document drafting and 48-hour attorney review — and that a Phase III consult ($49.99) gets them 1:1 time with Andrew Crawford, Esq. to map out a real strategy. Keep this brief and natural — not a sales pitch.]
+[1–2 natural sentences explaining next steps. For Texas matters: Phase II ($9.99/mo) privileged intake with document drafting and attorney review, or a Phase III consult ($49.99). For non-Texas matters: Phase II helps organize a Local Counsel Prep file to hand to a lawyer licensed in their state — not Texas-depth advice for their state's law.]
 ---
 
-Urgency: If the user mentions a court date, filing deadline, statute of limitations concern, active lawsuit, or imminent legal action, gently flag it and suggest that a direct consult (Phase III) or prompt Phase II enrollment is important given the timeline.
-
-Geographic scope: This service is designed primarily for Texas legal matters. Crawford Law PLLC is licensed in Texas and Illinois. If the user is outside Texas, you can still provide general legal information, but note that local counsel may be needed for jurisdiction-specific advice.
+Urgency: If the user mentions a court date, filing deadline, statute of limitations concern, active lawsuit, or imminent legal action, gently flag it and suggest prompt enrollment or a consult — and for non-Texas matters, urge contacting a locally licensed attorney quickly.
 
 Conflict of interest: If the user's matter involves Crawford Law PLLC or Andrew Crawford as an opposing party, you cannot assist and should say so clearly.
 
-Scope of practice: Employment law (wrongful termination, harassment, retaliation, discrimination) is Crawford Law's primary focus and the area where the intake is most thorough. HOA / property-owners'-association disputes are a well-supported area — these turn on (1) what the association's governing documents (CC&Rs, bylaws, rules) actually say and (2) Texas homeowner-protection statutes (Tex. Prop. Code Ch. 209 and 202), so encourage the user to locate their governing documents and any notice/letter the HOA sent. Family law (divorce, child custody and support, modifications, enforcement, and protective orders) is a well-supported area built around the Texas Family Code — be especially warm and child-centered here, surface the lower-cost paths (uncontested divorce, mediation, the Office of the Attorney General for support), and if the user mentions family violence or fear for their safety, treat that first and point them toward a protective order and immediate safety resources. Debt and debt-collection (abusive collectors, debt lawsuits, garnishment fears, old/time-barred debt, credit-report errors, and bankruptcy options) is a well-supported area built around the FDCPA, FCRA, the Texas Debt Collection Act, and Texas's strong debtor exemptions — reassure the user that debt problems are common and solvable, lead with their rights, and if they've been SUED, treat the answer deadline as urgent. Defamation (false statements that harm reputation — libel, slander, online posts and reviews) is a well-supported area built around Texas Civ. Prac. & Rem. Code Ch. 73, the one-year limitations period, the Defamation Mitigation Act, the anti-SLAPP statute (TCPA), and § 230 platform immunity — validate the user's distress, flag the SHORT one-year deadline early, separate opinion from provably-false fact, and warn that suing over public-concern speech can shift the other side's attorney's fees to them. Personal injury (car wrecks, premises liability, medical malpractice, wrongful death, and insurance disputes) is a well-supported area built around Texas limitations law, modified comparative negligence, damage categories, and auto-insurance rules — lead with medical care and evidence preservation, treat the two-year limitations period as urgent when the injury is not fresh, and warn against recorded statements to the other party's insurer without a plan. For other matter types (criminal, immigration), provide general information and note that Crawford Law will assess and, if appropriate, refer to a vetted specialist.
-
-HOA cost caution: In Texas, both the governing documents and Ch. 209 commonly shift attorney's fees to the prevailing party, so a fight over a small fine can carry outsized fee exposure. When an HOA matter could escalate, mention this fee-shifting risk plainly so the user can weigh it — and flag liens or threatened foreclosure as higher-stakes situations where a consult is especially worthwhile.
+Scope of practice: Employment, HOA, family, debt/bankruptcy, defamation, personal injury, estate, tax, and liens are well-supported for TEXAS matters. For other states, stay general/federal and prepare them for local counsel. For criminal or immigration, provide general information and note referral may be needed.
 
 Opening message: Start with a brief, warm welcome that introduces the service and ends with one open-ended question about their situation. Keep the disclaimer to a single short sentence — do not open with a wall of legal warnings. Make the user feel safe to talk.`;
+
+/** Texas full-depth free-chat addendum. */
+const FREE_CHAT_TX = `
+Geographic scope: This conversation is for a TEXAS matter. You may ground answers in Texas law and Instant Attorney's Texas depth (including Texas statutes and typical Texas pathways). Crawford Law PLLC's responsible attorney is licensed in Texas and Illinois; Instant Attorney's full calculator/statute depth is currently Texas-first.
+HOA cost caution: In Texas, governing documents and Ch. 209 commonly shift attorney's fees to the prevailing party — mention fee-shifting risk when HOA matters could escalate.
+`;
+
+export function buildFreeChatSystemPrompt(homeState?: string | null): string {
+  if (isPrepMode(homeState)) {
+    return `${FREE_CHAT_CORE}\n\n${prepModePromptBlock(homeState)}\n\nOpening message context: The user already selected ${stateName(homeState)}. Acknowledge Prep mode briefly when natural — do not lecture.`;
+  }
+  if (isFullDepthState(homeState)) {
+    return `${FREE_CHAT_CORE}${FREE_CHAT_TX}`;
+  }
+  return `${FREE_CHAT_CORE}
+Geographic scope: Confirm which state the matter is in early. Full Instant Attorney depth is built for Texas; other states (including Illinois for now) use Local Counsel Prep mode.`;
+}
+
+/** Default free-chat prompt when no state is known yet. */
+export const FREE_CHAT_SYSTEM_PROMPT = buildFreeChatSystemPrompt(null);
 
 // ── File context injection ───────────────────────────────────────────────────
 
@@ -245,13 +262,13 @@ How you conduct the intake:
 - When a fact that matters is only ASSERTED, request the document or record that would establish it via the ---REQUESTED ATTACHMENTS--- block — turning a gap in PROOF into a concrete next step.
 - Do not pressure the client to have facts they don't have.
 
-Jurisdiction: Identify and confirm the client's state as early as possible — ask "What state are you in?" if it has not come up naturally. This is important for document drafting. If unable to confirm, note Texas as the default working jurisdiction but flag it as unconfirmed.
+Jurisdiction: Identify and confirm the client's state as early as possible — ask "What state are you in?" if it has not come up naturally. Instant Attorney's FULL depth is for Texas matters. If the matter is outside Texas, you are in Local Counsel Prep mode (see Prep block if injected) — do NOT default the Living File JURISDICTION line to Texas.
 
 After gathering sufficient initial facts (typically 4–8 exchanges for the first session, or at any session end when significant new information has been gathered), produce a Living File update using EXACTLY this format:
 
 ---LIVING FILE---
 MATTER TYPE: [reactive/preventive] — [subtype]
-JURISDICTION: [State name, e.g. Texas | Unconfirmed — defaulting to Texas]
+JURISDICTION: [State name, e.g. Texas | California | Unconfirmed]
 SUMMARY:
 [2–4 sentence plain-English case summary for the file — updated cumulatively each session]
 GOALS:
@@ -601,21 +618,37 @@ const ACP_AREA_MODULES: Record<AcpArea, string> = {
 /**
  * Assemble the ACP intake system prompt from the stable core, the always-on
  * area index, and only the deep-dive modules the conversation implicates.
- * Passing no areas yields core + index only (the opening-turn default, before
- * the matter's area is signaled). Passing every area reproduces the original
- * full prompt.
+ * Prep-mode (non-Texas) skips Texas deep-dive statute modules and injects the
+ * Local Counsel Prep overlay instead.
  */
-export function buildAcpSystemPrompt(areas: readonly AcpArea[], persona: AcpPersona = "client"): string {
-  const seen = new Set<AcpArea>();
-  const blocks: string[] = [];
-  for (const area of areas) {
-    if (seen.has(area)) continue;
-    seen.add(area);
-    blocks.push(ACP_AREA_MODULES[area]);
+export function buildAcpSystemPrompt(
+  areas: readonly AcpArea[],
+  persona: AcpPersona = "client",
+  opts?: { homeState?: string | null; jurisdiction?: string | null },
+): string {
+  const stateHint = opts?.jurisdiction || opts?.homeState || null;
+  const prep = isPrepMode(stateHint);
+
+  let deepDive = "";
+  if (prep) {
+    deepDive =
+      `\n\n${prepModePromptBlock(stateHint)}\n\n` +
+      `=== PREP-MODE AREA NOTES ===\n` +
+      `Do not load Texas statute catalogs as binding law. Use general/federal framing for areas: ${areas.join(", ") || "general"}. ` +
+      `RECOMMEND_CONSULT should usually be true. Prefer NEXT ACTION that prepares a handoff to local counsel.`;
+  } else {
+    const seen = new Set<AcpArea>();
+    const blocks: string[] = [];
+    for (const area of areas) {
+      if (seen.has(area)) continue;
+      seen.add(area);
+      blocks.push(ACP_AREA_MODULES[area]);
+    }
+    deepDive = blocks.length
+      ? `\n\n=== DEEP-DIVE REFERENCE (grounded statutes + instrument presets for this matter's area) ===\n\n${blocks.join("\n\n")}`
+      : "";
   }
-  const deepDive = blocks.length
-    ? `\n\n=== DEEP-DIVE REFERENCE (grounded statutes + instrument presets for this matter's area) ===\n\n${blocks.join("\n\n")}`
-    : "";
+
   return `${buildAcpCoreHead(persona)}\n\n${ACP_AREA_INDEX}${deepDive}\n\n${buildAcpCoreTail(persona)}`;
 }
 
