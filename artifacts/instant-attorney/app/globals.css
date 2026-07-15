@@ -6791,6 +6791,31 @@ mark.atty-placeholder {
   margin: 0.5rem 0 0.75rem;
 }
 
+/* ── PDF template fill (upload the real form, download it filled in) ──────── */
+.gf-pdf { margin-top: 1.5rem; padding: 1rem; border: 1px solid rgba(0, 0, 0, 0.1); border-radius: 8px; }
+.gf-pdf h3 { font-size: 1rem; margin: 0 0 0.5rem; }
+.gf-pdf p { font-size: 0.88rem; margin: 0 0 0.6rem; }
+.gf-pdf-upload input[type="file"],
+.gf-pdf-replace input[type="file"] { font-size: 0.85rem; }
+.gf-pdf-unsupported { background: #fff9ec; border: 1px solid #e6c869; border-radius: 8px; padding: 0.6rem 0.75rem; }
+.gf-pdf-map-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.5rem; }
+.gf-pdf-map-row label { font-size: 0.88rem; font-weight: 500; flex: 1; }
+.gf-pdf-map-row select { flex: 1; padding: 0.4rem 0.5rem; border: 1px solid rgba(0, 0, 0, 0.2); border-radius: 6px; font-size: 0.85rem; }
+.gf-pdf-mapping button,
+.gf-pdf-ready button {
+  padding: 0.55rem 1rem;
+  border-radius: 8px;
+  border: 1px solid #2f6df6;
+  background: #2f6df6;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+.gf-pdf-mapping button:disabled,
+.gf-pdf-ready button:disabled { opacity: 0.5; cursor: not-allowed; }
+.gf-pdf-ready { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.gf-pdf-replace { font-size: 0.82rem; opacity: 0.8; display: flex; align-items: center; gap: 0.4rem; }
+
 /* ── On-device voice input (talk-to-text) ─────────────────────────────────── */
 .voice-input {
   position: relative;

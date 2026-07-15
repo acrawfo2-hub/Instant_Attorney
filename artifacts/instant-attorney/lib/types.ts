@@ -337,6 +337,13 @@ export type GovFormSource = "registry" | "dynamic";
 /** Lifecycle of the grounded lookup for a dynamic form. */
 export type GovFormLookupStatus = "pending" | "ready" | "failed";
 
+/** Lifecycle of an uploaded PDF template: no template yet -> (acroform) field
+ * map awaiting confirmation -> fillable -> (flat) no auto-fill support yet. */
+export type PdfStatus = "needs_template" | "mapping" | "ready" | "unsupported";
+
+/** Detected shape of an uploaded PDF template. */
+export type PdfMode = "acroform" | "flat";
+
 export interface GovFormInstrument {
   id: string;
   case_file_id: string;
@@ -354,6 +361,13 @@ export interface GovFormInstrument {
    * a GovernmentForm; see lib/government-forms.ts. */
   form_def: GovFormDefinition | null;
   lookup_status: GovFormLookupStatus | null;
+  /** Null until the client uploads the official PDF for this form. */
+  pdf_status: PdfStatus | null;
+  pdf_mode: PdfMode | null;
+  /** Storage path in the gov-form-templates bucket. */
+  pdf_template_path: string | null;
+  /** GovFormField.name -> PDF AcroForm field name (acroform templates only). */
+  pdf_field_map: Record<string, string> | null;
   created_at: string;
   updated_at: string;
 }
