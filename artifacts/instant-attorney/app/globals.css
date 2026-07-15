@@ -2735,6 +2735,39 @@ body {
 .atty-brand svg { color: var(--brand-gold); }
 .atty-name { font-size: 13px; color: var(--brand-text-xlt); }
 
+.atty-tabs { border-top: 1px solid rgba(255,255,255,0.06); }
+.atty-tabs-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  gap: 4px;
+}
+.atty-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand-text-xlt);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+.atty-tab:hover { color: var(--brand-cream-heading); }
+.atty-tab-active {
+  color: var(--brand-cream-heading);
+  border-bottom-color: var(--brand-gold);
+}
+.atty-tab-badge {
+  background: var(--brand-gold);
+  color: var(--brand-navy-dk);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 20px;
+}
+
 .atty-main {
   max-width: 1100px;
   margin: 0 auto;
@@ -5041,6 +5074,149 @@ mark.atty-placeholder {
 .lf-consult-banner-pending   { border-left-color: #ff9f0a; background: rgba(255,159,10,0.04); }
 .lf-consult-banner-proposed  { border-left-color: #5ac8fa; background: rgba(90,200,250,0.05); }
 
+/* ── Consult live session (notepad / recording shell) ───────────────────── */
+.lf-session-note {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--brand-text-dk);
+  margin: 0.4rem 0;
+}
+.lf-session-note + .lf-session-note {
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--brand-border);
+}
+.lf-session-error {
+  font-size: 12px;
+  color: #b3261e;
+  margin-top: 0.5rem;
+}
+.lf-notepad-compose { margin-top: 0.85rem; }
+
+/* Wider shell so the notepad rail and the embedded Living File both have
+   room — the default lf-main max-width is sized for a single Living File. */
+.lf-session-wide .lf-main { max-width: 1500px; }
+
+.lf-session-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 400px) 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .lf-session-layout { grid-template-columns: 1fr; }
+}
+.lf-session-rail { position: sticky; top: 1rem; }
+@media (max-width: 900px) {
+  .lf-session-rail { position: static; }
+}
+.lf-session-consent {
+  border-left: 3px solid var(--brand-gold);
+  padding-left: 0.85rem;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.lf-closeout-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+.lf-closeout-field { margin-bottom: 1rem; }
+.lf-closeout-field:last-of-type { margin-bottom: 0; }
+.lf-closeout-list-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.4rem;
+}
+.lf-closeout-input {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid var(--brand-border);
+  border-radius: var(--brand-r-md);
+  font-size: 13px;
+  font-family: inherit;
+  background: var(--brand-cream);
+  color: var(--brand-text-dk);
+  box-sizing: border-box;
+}
+.lf-closeout-input:disabled { opacity: 0.7; }
+.lf-closeout-kind { flex: 0 0 auto; width: 150px; }
+
+/* ── Attorney brainstorm chat ─────────────────────────────────────────────── */
+.brainstorm-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.brainstorm-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 0.25rem;
+}
+.brainstorm-row { display: flex; }
+.brainstorm-row-user { justify-content: flex-end; }
+.brainstorm-row-assistant { justify-content: flex-start; }
+.brainstorm-bubble {
+  max-width: 75%;
+  padding: 0.75rem 1rem;
+  border-radius: var(--brand-r-lg);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.brainstorm-bubble p { margin: 0; white-space: pre-wrap; }
+.brainstorm-bubble-user {
+  background: var(--brand-navy);
+  color: var(--brand-cream-text);
+  border-top-right-radius: 4px;
+}
+.brainstorm-bubble-assistant {
+  background: var(--brand-white);
+  border: 0.5px solid var(--brand-border);
+  color: var(--brand-text-dk);
+  border-top-left-radius: 4px;
+}
+.brainstorm-apply-row {
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid rgba(0,0,0,0.08);
+}
+.brainstorm-applied-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: #1d8a3d;
+  background: rgba(52,199,89,0.12);
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+.brainstorm-compose { display: flex; flex-direction: column; gap: 0.5rem; }
+
+/* ── File view mode toggle (Living File / Brainstorm) ────────────────────── */
+.lf-view-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 1.5rem;
+  background: var(--brand-white);
+  border-bottom: 0.5px solid var(--brand-border);
+}
+.lf-view-tab {
+  padding: 0.7rem 1rem;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand-text-lt);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+.lf-view-tab:hover { color: var(--brand-text-dk); }
+.lf-view-tab-active { color: var(--brand-text-dk); border-bottom-color: var(--brand-gold); }
+
 .lf-consult-rec-badge-confirmed { background: rgba(52,199,89,0.12); border-color: rgba(52,199,89,0.3); color: #34c759; }
 .lf-consult-rec-badge-pending   { background: rgba(255,159,10,0.12); border-color: rgba(255,159,10,0.3); color: #ff9f0a; }
 .lf-consult-rec-badge-proposed  { background: rgba(90,200,250,0.12); border-color: rgba(90,200,250,0.3); color: #5ac8fa; }
@@ -5619,6 +5795,13 @@ mark.atty-placeholder {
   padding: 1rem 1.25rem;
   margin-bottom: 0.75rem;
 }
+.atty-consult-card-link {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s;
+}
+.atty-consult-card-link:hover { border-color: var(--brand-gold); }
 .atty-consult-header {
   display: flex;
   align-items: flex-start;
@@ -7437,6 +7620,11 @@ mark.atty-placeholder {
 }
 .lf-post-consult-referral { margin-bottom: 12px; }
 .lf-post-consult-referral p { font-size: 13px; line-height: 1.5; margin: 4px 0 0; }
+.lf-post-consult-strategy,
+.lf-post-consult-timeline,
+.lf-post-consult-documents { margin-bottom: 12px; }
+.lf-post-consult-strategy p,
+.lf-post-consult-timeline p { font-size: 13px; line-height: 1.5; margin: 4px 0 0; }
 .lf-post-consult-list {
   margin: 8px 0 0;
   padding-left: 20px;

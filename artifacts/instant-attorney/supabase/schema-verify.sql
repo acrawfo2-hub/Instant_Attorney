@@ -106,4 +106,21 @@ union all select 'documents.facts_synced_at', case when exists (
   select 1 from information_schema.columns
   where table_schema = 'public' and table_name = 'documents' and column_name = 'facts_synced_at'
 ) then 'OK' else 'MISSING' end
+union all select 'consult_notes', case when exists (
+  select 1 from information_schema.tables where table_schema = 'public' and table_name = 'consult_notes'
+) then 'OK' else 'MISSING' end
+union all select 'consult_recordings', case when exists (
+  select 1 from information_schema.tables where table_schema = 'public' and table_name = 'consult_recordings'
+) then 'OK' else 'MISSING' end
+union all select 'consult_requests.session_started_at', case when exists (
+  select 1 from information_schema.columns
+  where table_schema = 'public' and table_name = 'consult_requests' and column_name = 'session_started_at'
+) then 'OK' else 'MISSING' end
+union all select 'consult_requests.recording_consent_at', case when exists (
+  select 1 from information_schema.columns
+  where table_schema = 'public' and table_name = 'consult_requests' and column_name = 'recording_consent_at'
+) then 'OK' else 'MISSING' end
+union all select 'case_brainstorm_messages', case when exists (
+  select 1 from information_schema.tables where table_schema = 'public' and table_name = 'case_brainstorm_messages'
+) then 'OK' else 'MISSING' end
 order by object;

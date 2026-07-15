@@ -1,9 +1,19 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { requireViewer } from "@/lib/auth/require-attorney";
 import ClientFileView from "@/components/ClientFileView";
+import CaseBrainstormChat from "@/components/CaseBrainstormChat";
 import AccountMenu from "@/components/AccountMenu";
-import type { CaseFile, FactItem, Document, Profile, RequestedAttachment, GovFormInstrument } from "@/lib/types";
+import type {
+  CaseFile,
+  FactItem,
+  Document,
+  Profile,
+  RequestedAttachment,
+  GovFormInstrument,
+  ConsultRequest,
+  CaseBrainstormMessage,
+} from "@/lib/types";
 
 // Attorney view of a single client case file. Renders the exact same Living
 // File the client sees (legal strategy, instruments, fact cards, gov forms,
@@ -15,25 +25,17 @@ import type { CaseFile, FactItem, Document, Profile, RequestedAttachment, GovFor
 // fetch through their own attorney-aware API routes.
 export default async function AttorneyFilePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ caseFileId: string }>;
+  searchParams: Promise<{ view?: string }>;
 }) {
   const { caseFileId } = await params;
+  const { view } = await searchParams;
+  const isBrainstorm = view === "brainstorm";
 
-  const auth = await createClient();
-  const {
-    data: { user },
-  } = await auth.auth.getUser();
-  if (!user) redirect("/login");
-
-  const { data: viewer } = await auth
-    .from("profiles")
-    .select("is_attorney")
-    .eq("id", user.id)
-    .single();
-  if (!viewer?.is_attorney) redirect("/dashboard");
-
-  const db = createServiceClient();
+  const { db, isAttorney } = await requireViewer();
+  if (!isAttorney) redirect("/dashboard");
 
   const { data: caseFileRow } = await db
     .from("case_files")
@@ -43,7 +45,7 @@ export default async function AttorneyFilePage({
   if (!caseFileRow) notFound();
   const caseFile = caseFileRow as CaseFile;
 
-  const [{ data: clientProfile }, { data: facts }, { data: documents }, { data: requestedRows }, { data: formRows }] =
+  const [{ data: clientProfile }, { data: facts }, { data: documents }, { data: requestedRows }, { data: formRows }, { data: consultRow }] =
     await Promise.all([
       db.from("profiles").select("*").eq("id", caseFile.user_id).single(),
       db
@@ -67,7 +69,27 @@ export default async function AttorneyFilePage({
         .eq("case_file_id", caseFileId)
         .neq("status", "dismissed")
         .order("created_at", { ascending: true }),
+      db
+        .from("consult_requests")
+        .select("*")
+        .eq("case_file_id", caseFileId)
+        .in("status", ["confirmed", "completed"])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
+
+  const consult = (consultRow as ConsultRequest | null) ?? null;
+
+  let brainstormMessages: CaseBrainstormMessage[] = [];
+  if (isBrainstorm) {
+    const { data: messageRows } = await db
+      .from("case_brainstorm_messages")
+      .select("*")
+      .eq("case_file_id", caseFileId)
+      .order("created_at", { ascending: true });
+    brainstormMessages = (messageRows ?? []) as CaseBrainstormMessage[];
+  }
 
   const allDocs = (documents ?? []) as Document[];
   const topDocuments = allDocs.filter(
@@ -101,6 +123,11 @@ export default async function AttorneyFilePage({
         </div>
 
         <div className="lf-header-right">
+          {consult && (
+            <Link href={`/consult/${consult.id}/session`} className="lf-logout-btn">
+              {consult.status === "completed" ? "Consult Session" : "Join Consult"}
+            </Link>
+          )}
           <Link href={`/attorney/file/${caseFileId}/financials`} className="lf-logout-btn">
             Financials
           </Link>
@@ -111,17 +138,37 @@ export default async function AttorneyFilePage({
         </div>
       </header>
 
+      <nav className="lf-view-tabs">
+        <Link href={`/attorney/file/${caseFileId}`} className={`lf-view-tab${!isBrainstorm ? " lf-view-tab-active" : ""}`}>
+          Living File
+        </Link>
+        <Link
+          href={`/attorney/file/${caseFileId}?view=brainstorm`}
+          className={`lf-view-tab${isBrainstorm ? " lf-view-tab-active" : ""}`}
+        >
+          Brainstorm
+        </Link>
+      </nav>
+
       <main className="lf-main">
-        <ClientFileView
-          caseFile={caseFile}
-          facts={(facts ?? []) as FactItem[]}
-          documents={topDocuments}
-          childDocuments={childDocuments}
-          requestedAttachments={(requestedRows ?? []) as RequestedAttachment[]}
-          govForms={(formRows ?? []) as GovFormInstrument[]}
-          mode="attorney"
-          clientProfile={client}
-        />
+        {isBrainstorm ? (
+          <div className="lf-grid">
+            <div className="lf-card lf-card-full">
+              <CaseBrainstormChat caseFileId={caseFileId} initialMessages={brainstormMessages} />
+            </div>
+          </div>
+        ) : (
+          <ClientFileView
+            caseFile={caseFile}
+            facts={(facts ?? []) as FactItem[]}
+            documents={topDocuments}
+            childDocuments={childDocuments}
+            requestedAttachments={(requestedRows ?? []) as RequestedAttachment[]}
+            govForms={(formRows ?? []) as GovFormInstrument[]}
+            mode="attorney"
+            clientProfile={client}
+          />
+        )}
       </main>
     </div>
   );

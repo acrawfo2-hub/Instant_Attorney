@@ -1,6 +1,7 @@
 import { Resend } from "resend";
-import type { Document, CaseFile, Profile, ConsultRequest } from "./types";
+import type { Document, CaseFile, Profile, ConsultRequest, ConsultWrapUp } from "./types";
 import { docTypeLabel } from "./types.ts";
+import { CONSULT_DISPOSITION_LABELS } from "./consult-wrap-up.ts";
 
 let _resend: Resend | null = null;
 function getResend(): Resend {
@@ -205,6 +206,36 @@ export async function notifyClientConsultConfirmed(
         <p style="margin:24px 0;">
           <a href="https://instant-attorney.com/dashboard" style="background:#1a1a2e;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;font-weight:bold;">
             View in Dashboard →
+          </a>
+        </p>
+        <p style="font-size:12px;color:#888;margin-top:32px;border-top:1px solid #eee;padding-top:12px;">
+          Crawford Law PLLC · Texas Bar #24148908 · This communication is attorney-client privileged.
+        </p>
+      </div>
+    `,
+  });
+}
+
+export async function notifyClientConsultClosingReport(
+  consult: ConsultRequest,
+  clientProfile: Profile,
+  wrapUp: ConsultWrapUp
+): Promise<void> {
+  if (!process.env.RESEND_API_KEY) return;
+  const dispositionLabel = wrapUp.disposition ? CONSULT_DISPOSITION_LABELS[wrapUp.disposition] : null;
+
+  await getResend().emails.send({
+    from: FROM_EMAIL,
+    to: clientProfile.email,
+    subject: "Your consult summary is ready — Instant Attorney",
+    html: `
+      <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+        <h2 style="color:#1a1a2e;">Your Consult Summary</h2>
+        <p>Andrew Crawford, Esq. has posted a summary of your consult, including next steps and what to expect, to your dashboard.</p>
+        ${dispositionLabel ? `<table style="width:100%;border-collapse:collapse;margin:16px 0;"><tr><td style="padding:8px;font-weight:bold;width:140px;">Outcome</td><td style="padding:8px;">${dispositionLabel}</td></tr></table>` : ""}
+        <p style="margin:24px 0;">
+          <a href="https://instant-attorney.com/dashboard" style="background:#1a1a2e;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;font-weight:bold;">
+            View Your Summary →
           </a>
         </p>
         <p style="font-size:12px;color:#888;margin-top:32px;border-top:1px solid #eee;padding-top:12px;">

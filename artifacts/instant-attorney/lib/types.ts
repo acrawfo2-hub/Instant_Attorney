@@ -61,8 +61,14 @@ export interface ConsultActionItem {
 /** Attorney-editable wrap-up form (draft or submitted). */
 export interface ConsultWrapUp {
   consultSummary: string;
+  /** Short overview of the legal strategy and where the matter stands. */
+  strategyOverview: string;
   disposition: ConsultDisposition | "";
   referralNotes: string;
+  /** What happens next and roughly when. */
+  expectedTimeline: string;
+  /** Documents the client should expect to RECEIVE from the firm — not things the client needs to provide (see clientActions for that). */
+  expectedDocuments: ConsultActionItem[];
   clientActions: ConsultActionItem[];
   attorneyActions: ConsultActionItem[];
 }
@@ -92,8 +98,40 @@ export interface ConsultRequest {
   post_consult_plan: ConsultWrapUp | null;
   wrap_up_submitted_at: string | null;
   fee_estimate_draft: ConsultFeeEstimateDraft | null;
+  session_started_at: string | null;
+  session_ended_at: string | null;
+  recording_consent_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/** Timestamped notepad entry kept during a live consult session. Attorney/reviewer only — not client-visible. */
+export interface ConsultNote {
+  id: string;
+  consult_request_id: string;
+  author_id: string | null;
+  body: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ConsultTranscriptStatus = "pending" | "processing" | "ready" | "failed";
+
+/** Audio recording of a consult, transcribed after the call. Attorney/reviewer only — not client-visible. */
+export interface ConsultRecording {
+  id: string;
+  consult_request_id: string;
+  recorded_by: string | null;
+  storage_bucket: string | null;
+  storage_path: string | null;
+  content_sha256: string | null;
+  duration_seconds: number | null;
+  byte_size: number | null;
+  transcript_status: ConsultTranscriptStatus;
+  transcript_text: string | null;
+  transcript_error: string | null;
+  recorded_at: string;
+  transcribed_at: string | null;
 }
 
 // All supported wizard types — add new ones here as wizards are built
@@ -119,6 +157,20 @@ export type DocumentStatus =
   | "approved"
   | "changes_requested"
   | "delivered";
+
+export type BrainstormMessageRole = "user" | "assistant";
+
+/** Attorney-only sounding-board chat scoped to a case file. Never client-visible. */
+export interface CaseBrainstormMessage {
+  id: string;
+  case_file_id: string;
+  author_id: string | null;
+  role: BrainstormMessageRole;
+  content: string;
+  /** Set once the attorney has applied this message's proposed Living File/strategy update, if any. */
+  applied_at: string | null;
+  created_at: string;
+}
 
 export interface Profile {
   id: string;

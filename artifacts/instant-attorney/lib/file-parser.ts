@@ -54,6 +54,18 @@ export function isDraftReadyForReview(text: string): boolean {
   return match[1].toUpperCase().includes("READY FOR ATTORNEY REVIEW");
 }
 
+// Returns true when text contains a complete ---LIVING FILE--- or
+// ---LEGAL STRATEGY--- block that parseAndUpdateFile below would actually
+// act on — the SAME order-sensitive regexes parseLivingFile/parseLegalStrategy
+// use (not a plain substring check), so a caller deciding whether to offer
+// "apply this update" can't disagree with what applying it will actually do.
+export function hasApplicableUpdate(text: string): boolean {
+  return (
+    /---LIVING FILE---([\s\S]*?)---END FILE---/.test(text) ||
+    /---LEGAL STRATEGY---([\s\S]*?)---END STRATEGY---/.test(text)
+  );
+}
+
 // Parses all structured blocks from AI output and writes updates to the DB.
 // Called at key events only: end of session, wizard completion, document upload.
 export async function parseAndUpdateFile(
