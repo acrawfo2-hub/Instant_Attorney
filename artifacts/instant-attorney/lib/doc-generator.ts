@@ -767,9 +767,14 @@ export async function generateDocxFromText(
   // Drives the pre-review watermark. Anything other than an attorney-approved
   // status (including a null/unknown status) is treated as a pre-review draft and
   // is watermarked — fail safe, never silently un-watermarked.
-  status: DocumentStatus | null = null
+  status: DocumentStatus | null = null,
+  // True when the document belongs to an attorney-user account: they are the
+  // reviewing attorney for their own client's matter, so the "not reviewed by
+  // an attorney" watermark (which implies Andrew Crawford should review it)
+  // is simply the wrong message. Never gates any other behavior.
+  isAttorneyUserDoc = false
 ): Promise<Buffer> {
-  const approved = isAttorneyApproved(status);
+  const approved = isAttorneyApproved(status) || isAttorneyUserDoc;
   const lines = draftText.split("\n");
 
   const children: (Paragraph | Table)[] = [

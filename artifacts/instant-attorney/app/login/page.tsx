@@ -7,7 +7,11 @@ import { createClient } from "@/lib/supabase/client";
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const redirect = params.get("redirect") ?? "/dashboard";
+  // An explicit ?redirect= (set by middleware.ts when bouncing an
+  // unauthenticated user away from a specific protected page) always wins —
+  // that deep-link intent must survive login. Only a PLAIN /login (no param)
+  // falls back to the server's role-computed destination below.
+  const explicitRedirect = params.get("redirect");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -19,6 +23,7 @@ function LoginForm() {
     setError("");
     setLoading(true);
 
+    let redirectTo = explicitRedirect ?? "/dashboard";
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
@@ -31,6 +36,9 @@ function LoginForm() {
         setLoading(false);
         return;
       }
+      if (!explicitRedirect && data.redirectTo) {
+        redirectTo = data.redirectTo;
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setError("Network error: " + msg);
@@ -38,7 +46,7 @@ function LoginForm() {
       return;
     }
 
-    router.push(redirect);
+    router.push(redirectTo);
     router.refresh();
   }
 

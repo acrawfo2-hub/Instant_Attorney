@@ -1,5 +1,15 @@
 export type SubscriptionStatus = "active" | "canceled" | "past_due" | "trialing" | "bypass";
-export type SubscriptionPlan = "phase2" | "consult";
+export type SubscriptionPlan = "phase2" | "consult" | "attorney_pro";
+/**
+ * A profile's persona. `client` is the ordinary lay user. `attorney_user` is
+ * an external/small-firm attorney using the drafting wizards as a
+ * professional tool for their OWN clients' matters — separate from
+ * `Profile.is_attorney`, which means "Andrew Crawford, the firm's own
+ * reviewing attorney" and must never be conflated with this.
+ */
+export type AccountType = "client" | "attorney_user";
+/** Manual-approval gate for attorney_user signups; null for ordinary clients. */
+export type AttorneyUserStatus = "pending" | "approved" | "rejected";
 export type MatterType = "reactive" | "preventive";
 export type CaseStatus = "open" | "closed" | "referred" | "archived";
 export type CaseFileType = "standard" | "quick_consult";
@@ -94,7 +104,8 @@ export type WizardType =
   | "draft_waiver"
   | "wills_trusts"
   | "doc_review"
-  | "general_document";
+  | "general_document"
+  | "improve_draft";
 
 /** Child documents created during attorney review (not wizard-generated). */
 export type DerivedDocType = "critical_review" | "second_draft";
@@ -115,6 +126,10 @@ export interface Profile {
   full_name: string | null;
   phone: string | null;
   is_attorney: boolean;
+  account_type: AccountType;
+  attorney_user_status: AttorneyUserStatus | null;
+  bar_number: string | null;
+  firm_name: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -506,6 +521,7 @@ export const WIZARD_LABELS: Record<WizardType, string> = {
   wills_trusts: "Wills & Trusts",
   doc_review: "Document Review",
   general_document: "Legal Document",
+  improve_draft: "Improve My Draft",
 };
 
 export const DERIVED_DOC_LABELS: Record<DerivedDocType, string> = {

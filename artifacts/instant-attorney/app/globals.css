@@ -3870,6 +3870,21 @@ mark.atty-placeholder {
 }
 .wiz-gate-btn:hover { opacity: 0.9; }
 
+/* Improve My Draft — quick-pick list of already-uploaded documents */
+.imp-existing-list {
+  display: flex; flex-direction: column; gap: 8px;
+  width: 100%;
+}
+.imp-existing-item {
+  font-size: 13px; font-weight: 600;
+  color: var(--brand-text-dk); background: #fff;
+  border: 1.5px solid var(--brand-border); border-radius: 6px;
+  padding: 10px 14px; cursor: pointer; text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+}
+.imp-existing-item:hover { border-color: var(--brand-gold); background: #fdf8ec; }
+.imp-existing-item:disabled { opacity: 0.6; cursor: default; }
+
 /* Upload zone */
 .att-upload-zone {
   display: flex; flex-direction: column; align-items: center; gap: 6px;
@@ -6672,6 +6687,21 @@ mark.atty-placeholder {
   color: var(--brand-text-md);
   margin-bottom: 14px;
 }
+
+/* Ask for a change — attorney-user free-form chat edit */
+.wiz-chat-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #fdf8ec;
+  border: 1px solid var(--brand-border);
+  border-radius: var(--brand-r-md);
+  padding: 14px;
+  margin-bottom: 14px;
+}
+.wiz-chat-edit .wiz-field-label { margin: 0; }
+.wiz-chat-edit .wiz-field-hint { margin: 0 0 4px; }
+.wiz-chat-edit .wiz-send { align-self: flex-start; }
 .wiz-reassure strong { color: #1d5237; }
 .wiz-reassure-icon {
   display: inline-flex;
@@ -7657,6 +7687,11 @@ mark.atty-placeholder {
 .case-chat-error { color: #c44444; font-size: 12.5px; margin: 0; }
 
 /* ── Attorney comments & concerns on a document ── */
+.atty-chat-edit { margin-top: 20px; }
+.atty-chat-edit h2 { font-size: 16px; margin: 0; }
+.atty-chat-msg-user { background: var(--brand-cream); }
+.atty-chat-msg-assistant { background: #fdf8ec; border-color: rgba(201, 162, 39, 0.35); }
+
 .atty-comments-workspace { margin-top: 20px; }
 .atty-comment-list {
   list-style: none;

@@ -1,11 +1,16 @@
 "use client";
 
 import { useState, FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 export default function RegisterPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // A distinct entry point for attorneys signing up to use the drafting
+  // wizards as a professional tool for their own clients — kept separate
+  // from the ordinary lay-client signup (see app/onboarding/attorney).
+  const isAttorneySignup = searchParams.get("as") === "attorney";
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -25,12 +30,16 @@ export default function RegisterPage() {
     }
 
     const supabase = createClient();
+    const nextPath = isAttorneySignup ? "/onboarding/attorney" : "/onboarding";
     const { error: authError } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: { full_name: fullName },
-        emailRedirectTo: `${location.origin}/api/auth/callback?next=/onboarding`,
+        data: {
+          full_name: fullName,
+          ...(isAttorneySignup ? { account_type: "attorney_user" } : {}),
+        },
+        emailRedirectTo: `${location.origin}/api/auth/callback?next=${nextPath}`,
       },
     });
 
@@ -78,8 +87,14 @@ export default function RegisterPage() {
           <span>Instant-Attorney</span>
         </div>
 
-        <h1 className="auth-heading">Create your account</h1>
-        <p className="auth-sub">You&apos;ll complete your representation agreement and payment next.</p>
+        <h1 className="auth-heading">
+          {isAttorneySignup ? "Create your attorney account" : "Create your account"}
+        </h1>
+        <p className="auth-sub">
+          {isAttorneySignup
+            ? "You'll complete a subscriber agreement next. New attorney accounts are manually reviewed before access unlocks."
+            : "You'll complete your representation agreement and payment next."}
+        </p>
 
         <form className="auth-form" onSubmit={handleSubmit}>
           <div className="auth-field">
@@ -138,6 +153,18 @@ export default function RegisterPage() {
           <button className="auth-text-link" onClick={() => router.push("/login")}>
             Sign in
           </button>
+        </p>
+
+        <p className="auth-footer-link">
+          {isAttorneySignup ? (
+            <button className="auth-text-link" onClick={() => router.push("/register")}>
+              Not an attorney? Sign up as a client
+            </button>
+          ) : (
+            <button className="auth-text-link" onClick={() => router.push("/register?as=attorney")}>
+              Are you an attorney? Use Instant Attorney as a drafting tool →
+            </button>
+          )}
         </p>
       </div>
     </div>
