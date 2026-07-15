@@ -16,7 +16,6 @@ import { BYPASS_USER_ID } from "@/lib/types";
 import type { CaseFile, FactItem, Attachment, RequestedAttachment, CounselEngagementGoal } from "@/lib/types";
 import { buildCounselContextPatch, persistCounselContext } from "@/lib/existing-counsel-persist";
 import {
-  isPrepMode,
   jurisdictionFromCaseFileText,
   normalizeStateCode,
   stateName,
