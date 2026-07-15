@@ -182,6 +182,8 @@ export interface Profile {
   attorney_user_status: AttorneyUserStatus | null;
   bar_number: string | null;
   firm_name: string | null;
+  /** US state code (or OTHER) for UPL / jurisdiction notices. */
+  home_state?: string | null;
   created_at: string;
   updated_at: string;
 }

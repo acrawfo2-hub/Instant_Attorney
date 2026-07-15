@@ -458,6 +458,13 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
             <Link href={`/attorney/file/${doc.case_files.id}`} className="atty-living-file-link">
               View full file →
             </Link>
+            <Link
+              href={`/attorney/file/${doc.case_files.id}/brief-pack`}
+              className="atty-living-file-link"
+              style={{ display: "block", marginTop: 6 }}
+            >
+              Open brief pack (print/PDF) →
+            </Link>
           </div>
 
           <div className="atty-review-section">

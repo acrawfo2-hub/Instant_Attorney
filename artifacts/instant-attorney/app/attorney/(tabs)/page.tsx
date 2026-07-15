@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createServiceClient } from "@/lib/supabase/server";
 import { docTypeLabel, personDisplayName } from "@/lib/types";
-import type { Document, CaseFile, Profile } from "@/lib/types";
+import type { Document, CaseFile, Profile, LegalStrategy } from "@/lib/types";
 import ConsultRequestQueue, { type ConsultRequestRow } from "@/components/ConsultRequestQueue";
 
 export const dynamic = "force-dynamic";
@@ -38,6 +38,24 @@ function matterLabel(cf: CaseFile | null | undefined) {
   return cf.matter_subtype ? `${t} — ${cf.matter_subtype}` : t;
 }
 
+function slaMsLeft(submittedAt: string | null | undefined): number {
+  if (!submittedAt) return Number.POSITIVE_INFINITY;
+  return new Date(submittedAt).getTime() + 48 * 60 * 60 * 1000 - Date.now();
+}
+
+function recommendConsult(doc: DocumentWithRelations): boolean {
+  const strategy = doc.case_files?.legal_strategy as LegalStrategy | null | undefined;
+  return !!strategy?.recommend_consult;
+}
+
+/** Triage: overdue first, then consult-recommended, then soonest SLA. */
+function triageScore(doc: DocumentWithRelations): number {
+  const left = slaMsLeft(doc.submitted_at);
+  const overdueBoost = left <= 0 ? -1_000_000_000 : 0;
+  const consultBoost = recommendConsult(doc) ? -500_000_000 : 0;
+  return overdueBoost + consultBoost + left;
+}
+
 // Pure triage: only what needs the attorney's attention right now. The full
 // client roster lives on the Clients tab; the full consult picture (including
 // completed ones) lives on the Consults tab.
@@ -59,7 +77,9 @@ export default async function AttorneyDashboardPage() {
       .order("created_at", { ascending: false }),
   ]);
 
-  const pending = (documents ?? []) as DocumentWithRelations[];
+  const pending = ([...(documents ?? [])] as DocumentWithRelations[]).sort(
+    (a, b) => triageScore(a) - triageScore(b),
+  );
   const consults = (consultRequests ?? []) as ConsultRequestRow[];
 
   return (
@@ -68,7 +88,9 @@ export default async function AttorneyDashboardPage() {
         <h2 className="atty-section-title">
           Drafts to Review
           {pending.length > 0 && <span className="atty-count">{pending.length}</span>}
-          <span className="atty-section-hint">48-hour SLA · soonest deadline first</span>
+          <span className="atty-section-hint">
+            48-hour SLA · overdue first · consult-recommended next
+          </span>
         </h2>
 
         {pending.length === 0 ? (
@@ -76,25 +98,55 @@ export default async function AttorneyDashboardPage() {
         ) : (
           <table className="atty-table">
             <thead>
-              <tr><th>SLA</th><th>Client</th><th>Document</th><th>Matter</th><th>Submitted</th><th /></tr>
+              <tr>
+                <th>SLA</th>
+                <th>Flags</th>
+                <th>Client</th>
+                <th>Document</th>
+                <th>Matter</th>
+                <th>Submitted</th>
+                <th />
+              </tr>
             </thead>
             <tbody>
-              {pending.map((doc) => (
-                <tr key={doc.id} className="atty-tr-urgent">
-                  <td className="atty-td-sla"><ReviewClock submittedAt={doc.submitted_at ?? null} /></td>
-                  <td>{personDisplayName(doc.profiles)}</td>
-                  <td className="atty-td-doc">
-                    {docTypeLabel(doc.doc_type)}: {doc.title}
-                  </td>
-                  <td className="atty-td-matter">{matterLabel(doc.case_files)}</td>
-                  <td className="atty-td-muted">
-                    {doc.submitted_at ? new Date(doc.submitted_at).toLocaleDateString() : "—"}
-                  </td>
-                  <td className="atty-td-arrow">
-                    <Link href={`/attorney/review/${doc.id}`} className="atty-row-link">Review →</Link>
-                  </td>
-                </tr>
-              ))}
+              {pending.map((doc) => {
+                const consultRec = recommendConsult(doc);
+                const overdue = slaMsLeft(doc.submitted_at) <= 0;
+                return (
+                  <tr
+                    key={doc.id}
+                    className={
+                      overdue ? "atty-tr-overdue" : consultRec ? "atty-tr-consult" : "atty-tr-urgent"
+                    }
+                  >
+                    <td className="atty-td-sla">
+                      <ReviewClock submittedAt={doc.submitted_at ?? null} />
+                    </td>
+                    <td className="atty-td-flags">
+                      {overdue && <span className="atty-flag atty-flag--overdue">Overdue</span>}
+                      {consultRec && (
+                        <span className="atty-flag atty-flag--consult" title="Living File recommends a consult">
+                          Consult rec.
+                        </span>
+                      )}
+                      {!overdue && !consultRec && <span className="atty-td-muted">—</span>}
+                    </td>
+                    <td>{personDisplayName(doc.profiles)}</td>
+                    <td className="atty-td-doc">
+                      {docTypeLabel(doc.doc_type)}: {doc.title}
+                    </td>
+                    <td className="atty-td-matter">{matterLabel(doc.case_files)}</td>
+                    <td className="atty-td-muted">
+                      {doc.submitted_at ? new Date(doc.submitted_at).toLocaleDateString() : "—"}
+                    </td>
+                    <td className="atty-td-arrow">
+                      <Link href={`/attorney/review/${doc.id}`} className="atty-row-link">
+                        Review →
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

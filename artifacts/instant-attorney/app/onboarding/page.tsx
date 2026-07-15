@@ -2,6 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import {
+  US_STATE_OPTIONS,
+  isLicensedState,
+  jurisdictionNotice,
+} from "@/lib/jurisdiction";
+import { isZdrConfirmedPublic, ZDR_PENDING_NOTICE } from "@/lib/zdr";
 
 /** Count the digits in a phone string (ignores formatting). */
 function digitCount(s: string): number {
@@ -77,11 +83,15 @@ export default function OnboardingPage() {
   const [step, setStep] = useState<Step>(0);
   const [signatureName, setSignatureName] = useState("");
   const [phone, setPhone] = useState("");
+  const [homeState, setHomeState] = useState("");
   const [repAgreed, setRepAgreed] = useState(false);
   const [aiAgreed, setAiAgreed] = useState(false);
   const [billingAck, setBillingAck] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const outOfJurisdiction = homeState !== "" && !isLicensedState(homeState);
+  const jurisdictionMsg = jurisdictionNotice(homeState);
 
   // Pre-fill name/phone from the profile so returning users don't retype.
   useEffect(() => {
@@ -92,6 +102,7 @@ export default function OnboardingPage() {
         if (!active || !data) return;
         if (data.full_name) setSignatureName((v) => v || data.full_name);
         if (data.phone) setPhone((v) => v || data.phone);
+        if (data.home_state) setHomeState((v) => v || data.home_state);
       })
       .catch(() => {});
     return () => {
@@ -111,7 +122,7 @@ export default function OnboardingPage() {
   }
 
   async function handleRepNext() {
-    if (!repAgreed || !signatureName.trim() || !phoneValid) return;
+    if (!repAgreed || !signatureName.trim() || !phoneValid || !homeState) return;
     setLoading(true);
     setError("");
     try {
@@ -119,7 +130,11 @@ export default function OnboardingPage() {
       const profRes = await fetch("/api/account/profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ full_name: signatureName.trim(), phone: phone.trim() }),
+        body: JSON.stringify({
+          full_name: signatureName.trim(),
+          phone: phone.trim(),
+          home_state: homeState,
+        }),
       });
       if (!profRes.ok) {
         const b = await profRes.json().catch(() => ({}));
@@ -251,6 +266,41 @@ export default function OnboardingPage() {
               </p>
             </div>
 
+            <div className="ob-field">
+              <label className="auth-label" htmlFor="home-state">
+                Where is your matter primarily located?
+              </label>
+              <select
+                id="home-state"
+                className="auth-input"
+                value={homeState}
+                onChange={(e) => setHomeState(e.target.value)}
+                required
+              >
+                <option value="">Select a state…</option>
+                {US_STATE_OPTIONS.map((s) => (
+                  <option key={s.code} value={s.code}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+              <p className="ob-field-hint">
+                Crawford Law PLLC is licensed in Texas and Illinois. This helps us stay inside that lane.
+              </p>
+              {jurisdictionMsg && (
+                <div className="ob-jurisdiction-banner" role="alert">
+                  {jurisdictionMsg}
+                  {outOfJurisdiction && (
+                    <p className="ob-jurisdiction-banner-sub">
+                      You may continue for general information and tools, but we cannot form a
+                      representation relationship for an out-of-jurisdiction matter. Please engage
+                      local counsel for advice and filings where you live.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
             <label className="ob-checkbox-label">
               <input
                 type="checkbox"
@@ -259,6 +309,9 @@ export default function OnboardingPage() {
                 onChange={(e) => setRepAgreed(e.target.checked)}
               />
               I have read and agree to the Crawford Law PLLC Representation Agreement
+              {outOfJurisdiction
+                ? " (I understand the firm is licensed in Texas and Illinois only)"
+                : ""}
             </label>
 
             {error && <p className="auth-error">{error}</p>}
@@ -266,7 +319,7 @@ export default function OnboardingPage() {
             <button
               className="auth-btn"
               onClick={handleRepNext}
-              disabled={!repAgreed || !signatureName.trim() || !phoneValid || loading}
+              disabled={!repAgreed || !signatureName.trim() || !phoneValid || !homeState || loading}
             >
               {loading ? "Saving…" : "I Agree — Continue →"}
             </button>
@@ -281,6 +334,12 @@ export default function OnboardingPage() {
               Crawford Law uses AI to assist with intake, document drafting, and analysis. An attorney reviews all AI outputs before delivery. Your consent is required before we begin.
             </p>
             <div className="ob-agreement-text">{AI_CONSENT}</div>
+
+            {!isZdrConfirmedPublic() && (
+              <div className="ob-jurisdiction-banner" role="status">
+                {ZDR_PENDING_NOTICE}
+              </div>
+            )}
 
             <p className="ob-philosophy-link">
               <a href="/legal/ai-philosophy" target="_blank" rel="noopener noreferrer">

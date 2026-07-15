@@ -174,21 +174,24 @@ export function computeMissionControl(input: MissionControlInput): MissionContro
   }
 
   // ── Tier 0: Post-consult client action items ────────────────────────────────
+  // Close the loop: every wrap-up to-do gets a concrete CTA into the Living File
+  // (uploads → attachments; everything else → continue intake chat or Mission Control).
   for (const [i, item] of consultClientActions.entries()) {
     if (!item.text.trim()) continue;
+    const isDoc = item.kind === "document";
     actions.push({
       id: `consult-action:${item.id}`,
-      kind: item.kind === "document" ? "upload" : "consult",
+      kind: isDoc ? "upload" : "chat",
       status: "open",
       priority: 3 + i,
       title: item.text.trim(),
       reason: "From your consult with Andrew Crawford, Esq.",
       cta: isAttorney
         ? undefined
-        : item.kind === "document"
+        : isDoc
           ? { label: "Upload →", href: "#attachments" }
-          : undefined,
-      jumpTo: item.kind === "document" ? "#attachments" : undefined,
+          : { label: "Continue →", href: `/chat?caseFileId=${id}` },
+      jumpTo: isDoc ? "#attachments" : "#mission-control",
     });
   }
   const canCreate =
