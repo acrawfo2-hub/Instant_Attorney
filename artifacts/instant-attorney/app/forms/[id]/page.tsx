@@ -1,9 +1,9 @@
 "use client";
 
-import { use, useEffect, useState, useCallback } from "react";
+import { use, useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import type { GovernmentForm, GovFormField } from "@/lib/government-forms";
-import type { GovFormInstrument } from "@/lib/types";
+import type { GovFormInstrument, FormVerification } from "@/lib/types";
 
 interface Progress {
   total_required: number;
@@ -20,6 +20,128 @@ interface GuideState {
   progress: Progress;
   checklist: string[];
   errors?: Record<string, string>;
+}
+
+const SCREENSHOT_TIPS: { label: string; steps: string }[] = [
+  { label: "Windows", steps: "Press Win + Shift + S to snip an area of the screen, or Win + PrtScn to capture the whole screen." },
+  { label: "Mac", steps: "Press Cmd + Shift + 4 and drag to select an area, or Cmd + Shift + 3 to capture the whole screen." },
+  { label: "iPhone", steps: "Press the Side button and Volume Up button at the same time." },
+  { label: "Android", steps: "Press the Power button and Volume Down button at the same time (may vary by phone)." },
+  { label: "A printed or handwritten page", steps: "Use your phone's camera in good light. Lay the page flat, keep all four corners in frame, and avoid glare or shadows across the text." },
+];
+
+const VERIFICATION_STATUS_LABEL: Record<FormVerification["status"], string> = {
+  processing: "Checking your photos…",
+  verified: "Looks correctly filled out",
+  mismatch: "Some answers don't match",
+  needs_review: "Needs a closer look",
+  failed: "Couldn't read these photos",
+};
+
+// Screenshot-verification fallback: once the client has filled out the real form
+// (fillable PDF or by hand), they upload photos here and the AI checks what it
+// reads against the answers already collected above, field by field.
+function VerifyForm({ instrumentId }: { instrumentId: string }) {
+  const [verifications, setVerifications] = useState<FormVerification[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [showTips, setShowTips] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const refresh = useCallback(async () => {
+    const res = await fetch(`/api/gov-forms/${instrumentId}/verify`);
+    if (res.ok) {
+      const data = await res.json();
+      setVerifications(data.verifications ?? []);
+    }
+    setLoaded(true);
+  }, [instrumentId]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const hasPending = verifications.some((v) => v.status === "processing");
+  useEffect(() => {
+    if (!hasPending) return;
+    const timer = setInterval(refresh, 3000);
+    return () => clearInterval(timer);
+  }, [hasPending, refresh]);
+
+  async function handleUpload() {
+    const files = fileInputRef.current?.files;
+    if (!files || files.length === 0) {
+      setError("Choose at least one photo or screenshot first.");
+      return;
+    }
+    setError(null);
+    setUploading(true);
+    const body = new FormData();
+    for (const file of Array.from(files)) body.append("files", file);
+    const res = await fetch(`/api/gov-forms/${instrumentId}/verify`, { method: "POST", body });
+    setUploading(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? "Upload failed. Please try again.");
+      return;
+    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    await refresh();
+  }
+
+  const latest = verifications[0] ?? null;
+
+  return (
+    <section className="gf-verify">
+      <h3>Confirm your filled-out form</h3>
+      <p className="gf-verify-intro">
+        Once you&apos;ve filled this out — in the fillable PDF, or by hand — upload a photo or
+        screenshot of every page and we&apos;ll check it against the answers above.
+      </p>
+
+      <button type="button" className="gf-tips-toggle" onClick={() => setShowTips((s) => !s)}>
+        {showTips ? "Hide" : "How do I take a screenshot or photo?"}
+      </button>
+      {showTips && (
+        <ul className="gf-tips">
+          {SCREENSHOT_TIPS.map((t) => (
+            <li key={t.label}><strong>{t.label}:</strong> {t.steps}</li>
+          ))}
+        </ul>
+      )}
+
+      <div className="gf-verify-upload">
+        <input ref={fileInputRef} type="file" accept="image/*" multiple disabled={uploading} />
+        <button type="button" onClick={handleUpload} disabled={uploading}>
+          {uploading ? "Uploading…" : "Verify my filled-out form"}
+        </button>
+      </div>
+      {error && <p className="gf-error">{error}</p>}
+
+      {loaded && latest && (
+        <div className={`gf-verify-result gf-verify-${latest.status}`}>
+          <p className="gf-verify-status">
+            {VERIFICATION_STATUS_LABEL[latest.status]}
+            {latest.status === "processing" && <span className="gf-verify-spinner" aria-hidden="true" />}
+          </p>
+          {latest.summary && <p className="gf-verify-summary">{latest.summary}</p>}
+          {latest.field_results.length > 0 && (
+            <ul className="gf-verify-fields">
+              {latest.field_results.map((r) => (
+                <li key={r.field} className={r.match ? "gf-field-match" : "gf-field-mismatch"}>
+                  <span className="gf-field-icon" aria-hidden="true">{r.match ? "✅" : "⚠️"}</span>
+                  <span className="gf-field-body">
+                    <strong>{r.label}:</strong> we read &ldquo;{r.seen ?? "(not found)"}&rdquo;
+                    {!r.match && ` — expected ${r.expected}`}
+                    {r.note && <span className="gf-field-note"> {r.note}</span>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </section>
+  );
 }
 
 // Guided government-form completion tool. Distinct from the document-generation
@@ -195,10 +317,22 @@ export default function GovFormGuidePage({ params }: { params: Promise<{ id: str
       <section className="gf-checklist">
         <h3>Before you submit</h3>
         <ul>{state.checklist.map((c, i) => <li key={i}>{c}</li>)}</ul>
+        {form.fillable === false ? (
+          <p className="gf-fillable-note gf-fillable-note-manual">
+            No fillable PDF for this one — {form.fillable_note ?? "print it out and fill it in by hand, or use the official portal below."}
+          </p>
+        ) : (
+          <p className="gf-fillable-note">
+            This form has a fillable PDF — open it and type your answers directly into it in your
+            browser or PDF reader. Prefer pen and paper? Print it and fill it out by hand instead.
+          </p>
+        )}
         <a href={form.official_url} target="_blank" rel="noopener" className="gf-official">
-          Open the official form on {form.agency} ↗
+          {form.fillable === false ? "Open the official form" : "Open the fillable PDF"} on {form.agency} ↗
         </a>
       </section>
+
+      <VerifyForm instrumentId={state.instrument.id} />
 
       <p className="gf-disclaimer">
         Instant Attorney helps you find and complete government forms — this is form

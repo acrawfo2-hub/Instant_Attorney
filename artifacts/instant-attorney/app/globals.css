@@ -6791,6 +6791,82 @@ mark.atty-placeholder {
   margin: 0.5rem 0 0.75rem;
 }
 
+/* ── Fillable-PDF vs. screenshot-verification fallback ────────────────────── */
+.gf-fillable-note {
+  font-size: 0.85rem;
+  opacity: 0.85;
+  margin: 0.75rem 0 0;
+}
+.gf-fillable-note-manual { color: #8a6100; opacity: 1; }
+
+.gf-verify { margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid rgba(0, 0, 0, 0.1); }
+.gf-verify h3 { font-size: 1rem; margin: 0 0 0.4rem; }
+.gf-verify-intro { font-size: 0.88rem; opacity: 0.8; margin: 0 0 0.75rem; }
+
+.gf-tips-toggle {
+  background: none;
+  border: none;
+  color: #2f6df6;
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 0;
+  cursor: pointer;
+  margin-bottom: 0.5rem;
+}
+.gf-tips {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0.75rem 0.9rem;
+  background: rgba(47, 109, 246, 0.06);
+  border-radius: 8px;
+  font-size: 0.84rem;
+}
+.gf-tips li { margin-bottom: 0.35rem; }
+.gf-tips li:last-child { margin-bottom: 0; }
+
+.gf-verify-upload { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem; }
+.gf-verify-upload input[type="file"] { font-size: 0.85rem; }
+.gf-verify-upload button {
+  padding: 0.55rem 1rem;
+  border-radius: 8px;
+  border: 1px solid #2f6df6;
+  background: #2f6df6;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+.gf-verify-upload button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.gf-verify-result {
+  margin-top: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+.gf-verify-status { font-weight: 600; margin: 0 0 0.35rem; display: flex; align-items: center; gap: 0.5rem; }
+.gf-verify-summary { font-size: 0.88rem; margin: 0 0 0.5rem; opacity: 0.9; }
+.gf-verify-verified { background: #eefbf0; border-color: #a9dfb4; }
+.gf-verify-mismatch { background: #fdeeee; border-color: #e9b3b3; }
+.gf-verify-needs_review { background: #fff9ec; border-color: #e6c869; }
+.gf-verify-failed { background: rgba(0, 0, 0, 0.03); }
+
+.gf-verify-spinner {
+  display: inline-block;
+  width: 0.8rem;
+  height: 0.8rem;
+  border: 2px solid rgba(0, 0, 0, 0.15);
+  border-top-color: #2f6df6;
+  border-radius: 50%;
+  animation: gf-spin 0.8s linear infinite;
+}
+@keyframes gf-spin { to { transform: rotate(360deg); } }
+
+.gf-verify-fields { list-style: none; margin: 0; padding: 0; font-size: 0.85rem; }
+.gf-verify-fields li { display: flex; align-items: start; gap: 0.4rem; margin-bottom: 0.4rem; }
+.gf-field-icon { flex: 0 0 auto; }
+.gf-field-note { opacity: 0.75; }
+.gf-field-mismatch { font-weight: 500; }
+
 /* ── On-device voice input (talk-to-text) ─────────────────────────────────── */
 .voice-input {
   position: relative;

@@ -386,6 +386,35 @@ export interface GovFormDefinition {
   triggers: string[];
 }
 
+// ── Form screenshot verification ─────────────────────────────────────────────
+// Fallback path for a government form instrument (see above) when the client
+// fills it out by hand instead of a fillable PDF: they upload photos/screenshots
+// of the completed form and the AI compares what it reads against `answers`.
+export type FormVerificationStatus = "processing" | "verified" | "mismatch" | "needs_review" | "failed";
+
+export interface FieldVerificationResult {
+  field: string;
+  label: string;
+  expected: string;
+  /** What the AI read on the page for this field, or null if not found/legible. */
+  seen: string | null;
+  match: boolean;
+  note?: string;
+}
+
+export interface FormVerification {
+  id: string;
+  form_instrument_id: string;
+  case_file_id: string;
+  user_id: string;
+  storage_paths: string[];
+  status: FormVerificationStatus;
+  summary: string | null;
+  field_results: FieldVerificationResult[];
+  created_at: string;
+  updated_at: string;
+}
+
 export interface IntakeMessage {
   id: string;
   case_file_id: string;
