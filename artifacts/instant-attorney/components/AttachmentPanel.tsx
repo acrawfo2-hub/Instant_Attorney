@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { Attachment, RequestedAttachment } from "@/lib/types";
+import ScanToPdfModal from "@/components/ScanToPdfModal";
 
 interface AttachmentPanelProps {
   caseFileId: string;
@@ -26,6 +27,8 @@ export default function AttachmentPanel({ caseFileId }: AttachmentPanelProps) {
   // When the upload was started from a specific "still needed" item, this holds
   // that requested-attachment id so we can mark it fulfilled after upload.
   const [pendingRequestedId, setPendingRequestedId] = useState<string | null>(null);
+  const [scanOpen, setScanOpen] = useState(false);
+  const [scanContextLabel, setScanContextLabel] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -79,6 +82,18 @@ export default function AttachmentPanel({ caseFileId }: AttachmentPanelProps) {
     fileInputRef.current?.click();
   }
 
+  function openScan(requestedId: string | null = null, label: string | null = null) {
+    setUploadError("");
+    setPendingRequestedId(requestedId);
+    setScanContextLabel(label);
+    setScanOpen(true);
+  }
+
+  function handleScanComplete(file: File) {
+    setPendingFile(file);
+    setScanOpen(false);
+  }
+
   // Add a file first; the analyze-or-store decision happens afterward.
   function handleFileInput(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -129,18 +144,33 @@ export default function AttachmentPanel({ caseFileId }: AttachmentPanelProps) {
                 <span className="att-check-desc">{r.description}</span>
                 {r.reason && <span className="att-check-reason">{r.reason}</span>}
               </div>
-              <button
-                type="button"
-                className="att-check-upload-btn"
-                onClick={() => startRequestedUpload(r.id)}
-                disabled={uploading}
-                title={`Upload “${r.description}”`}
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
-                </svg>
-                Upload
-              </button>
+              <div className="att-check-actions">
+                <button
+                  type="button"
+                  className="att-check-upload-btn att-check-scan-btn"
+                  onClick={() => openScan(r.id, r.description)}
+                  disabled={uploading}
+                  title={`Scan phone photos for “${r.description}”`}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                    <circle cx="12" cy="13" r="4" />
+                  </svg>
+                  Scan
+                </button>
+                <button
+                  type="button"
+                  className="att-check-upload-btn"
+                  onClick={() => startRequestedUpload(r.id)}
+                  disabled={uploading}
+                  title={`Upload “${r.description}”`}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
+                  </svg>
+                  Upload
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -218,29 +248,53 @@ export default function AttachmentPanel({ caseFileId }: AttachmentPanelProps) {
           </div>
         </div>
       ) : (
-        <div
-          className={`att-upload-zone${dragOver ? " att-upload-zone-over" : ""}`}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-          onClick={openGenericPicker}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openGenericPicker(); } }}
-        >
-          <span className="att-upload-zone-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
+        <div className="att-add-block">
+          <div
+            className={`att-upload-zone${dragOver ? " att-upload-zone-over" : ""}`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={openGenericPicker}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openGenericPicker(); } }}
+          >
+            <span className="att-upload-zone-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+            </span>
+            <span className="att-drop-hint">
+              {dragOver ? "Drop your file here" : "Drag & drop a file, or click to add"}
+            </span>
+            <span className="att-upload-hint">PDF, Word, images, text · up to 25 MB</span>
+          </div>
+          <button
+            type="button"
+            className="att-scan-entry"
+            onClick={() => openScan(null, null)}
+            disabled={uploading}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+              <circle cx="12" cy="13" r="4" />
             </svg>
-          </span>
-          <span className="att-drop-hint">
-            {dragOver ? "Drop your file here" : "Drag & drop a file, or click to add"}
-          </span>
-          <span className="att-upload-hint">PDF, Word, images, text · up to 25 MB</span>
+            <span className="att-scan-entry-text">
+              <span className="att-scan-entry-title">Scan phone photos to PDF</span>
+              <span className="att-scan-entry-sub">Best for notices, letters, and multi-page paper docs</span>
+            </span>
+          </button>
         </div>
       )}
 
       {uploadError && <p className="att-upload-error">{uploadError}</p>}
+
+      <ScanToPdfModal
+        open={scanOpen}
+        onClose={() => setScanOpen(false)}
+        onComplete={handleScanComplete}
+        contextLabel={scanContextLabel}
+      />
 
       {/* ── Documents UPLOADED — what's already on the file ──────────────────── */}
       {attachments.length > 0 && (
