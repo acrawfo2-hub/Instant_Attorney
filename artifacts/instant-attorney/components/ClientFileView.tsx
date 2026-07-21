@@ -26,6 +26,7 @@ import RoadmapSpine from "@/components/RoadmapSpine";
 import RoadmapToolGroup from "@/components/RoadmapToolGroup";
 import PostConsultCard from "@/components/PostConsultCard";
 import CaseChatPanel from "@/components/CaseChatPanel";
+import DocumentExecutionPanel from "@/components/DocumentExecutionPanel";
 import type { CaseFile, FactItem, Document, Profile, WizardType, ConsultRequest, ConsultWrapUp, RequestedAttachment, GovFormInstrument, Attachment } from "@/lib/types";
 import { isValidWizardType } from "@/lib/document-utils";
 import { WIZARD_LABELS, docTypeLabel, personDisplayName, isDocumentOutOfDate, coerceWizardType } from "@/lib/types";
@@ -1029,20 +1030,6 @@ export default function ClientFileView({
                     )}
                     <DocStatusLine doc={doc} />
                     <span className="lf-doc-date">{new Date(doc.created_at).toLocaleDateString()}</span>
-                    {!isAttorney && doc.status === "approved" && (
-                      <div className="lf-doc-downloads">
-                        {secondDraft?.draft_text && (
-                          <a href={`/api/documents/${secondDraft.id}/download`} className="lf-doc-download-link">
-                            Download approved document (.docx)
-                          </a>
-                        )}
-                        {doc.draft_text && (
-                          <a href={`/api/documents/${doc.id}/download`} className="lf-doc-download-link lf-doc-download-link-muted">
-                            Download original wizard draft (.docx)
-                          </a>
-                        )}
-                      </div>
-                    )}
                     {!isAttorney && doc.status === "pending_review" && doc.draft_text && (
                       <a href={`/api/documents/${doc.id}/download`} className="lf-doc-download-link">
                         Download submitted draft (.docx)
@@ -1100,6 +1087,8 @@ export default function ClientFileView({
               // will use still has [[blanks]], offer an easy fill-in panel that
               // writes the answers straight into the document (and the Living File).
               const fillTarget = secondDraft?.draft_text ? secondDraft : (doc.draft_text ? doc : null);
+              const approvedDownloadId =
+                secondDraft?.draft_text ? secondDraft.id : doc.id;
               return (
                 <div key={doc.id} className="lf-doc-item">
                   {docRow}
@@ -1109,6 +1098,13 @@ export default function ClientFileView({
                       documentId={fillTarget.id}
                       draftText={fillTarget.draft_text}
                       documentTitle={doc.title}
+                    />
+                  )}
+                  {!isAttorney && (doc.status === "approved" || doc.status === "delivered") && (
+                    <DocumentExecutionPanel
+                      documentId={doc.id}
+                      documentTitle={doc.title}
+                      downloadDocumentId={approvedDownloadId}
                     />
                   )}
                   {doc.status === "changes_requested" && (
