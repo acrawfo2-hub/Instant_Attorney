@@ -163,11 +163,39 @@ function AcpChatInner() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputAreaRef = useRef<HTMLDivElement>(null);
   const hydratedRef = useRef(false);
+  const caseFileIdRef = useRef<string | null>(caseFileId);
   const hasUserMessages = messages.some((m) => m.role === "user");
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamingText, handoff]);
+
+  // Keep the latest case file id reachable from the one-time page-hide handler.
+  useEffect(() => {
+    caseFileIdRef.current = caseFileId;
+  }, [caseFileId]);
+
+  // Flush the Living File when the page is hidden (tab close / navigation away)
+  // via sendBeacon, so the conversation tail is never lost on exit.
+  useEffect(() => {
+    const onHide = () => {
+      const id = caseFileIdRef.current;
+      if (!id) return;
+      const blob = new Blob([JSON.stringify({ caseFileId: id, force: true })], {
+        type: "application/json",
+      });
+      navigator.sendBeacon("/api/chat-acp/sync-file", blob);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") onHide();
+    };
+    window.addEventListener("pagehide", onHide);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("pagehide", onHide);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
 
   // ── Resume an existing conversation ─────────────────────────────────────────
   // When the page is opened with ?caseFileId=… (returning to an existing file),
@@ -322,11 +350,27 @@ function AcpChatInner() {
     el.style.height = Math.min(el.scrollHeight, 160) + "px";
   }
 
+  // Force a Living File sweep of the conversation tail (fire-and-forget). Used
+  // when the client leaves or switches modes, so anything since the last
+  // automatic background sweep still lands in the file.
+  const flushLivingFile = useCallback(() => {
+    const id = caseFileIdRef.current;
+    if (!id) return;
+    fetch("/api/chat-acp/sync-file", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ caseFileId: id, force: true }),
+      keepalive: true,
+    }).catch(() => {});
+  }, []);
+
   // Switch between guided intake and freestyle. Reflect the choice in the URL so
   // a reload keeps the mode; the server also persists it to the case file on the
-  // next send, so returning later resumes it too.
+  // next send, so returning later resumes it too. Flush first so the tail of the
+  // mode being left is captured into the file.
   function changeMode(next: ChatMode) {
     if (next === mode) return;
+    flushLivingFile();
     setMode(next);
     const params = new URLSearchParams(window.location.search);
     params.set("mode", next);

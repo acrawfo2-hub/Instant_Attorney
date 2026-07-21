@@ -188,6 +188,9 @@ export interface CaseFile {
   file_type: CaseFileType;
   /** Persisted chat mode so reopening a file resumes where the client left off. */
   chat_mode?: ChatMode;
+  /** created_at of the last intake message the Living File extractor has folded
+   *  into the file. The background sweep reads only messages newer than this. */
+  last_file_synced_at?: string | null;
   title: string | null;
   archive_at: string | null;
   pre_consult_memo: string | null;

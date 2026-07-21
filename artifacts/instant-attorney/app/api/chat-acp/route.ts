@@ -6,6 +6,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { buildAcpSystemPrompt, buildFileContext } from "@/lib/prompts";
 import { detectAcpAreasFromContext } from "@/lib/acp-area-router";
 import { parseAndUpdateFile, isCompleteFileUpdate } from "@/lib/file-parser";
+import { syncLivingFile } from "@/lib/living-file-extractor";
 import { triggerPendingLookups } from "@/lib/gov-form-lookup";
 import { generateCaseTitle } from "@/lib/title-generator";
 import { toAnthropicBlock, processAttachment } from "@/lib/attachment-processor";
@@ -401,6 +402,15 @@ export async function POST(req: NextRequest) {
             }
           }
         }
+        // Background Living File sweep (both modes). Debounced inside the
+        // extractor — a cheap no-op until enough new messages accumulate — so
+        // the file stays current even when this turn emitted no inline block.
+        // Fire-and-forget, same lifetime as the other post-stream background
+        // tasks above.
+        syncLivingFile(anthropic, db, resolvedCaseFileId, userId).catch(
+          (err) => console.error("[chat-acp] living file sync error:", err)
+        );
+
         if (finalMsg?.stop_reason === "max_tokens") {
           logTruncation({
             endpoint: "chat-acp",

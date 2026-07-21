@@ -13,6 +13,7 @@ export type UsageFeature =
   | "attachment_analysis"
   | "attorney_review"
   | "attorney_chat"
+  | "living_file_sync"
   | "attorney_second_draft_fitness"
   | "attorney_second_draft"
   | "attorney_merge"
