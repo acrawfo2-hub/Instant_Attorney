@@ -140,14 +140,14 @@ export default function CaseFileCard({ file, mode }: CaseFileCardProps) {
                   <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
                   <circle cx="12" cy="12" r="3"/>
                 </svg>
-                Open Living File
+                Open your case
               </a>
 
               <a href={`/chat?caseFileId=${file.id}`} className="card__btn card__btn--outline">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
                 </svg>
-                Continue Chat
+                Add details
               </a>
 
               <button

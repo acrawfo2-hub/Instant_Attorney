@@ -11,6 +11,8 @@ import MatterSwitcher from "@/components/MatterSwitcher";
 import { parseRoadmapOverlay } from "@/lib/roadmap-snapshot";
 import type { RoadmapAiOverlay } from "@/lib/roadmap-types";
 import { toMatterSwitcherItem } from "@/lib/matter-switcher";
+import { computeNextStep } from "@/lib/next-step";
+import { getCaseHeaderCta } from "@/lib/case-cta";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
@@ -153,6 +155,11 @@ export default async function FileDetailPage({
 
   const { caseFile, facts, documents, childDocuments, consultRequest, hasConsultSub, completedConsultWrapUp, completedConsultSubmittedAt, requestedAttachments, govForms, attachments, roadmapOverlay, openMatters } = result;
 
+  const headerCta = getCaseHeaderCta(
+    computeNextStep(caseFile, documents, facts),
+    caseFile.id,
+  );
+
   return (
     <div className="lf-shell">
       <header className="lf-header">
@@ -166,19 +173,22 @@ export default async function FileDetailPage({
         <div className="lf-header-center">
           <MatterSwitcher currentId={caseFile.id} matters={openMatters} />
           {caseFile.matter_type && (
-            <span className="lf-badge">
-              {caseFile.matter_type === "reactive" ? "Reactive Matter" : "Preventive Matter"}
+            <span
+              className="lf-badge"
+              title={caseFile.matter_type === "reactive" ? "Something happened that you need help with" : "Planning ahead before a problem arises"}
+            >
+              {caseFile.matter_type === "reactive" ? "Active case" : "Planning ahead"}
             </span>
           )}
         </div>
 
         <div className="lf-header-right">
           {isBypass && <span className="ob-bypass-badge">Test Mode</span>}
-          <Link href={`/dashboard/${caseFile.id}/financials`} className="lf-logout-btn">
-            Financials
+          <Link href={`/dashboard/${caseFile.id}/financials`} className="lf-logout-btn" title="Assets, debts, and income worksheet">
+            Money &amp; property
           </Link>
-          <Link href={`/chat?caseFileId=${caseFile.id}`} className="lf-begin-btn">
-            Continue Intake
+          <Link href={headerCta.href} className="lf-begin-btn">
+            {headerCta.label}
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="9 18 15 12 9 6" />
             </svg>

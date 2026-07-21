@@ -394,9 +394,10 @@ export default function ClientFileView({
             <div className="lf-card lf-card-full lf-consult-banner lf-consult-banner-confirmed">
               <div className="lf-consult-banner-inner">
                 <div className="lf-consult-banner-text">
-                  <span className="lf-consult-rec-badge lf-consult-rec-badge-confirmed">Consult Confirmed</span>
+                  <span className="lf-consult-rec-badge lf-consult-rec-badge-confirmed">Consult confirmed</span>
                   <span className="lf-consult-desc"><strong>{timeStr}</strong> · Andrew will call {cr.client_phone ?? "you"}</span>
                 </div>
+                <Link href={`/consult/${cr.id}/session`} className="lf-consult-btn">Open consult page →</Link>
               </div>
             </div>
           );
