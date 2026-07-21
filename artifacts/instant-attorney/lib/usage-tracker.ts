@@ -11,6 +11,7 @@ export type UsageFeature =
   | "what_if"
   | "title_generator"
   | "attachment_analysis"
+  | "form_verification"
   | "attorney_review"
   | "attorney_second_draft_fitness"
   | "attorney_second_draft"
