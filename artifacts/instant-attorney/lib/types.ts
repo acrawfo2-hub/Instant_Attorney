@@ -260,6 +260,12 @@ export interface CaseFile {
   /** created_at of the last intake message the Living File extractor has folded
    *  into the file. The background sweep reads only messages newer than this. */
   last_file_synced_at?: string | null;
+  /** True when the reviewing attorney created this file to onboard a client from
+   *  their own practice (file is owned by the attorney's account). */
+  created_by_attorney?: boolean;
+  /** Real client's display name / email for an attorney-onboarded file. */
+  client_display_name?: string | null;
+  client_email?: string | null;
   title: string | null;
   archive_at: string | null;
   pre_consult_memo: string | null;
