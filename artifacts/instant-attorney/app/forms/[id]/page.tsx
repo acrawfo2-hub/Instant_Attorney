@@ -4,6 +4,7 @@ import { use, useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import type { GovernmentForm, GovFormField } from "@/lib/government-forms";
 import type { GovFormInstrument } from "@/lib/types";
+import type { DetectedPdfField } from "@/lib/gov-form-pdf";
 
 interface Progress {
   total_required: number;
@@ -22,6 +23,11 @@ interface GuideState {
   errors?: Record<string, string>;
 }
 
+interface PdfTemplateState {
+  instrument: GovFormInstrument;
+  pdf_fields: DetectedPdfField[];
+}
+
 // Guided government-form completion tool. Distinct from the document-generation
 // wizard: it walks the client field by field through a real government form,
 // validating answers server-side and tracking progress, then hands off a
@@ -33,6 +39,10 @@ export default function GovFormGuidePage({ params }: { params: Promise<{ id: str
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const [pdfState, setPdfState] = useState<PdfTemplateState | null>(null);
+  const [fieldMapDraft, setFieldMapDraft] = useState<Record<string, string>>({});
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
 
   const hydrate = useCallback((data: GuideState) => {
     setState(data);
@@ -50,6 +60,13 @@ export default function GovFormGuidePage({ params }: { params: Promise<{ id: str
       const res = await fetch(`/api/gov-forms/${id}`);
       if (!res.ok) { setNotFound(true); return; }
       hydrate(await res.json());
+
+      const pdfRes = await fetch(`/api/gov-forms/${id}/template`);
+      if (pdfRes.ok) {
+        const data = (await pdfRes.json()) as PdfTemplateState;
+        setPdfState(data);
+        setFieldMapDraft(data.instrument.pdf_field_map ?? {});
+      }
     })();
   }, [id, hydrate]);
 
@@ -66,6 +83,63 @@ export default function GovFormGuidePage({ params }: { params: Promise<{ id: str
       setErrors(data.errors ?? {});
     }
     setSaving(false);
+  }
+
+  async function uploadTemplate(file: File) {
+    setPdfBusy(true);
+    setPdfError(null);
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch(`/api/gov-forms/${id}/template`, { method: "POST", body: fd });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data) {
+      setPdfError(data?.error ?? "Could not upload that file.");
+      setPdfBusy(false);
+      return;
+    }
+    setPdfState({ instrument: data.instrument, pdf_fields: data.pdf_fields });
+    setFieldMapDraft(data.instrument.pdf_field_map ?? {});
+    setPdfBusy(false);
+  }
+
+  async function confirmFieldMap() {
+    setPdfBusy(true);
+    setPdfError(null);
+    const res = await fetch(`/api/gov-forms/${id}/template`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ field_map: fieldMapDraft, confirm: true }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data) {
+      setPdfError(data?.error ?? "Could not save the field mapping.");
+      setPdfBusy(false);
+      return;
+    }
+    setPdfState({ instrument: data.instrument, pdf_fields: data.pdf_fields });
+    setPdfBusy(false);
+  }
+
+  async function downloadFilledPdf(formNumber: string) {
+    setPdfBusy(true);
+    setPdfError(null);
+    const res = await fetch(`/api/gov-forms/${id}/download-pdf`);
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      setPdfError(data?.message ?? data?.error ?? "Could not download the filled PDF.");
+      setPdfBusy(false);
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${formNumber.replace(/[^a-z0-9]+/gi, "_")}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    setPdfBusy(false);
   }
 
   if (notFound) {
@@ -184,6 +258,78 @@ export default function GovFormGuidePage({ params }: { params: Promise<{ id: str
           Mark complete
         </button>
       </div>
+
+      <section className="gf-pdf">
+        <h3>Fill the actual PDF</h3>
+        {!pdfState?.instrument.pdf_template_path ? (
+          <div className="gf-pdf-upload">
+            <p>
+              Download the official form from{" "}
+              <a href={form.official_url} target="_blank" rel="noopener">{form.agency}</a>, then upload the blank
+              PDF here — we&apos;ll fill it in with the answers above.
+            </p>
+            <input
+              type="file"
+              accept="application/pdf"
+              disabled={pdfBusy}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) uploadTemplate(f);
+              }}
+            />
+          </div>
+        ) : pdfState.instrument.pdf_status === "unsupported" ? (
+          <div className="gf-pdf-unsupported">
+            <p>
+              This PDF isn&apos;t a fillable form (no editable fields), so we can&apos;t auto-fill it yet. Use your
+              saved answers above to fill in the blank form by hand.
+            </p>
+            <a href={form.official_url} target="_blank" rel="noopener" className="gf-official">
+              Open the official blank form ↗
+            </a>
+          </div>
+        ) : pdfState.instrument.pdf_status === "mapping" ? (
+          <div className="gf-pdf-mapping">
+            <p>We matched your answers to the PDF&apos;s fields — check these before your first download:</p>
+            {form.fields.map((field) => (
+              <div key={field.name} className="gf-pdf-map-row">
+                <label>{field.label}</label>
+                <select
+                  value={fieldMapDraft[field.name] ?? ""}
+                  onChange={(e) => setFieldMapDraft((m) => ({ ...m, [field.name]: e.target.value }))}
+                >
+                  <option value="">— not on this form —</option>
+                  {pdfState.pdf_fields.map((pf) => (
+                    <option key={pf.name} value={pf.name}>{pf.label ?? pf.name}</option>
+                  ))}
+                </select>
+              </div>
+            ))}
+            <button onClick={confirmFieldMap} disabled={pdfBusy}>
+              {pdfBusy ? "Saving…" : "Confirm mapping"}
+            </button>
+          </div>
+        ) : (
+          <div className="gf-pdf-ready">
+            <button onClick={() => downloadFilledPdf(form.form_number)} disabled={pdfBusy}>
+              {pdfBusy ? "Preparing…" : "Download filled PDF"}
+            </button>
+            <label className="gf-pdf-replace">
+              Replace template
+              <input
+                type="file"
+                accept="application/pdf"
+                disabled={pdfBusy}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) uploadTemplate(f);
+                }}
+              />
+            </label>
+          </div>
+        )}
+        {pdfError && <p className="gf-error">{pdfError}</p>}
+      </section>
 
       {form.common_mistakes.length > 0 && (
         <section className="gf-mistakes">

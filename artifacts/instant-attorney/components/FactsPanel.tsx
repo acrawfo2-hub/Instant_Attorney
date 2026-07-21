@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { FactItem } from "@/lib/types";
+import ProvabilityFactText from "@/components/ProvabilityFactText";
 
 // How many items each fact card shows before collapsing the rest. The full list
 // is always available — clicking the card just reveals it; nothing is ever
@@ -80,7 +81,7 @@ function FactCard({
           <ul className={listClass}>
             {shown.map((f) => (
               <li key={f.id} id={idPrefix ? `${idPrefix}${f.id}` : undefined}>
-                {f.description}
+                <ProvabilityFactText description={f.description} />
               </li>
             ))}
           </ul>

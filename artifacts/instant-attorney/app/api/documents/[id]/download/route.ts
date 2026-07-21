@@ -56,11 +56,15 @@ export async function GET(
   // An attorney downloading a client's document gets the document row but a NULL
   // embedded case_files under RLS — which used to crash the docx builder. This
   // path is already authorized above, so a service-role read is safe.
-  const { data: caseFile } = await createServiceClient()
-    .from("case_files")
-    .select("matter_subtype, jurisdiction")
-    .eq("id", doc.case_file_id)
-    .maybeSingle();
+  const serviceDb = createServiceClient();
+  const [{ data: caseFile }, { data: ownerProfile }] = await Promise.all([
+    serviceDb.from("case_files").select("matter_subtype, jurisdiction").eq("id", doc.case_file_id).maybeSingle(),
+    // The DOCUMENT OWNER's persona (not necessarily the requester's — an
+    // attorney reviewing someone else's document has their own account_type)
+    // decides whether the "not reviewed by an attorney" watermark applies.
+    serviceDb.from("profiles").select("account_type").eq("id", doc.user_id).maybeSingle(),
+  ]);
+  const isAttorneyUserDoc = ownerProfile?.account_type === "attorney_user";
 
   let buffer: Buffer;
   try {
@@ -68,7 +72,7 @@ export async function GET(
     // drops the watermark once an attorney has approved the document (AI
     // Philosophy §4.2, Terms §7). A child (critical_review/second_draft) carries
     // its own status, set to "approved" alongside its parent on approval.
-    buffer = await generateDocxFromText(doc.title, text, (caseFile as CaseFile) ?? null, doc.status);
+    buffer = await generateDocxFromText(doc.title, text, (caseFile as CaseFile) ?? null, doc.status, isAttorneyUserDoc);
   } catch (err) {
     console.error("[documents/download] docx generation error:", err);
     return NextResponse.json({ error: "Could not build the document file" }, { status: 500 });
@@ -78,10 +82,10 @@ export async function GET(
   // the exact .docx, with the review/watermark state at this moment. Best-effort —
   // a logging hiccup never blocks the client's download.
   await recordDocumentDelivery({
-    serviceDb: createServiceClient(),
+    serviceDb,
     document: doc,
     buffer,
-    watermarked: !isAttorneyApproved(doc.status),
+    watermarked: !isAttorneyApproved(doc.status) && !isAttorneyUserDoc,
     downloadedBy: userId,
     downloadedByIsAttorney: Boolean(profile?.is_attorney),
   });

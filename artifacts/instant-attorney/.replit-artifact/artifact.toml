@@ -31,6 +31,10 @@ paths = [
   "/api/account",
   "/api/usage",
   "/api/admin",
+  "/api/family",
+  "/api/bankruptcy",
+  "/api/personal-injury",
+  "/api/roadmap",
   "/consult",
 ]
 localPort = 21203

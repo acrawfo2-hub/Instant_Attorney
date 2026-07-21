@@ -15,6 +15,11 @@ import { maxOutputTokensFor, limitSignalMetadata } from "@/lib/token-limits";
 import { BYPASS_USER_ID } from "@/lib/types";
 import type { CaseFile, FactItem, Attachment, RequestedAttachment, CounselEngagementGoal } from "@/lib/types";
 import { buildCounselContextPatch, persistCounselContext } from "@/lib/existing-counsel-persist";
+import {
+  jurisdictionFromCaseFileText,
+  normalizeStateCode,
+  stateName,
+} from "@/lib/jurisdiction";
 
 const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney, maxRetries: 4 });
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
@@ -83,7 +88,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Ensure case file exists
+  // Ensure case file exists — seed jurisdiction from the client's home_state.
+  const { data: homeStateRow } = await db
+    .from("profiles")
+    .select("home_state")
+    .eq("id", userId)
+    .maybeSingle();
+  const profileHomeState = normalizeStateCode(homeStateRow?.home_state ?? null);
+
   if (!resolvedCaseFileId) {
     const { data: existing } = await db
       .from("case_files")
@@ -101,6 +113,11 @@ export async function POST(req: NextRequest) {
       if (fileType === "quick_consult") {
         newFileData.file_type = "quick_consult";
         newFileData.archive_at = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      }
+      if (profileHomeState && profileHomeState !== "OTHER") {
+        newFileData.jurisdiction = stateName(profileHomeState);
+      } else if (profileHomeState === "OTHER") {
+        newFileData.jurisdiction = "Outside the United States";
       }
       const { data: created, error } = await db
         .from("case_files")
@@ -137,13 +154,18 @@ export async function POST(req: NextRequest) {
   }
 
   // Load current file state + attachments for context injection
-  const [{ data: caseFileRow }, { data: factRows }, { data: attachmentRows }, { data: requestedRows }] =
+  const [{ data: caseFileRow }, { data: factRows }, { data: attachmentRows }, { data: requestedRows }, { data: accountRow }] =
     await Promise.all([
       db.from("case_files").select("*").eq("id", resolvedCaseFileId).single(),
       db.from("fact_items").select("*").eq("case_file_id", resolvedCaseFileId),
       db.from("attachments").select("*").eq("case_file_id", resolvedCaseFileId).eq("status", "ready"),
       db.from("requested_attachments").select("*").eq("case_file_id", resolvedCaseFileId),
+      db.from("profiles").select("account_type").eq("id", userId).maybeSingle(),
     ]);
+
+  // Attorney-users get a reframed intake persona (no privilege/representation
+  // language) — see buildAcpCoreHead/buildAcpCoreTail in lib/prompts.ts.
+  const acpPersona = accountRow?.account_type === "attorney_user" ? "attorney_user" as const : "client" as const;
 
   const caseFile = caseFileRow as CaseFile | null;
   const facts = (factRows ?? []) as FactItem[];
@@ -220,7 +242,25 @@ export async function POST(req: NextRequest) {
   // areas every turn. prompts.ts always includes the compact area index, so an
   // as-yet-unmatched opening turn still degrades gracefully.
   const detectedAreas = detectAcpAreasFromContext(messages, caseFile);
-  const acpSystemPrompt = buildAcpSystemPrompt(detectedAreas);
+
+  // Backfill jurisdiction from profile when the Living File has none yet.
+  let effectiveJurisdiction = caseFile?.jurisdiction ?? null;
+  if (!jurisdictionFromCaseFileText(effectiveJurisdiction) && profileHomeState) {
+    effectiveJurisdiction =
+      profileHomeState === "OTHER" ? "Outside the United States" : stateName(profileHomeState);
+    if (resolvedCaseFileId && !caseFile?.jurisdiction) {
+      await db
+        .from("case_files")
+        .update({ jurisdiction: effectiveJurisdiction })
+        .eq("id", resolvedCaseFileId);
+      if (caseFile) caseFile.jurisdiction = effectiveJurisdiction;
+    }
+  }
+
+  const acpSystemPrompt = buildAcpSystemPrompt(detectedAreas, acpPersona, {
+    homeState: profileHomeState,
+    jurisdiction: effectiveJurisdiction,
+  });
 
   // Stream from Anthropic
   const stream = anthropic.messages.stream({

@@ -126,6 +126,41 @@ export async function toAnthropicBlock(
   throw new Error(`Unsupported file type: ${mimeType} (${fileName})`);
 }
 
+// Load a previously-uploaded attachment's raw bytes from storage and convert it
+// to Anthropic content blocks — used by the "Improve My Draft" wizard (and its
+// regenerate path) to feed the client's own uploaded document verbatim into the
+// drafter call, instead of only the summarized analysis used elsewhere. Scoped
+// to the caller's case + user; returns null if not found/not owned so callers
+// can fail closed rather than leak another user's file.
+export async function loadAttachmentAsContentBlocks(
+  db: SupabaseClient,
+  attachmentId: string,
+  caseFileId: string,
+  userId: string
+): Promise<{ blocks: AttachmentContentBlock[]; fileName: string } | null> {
+  const { data: attachment } = await db
+    .from("attachments")
+    .select("storage_path, file_type, file_name")
+    .eq("id", attachmentId)
+    .eq("case_file_id", caseFileId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!attachment?.storage_path) return null;
+
+  const { data: fileData, error } = await db.storage
+    .from("case-attachments")
+    .download(attachment.storage_path);
+  if (error || !fileData) {
+    console.error("[attachment-processor] loadAttachmentAsContentBlocks download error:", error);
+    return null;
+  }
+
+  const buffer = Buffer.from(await fileData.arrayBuffer());
+  const blocks = await toAnthropicBlock(buffer, attachment.file_type, attachment.file_name);
+  return { blocks, fileName: attachment.file_name };
+}
+
 // Standard structured-analysis prompt for documents (PDFs, Word, text, etc.).
 function buildDocumentPrompt(fileContext: string): string {
   return `You are analyzing a file attached to an ACP-protected legal case file at Crawford Law PLLC. Produce a concise structured analysis that will be added to the client's Living File.

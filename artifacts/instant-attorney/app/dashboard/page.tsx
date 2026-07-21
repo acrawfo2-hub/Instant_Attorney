@@ -9,6 +9,9 @@ import ConsultStatusCard from "@/components/ConsultStatusCard";
 import AccountMenu from "@/components/AccountMenu";
 import BillingMeter from "@/components/BillingMeter";
 import ConsultCheckoutButton from "@/components/ConsultCheckoutButton";
+import ResumeMatterBanner from "@/components/ResumeMatterBanner";
+import { toMatterSwitcherItem } from "@/lib/matter-switcher";
+import { isPrepMode, jurisdictionNotice } from "@/lib/jurisdiction";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 const MAX_ACTIVE_FILES = 10;
@@ -61,13 +64,21 @@ async function getData() {
       .maybeSingle(),
     db
       .from("profiles")
-      .select("full_name, email")
+      .select("full_name, email, account_type, is_attorney, home_state")
       .eq("id", userId)
       .maybeSingle(),
   ]);
 
+  // The reviewing attorney belongs on his review queue, never the client
+  // dashboard — bounce before the subscription check even runs (he isn't a
+  // paying subscriber). Defense in depth: /login already routes him straight
+  // to /attorney, this only matters for a direct nav or a stale bookmark.
+  if (!BYPASS_AUTH && profileRow?.is_attorney) {
+    redirect("/attorney");
+  }
+
   if (!BYPASS_AUTH && (!subRow || !["active", "trialing", "bypass"].includes(subRow.status ?? ""))) {
-    redirect("/onboarding");
+    redirect(profileRow?.account_type === "attorney_user" ? "/onboarding/attorney" : "/onboarding");
   }
 
   const files = (allFiles ?? []) as CaseFile[];
@@ -84,16 +95,31 @@ async function getData() {
     accountEmail || "Account",
   );
 
-  return { activeFiles, archivedFiles, totalPendingDocs, consult, hasConsultSub, accountName, accountEmail };
+  return { activeFiles, archivedFiles, totalPendingDocs, consult, hasConsultSub, accountName, accountEmail, homeState: profileRow?.home_state ?? null };
 }
 
 export default async function DashboardPage() {
   const hdrs = await headers();
   const isBypass = hdrs.get("x-bypass-auth") === "true" || BYPASS_AUTH;
 
-  const { activeFiles, archivedFiles, totalPendingDocs, consult, hasConsultSub, accountName, accountEmail } = await getData();
+  const { activeFiles, archivedFiles, totalPendingDocs, consult, hasConsultSub, accountName, accountEmail, homeState } = await getData();
   const atLimit = activeFiles.length >= MAX_ACTIVE_FILES;
   const hasFiles = activeFiles.length > 0;
+  const prepMode = isPrepMode(homeState);
+
+  // Single open matter → land on the Living File (Mission Control / Next Step),
+  // not a chat-forward file list. Chat remains the intake surface from inside the file.
+  if (activeFiles.length === 1) {
+    redirect(`/dashboard/${activeFiles[0].id}`);
+  }
+
+  // Prefer files that already have a next step when showing the multi-file grid.
+  const sortedActive = [...activeFiles].sort((a, b) => {
+    const aNext = a.next_action ? 0 : 1;
+    const bNext = b.next_action ? 0 : 1;
+    if (aNext !== bNext) return aNext - bNext;
+    return new Date(b.opened_at).getTime() - new Date(a.opened_at).getTime();
+  });
 
   return (
     <div className="lf-shell">
@@ -107,7 +133,7 @@ export default async function DashboardPage() {
           Instant-Attorney
         </Link>
         <div className="lf-header-center">
-          <span className="lf-header-title">Your Files</span>
+          <span className="lf-header-title">{hasFiles ? "Your matters" : "Your Files"}</span>
         </div>
         <div className="lf-header-right">
           {isBypass && <span className="ob-bypass-badge">Test Mode</span>}
@@ -119,7 +145,7 @@ export default async function DashboardPage() {
         {/* Usage / top-up status + spend-limit controls (hidden for free users) */}
         <BillingMeter />
 
-        {/* Start Here — the chat is the front door to everything */}
+        {/* Start Here — Living File is the product; chat is how you open/continue it */}
         <section className={`dash-start${hasFiles ? " dash-start--compact" : ""}`}>
           {!hasFiles && (
             <div className="dash-start-badge">
@@ -130,13 +156,19 @@ export default async function DashboardPage() {
             </div>
           )}
           <div className="dash-start-body">
-            {!hasFiles && (
+            {!hasFiles ? (
               <>
-                <h2 className="dash-start-title">Start with a conversation</h2>
+                <h2 className="dash-start-title">Open your Living File</h2>
                 <p className="dash-start-sub">
-                  Tell Instant-Attorney what&apos;s going on. We&apos;ll open your file, gather the
-                  facts, surface the gaps, and map your next steps. <strong>Everything begins here</strong> —
-                  the tools further down are optional and you don&apos;t need them to start.
+                  A short conversation builds your file — facts, gaps, strategy, and a clear next step.
+                  The chat is intake; <strong>your Living File is the product</strong>.
+                </p>
+              </>
+            ) : (
+              <>
+                <h2 className="dash-start-title dash-start-title--compact">Pick up where you left off</h2>
+                <p className="dash-start-sub dash-start-sub--compact">
+                  Open a Living File to see your next step, open gaps, and documents. Chat is available inside each file when you need to add facts.
                 </p>
               </>
             )}
@@ -150,7 +182,7 @@ export default async function DashboardPage() {
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
                   </svg>
-                  {hasFiles ? "Create New File" : "Start Your File"}
+                  {hasFiles ? "Open another matter" : "Start Your Living File"}
                 </Link>
               )}
               <Link href="/chat?type=quick_consult" className="dash-btn dash-btn-secondary">
@@ -191,6 +223,15 @@ export default async function DashboardPage() {
 
         {/* Self-service tools — optional, collapsed once the client has a file so
             the file's strategy / gaps / next steps stay front and center. */}
+        {prepMode && (
+          <div className="ob-jurisdiction-banner" role="status" style={{ marginBottom: 16 }}>
+            {jurisdictionNotice(homeState)}
+            <p className="ob-jurisdiction-banner-sub">
+              Texas-specific calculators below are labeled for reference only — they are not
+              authoritative for your state. Prefer your Living File Prep handoff.
+            </p>
+          </div>
+        )}
         <details className="dash-toolbox" {...(!hasFiles ? { open: true } : {})}>
           <summary className="dash-toolbox-summary">
             <span className="dash-toolbox-summary-main">
@@ -381,6 +422,10 @@ export default async function DashboardPage() {
           <ConsultStatusCard consult={consult} />
         )}
 
+        {sortedActive.length >= 2 && (
+          <ResumeMatterBanner matters={sortedActive.map(toMatterSwitcherItem)} />
+        )}
+
         {/* Active files */}
         {activeFiles.length === 0 ? (
           <div className="dash-empty">
@@ -402,7 +447,7 @@ export default async function DashboardPage() {
           </div>
         ) : (
           <div className="dash-file-grid">
-            {activeFiles.map((f) => (
+            {sortedActive.map((f) => (
               <CaseFileCard key={f.id} file={f} mode="active" />
             ))}
           </div>

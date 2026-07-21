@@ -13,6 +13,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { DRAFTER_SYSTEM_PROMPT, WIZARD_FIELD_HINTS, buildFileContext } from "@/lib/prompts";
 import { parseAndUpdateFile, extractDraftText, syncDraftGapsToLivingFile, isCompleteFileUpdate } from "@/lib/file-parser";
 import { stampFactsSynced, isValidWizardType } from "@/lib/document-utils";
+import { loadAttachmentAsContentBlocks } from "@/lib/attachment-processor";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
 import { getBillingGate } from "@/lib/topup";
 import { BYPASS_USER_ID, WIZARD_LABELS } from "@/lib/types";
@@ -164,6 +165,28 @@ export async function POST(
     ? `Please draft a ${instrument} based on my Living File.`
     : `Please draft a ${documentLabel} based on my Living File. Document type: ${wizardType}`;
 
+  // "Improve My Draft" documents were built from the client's own uploaded
+  // file — re-include it here so a regeneration keeps improving that same
+  // document instead of silently falling back to a from-scratch redraft.
+  let regenerateMessage: Anthropic.MessageParam = { role: "user", content: initMsg };
+  if (wizardType === "improve_draft") {
+    const baseAttachmentId = (doc.content_json as Record<string, unknown> | null)?.base_attachment_id as
+      | string
+      | undefined;
+    if (baseAttachmentId) {
+      const loaded = await loadAttachmentAsContentBlocks(writeDb, baseAttachmentId, caseFileId, userId);
+      if (loaded) {
+        regenerateMessage = {
+          role: "user",
+          content: [
+            ...(loaded.blocks as (Anthropic.ImageBlockParam | Anthropic.DocumentBlockParam | Anthropic.TextBlockParam)[]),
+            { type: "text" as const, text: `Uploaded file: ${loaded.fileName}\n\n${initMsg}` },
+          ],
+        };
+      }
+    }
+  }
+
   // Stream server-side then assemble — the SDK refuses non-streaming requests
   // whose max_tokens risks a >10-min response (our 64k ceiling), and we never
   // pass SSE through Replit's proxy. Return a single JSON payload.
@@ -181,7 +204,7 @@ export async function POST(
         },
         { type: "text" as const, text: fileContext },
       ],
-      messages: [{ role: "user" as const, content: initMsg }],
+      messages: [regenerateMessage],
     });
     message = await stream.finalMessage();
   } catch (err) {

@@ -1,5 +1,5 @@
 -- Instant Attorney — Schema verification
--- Run AFTER all migration stages (schema.sql through schema-stage7.sql).
+-- Run AFTER all migration stages (schema.sql through schema-stage37-home-state.sql).
 -- Every row should show status = OK.
 
 select 'profiles' as object, case when exists (
@@ -105,5 +105,47 @@ union all select 'fact_items.kind', case when exists (
 union all select 'documents.facts_synced_at', case when exists (
   select 1 from information_schema.columns
   where table_schema = 'public' and table_name = 'documents' and column_name = 'facts_synced_at'
+) then 'OK' else 'MISSING' end
+union all select 'consult_notes', case when exists (
+  select 1 from information_schema.tables where table_schema = 'public' and table_name = 'consult_notes'
+) then 'OK' else 'MISSING' end
+union all select 'consult_recordings', case when exists (
+  select 1 from information_schema.tables where table_schema = 'public' and table_name = 'consult_recordings'
+) then 'OK' else 'MISSING' end
+union all select 'consult_requests.session_started_at', case when exists (
+  select 1 from information_schema.columns
+  where table_schema = 'public' and table_name = 'consult_requests' and column_name = 'session_started_at'
+) then 'OK' else 'MISSING' end
+union all select 'consult_requests.recording_consent_at', case when exists (
+  select 1 from information_schema.columns
+  where table_schema = 'public' and table_name = 'consult_requests' and column_name = 'recording_consent_at'
+) then 'OK' else 'MISSING' end
+union all select 'case_brainstorm_messages', case when exists (
+  select 1 from information_schema.tables where table_schema = 'public' and table_name = 'case_brainstorm_messages'
+) then 'OK' else 'MISSING' end
+union all select 'document_comments', case when exists (
+  select 1 from information_schema.tables where table_schema = 'public' and table_name = 'document_comments'
+) then 'OK' else 'MISSING' end
+union all select 'case_messages', case when exists (
+  select 1 from information_schema.tables where table_schema = 'public' and table_name = 'case_messages'
+) then 'OK' else 'MISSING' end
+union all select 'attorney_subscriber_agreements', case when exists (
+  select 1 from information_schema.tables where table_schema = 'public' and table_name = 'attorney_subscriber_agreements'
+) then 'OK' else 'MISSING' end
+union all select 'profiles.account_type', case when exists (
+  select 1 from information_schema.columns
+  where table_schema = 'public' and table_name = 'profiles' and column_name = 'account_type'
+) then 'OK' else 'MISSING' end
+union all select 'profiles.home_state', case when exists (
+  select 1 from information_schema.columns
+  where table_schema = 'public' and table_name = 'profiles' and column_name = 'home_state'
+) then 'OK' else 'MISSING' end
+union all select 'form_instruments.pdf_status', case when exists (
+  select 1 from information_schema.columns
+  where table_schema = 'public' and table_name = 'form_instruments' and column_name = 'pdf_status'
+) then 'OK' else 'MISSING' end
+union all select 'case_files.counsel_intake_at', case when exists (
+  select 1 from information_schema.columns
+  where table_schema = 'public' and table_name = 'case_files' and column_name = 'counsel_intake_at'
 ) then 'OK' else 'MISSING' end
 order by object;

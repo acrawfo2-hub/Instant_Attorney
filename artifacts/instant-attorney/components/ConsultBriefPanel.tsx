@@ -129,6 +129,13 @@ export default function ConsultBriefPanel({
         <Link href={`/attorney/file/${caseFileId}`} className="cb-full-file-link">
           Full file →
         </Link>
+        <Link
+          href={`/attorney/file/${caseFileId}/brief-pack${consultId ? `?consultId=${encodeURIComponent(consultId)}` : ""}`}
+          className="cb-brief-pack-link"
+          title="Living File + gaps + drafts + attachments — print or save as PDF"
+        >
+          Brief pack ↗
+        </Link>
       </div>
 
       {expanded && (

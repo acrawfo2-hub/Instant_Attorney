@@ -14,6 +14,7 @@ import {
 } from "docx";
 import type { CaseFile, DocumentStatus, FactItem, Profile, WizardType } from "./types";
 import { placeholderFields } from "./wizard-parsing";
+import { isFullDepthState, jurisdictionFromCaseFileText, prepModeWatermarkDetail } from "./jurisdiction.ts";
 
 // Build a safe Content-Disposition value for a .docx download. HTTP headers must
 // be Latin-1, but document titles routinely contain em-dashes ("— Revised Draft")
@@ -139,9 +140,17 @@ const DRAFT_BANNER_HEADLINE = "DRAFT — NOT REVIEWED OR APPROVED BY AN ATTORNEY
 const DRAFT_BANNER_DETAIL =
   "Do not file, sign, serve, or rely on this document until a licensed attorney approves it.";
 
+function draftBannerDetail(jurisdiction?: string | null): string {
+  const raw = jurisdiction?.trim() || null;
+  if (!raw || /unconfirmed/i.test(raw)) return DRAFT_BANNER_DETAIL;
+  const code = jurisdictionFromCaseFileText(raw);
+  if (isFullDepthState(code) || /^texas$|^tx$/i.test(raw)) return DRAFT_BANNER_DETAIL;
+  return prepModeWatermarkDetail(code ?? raw);
+}
+
 // Repeating per-page header banner for pre-review drafts. Lives in the page
 // margin, so it prints on every page above the body content.
-function draftWatermarkHeader(): Header {
+function draftWatermarkHeader(jurisdiction?: string | null): Header {
   return new Header({
     children: [
       new Paragraph({
@@ -149,7 +158,7 @@ function draftWatermarkHeader(): Header {
         alignment: AlignmentType.CENTER,
       }),
       new Paragraph({
-        children: [new TextRun({ text: DRAFT_BANNER_DETAIL, italics: true, color: "CC0000", size: 16 })],
+        children: [new TextRun({ text: draftBannerDetail(jurisdiction), italics: true, color: "CC0000", size: 16 })],
         alignment: AlignmentType.CENTER,
         border: { bottom: { style: BorderStyle.SINGLE, size: 1, color: "CC0000" } },
       }),
@@ -158,8 +167,11 @@ function draftWatermarkHeader(): Header {
 }
 
 // Section `headers` entry for a draft, or undefined once approved (no watermark).
-function draftSectionHeaders(approved: boolean): { default: Header } | undefined {
-  return approved ? undefined : { default: draftWatermarkHeader() };
+function draftSectionHeaders(
+  approved: boolean,
+  jurisdiction?: string | null,
+): { default: Header } | undefined {
+  return approved ? undefined : { default: draftWatermarkHeader(jurisdiction) };
 }
 
 // Closing footer line for a pre-review draft. Returns nothing once approved.
@@ -174,7 +186,7 @@ function draftFooterParagraphs(approved: boolean, jurisdiction?: string | null):
     new Paragraph({
       children: [
         new TextRun({
-          text: `${DRAFT_BANNER_HEADLINE} · ${DRAFT_BANNER_DETAIL} · Crawford Law PLLC · ${new Date().toLocaleDateString()} · ${jurisdiction ?? "TX"}`,
+          text: `${DRAFT_BANNER_HEADLINE} · ${draftBannerDetail(jurisdiction)} · Crawford Law PLLC · ${new Date().toLocaleDateString()} · ${jurisdiction ?? "TX"}`,
           bold: true,
           size: 16,
           color: "CC0000",
@@ -767,9 +779,14 @@ export async function generateDocxFromText(
   // Drives the pre-review watermark. Anything other than an attorney-approved
   // status (including a null/unknown status) is treated as a pre-review draft and
   // is watermarked — fail safe, never silently un-watermarked.
-  status: DocumentStatus | null = null
+  status: DocumentStatus | null = null,
+  // True when the document belongs to an attorney-user account: they are the
+  // reviewing attorney for their own client's matter, so the "not reviewed by
+  // an attorney" watermark (which implies Andrew Crawford should review it)
+  // is simply the wrong message. Never gates any other behavior.
+  isAttorneyUserDoc = false
 ): Promise<Buffer> {
-  const approved = isAttorneyApproved(status);
+  const approved = isAttorneyApproved(status) || isAttorneyUserDoc;
   const lines = draftText.split("\n");
 
   const children: (Paragraph | Table)[] = [
@@ -861,7 +878,7 @@ export async function generateDocxFromText(
   children.push(...draftFooterParagraphs(approved, caseFile?.jurisdiction));
 
   const doc = new Document({
-    sections: [{ headers: draftSectionHeaders(approved), children }],
+    sections: [{ headers: draftSectionHeaders(approved, caseFile?.jurisdiction), children }],
   });
   return pack(doc);
 }

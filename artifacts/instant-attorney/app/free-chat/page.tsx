@@ -5,6 +5,13 @@ import { useRouter } from "next/navigation";
 import { getPracticeArea } from "@/lib/practice-areas";
 import { detectFinancialDisclosure, freeChatFinanceNotice } from "@/lib/financial-disclosure-detector";
 import { detectExistingCounselMention, freeChatExistingCounselNotice } from "@/lib/existing-counsel";
+import {
+  US_STATE_OPTIONS,
+  isLicensedState,
+  jurisdictionNotice,
+} from "@/lib/jurisdiction";
+
+const JURISDICTION_KEY = "ia_free_chat_home_state";
 
 type Role = "user" | "assistant";
 
@@ -76,16 +83,30 @@ export default function FreeChatPage() {
   const [input, setInput] = useState("");
   const [financeNotice, setFinanceNotice] = useState(false);
   const [counselNotice, setCounselNotice] = useState(false);
+  const [homeState, setHomeState] = useState<string | null>(null);
+  const [jurisdictionReady, setJurisdictionReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [streamingText, setStreamingText] = useState("");
   const [chatTruncated, setChatTruncated] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const exchangeCount = messages.filter((m) => m.role === "user").length;
+  const jurisdictionMsg = jurisdictionNotice(homeState);
+  const outOfLane = !!homeState && !isLicensedState(homeState);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamingText]);
+
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(JURISDICTION_KEY);
+      if (saved) setHomeState(saved);
+    } catch {
+      /* ignore */
+    }
+    setJurisdictionReady(true);
+  }, []);
 
   // Tailor the opening message to the practice area the user arrived from
   // (/free-chat?area=hoa, etc.). Read after mount so server and first client
@@ -103,6 +124,15 @@ export default function FreeChatPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  function chooseState(code: string) {
+    setHomeState(code);
+    try {
+      sessionStorage.setItem(JURISDICTION_KEY, code);
+    } catch {
+      /* ignore */
+    }
+  }
+
   function autoResize() {
     const el = textareaRef.current;
     if (!el) return;
@@ -113,7 +143,7 @@ export default function FreeChatPage() {
   async function sendMessage(e: FormEvent) {
     e.preventDefault();
     const text = input.trim();
-    if (!text || loading) return;
+    if (!text || loading || !homeState) return;
 
     // Non-blocking nudge: this free chat isn't privileged, so keep detailed
     // finances out of it. We never stop the send — just surface a gentle notice.
@@ -138,6 +168,7 @@ export default function FreeChatPage() {
             role: m.role,
             content: m.content,
           })),
+          homeState,
         }),
       });
 
@@ -225,6 +256,38 @@ export default function FreeChatPage() {
         </svg>
         General legal information only — not legal advice. No attorney-client relationship or privilege applies to this conversation.
       </div>
+
+      {jurisdictionReady && !homeState && (
+        <div className="fc-jurisdiction-gate" role="dialog" aria-label="Select your state">
+          <p className="fc-jurisdiction-title">Where is your matter primarily located?</p>
+          <p className="fc-jurisdiction-sub">
+            Full Instant Attorney depth is built for Texas. Other states use Local Counsel Prep —
+            we help you organize your file and hand off to a lawyer licensed where you are.
+          </p>
+          <select
+            className="fc-jurisdiction-select"
+            defaultValue=""
+            onChange={(e) => {
+              if (e.target.value) chooseState(e.target.value);
+            }}
+          >
+            <option value="" disabled>
+              Select a state…
+            </option>
+            {US_STATE_OPTIONS.map((s) => (
+              <option key={s.code} value={s.code}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {homeState && jurisdictionMsg && (
+        <div className={`fc-jurisdiction-banner${outOfLane ? " fc-jurisdiction-banner--warn" : ""}`} role="status">
+          {jurisdictionMsg}
+        </div>
+      )}
 
       {/* MESSAGES */}
       <main className="fc-messages">
@@ -391,12 +454,12 @@ export default function FreeChatPage() {
             }}
             onKeyDown={handleKeyDown}
             rows={1}
-            disabled={loading}
+            disabled={loading || !homeState}
           />
           <button
             type="submit"
             className="fc-send-btn"
-            disabled={loading || !input.trim()}
+            disabled={loading || !input.trim() || !homeState}
             aria-label="Send"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

@@ -10,6 +10,7 @@ import {
   type DebtSituation,
 } from "@/lib/debt-collection-rights";
 import { getDebtInstrument } from "@/lib/debt-instruments";
+import StatuteChips from "@/components/StatuteChips";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Know Your Debt-Collection Rights — a free, informational tool. Pure client
@@ -104,6 +105,12 @@ function RightsTool() {
                 <li key={i} style={{ marginBottom: 6 }}>{r}</li>
               ))}
             </ul>
+
+            {guidance.relevant_statutes.length > 0 && (
+              <div style={{ margin: "14px 0 4px" }}>
+                <StatuteChips keys={guidance.relevant_statutes} label="Read the governing law" />
+              </div>
+            )}
 
             <h3 style={sectionLabel}>What you can do</h3>
             <ol style={{ ...listStyle, paddingLeft: 18 }}>

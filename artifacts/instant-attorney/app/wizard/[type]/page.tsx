@@ -73,7 +73,41 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  // Attorney-users draft for their own clients and are the reviewing attorney
+  // themselves — they never submit into Andrew Crawford's review queue.
+  const [isAttorneyUser, setIsAttorneyUser] = useState(false);
+  // Free-form "ask for a change" chat, available once a draft exists — this is
+  // the only way to keep editing once the checklist has no remaining blanks.
+  const [chatInput, setChatInput] = useState("");
   const didInitRef = useRef(false);
+
+  useEffect(() => {
+    let active = true;
+    // Determines whether this session gets the attorney persona at all
+    // (submit-vs-download flow, surgical vs full-rewrite edits) — a
+    // transient failure here must not silently strand a real attorney-user
+    // on the client-facing flow for the whole session, so retry a few times
+    // before giving up.
+    async function loadAccountType() {
+      for (let attempt = 0; attempt < 3 && active; attempt++) {
+        try {
+          const r = await fetch("/api/account/profile");
+          if (r.ok) {
+            const data = await r.json();
+            if (active && data?.account_type === "attorney_user") setIsAttorneyUser(true);
+            return;
+          }
+        } catch {
+          // fall through to retry
+        }
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+      }
+    }
+    loadAccountType();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Guided checklist: per-field answers + "anything else" note + update feedback
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -92,6 +126,17 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   // Document Review needs a real uploaded document; when none exists this gates
   // generation and shows an "upload first" screen instead of drafting.
   const [docReviewGated, setDocReviewGated] = useState(false);
+  // Improve My Draft needs the client's own uploaded document as the base to
+  // improve. Gates generation until one is picked or uploaded inline.
+  const [improveDraftGated, setImproveDraftGated] = useState(false);
+  const [existingDraftAttachments, setExistingDraftAttachments] = useState<{ id: string; file_name: string }[]>([]);
+  const [improveUploading, setImproveUploading] = useState(false);
+  const [improveUploadError, setImproveUploadError] = useState("");
+  const [improveDragOver, setImproveDragOver] = useState(false);
+  // The attachment id feeding the current "Improve My Draft" generation. A ref
+  // (not state) because runDrafter's fetch body reads it synchronously.
+  const baseAttachmentIdRef = useRef<string>("");
+  const improveFileInputRef = useRef<HTMLInputElement>(null);
   // Staged starter answers to fold in once the first draft is ready: those that
   // map to a unique placeholder are filled deterministically; the rest go to one
   // model refine pass. Captured at save time because runDrafter clears the form.
@@ -206,6 +251,25 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
       } catch {
         // If the check fails, fall through to normal generation rather than blocking.
       }
+    }
+
+    // 2c) Improve My Draft needs the client's own uploaded document as the base
+    //     to improve. Gate generation and let them pick an existing upload or
+    //     add a new one inline — never draft from a blank page for this type.
+    if (wizardType === "improve_draft" && caseFileId) {
+      try {
+        const res = await fetch(`/api/attachments?caseFileId=${encodeURIComponent(caseFileId)}`);
+        if (res.ok) {
+          const data = await res.json();
+          const docs = ((data.attachments ?? []) as { id: string; file_name: string; status: string; attachment_type: string }[])
+            .filter((a) => a.status === "ready" && a.attachment_type !== "screenshot");
+          setExistingDraftAttachments(docs);
+        }
+      } catch {
+        // If the lookup fails, the uploader is still shown — just no quick picks.
+      }
+      setImproveDraftGated(true);
+      return;
     }
 
     // 3) Generate the draft live now, and surface starter questions immediately so
@@ -328,6 +392,51 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
     setError("");
   }
 
+  // Kick off "Improve My Draft" generation now that a base attachment (existing
+  // or freshly uploaded) has been chosen. No starter questions for this type —
+  // the uploaded document itself is the input.
+  async function startImproveDraft(attachmentId: string) {
+    baseAttachmentIdRef.current = attachmentId;
+    setImproveDraftGated(false);
+    await runDrafter([], true);
+  }
+
+  async function uploadImproveDraftFile(file: File) {
+    setImproveUploadError("");
+    setImproveUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("caseFileId", caseFileId);
+      form.append("analyze", "true");
+      const res = await fetch("/api/attachments/upload", { method: "POST", body: form });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setImproveUploadError(data.error ?? "Upload failed");
+        return;
+      }
+      const data = await res.json();
+      await startImproveDraft(data.id);
+    } catch {
+      setImproveUploadError("Upload failed — please try again");
+    } finally {
+      setImproveUploading(false);
+    }
+  }
+
+  function handleImproveFileInput(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (file) uploadImproveDraftFile(file);
+  }
+
+  function handleImproveDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setImproveDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) uploadImproveDraftFile(file);
+  }
+
   async function runDrafter(history: Message[], isInit = false): Promise<boolean> {
     abortRef.current?.abort();
     const abort = new AbortController();
@@ -357,6 +466,8 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
           wizardType,
           documentId: documentId || undefined,
           instrument: instrumentParam || undefined,
+          baseAttachmentId: wizardType === "improve_draft" ? (baseAttachmentIdRef.current || undefined) : undefined,
+          isInit,
         }),
         signal: abort.signal,
       });
@@ -485,7 +596,30 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
       // round of questions, update the draft AND send it straight to the
       // attorney (placeholders and all). Previously answers only saved a local
       // "draft" the client had to separately submit — so progress looked lost.
-      await submitToAttorney();
+      // Attorney-users are the reviewing attorney for their own client's
+      // matter — there is no one to submit to, so just leave the draft updated.
+      if (!isAttorneyUser) {
+        await submitToAttorney();
+      }
+    }
+  }
+
+  // Free-form "ask for a change" edit — the attorney-user path to keep
+  // refining a draft once the checklist has no remaining blanks (or any time
+  // they'd rather just say what they want changed). The server applies a
+  // targeted edit instead of a full regeneration for attorney-user accounts
+  // (see buildDrafterSystemPrompt("attorney") in lib/prompts.ts).
+  async function sendChatEdit() {
+    const text = chatInput.trim();
+    if (!text || streaming) return;
+    setJustUpdated(false);
+    const userMsg: Message = { role: "user", content: text };
+    const ok = await runDrafter([...messages, userMsg], false);
+    // Only clear on success — a failed send (timeout, 502) must never lose
+    // what the attorney typed; runDrafter already surfaces the error via `error`.
+    if (ok) {
+      setChatInput("");
+      setJustUpdated(true);
     }
   }
 
@@ -570,6 +704,80 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
           >
             Go to my file to upload →
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (improveDraftGated) {
+    return (
+      <div className="wiz-shell wiz-shell-v2">
+        <header className="wiz-header">
+          <button className="wiz-back" onClick={() => router.push("/dashboard")}>← Back to File</button>
+          <div className="wiz-title">
+            <span className="wiz-type-pill">{label}</span>
+          </div>
+        </header>
+        <div className="wiz-gate">
+          <div className="wiz-gate-icon">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+            </svg>
+          </div>
+          <h2 className="wiz-gate-title">Upload the draft you want us to improve</h2>
+          <p className="wiz-gate-msg">
+            We&apos;ll read your document and produce a materially better version —
+            tighter language, filled-in facts from your file, and any legal gaps flagged —
+            in the same drafting workspace as every other document.
+          </p>
+
+          {existingDraftAttachments.length > 0 && (
+            <div className="imp-existing-list">
+              {existingDraftAttachments.map((a) => (
+                <button
+                  key={a.id}
+                  className="imp-existing-item"
+                  onClick={() => startImproveDraft(a.id)}
+                  disabled={improveUploading}
+                >
+                  Use “{a.file_name}” →
+                </button>
+              ))}
+            </div>
+          )}
+
+          <input
+            ref={improveFileInputRef}
+            type="file"
+            accept=".pdf,.doc,.docx,.txt,.rtf"
+            style={{ display: "none" }}
+            onChange={handleImproveFileInput}
+          />
+
+          {improveUploading ? (
+            <div className="att-upload-zone att-upload-zone-busy">
+              <span className="att-uploading-msg">Uploading and starting your draft…</span>
+            </div>
+          ) : (
+            <div
+              className={`att-upload-zone${improveDragOver ? " att-upload-zone-over" : ""}`}
+              onDragOver={(e) => { e.preventDefault(); setImproveDragOver(true); }}
+              onDragLeave={() => setImproveDragOver(false)}
+              onDrop={handleImproveDrop}
+              onClick={() => improveFileInputRef.current?.click()}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); improveFileInputRef.current?.click(); } }}
+            >
+              <span className="att-drop-hint">
+                {improveDragOver ? "Drop your file here" : "Drag & drop your draft, or click to add"}
+              </span>
+              <span className="att-upload-hint">PDF, Word, or text · up to 25 MB</span>
+            </div>
+          )}
+
+          {improveUploadError && <p className="att-upload-error">{improveUploadError}</p>}
         </div>
       </div>
     );
@@ -719,7 +927,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
 
                   <div className="wiz-field wiz-field-note">
                     <label className="wiz-field-label" htmlFor="starter-extra">
-                      Anything else the attorney should know? (optional)
+                      {isAttorneyUser ? "Anything else to note? (optional)" : "Anything else the attorney should know? (optional)"}
                     </label>
                     <textarea
                       id="starter-extra"
@@ -761,10 +969,55 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
                 <div className="wiz-reassure" role="note">
                   <span className="wiz-reassure-icon">✓</span>
                   <div>
-                    <strong>It&apos;s okay to leave blanks.</strong> Your draft is ready now. Fill in
-                    what you know, then send it — Andrew Crawford, Esq. will fill in anything that&apos;s
-                    missing and follow up with you about it.
+                    {isAttorneyUser ? (
+                      <><strong>It&apos;s okay to leave blanks.</strong> Your draft is ready now. Fill in what you know, update the draft, and download it whenever you&apos;re ready — any remaining placeholders stay highlighted for you to finish.</>
+                    ) : (
+                      <><strong>It&apos;s okay to leave blanks.</strong> Your draft is ready now. Fill in what you know, then send it — Andrew Crawford, Esq. will fill in anything that&apos;s missing and follow up with you about it.</>
+                    )}
                   </div>
+                </div>
+              )}
+
+              {/* Ask for a change — attorney-user only. A persistent chat, not a
+                  checklist: type what you want changed and get a targeted edit
+                  back, like directing a junior associate. This is the only edit
+                  path once the checklist below has no remaining blanks. */}
+              {currentDraft && isAttorneyUser && (
+                <div className="wiz-chat-edit">
+                  <label className="wiz-field-label" htmlFor="wiz-chat-input">Ask for a change</label>
+                  <p className="wiz-field-hint">
+                    e.g. &quot;Change the notice period to 60 days&quot; or &quot;Add a force majeure clause.&quot;
+                    Only what you ask for changes — everything else stays as-is.
+                  </p>
+                  <div className="wiz-field-input-row">
+                    <textarea
+                      id="wiz-chat-input"
+                      className="wiz-input"
+                      rows={2}
+                      value={chatInput}
+                      disabled={streaming}
+                      placeholder="Type the change you want…"
+                      onChange={(e) => setChatInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          sendChatEdit();
+                        }
+                      }}
+                    />
+                    <VoiceInputButton
+                      compact
+                      disabled={streaming}
+                      onTranscript={(t) => setChatInput((v) => appendDictation(v, t))}
+                    />
+                  </div>
+                  <button
+                    className="wiz-send"
+                    onClick={sendChatEdit}
+                    disabled={streaming || !chatInput.trim()}
+                  >
+                    {streaming ? "Updating draft…" : "Send →"}
+                  </button>
                 </div>
               )}
 
@@ -822,11 +1075,18 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
                   <div className="wiz-checklist-head">
                     <h3 className="wiz-checklist-title">Finish your draft</h3>
                     <p className="wiz-checklist-sub">
-                      Fill in what you know — you don&apos;t have to answer everything.
-                      When you&apos;re done, click <strong>Update Draft &amp; Send to
-                      Attorney</strong>: we&apos;ll update your document and send it
-                      straight to Andrew Crawford, Esq. for review. Anything you leave
-                      blank stays as a highlighted placeholder for him to finalize.
+                      {isAttorneyUser ? (
+                        <>Fill in what you know — you don&apos;t have to answer everything.
+                        When you&apos;re done, click <strong>Update Draft</strong>: we&apos;ll
+                        update your document. Anything you leave blank stays as a highlighted
+                        placeholder for you to finish before you download it.</>
+                      ) : (
+                        <>Fill in what you know — you don&apos;t have to answer everything.
+                        When you&apos;re done, click <strong>Update Draft &amp; Send to
+                        Attorney</strong>: we&apos;ll update your document and send it
+                        straight to Andrew Crawford, Esq. for review. Anything you leave
+                        blank stays as a highlighted placeholder for him to finalize.</>
+                      )}
                     </p>
                     {blockingCount > 0 && (
                       <p className="wiz-checklist-count">
@@ -876,7 +1136,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
 
                   <div className="wiz-field wiz-field-note">
                     <label className="wiz-field-label" htmlFor="fld-extra">
-                      Anything else the attorney should know? (optional)
+                      {isAttorneyUser ? "Anything else to note? (optional)" : "Anything else the attorney should know? (optional)"}
                     </label>
                     <textarea
                       id="fld-extra"
@@ -907,9 +1167,11 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
                       ? "Updating draft…"
                       : submitting
                         ? "Sending to attorney…"
-                        : filledCount > 0
-                          ? `Update Draft & Send to Attorney (${filledCount} answer${filledCount > 1 ? "s" : ""}) →`
-                          : "Update Draft & Send to Attorney →"}
+                        : isAttorneyUser
+                          ? (filledCount > 0 ? `Update Draft (${filledCount} answer${filledCount > 1 ? "s" : ""}) →` : "Update Draft →")
+                          : filledCount > 0
+                            ? `Update Draft & Send to Attorney (${filledCount} answer${filledCount > 1 ? "s" : ""}) →`
+                            : "Update Draft & Send to Attorney →"}
                   </button>
                 </div>
               )}
@@ -919,8 +1181,9 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
                 <div className="wiz-checklist wiz-checklist-complete">
                   <h3 className="wiz-checklist-title">Your draft looks complete</h3>
                   <p className="wiz-checklist-sub">
-                    We didn&apos;t find any remaining blanks. Review the document on the
-                    left, then send it to the attorney below.
+                    {isAttorneyUser
+                      ? "We didn't find any remaining blanks. Review the document on the left, then download it below."
+                      : "We didn't find any remaining blanks. Review the document on the left, then send it to the attorney below."}
                   </p>
                   {justUpdated && <div className="wiz-updated-confirm">Draft updated ✓</div>}
                 </div>
@@ -931,38 +1194,52 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
               {/* Send as-is — for clients who have nothing to add and just want the
                   current draft in front of the attorney right now. If they HAVE
                   typed answers, this routes through handleSubmitAnswers first so
-                  those answers aren't lost. */}
+                  those answers aren't lost. Attorney-users have no attorney to
+                  send to, so they get a simple download prompt instead. */}
               {currentDraft && (
-                <div className="wiz-submit-area">
-                  <div className="wiz-attorney-framing">
-                    <p className="wiz-attorney-lead">Nothing to add?</p>
-                    <p className="wiz-attorney-body">
-                      You can send the current draft to Andrew Crawford, Esq. right
-                      now, exactly as it is. He&apos;ll fill in any highlighted blanks
-                      and follow up with you about anything he needs.
-                    </p>
+                isAttorneyUser ? (
+                  <div className="wiz-submit-area">
+                    <div className="wiz-attorney-framing">
+                      <p className="wiz-attorney-lead">Ready to use?</p>
+                      <p className="wiz-attorney-body">
+                        Download the current draft (.docx) from the button at the top of the
+                        page whenever you&apos;re ready. Any remaining highlighted placeholders
+                        are yours to finish before you use it with your client.
+                      </p>
+                    </div>
                   </div>
-                  <p className="wiz-submit-hint">
-                    {blockingCount > 0
-                      ? `${blockingCount} item${blockingCount > 1 ? "s" : ""} still blank — that's okay, the attorney will follow up on what's needed.`
-                      : "Sending starts the 48-hour attorney review clock."}
-                  </p>
-                  <button
-                    className="wiz-submit-btn"
-                    onClick={hasAnyInput ? handleSubmitAnswers : submitToAttorney}
-                    disabled={submitting || streaming || !documentId}
-                  >
-                    {submitting
-                      ? "Sending…"
-                      : streaming
-                        ? "Working…"
-                        : !documentId
-                          ? "Preparing draft…"
-                          : hasAnyInput
-                            ? "Update Draft & Send to Attorney →"
-                            : "Send Draft to Attorney As-Is →"}
-                  </button>
-                </div>
+                ) : (
+                  <div className="wiz-submit-area">
+                    <div className="wiz-attorney-framing">
+                      <p className="wiz-attorney-lead">Nothing to add?</p>
+                      <p className="wiz-attorney-body">
+                        You can send the current draft to Andrew Crawford, Esq. right
+                        now, exactly as it is. He&apos;ll fill in any highlighted blanks
+                        and follow up with you about anything he needs.
+                      </p>
+                    </div>
+                    <p className="wiz-submit-hint">
+                      {blockingCount > 0
+                        ? `${blockingCount} item${blockingCount > 1 ? "s" : ""} still blank — that's okay, the attorney will follow up on what's needed.`
+                        : "Sending starts the 48-hour attorney review clock."}
+                    </p>
+                    <button
+                      className="wiz-submit-btn"
+                      onClick={hasAnyInput ? handleSubmitAnswers : submitToAttorney}
+                      disabled={submitting || streaming || !documentId}
+                    >
+                      {submitting
+                        ? "Sending…"
+                        : streaming
+                          ? "Working…"
+                          : !documentId
+                            ? "Preparing draft…"
+                            : hasAnyInput
+                              ? "Update Draft & Send to Attorney →"
+                              : "Send Draft to Attorney As-Is →"}
+                    </button>
+                  </div>
+                )
               )}
             </>
           )}

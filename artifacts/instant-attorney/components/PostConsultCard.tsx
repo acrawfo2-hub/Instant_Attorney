@@ -9,6 +9,7 @@ export default function PostConsultCard({
   submittedAt: string | null;
 }) {
   const clientActions = wrapUp.clientActions.filter((a) => a.text.trim());
+  const expectedDocuments = wrapUp.expectedDocuments.filter((a) => a.text.trim());
   const dispositionLabel = wrapUp.disposition
     ? CONSULT_DISPOSITION_LABELS[wrapUp.disposition]
     : null;
@@ -32,6 +33,13 @@ export default function PostConsultCard({
         <p className="lf-post-consult-summary">{wrapUp.consultSummary}</p>
       )}
 
+      {wrapUp.strategyOverview && (
+        <div className="lf-post-consult-strategy">
+          <div className="lf-card-label">Where things stand</div>
+          <p>{wrapUp.strategyOverview}</p>
+        </div>
+      )}
+
       {dispositionLabel && (
         <div className="lf-post-consult-disposition">
           Outcome: <strong>{dispositionLabel}</strong>
@@ -42,6 +50,24 @@ export default function PostConsultCard({
         <div className="lf-post-consult-referral">
           <div className="lf-card-label">Referral</div>
           <p>{wrapUp.referralNotes}</p>
+        </div>
+      )}
+
+      {wrapUp.expectedTimeline && (
+        <div className="lf-post-consult-timeline">
+          <div className="lf-card-label">Expected timeline</div>
+          <p>{wrapUp.expectedTimeline}</p>
+        </div>
+      )}
+
+      {expectedDocuments.length > 0 && (
+        <div className="lf-post-consult-documents">
+          <div className="lf-card-label">Documents to expect</div>
+          <ul className="lf-post-consult-list">
+            {expectedDocuments.map((doc) => (
+              <li key={doc.id}>{doc.text}</li>
+            ))}
+          </ul>
         </div>
       )}
 

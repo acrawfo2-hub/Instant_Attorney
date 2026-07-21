@@ -1,5 +1,15 @@
 export type SubscriptionStatus = "active" | "canceled" | "past_due" | "trialing" | "bypass";
-export type SubscriptionPlan = "phase2" | "consult";
+export type SubscriptionPlan = "phase2" | "consult" | "attorney_pro";
+/**
+ * A profile's persona. `client` is the ordinary lay user. `attorney_user` is
+ * an external/small-firm attorney using the drafting wizards as a
+ * professional tool for their OWN clients' matters — separate from
+ * `Profile.is_attorney`, which means "Andrew Crawford, the firm's own
+ * reviewing attorney" and must never be conflated with this.
+ */
+export type AccountType = "client" | "attorney_user";
+/** Manual-approval gate for attorney_user signups; null for ordinary clients. */
+export type AttorneyUserStatus = "pending" | "approved" | "rejected";
 export type MatterType = "reactive" | "preventive";
 export type CaseStatus = "open" | "closed" | "referred" | "archived";
 export type CaseFileType = "standard" | "quick_consult";
@@ -51,8 +61,14 @@ export interface ConsultActionItem {
 /** Attorney-editable wrap-up form (draft or submitted). */
 export interface ConsultWrapUp {
   consultSummary: string;
+  /** Short overview of the legal strategy and where the matter stands. */
+  strategyOverview: string;
   disposition: ConsultDisposition | "";
   referralNotes: string;
+  /** What happens next and roughly when. */
+  expectedTimeline: string;
+  /** Documents the client should expect to RECEIVE from the firm — not things the client needs to provide (see clientActions for that). */
+  expectedDocuments: ConsultActionItem[];
   clientActions: ConsultActionItem[];
   attorneyActions: ConsultActionItem[];
 }
@@ -82,8 +98,40 @@ export interface ConsultRequest {
   post_consult_plan: ConsultWrapUp | null;
   wrap_up_submitted_at: string | null;
   fee_estimate_draft: ConsultFeeEstimateDraft | null;
+  session_started_at: string | null;
+  session_ended_at: string | null;
+  recording_consent_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/** Timestamped notepad entry kept during a live consult session. Attorney/reviewer only — not client-visible. */
+export interface ConsultNote {
+  id: string;
+  consult_request_id: string;
+  author_id: string | null;
+  body: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ConsultTranscriptStatus = "pending" | "processing" | "ready" | "failed";
+
+/** Audio recording of a consult, transcribed after the call. Attorney/reviewer only — not client-visible. */
+export interface ConsultRecording {
+  id: string;
+  consult_request_id: string;
+  recorded_by: string | null;
+  storage_bucket: string | null;
+  storage_path: string | null;
+  content_sha256: string | null;
+  duration_seconds: number | null;
+  byte_size: number | null;
+  transcript_status: ConsultTranscriptStatus;
+  transcript_text: string | null;
+  transcript_error: string | null;
+  recorded_at: string;
+  transcribed_at: string | null;
 }
 
 // All supported wizard types — add new ones here as wizards are built
@@ -94,7 +142,8 @@ export type WizardType =
   | "draft_waiver"
   | "wills_trusts"
   | "doc_review"
-  | "general_document";
+  | "general_document"
+  | "improve_draft";
 
 /** Child documents created during attorney review (not wizard-generated). */
 export type DerivedDocType = "critical_review" | "second_draft";
@@ -109,12 +158,32 @@ export type DocumentStatus =
   | "changes_requested"
   | "delivered";
 
+export type BrainstormMessageRole = "user" | "assistant";
+
+/** Attorney-only sounding-board chat scoped to a case file. Never client-visible. */
+export interface CaseBrainstormMessage {
+  id: string;
+  case_file_id: string;
+  author_id: string | null;
+  role: BrainstormMessageRole;
+  content: string;
+  /** Set once the attorney has applied this message's proposed Living File/strategy update, if any. */
+  applied_at: string | null;
+  created_at: string;
+}
+
 export interface Profile {
   id: string;
   email: string;
   full_name: string | null;
   phone: string | null;
   is_attorney: boolean;
+  account_type: AccountType;
+  attorney_user_status: AttorneyUserStatus | null;
+  bar_number: string | null;
+  firm_name: string | null;
+  /** US state code (or OTHER) for UPL / jurisdiction notices. */
+  home_state?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -337,6 +406,13 @@ export type GovFormSource = "registry" | "dynamic";
 /** Lifecycle of the grounded lookup for a dynamic form. */
 export type GovFormLookupStatus = "pending" | "ready" | "failed";
 
+/** Lifecycle of an uploaded PDF template: no template yet -> (acroform) field
+ * map awaiting confirmation -> fillable -> (flat) no auto-fill support yet. */
+export type PdfStatus = "needs_template" | "mapping" | "ready" | "unsupported";
+
+/** Detected shape of an uploaded PDF template. */
+export type PdfMode = "acroform" | "flat";
+
 export interface GovFormInstrument {
   id: string;
   case_file_id: string;
@@ -354,6 +430,13 @@ export interface GovFormInstrument {
    * a GovernmentForm; see lib/government-forms.ts. */
   form_def: GovFormDefinition | null;
   lookup_status: GovFormLookupStatus | null;
+  /** Null until the client uploads the official PDF for this form. */
+  pdf_status: PdfStatus | null;
+  pdf_mode: PdfMode | null;
+  /** Storage path in the gov-form-templates bucket. */
+  pdf_template_path: string | null;
+  /** GovFormField.name -> PDF AcroForm field name (acroform templates only). */
+  pdf_field_map: Record<string, string> | null;
   created_at: string;
   updated_at: string;
 }
@@ -492,6 +575,7 @@ export const WIZARD_LABELS: Record<WizardType, string> = {
   wills_trusts: "Wills & Trusts",
   doc_review: "Document Review",
   general_document: "Legal Document",
+  improve_draft: "Improve My Draft",
 };
 
 export const DERIVED_DOC_LABELS: Record<DerivedDocType, string> = {

@@ -113,7 +113,7 @@ export default function MissionControlBoard({ board, caseFileId, mode }: Mission
   const isAttorney = mode === "attorney";
 
   return (
-    <section className={`lf-nextstep lf-nextstep-${hero.tone} mc-board`} aria-label="Mission control">
+    <section id="mission-control" className={`lf-nextstep lf-nextstep-${hero.tone} mc-board`} aria-label="Mission control">
       {!isAttorney && (
         <div className="mc-board-intro">
           <span className="mc-board-intro-title">Generate a legal document for your file and have it reviewed</span>

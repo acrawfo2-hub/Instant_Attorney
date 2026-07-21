@@ -20,8 +20,11 @@ export function newActionId(): string {
 export function emptyWrapUp(): ConsultWrapUp {
   return {
     consultSummary: "",
+    strategyOverview: "",
     disposition: "",
     referralNotes: "",
+    expectedTimeline: "",
+    expectedDocuments: [],
     clientActions: [],
     attorneyActions: [],
   };
@@ -47,8 +50,11 @@ export function normalizeWrapUp(raw: unknown): ConsultWrapUp {
 
   return {
     consultSummary: String(o.consultSummary ?? "").trim(),
+    strategyOverview: String(o.strategyOverview ?? "").trim(),
     disposition: validDispositions.has(disposition) ? (disposition as ConsultDisposition) : "",
     referralNotes: String(o.referralNotes ?? "").trim(),
+    expectedTimeline: String(o.expectedTimeline ?? "").trim(),
+    expectedDocuments: actions(o.expectedDocuments),
     clientActions: actions(o.clientActions),
     attorneyActions: actions(o.attorneyActions),
   };
@@ -93,6 +99,7 @@ export async function applyWrapUpToLivingFile(
 
   const clientActions = wrapUp.clientActions.filter((a) => a.text.trim());
   const attorneyActions = wrapUp.attorneyActions.filter((a) => a.text.trim());
+  const expectedDocuments = wrapUp.expectedDocuments.filter((a) => a.text.trim());
   const firstClientAction = clientActions[0]?.text.trim() ?? null;
 
   const caseUpdates: Record<string, unknown> = {
@@ -126,6 +133,7 @@ export async function applyWrapUpToLivingFile(
     ...wrapUp,
     clientActions,
     attorneyActions,
+    expectedDocuments,
   };
 
   const { data: updated, error } = await db

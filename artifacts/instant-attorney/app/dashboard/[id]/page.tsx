@@ -7,8 +7,10 @@ import type { Document, ConsultRequest, ConsultWrapUp, RequestedAttachment, GovF
 import { normalizeWrapUp } from "@/lib/consult-wrap-up";
 import ClientFileView from "@/components/ClientFileView";
 import AccountMenu from "@/components/AccountMenu";
+import MatterSwitcher from "@/components/MatterSwitcher";
 import { parseRoadmapOverlay } from "@/lib/roadmap-snapshot";
 import type { RoadmapAiOverlay } from "@/lib/roadmap-types";
+import { toMatterSwitcherItem } from "@/lib/matter-switcher";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
@@ -27,7 +29,7 @@ async function getData(caseFileId: string) {
     userId = user.id;
   }
 
-  const [{ data: caseFile }, { data: facts }, { data: documents }, { data: consultRow }, { data: completedConsultRow }, { data: subRow }, { data: requestedRows }, { data: formRows }, { data: attachmentRows }, { data: roadmapSnap }] = await Promise.all([
+  const [{ data: caseFile }, { data: facts }, { data: documents }, { data: consultRow }, { data: completedConsultRow }, { data: subRow }, { data: requestedRows }, { data: formRows }, { data: attachmentRows }, { data: roadmapSnap }, { data: siblingRows }] = await Promise.all([
     db.from("case_files")
       .select("*")
       .eq("id", caseFileId)
@@ -83,6 +85,12 @@ async function getData(caseFileId: string) {
       .select("ai_overlay")
       .eq("case_file_id", caseFileId)
       .maybeSingle(),
+    db
+      .from("case_files")
+      .select("id, title, matter_subtype, matter_type, file_type, next_action, updated_at, status")
+      .eq("user_id", userId)
+      .eq("status", "open")
+      .order("updated_at", { ascending: false }),
   ]);
 
   if (!BYPASS_AUTH && (!subRow || !["active", "trialing", "bypass"].includes(subRow?.status ?? ""))) {
@@ -92,6 +100,22 @@ async function getData(caseFileId: string) {
   if (!caseFile) return null;
 
   const allDocs = (documents ?? []) as Document[];
+  type SiblingRow = {
+    id: string;
+    title: string | null;
+    matter_subtype: string | null;
+    matter_type: string | null;
+    file_type: string | null;
+    next_action: string | null;
+    updated_at: string;
+  };
+  const openMatters = ((siblingRows ?? []) as SiblingRow[]).map(toMatterSwitcherItem);
+
+  // Ensure the current file is always in the switcher list even if the sibling
+  // query raced ahead of a just-opened row.
+  if (!openMatters.some((m) => m.id === caseFileId)) {
+    openMatters.unshift(toMatterSwitcherItem(caseFile as CaseFile));
+  }
 
   return {
     caseFile: caseFile as CaseFile,
@@ -111,6 +135,7 @@ async function getData(caseFileId: string) {
     govForms: (formRows ?? []) as GovFormInstrument[],
     attachments: (attachmentRows ?? []) as Attachment[],
     roadmapOverlay: parseRoadmapOverlay(roadmapSnap?.ai_overlay) as RoadmapAiOverlay,
+    openMatters,
   };
 }
 
@@ -126,11 +151,7 @@ export default async function FileDetailPage({
   const result = await getData(id);
   if (!result) notFound();
 
-  const { caseFile, facts, documents, childDocuments, consultRequest, hasConsultSub, completedConsultWrapUp, completedConsultSubmittedAt, requestedAttachments, govForms, attachments, roadmapOverlay } = result;
-
-  const title = caseFile.title
-    || (caseFile.matter_subtype ? caseFile.matter_subtype.replace(/_/g, " ") : null)
-    || "Your File";
+  const { caseFile, facts, documents, childDocuments, consultRequest, hasConsultSub, completedConsultWrapUp, completedConsultSubmittedAt, requestedAttachments, govForms, attachments, roadmapOverlay, openMatters } = result;
 
   return (
     <div className="lf-shell">
@@ -139,11 +160,11 @@ export default async function FileDetailPage({
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 18 9 12 15 6" />
           </svg>
-          All Files
+          All matters
         </Link>
 
         <div className="lf-header-center">
-          <span className="lf-header-title">{title}</span>
+          <MatterSwitcher currentId={caseFile.id} matters={openMatters} />
           {caseFile.matter_type && (
             <span className="lf-badge">
               {caseFile.matter_type === "reactive" ? "Reactive Matter" : "Preventive Matter"}

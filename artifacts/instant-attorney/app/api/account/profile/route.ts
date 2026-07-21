@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { BYPASS_USER_ID } from "@/lib/types";
+import { normalizeStateCode } from "@/lib/jurisdiction";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
@@ -26,7 +27,7 @@ export async function GET(_req: NextRequest) {
 
   const { data } = await ctx.db
     .from("profiles")
-    .select("full_name, phone, email, is_attorney")
+    .select("full_name, phone, email, is_attorney, account_type, attorney_user_status, bar_number, firm_name, home_state")
     .eq("id", ctx.userId)
     .maybeSingle();
 
@@ -35,6 +36,11 @@ export async function GET(_req: NextRequest) {
     phone: data?.phone ?? "",
     email: data?.email ?? "",
     is_attorney: !!data?.is_attorney,
+    account_type: data?.account_type ?? "client",
+    attorney_user_status: data?.attorney_user_status ?? null,
+    bar_number: data?.bar_number ?? "",
+    firm_name: data?.firm_name ?? "",
+    home_state: data?.home_state ?? "",
   });
 }
 
@@ -47,14 +53,26 @@ export async function POST(req: NextRequest) {
   const ctx = await resolve();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  let body: { full_name?: unknown; phone?: unknown };
+  let body: {
+    full_name?: unknown;
+    phone?: unknown;
+    bar_number?: unknown;
+    firm_name?: unknown;
+    home_state?: unknown;
+  };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const update: { full_name?: string; phone?: string } = {};
+  const update: {
+    full_name?: string;
+    phone?: string;
+    bar_number?: string;
+    firm_name?: string;
+    home_state?: string;
+  } = {};
 
   if (typeof body.full_name === "string") {
     const name = body.full_name.trim();
@@ -83,6 +101,30 @@ export async function POST(req: NextRequest) {
     }
     // Empty string clears the phone; non-empty stores as entered.
     update.phone = phone;
+  }
+
+  if (typeof body.bar_number === "string") {
+    const barNumber = body.bar_number.trim();
+    if (barNumber.length > 40) {
+      return NextResponse.json({ error: "That bar number is too long." }, { status: 400 });
+    }
+    update.bar_number = barNumber;
+  }
+
+  if (typeof body.firm_name === "string") {
+    const firmName = body.firm_name.trim();
+    if (firmName.length > 200) {
+      return NextResponse.json({ error: "That firm name is too long." }, { status: 400 });
+    }
+    update.firm_name = firmName;
+  }
+
+  if (typeof body.home_state === "string") {
+    const normalized = normalizeStateCode(body.home_state);
+    if (!normalized) {
+      return NextResponse.json({ error: "Please select a valid state." }, { status: 400 });
+    }
+    update.home_state = normalized;
   }
 
   if (Object.keys(update).length === 0) {

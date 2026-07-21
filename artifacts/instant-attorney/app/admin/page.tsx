@@ -12,8 +12,11 @@ const FEATURE_LABELS: Record<string, string> = {
   attorney_review: "Attorney review",
   attorney_second_draft_fitness: "Second draft — fitness check",
   attorney_second_draft: "Attorney second draft (Opus)",
+  attorney_chat_edit: "Attorney chat edit",
   attorney_merge: "Attorney merge",
   attorney_pre_consult: "Pre-consult memo",
+  attorney_consult_closeout: "Consult closeout draft",
+  attorney_brainstorm: "Attorney brainstorm chat",
   attachment_analysis: "Attachment analysis",
   chat_acp: "Intake chat",
 };
@@ -123,6 +126,7 @@ export default async function AdminPage() {
           <div className="admin-header-right">
             <span className="admin-name">{personDisplayName(profile)}</span>
             <Link href="/admin/archives" className="admin-link">Archived Matters →</Link>
+            <Link href="/admin/attorney-signups" className="admin-link">Attorney Signups →</Link>
             <Link href="/attorney" className="admin-link">Attorney Dashboard →</Link>
           </div>
         </div>

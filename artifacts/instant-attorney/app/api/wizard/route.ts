@@ -1,9 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { DRAFTER_SYSTEM_PROMPT, WIZARD_FIELD_HINTS, buildFileContext } from "@/lib/prompts";
+import { buildDrafterSystemPrompt, WIZARD_FIELD_HINTS, buildFileContext } from "@/lib/prompts";
 import { parseAndUpdateFile, extractDraftText, syncDraftGapsToLivingFile, isCompleteFileUpdate } from "@/lib/file-parser";
 import { resolveWizardDocumentTarget, stampFactsSynced } from "@/lib/document-utils";
+import { loadAttachmentAsContentBlocks } from "@/lib/attachment-processor";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
 import { getBillingGate } from "@/lib/topup";
 import { BYPASS_USER_ID, WIZARD_LABELS } from "@/lib/types";
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
   if (!body || typeof body !== "object") {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
-  const { messages, caseFileId, wizardType, documentId, instrument, planKey } = body;
+  const { messages, caseFileId, wizardType, documentId, instrument, planKey, baseAttachmentId, isInit } = body;
   const planKeyStr = typeof planKey === "string" && planKey.trim() ? planKey.trim() : undefined;
 
   if (!Array.isArray(messages) || messages.length === 0) {
@@ -112,12 +113,13 @@ export async function POST(req: NextRequest) {
   const writeDb = BYPASS_AUTH ? db : createServiceClient();
 
   // Load current file state — refreshed on every call so answers update the context
-  const [{ data: caseFileRow }, { data: factRows }, { data: attachmentRows }, { data: requestedRows }] =
+  const [{ data: caseFileRow }, { data: factRows }, { data: attachmentRows }, { data: requestedRows }, { data: profileRow }] =
     await Promise.all([
       db.from("case_files").select("*").eq("id", caseFileId).single(),
       db.from("fact_items").select("*").eq("case_file_id", caseFileId),
       db.from("attachments").select("*").eq("case_file_id", caseFileId).eq("status", "ready"),
       db.from("requested_attachments").select("*").eq("case_file_id", caseFileId),
+      db.from("profiles").select("account_type").eq("id", userId).maybeSingle(),
     ]);
 
   const caseFile = caseFileRow as CaseFile | null;
@@ -126,10 +128,60 @@ export async function POST(req: NextRequest) {
   const requestedAttachments = (requestedRows ?? []) as RequestedAttachment[];
   const fileContext = caseFile ? buildFileContext(caseFile, facts, attachments, requestedAttachments) : "";
   const fieldHints = WIZARD_FIELD_HINTS[wizardType as WizardType];
+  // Attorney-users get a targeted-edit follow-up behavior instead of a full
+  // regeneration on every turn — same prompt, different "on follow-up" rule.
+  const drafterPersona = profileRow?.account_type === "attorney_user" ? "attorney" as const : "client" as const;
 
   const documentLabel = (wizardType === "general_document" && instrument)
     ? instrument
     : WIZARD_LABELS[wizardType as WizardType];
+
+  // "Improve My Draft" feeds the client's own uploaded document verbatim into
+  // the initial call, instead of drafting from the Living File alone. Only the
+  // very first call needs this — follow-up turns build on the draft already in
+  // the conversation history via `messages`.
+  let anthropicMessages = sanitizedMessages;
+  if (wizardType === "improve_draft" && isInit && baseAttachmentId) {
+    const loaded = await loadAttachmentAsContentBlocks(writeDb, baseAttachmentId, caseFileId, userId);
+    if (loaded) {
+      const firstUserText = sanitizedMessages[0]?.content ?? "";
+      anthropicMessages = [
+        {
+          role: "user" as const,
+          content: [
+            ...(loaded.blocks as (Anthropic.ImageBlockParam | Anthropic.DocumentBlockParam | Anthropic.TextBlockParam)[]),
+            { type: "text" as const, text: `Uploaded file: ${loaded.fileName}\n\n${firstUserText}` },
+          ],
+        },
+        ...sanitizedMessages.slice(1),
+      ];
+    }
+  }
+
+  // Attorney-persona follow-ups: the drafter always re-renders the complete
+  // document on every turn, so resending the full conversation history means
+  // every prior assistant turn's full-document text gets resent again on
+  // every subsequent call — O(turns^2 * document size) input tokens over a
+  // multi-turn editing session. Since the saved draft already reflects every
+  // earlier edit, we don't need the history at all: send just the latest
+  // instruction, with the CURRENT saved draft injected fresh into the system
+  // prompt each call (same approach as the attorney chat-edit route).
+  let currentDraftContext = "";
+  if (drafterPersona === "attorney" && !isInit && documentId) {
+    const lastMsg = sanitizedMessages[sanitizedMessages.length - 1];
+    if (lastMsg?.role === "user") {
+      const { data: currentDoc } = await writeDb
+        .from("documents")
+        .select("draft_text")
+        .eq("id", documentId)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (currentDoc?.draft_text) {
+        currentDraftContext = `\n\n---CURRENT DRAFT (apply the requested change to this exact text)---\n${currentDoc.draft_text}\n---END CURRENT DRAFT---`;
+        anthropicMessages = [lastMsg];
+      }
+    }
+  }
 
   // Stream server-side, then assemble the full message before responding.
   // Why streaming: the SDK refuses a *non-streaming* request whose max_tokens is
@@ -146,7 +198,7 @@ export async function POST(req: NextRequest) {
       system: [
         {
           type: "text" as const,
-          text: DRAFTER_SYSTEM_PROMPT,
+          text: buildDrafterSystemPrompt(drafterPersona),
         },
         {
           type: "text" as const,
@@ -155,10 +207,10 @@ export async function POST(req: NextRequest) {
         },
         {
           type: "text" as const,
-          text: fileContext,
+          text: fileContext + currentDraftContext,
         },
       ],
-      messages: sanitizedMessages,
+      messages: anthropicMessages,
     });
     message = await stream.finalMessage();
   } catch (err) {
@@ -275,6 +327,7 @@ export async function POST(req: NextRequest) {
             init_response: fullResponse,
             ...(truncated ? { truncated: true } : {}),
             ...(planKeyStr ? { plan_key: planKeyStr } : {}),
+            ...(wizardType === "improve_draft" && baseAttachmentId ? { base_attachment_id: baseAttachmentId } : {}),
           },
           draft_text: draftText,
           status: "draft",

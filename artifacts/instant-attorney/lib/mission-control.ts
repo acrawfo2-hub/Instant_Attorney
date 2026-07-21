@@ -9,6 +9,13 @@ import type {
 } from "./types.ts";
 import { WIZARD_LABELS, coerceWizardType } from "./types.ts";
 import { computeNextStep, type NextStepGuide } from "./next-step.ts";
+import {
+  isPrepMode,
+  jurisdictionFromCaseFileText,
+  prepModeBadgeLabel,
+  stateBarReferralUrl,
+  stateName,
+} from "./jurisdiction.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mission Control — ranked open actions on top of the Living File.
@@ -128,6 +135,39 @@ export function computeMissionControl(input: MissionControlInput): MissionContro
 
   const actions: MissionAction[] = [];
 
+  // ── Tier 0 Prep: Local counsel handoff for non-Texas matters ────────────────
+  const matterState =
+    jurisdictionFromCaseFileText(caseFile.jurisdiction) ??
+    (caseFile.jurisdiction && !/unconfirmed/i.test(caseFile.jurisdiction)
+      ? caseFile.jurisdiction
+      : null);
+  const prep = isPrepMode(matterState) || isPrepMode(caseFile.jurisdiction);
+  if (!isAttorney && prep) {
+    const name = stateName(matterState ?? caseFile.jurisdiction);
+    actions.push({
+      id: "prep:local-counsel",
+      kind: "consult",
+      status: "open",
+      priority: 1,
+      title: `Prepare your handoff to a ${name}-licensed attorney`,
+      reason: prepModeBadgeLabel(matterState ?? caseFile.jurisdiction),
+      cta: {
+        label: "Find local counsel →",
+        href: stateBarReferralUrl(matterState ?? caseFile.jurisdiction),
+      },
+      jumpTo: "#mission-control",
+    });
+    actions.push({
+      id: "prep:brief",
+      kind: "chat",
+      status: "open",
+      priority: 2,
+      title: "Continue organizing your Prep file",
+      reason: "Facts, timeline, and questions for local counsel — not Texas-depth advice",
+      cta: { label: "Continue intake →", href: `/chat?caseFileId=${id}` },
+    });
+  }
+
   // ── Tier 0a: Existing-counsel intake incomplete ─────────────────────────────
   if (!isAttorney && !caseFile.counsel_intake_at) {
     actions.push({
@@ -174,21 +214,24 @@ export function computeMissionControl(input: MissionControlInput): MissionContro
   }
 
   // ── Tier 0: Post-consult client action items ────────────────────────────────
+  // Close the loop: every wrap-up to-do gets a concrete CTA into the Living File
+  // (uploads → attachments; everything else → continue intake chat or Mission Control).
   for (const [i, item] of consultClientActions.entries()) {
     if (!item.text.trim()) continue;
+    const isDoc = item.kind === "document";
     actions.push({
       id: `consult-action:${item.id}`,
-      kind: item.kind === "document" ? "upload" : "consult",
+      kind: isDoc ? "upload" : "chat",
       status: "open",
       priority: 3 + i,
       title: item.text.trim(),
       reason: "From your consult with Andrew Crawford, Esq.",
       cta: isAttorney
         ? undefined
-        : item.kind === "document"
+        : isDoc
           ? { label: "Upload →", href: "#attachments" }
-          : undefined,
-      jumpTo: item.kind === "document" ? "#attachments" : undefined,
+          : { label: "Continue →", href: `/chat?caseFileId=${id}` },
+      jumpTo: isDoc ? "#attachments" : "#mission-control",
     });
   }
   const canCreate =
