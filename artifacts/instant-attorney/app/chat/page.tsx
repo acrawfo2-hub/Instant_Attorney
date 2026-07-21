@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback, FormEvent, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { IntakeMessage, WIZARD_LABELS, LegalStrategy } from "@/lib/types";
+import { IntakeMessage, WIZARD_LABELS, LegalStrategy, ChatMode } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
 import QuickConsultModal from "@/components/QuickConsultModal";
 import ExistingCounselModal from "@/components/ExistingCounselModal";
@@ -31,7 +31,18 @@ const INITIAL_MESSAGE: Msg = {
     "Welcome — this is your privileged Phase II intake channel, protected by the Crawford Law representation agreement you've signed.\n\nEverything you share here is confidential and covered by attorney-client privilege. I'll be building your Living File as we talk, so please share as much or as little as you're comfortable with right now.\n\nWhat's going on? Tell me about your situation.",
 };
 
-const MAX_INLINE_BYTES = 4 * 1024 * 1024; // 4 MB for inline screenshots
+const MAX_INLINE_BYTES = 4 * 1024 * 1024; // 4 MB for inline screenshots (intake)
+const MAX_FREESTYLE_BYTES = 10 * 1024 * 1024; // 10 MB for freestyle document attachments
+
+// Freestyle accepts documents too, not just screenshots — the chat-acp backend
+// already turns PDFs, Word docs, and text files into Anthropic content blocks.
+const FREESTYLE_ATTACH_TYPES = new Set([
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/msword",
+  "text/plain", "text/markdown", "text/csv", "text/html",
+  "application/json", "application/rtf", "text/rtf",
+]);
 
 function renderContent(text: string) {
   const lines = text.split("\n");
@@ -129,6 +140,9 @@ function AcpChatInner() {
   const isQuickConsult = searchParams.get("type") === "quick_consult";
 
   const [messages, setMessages] = useState<Msg[]>([INITIAL_MESSAGE]);
+  const [mode, setMode] = useState<ChatMode>(
+    searchParams.get("mode") === "freestyle" ? "freestyle" : "intake"
+  );
   const [caseFileId, setCaseFileId] = useState<string | null>(urlCaseFileId);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -168,7 +182,7 @@ function AcpChatInner() {
     let cancelled = false;
     (async () => {
       const supabase = createClient();
-      const [{ data: msgs }, { data: atts }] = await Promise.all([
+      const [{ data: msgs }, { data: atts }, { data: cf }] = await Promise.all([
         supabase
           .from("intake_messages")
           .select("id, role, content, created_at")
@@ -180,8 +194,18 @@ function AcpChatInner() {
           .eq("case_file_id", urlCaseFileId)
           .eq("attachment_type", "screenshot")
           .not("message_id", "is", null),
+        supabase
+          .from("case_files")
+          .select("chat_mode")
+          .eq("id", urlCaseFileId)
+          .maybeSingle(),
       ]);
-      if (cancelled || !msgs?.length) return;
+      if (cancelled) return;
+      // Resume the mode the client left this file in (unless the URL forces one).
+      if (cf?.chat_mode === "freestyle" && searchParams.get("mode") !== "intake") {
+        setMode("freestyle");
+      }
+      if (!msgs?.length) return;
 
       const imageByMessage = new Map<string, string>();
       (atts ?? []).forEach((a: { id: string; message_id: string | null }) => {
@@ -236,6 +260,7 @@ function AcpChatInner() {
       };
     }
     setShowCounselModal(true);
+    return undefined;
   }, [urlCaseFileId]);
 
   function handleCounselComplete(value: ExistingCounselFormValue) {
@@ -297,16 +322,41 @@ function AcpChatInner() {
     el.style.height = Math.min(el.scrollHeight, 160) + "px";
   }
 
+  // Switch between guided intake and freestyle. Reflect the choice in the URL so
+  // a reload keeps the mode; the server also persists it to the case file on the
+  // next send, so returning later resumes it too.
+  function changeMode(next: ChatMode) {
+    if (next === mode) return;
+    setMode(next);
+    const params = new URLSearchParams(window.location.search);
+    params.set("mode", next);
+    window.history.replaceState(null, "", `?${params.toString()}`);
+  }
+
   const attachFile = useCallback(async (file: File) => {
-    if (!file.type.startsWith("image/")) return; // Only inline images in chat
-    if (file.size > MAX_INLINE_BYTES) {
-      alert("Screenshots must be under 4 MB. For larger files, use the Upload Documents section on your dashboard.");
+    const isImage = file.type.startsWith("image/");
+    // Intake accepts screenshots only; freestyle also accepts documents (PDF,
+    // Word, text) since the backend already handles those content blocks.
+    const allowed = isImage || (mode === "freestyle" && FREESTYLE_ATTACH_TYPES.has(file.type));
+    if (!allowed) {
+      if (mode === "freestyle") {
+        alert("Freestyle accepts images, PDFs, Word documents, and text files.");
+      }
+      return;
+    }
+    const cap = mode === "freestyle" ? MAX_FREESTYLE_BYTES : MAX_INLINE_BYTES;
+    if (file.size > cap) {
+      alert(
+        mode === "freestyle"
+          ? "Attachments must be under 10 MB. For larger files, use the Upload Documents section on your dashboard."
+          : "Screenshots must be under 4 MB. For larger files, use the Upload Documents section on your dashboard."
+      );
       return;
     }
     const data = await fileToBase64(file);
     const previewUrl = URL.createObjectURL(file);
-    setPendingAttachment({ data, mimeType: file.type, fileName: file.name || "screenshot.png", previewUrl });
-  }, []);
+    setPendingAttachment({ data, mimeType: file.type, fileName: file.name || (isImage ? "screenshot.png" : "attachment"), previewUrl });
+  }, [mode]);
 
   function handlePaste(e: React.ClipboardEvent) {
     const items = Array.from(e.clipboardData.items);
@@ -379,6 +429,7 @@ function AcpChatInner() {
         body: JSON.stringify({
           messages: apiMessages,
           caseFileId,
+          mode,
           ...(isQuickConsult ? { fileType: "quick_consult" } : {}),
           ...(attachment ? { pendingAttachment: { data: attachment.data, mimeType: attachment.mimeType, fileName: attachment.fileName } } : {}),
           ...(pendingCounselContext
@@ -478,9 +529,51 @@ function AcpChatInner() {
         </button>
 
         <div className="fc-topbar-center">
-          <span className="fc-phase-label">
-            {isQuickConsult ? "Quick Question · ACP Protected" : "Phase II · Privileged Intake"}
-          </span>
+          <div
+            className="fc-mode-toggle"
+            role="tablist"
+            aria-label="Conversation mode"
+            style={{
+              display: "inline-flex",
+              gap: 2,
+              padding: 2,
+              borderRadius: 999,
+              background: "rgba(255,255,255,0.06)",
+              border: "1px solid rgba(200,169,110,0.18)",
+            }}
+          >
+            {(["intake", "freestyle"] as ChatMode[]).map((m) => {
+              const active = mode === m;
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => changeMode(m)}
+                  title={
+                    m === "intake"
+                      ? "Guided — one question at a time, builds your Living File"
+                      : "Freestyle — talk freely, attach documents, draft on the spot"
+                  }
+                  style={{
+                    padding: "5px 14px",
+                    borderRadius: 999,
+                    border: "none",
+                    cursor: "pointer",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    letterSpacing: "0.01em",
+                    background: active ? "var(--brand-gold)" : "transparent",
+                    color: active ? "#1a1206" : "var(--brand-cream-text)",
+                    transition: "background 120ms ease, color 120ms ease",
+                  }}
+                >
+                  {m === "intake" ? "Guided" : "Freestyle"}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <div className="fc-topbar-right">
@@ -654,7 +747,7 @@ function AcpChatInner() {
 
       {/* HANDOFF ACTION / INPUT — at the "ready" point the composer is replaced by the
           one obvious next step, with a small link back to chatting if needed. */}
-      {handoff && !keepChatting ? (
+      {handoff && !keepChatting && mode !== "freestyle" ? (
         <div className="fc-handoff-actions">
           <button className="fc-handoff-btn" onClick={() => router.push(handoff.href)}>
             Open my file → Start my {handoff.label}
@@ -685,10 +778,14 @@ function AcpChatInner() {
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        {/* Screenshot preview */}
+        {/* Attachment preview — thumbnail for images, a doc chip for files */}
         {pendingAttachment && (
           <div className="fc-attachment-preview">
-            <img src={pendingAttachment.previewUrl} alt="attachment preview" className="fc-attachment-thumb" />
+            {pendingAttachment.mimeType.startsWith("image/") ? (
+              <img src={pendingAttachment.previewUrl} alt="attachment preview" className="fc-attachment-thumb" />
+            ) : (
+              <span className="fc-attachment-thumb" aria-hidden style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>📄</span>
+            )}
             <span className="fc-attachment-name">{pendingAttachment.fileName}</span>
             <button className="fc-attachment-clear" onClick={clearAttachment} aria-label="Remove attachment">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -702,7 +799,13 @@ function AcpChatInner() {
           <textarea
             ref={textareaRef}
             className="fc-textarea"
-            placeholder={dragOver ? "Drop screenshot here…" : "Share the details of your situation… or paste a screenshot"}
+            placeholder={
+              dragOver
+                ? mode === "freestyle" ? "Drop a file here…" : "Drop screenshot here…"
+                : mode === "freestyle"
+                  ? "Ask anything, think it through, or ask me to draft… attach a document to work from"
+                  : "Share the details of your situation… or paste a screenshot"
+            }
             value={input}
             onChange={(e) => { setInput(e.target.value); autoResize(); }}
             onKeyDown={handleKeyDown}

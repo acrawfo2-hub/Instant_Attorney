@@ -12,6 +12,7 @@ export type UsageFeature =
   | "title_generator"
   | "attachment_analysis"
   | "attorney_review"
+  | "attorney_chat"
   | "attorney_second_draft_fitness"
   | "attorney_second_draft"
   | "attorney_merge"

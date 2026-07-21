@@ -6,6 +6,7 @@ import { buildDocumentPlan } from "@/lib/next-step";
 import type { CaseFile, Document, Attachment, Profile, IntakeMessage } from "@/lib/types";
 import DocumentPlanEditor from "./DocumentPlanEditor";
 import AccountMenu from "@/components/AccountMenu";
+import AttorneyFreestyleChat from "@/components/AttorneyFreestyleChat";
 
 interface CaseFileWithDocs extends CaseFile {
   documents: Document[];
@@ -310,6 +311,9 @@ export default async function ClientFilePage({
                   </div>
                 </div>
               )}
+
+              {/* Attorney freestyle work-product chat for this case file */}
+              <AttorneyFreestyleChat caseFileId={cf.id} />
 
               {/* Attachments for this case file */}
               {cf.attachments.length > 0 && (

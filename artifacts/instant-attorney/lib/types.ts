@@ -171,6 +171,14 @@ export interface LegalStrategy {
   lead_rationale?: string;
 }
 
+/**
+ * How a client's privileged chat behaves:
+ * - "intake"    — guided, one focused question at a time, Living File accretes.
+ * - "freestyle" — talk-to-Claude: full answers, wide-ranging discussion, and
+ *   inline drafting. Still ACP-protected; still able to update the Living File.
+ */
+export type ChatMode = "intake" | "freestyle";
+
 export interface CaseFile {
   id: string;
   user_id: string;
@@ -178,6 +186,8 @@ export interface CaseFile {
   matter_subtype: string | null;
   status: CaseStatus;
   file_type: CaseFileType;
+  /** Persisted chat mode so reopening a file resumes where the client left off. */
+  chat_mode?: ChatMode;
   title: string | null;
   archive_at: string | null;
   pre_consult_memo: string | null;
@@ -390,6 +400,20 @@ export interface IntakeMessage {
   id: string;
   case_file_id: string;
   user_id: string;
+  role: MessageRole;
+  content: string;
+  created_at: string;
+}
+
+/**
+ * An attorney's freestyle work-product message, scoped to a client's case file
+ * for context but kept OUT of the client's privileged intake_messages record.
+ * Only the authoring attorney can read these rows.
+ */
+export interface AttorneyWorkspaceMessage {
+  id: string;
+  case_file_id: string;
+  attorney_id: string;
   role: MessageRole;
   content: string;
   created_at: string;

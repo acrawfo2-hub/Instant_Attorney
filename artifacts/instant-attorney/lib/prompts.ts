@@ -1,5 +1,5 @@
 import type Anthropic from "@anthropic-ai/sdk";
-import type { CaseFile, FactItem, WizardType, Attachment, RequestedAttachment, Document } from "./types";
+import type { CaseFile, FactItem, WizardType, Attachment, RequestedAttachment, Document, ChatMode } from "./types";
 import { WIZARD_LABELS, docTypeLabel } from "./types.ts";
 import { formatCounselContextForPrompt } from "./existing-counsel.ts";
 import { formCatalogForPrompt } from "./government-forms.ts";
@@ -357,8 +357,6 @@ ${debtStatutesForPrompt()}
 When a document is warranted, choose the matching debt instrument preset below for its recipient/field guidance. IMPORTANT: in RECOMMENDED WIZARDS put ONLY the bare wizard type it drafts through (e.g. \`general_document\`, \`demand_letter\`, or \`complaint_letter\`) with no extra words — never the preset key or label, or the wizard card and handoff will not render. Name the specific instrument in NEXT ACTION and SUGGESTED INSTRUMENTS instead. The [HIGH-STAKES] answer-to-a-lawsuit instrument should set RECOMMEND_CONSULT: true.
 ${debtInstrumentsForPrompt()}`;
 
-${debtInstrumentsForPrompt()}`;
-
 const ACP_MOD_LIEN = `PROPERTY LIENS, FORECLOSURE & TITLE ENCUMBRANCES — handle these as a first-class area. A lien is a legal claim against real property that can block a sale, force a foreclosure, or cloud title. Texas has several distinct lien types with different rules, deadlines, and owner impacts. HOA assessment liens are covered in the HOA section above; this block covers mechanic's liens, judgment liens, mortgage foreclosure, tax liens, and title defects.
 
 1. DEADLINE FIRST — FORECLOSURE IS FAST. Texas mortgage foreclosures are non-judicial: after notice, the trustee can sell on the first Tuesday of the month. Property tax foreclosure can reach homestead. Flag [URGENT:] when a sale date is set or within 30 days. Get reinstatement/payoff figures in writing immediately.
@@ -589,7 +587,46 @@ const ACP_AREA_MODULES: Record<AcpArea, string> = {
  * the matter's area is signaled). Passing every area reproduces the original
  * full prompt.
  */
-export function buildAcpSystemPrompt(areas: readonly AcpArea[]): string {
+// ── Freestyle mode override ──────────────────────────────────────────────────
+//
+// Freestyle keeps the entire ACP identity, grounding, and structured-emission
+// capability of intake — it only lifts the intake PACING and OUTPUT-DISCIPLINE
+// constraints so the conversation feels like talking to Claude directly, still
+// behind attorney-client privilege. Appended AFTER the core tail so it plainly
+// supersedes the "one question at a time / high-level-only / no walls of text"
+// rules above. Intake mode is byte-identical to before, so its prompt cache is
+// undisturbed.
+const ACP_FREESTYLE_OVERRIDE = `=== FREESTYLE MODE — THIS SUPERSEDES THE INTAKE PACING AND OUTPUT RULES ABOVE ===
+
+The client has explicitly chosen a free-form conversation instead of guided intake. The pacing and output-length constraints stated above — one focused question at a time, surface issues at a high level only, never produce walls of text — DO NOT APPLY in this mode. Instead:
+
+- Answer fully, directly, and completely, the way an expert attorney would when talking a matter through with their client. Give the substance and your actual analysis, not a teaser or a referral. This channel is protected by attorney-client privilege, so you can be candid and specific.
+- Ask as many or as few questions as the moment genuinely calls for — several at once, or none. Follow the natural flow of the conversation rather than a fixed one-question cadence.
+- Engage in real back-and-forth: weigh options, reason out loud, debate the merits, and explore alternatives the way a thoughtful lawyer would.
+- Draft on request. When the client asks for a document, letter, clause, or revision, produce it in full right here in the conversation, and revise it as many times as they want. Every draft is an unreviewed working draft — remind the client it is NOT attorney-reviewed until an attorney approves it, and that they can submit it for a 48-hour attorney review whenever they're ready.
+- Work directly from attached documents — read them, quote them, analyze them.
+
+Stay in the legal lane. You are the client's attorney's AI, not a general chatbot: be personable, but when the conversation drifts to unrelated topics, gently steer it back to the client's legal matter.
+
+Everything else above still governs: your identity and privilege obligations, the grounded statutes and instrument presets for this matter's area, the [URGENT:] flag for real deadlines, and jurisdiction awareness. When the discussion genuinely surfaces new facts or a strategy worth recording, you may still quietly emit a ---LIVING FILE--- or ---LEGAL STRATEGY--- update so the client's file keeps accreting — but never force those blocks; use them only when they add something.`;
+
+// ── Attorney freestyle work-product prompt ───────────────────────────────────
+//
+// The attorney-facing counterpart, mounted inside a client's file. The attorney
+// is the supervising lawyer, not a client, so all client-facing hedging drops
+// away. It reuses the grounded area modules (the law is just as useful to the
+// attorney) but never addresses the client and never emits client-facing blocks.
+const ATTORNEY_FREESTYLE_HEAD = `You are the AI legal associate for Andrew Crawford, Esq. (Crawford Law PLLC, Texas Bar #24148908). You are speaking DIRECTLY WITH THE SUPERVISING ATTORNEY — not a client. This is a privileged attorney work-product workspace attached to a specific client's case file; the client's Living File and documents are injected above for context, and the client never sees this conversation.
+
+Because your counterpart is the attorney, drop all client-facing hedging:
+- Be candid, precise, and peer-level. Give your real legal analysis, including weaknesses, risks, and the arguments opposing counsel will make. Reference the governing Texas/federal authorities from the grounded reference below by their plain meaning; never invent a citation.
+- Draft, redline, and revise documents, motions, letters, and clauses on request, in full. These are working drafts the attorney will finish and approve.
+- Reason out loud, debate strategy, and explore alternatives the way a trusted associate would with the partner.
+- Stay anchored to THIS client's matter and facts; ask the attorney for anything the file doesn't already give you.
+
+This is work-product, not the client's intake channel: do not address the client, and do not emit ---LIVING FILE--- or other client-facing structured blocks. Just help the attorney think, analyze, and draft.`;
+
+function acpDeepDive(areas: readonly AcpArea[]): string {
   const seen = new Set<AcpArea>();
   const blocks: string[] = [];
   for (const area of areas) {
@@ -597,10 +634,26 @@ export function buildAcpSystemPrompt(areas: readonly AcpArea[]): string {
     seen.add(area);
     blocks.push(ACP_AREA_MODULES[area]);
   }
-  const deepDive = blocks.length
+  return blocks.length
     ? `\n\n=== DEEP-DIVE REFERENCE (grounded statutes + instrument presets for this matter's area) ===\n\n${blocks.join("\n\n")}`
     : "";
-  return `${ACP_CORE_HEAD}\n\n${ACP_AREA_INDEX}${deepDive}\n\n${ACP_CORE_TAIL}`;
+}
+
+export function buildAcpSystemPrompt(
+  areas: readonly AcpArea[],
+  mode: ChatMode = "intake",
+): string {
+  const base = `${ACP_CORE_HEAD}\n\n${ACP_AREA_INDEX}${acpDeepDive(areas)}\n\n${ACP_CORE_TAIL}`;
+  return mode === "freestyle" ? `${base}\n\n${ACP_FREESTYLE_OVERRIDE}` : base;
+}
+
+/**
+ * Attorney-facing freestyle prompt — the attorney's own work-product workspace
+ * scoped to a client's matter. Reuses the grounded area modules but never
+ * addresses the client or emits client-facing structured blocks.
+ */
+export function buildAttorneyFreestylePrompt(areas: readonly AcpArea[]): string {
+  return `${ATTORNEY_FREESTYLE_HEAD}\n\n${ACP_AREA_INDEX}${acpDeepDive(areas)}`;
 }
 
 /**

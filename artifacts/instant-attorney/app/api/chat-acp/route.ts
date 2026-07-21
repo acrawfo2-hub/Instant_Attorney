@@ -20,10 +20,11 @@ const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney, m
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
 export async function POST(req: NextRequest) {
-  const { messages, caseFileId, pendingAttachment, fileType, counselContext } = await req.json() as {
+  const { messages, caseFileId, pendingAttachment, fileType, counselContext, mode } = await req.json() as {
     messages: Array<{ role: string; content: string }>;
     caseFileId?: string;
     fileType?: "standard" | "quick_consult";
+    mode?: "intake" | "freestyle";
     pendingAttachment?: { data: string; mimeType: string; fileName: string };
     counselContext?: {
       has_existing_counsel: boolean;
@@ -136,6 +137,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Persist the client's chosen chat mode so reopening the file resumes it.
+  // Fire-and-forget — a failed write never blocks the reply, and the mode used
+  // for THIS turn comes from the request body regardless.
+  if (mode === "freestyle" || mode === "intake") {
+    db.from("case_files").update({ chat_mode: mode }).eq("id", resolvedCaseFileId)
+      .then(undefined, (err) => console.error("[chat-acp] chat_mode persist error:", err));
+  }
+
   // Load current file state + attachments for context injection
   const [{ data: caseFileRow }, { data: factRows }, { data: attachmentRows }, { data: requestedRows }] =
     await Promise.all([
@@ -220,7 +229,8 @@ export async function POST(req: NextRequest) {
   // areas every turn. prompts.ts always includes the compact area index, so an
   // as-yet-unmatched opening turn still degrades gracefully.
   const detectedAreas = detectAcpAreasFromContext(messages, caseFile);
-  const acpSystemPrompt = buildAcpSystemPrompt(detectedAreas);
+  const chatMode = mode === "freestyle" ? "freestyle" : "intake";
+  const acpSystemPrompt = buildAcpSystemPrompt(detectedAreas, chatMode);
 
   // Stream from Anthropic
   const stream = anthropic.messages.stream({
