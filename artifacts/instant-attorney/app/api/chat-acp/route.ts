@@ -6,6 +6,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { buildAcpSystemPrompt, buildFileContext } from "@/lib/prompts";
 import { detectAcpAreasFromContext } from "@/lib/acp-area-router";
 import { parseAndUpdateFile, isCompleteFileUpdate } from "@/lib/file-parser";
+import { syncLivingFile } from "@/lib/living-file-extractor";
 import { triggerPendingLookups } from "@/lib/gov-form-lookup";
 import { generateCaseTitle } from "@/lib/title-generator";
 import { toAnthropicBlock, processAttachment } from "@/lib/attachment-processor";
@@ -25,10 +26,11 @@ const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney, m
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
 export async function POST(req: NextRequest) {
-  const { messages, caseFileId, pendingAttachment, fileType, counselContext } = await req.json() as {
+  const { messages, caseFileId, pendingAttachment, fileType, counselContext, mode } = await req.json() as {
     messages: Array<{ role: string; content: string }>;
     caseFileId?: string;
     fileType?: "standard" | "quick_consult";
+    mode?: "intake" | "freestyle";
     pendingAttachment?: { data: string; mimeType: string; fileName: string };
     counselContext?: {
       has_existing_counsel: boolean;
@@ -153,6 +155,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Persist the client's chosen chat mode so reopening the file resumes it.
+  // Fire-and-forget — a failed write never blocks the reply, and the mode used
+  // for THIS turn comes from the request body regardless.
+  if (mode === "freestyle" || mode === "intake") {
+    db.from("case_files").update({ chat_mode: mode }).eq("id", resolvedCaseFileId)
+      .then(undefined, (err) => console.error("[chat-acp] chat_mode persist error:", err));
+  }
+
   // Load current file state + attachments for context injection
   const [{ data: caseFileRow }, { data: factRows }, { data: attachmentRows }, { data: requestedRows }, { data: accountRow }] =
     await Promise.all([
@@ -257,9 +267,11 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const chatMode = mode === "freestyle" ? "freestyle" : "intake";
   const acpSystemPrompt = buildAcpSystemPrompt(detectedAreas, acpPersona, {
     homeState: profileHomeState,
     jurisdiction: effectiveJurisdiction,
+    mode: chatMode,
   });
 
   // Stream from Anthropic
@@ -431,6 +443,15 @@ export async function POST(req: NextRequest) {
             }
           }
         }
+        // Background Living File sweep (both modes). Debounced inside the
+        // extractor — a cheap no-op until enough new messages accumulate — so
+        // the file stays current even when this turn emitted no inline block.
+        // Fire-and-forget, same lifetime as the other post-stream background
+        // tasks above.
+        syncLivingFile(anthropic, db, resolvedCaseFileId, userId).catch(
+          (err) => console.error("[chat-acp] living file sync error:", err)
+        );
+
         if (finalMsg?.stop_reason === "max_tokens") {
           logTruncation({
             endpoint: "chat-acp",

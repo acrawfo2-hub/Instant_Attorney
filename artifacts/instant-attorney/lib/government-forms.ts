@@ -52,6 +52,13 @@ export interface GovernmentForm {
   common_mistakes: string[];
   /** Natural-language situations that imply this form, used to guide detection. */
   triggers: string[];
+  /** Whether official_url is (or leads to) a fillable PDF the client can type
+   * answers directly into. Defaults to true when omitted. Set false for forms
+   * that are really an online portal or in-person process with no standalone
+   * fillable PDF — those clients go straight to the print-and-verify path. */
+  fillable?: boolean;
+  /** Shown instead of the default fillable-PDF guidance when fillable is false. */
+  fillable_note?: string;
 }
 
 export const GOVERNMENT_FORMS: GovernmentForm[] = [
@@ -161,6 +168,8 @@ export const GOVERNMENT_FORMS: GovernmentForm[] = [
       "Forgetting to also update your vehicle registration address with the county tax office.",
     ],
     triggers: ["moved to texas", "new address in texas", "changed address", "relocated to texas"],
+    fillable: false,
+    fillable_note: "Texas DPS handles this as an online portal update or in-person visit — there's no standalone fillable PDF to download.",
   },
   {
     key: "voter-registration",
@@ -232,6 +241,13 @@ export function getGovernmentForm(key: string): GovernmentForm | undefined {
 
 export function isKnownFormKey(key: string): boolean {
   return key in FORMS_BY_KEY;
+}
+
+/** Whether a form has a standalone fillable PDF the client can type into
+ * directly. Defaults to true — most registry forms are; a few (e.g. state DMV
+ * portal updates) opt out via `fillable: false`. */
+export function isFillable(form: Pick<GovernmentForm, "fillable">): boolean {
+  return form.fillable !== false;
 }
 
 /** Compact catalog injected into the detection prompt so the model only ever

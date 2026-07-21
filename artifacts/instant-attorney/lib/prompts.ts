@@ -1,5 +1,5 @@
 import type Anthropic from "@anthropic-ai/sdk";
-import type { CaseFile, FactItem, WizardType, Attachment, RequestedAttachment, Document, ConsultWrapUp } from "./types";
+import type { CaseFile, FactItem, WizardType, Attachment, RequestedAttachment, Document, ConsultWrapUp, ChatMode } from "./types";
 import { CONSULT_DISPOSITION_LABELS } from "./consult-wrap-up.ts";
 import { WIZARD_LABELS, docTypeLabel } from "./types.ts";
 import { formatCounselContextForPrompt } from "./existing-counsel.ts";
@@ -621,36 +621,97 @@ const ACP_AREA_MODULES: Record<AcpArea, string> = {
  * Prep-mode (non-Texas) skips Texas deep-dive statute modules and injects the
  * Local Counsel Prep overlay instead.
  */
-export function buildAcpSystemPrompt(
-  areas: readonly AcpArea[],
-  persona: AcpPersona = "client",
-  opts?: { homeState?: string | null; jurisdiction?: string | null },
-): string {
-  const stateHint = opts?.jurisdiction || opts?.homeState || null;
-  const prep = isPrepMode(stateHint);
+// ── Living File extractor (background sweep) ─────────────────────────────────
+export const LIVING_FILE_EXTRACTOR_SYSTEM = `You are a legal intake scribe for Crawford Law PLLC. Your only job is to keep a client's Living File current from their privileged conversation. You do NOT talk to anyone and you do NOT give advice — you read and record.
 
-  let deepDive = "";
+You are given (1) the CURRENT LIVING FILE and (2) the NEW CONVERSATION since it was last updated. Produce a single cumulative Living File update that folds any genuinely new information from the new conversation into the file.
+
+Rules:
+- ACCRETE, never repeat. Do not restate facts, goals, or gaps already present in the current file. Only add what is new, and refine an existing entry only when the conversation genuinely sharpens it.
+- If the new conversation contains nothing worth recording (chit-chat, clarifying questions, drafting back-and-forth with no new facts), output the single line: NO UPDATE — and nothing else.
+- Tag every fact in CONFIRMED FACTS by how it can be shown, matching the file's convention: "[fact] — established: <what evidence shows it>" when a document/record/attachment backs it, "[fact] — asserted: client's account" when it rests on what the client said in conversation (this is the default for anything stated in chat), or "[fact] — characterization/opinion" for non-provable characterizations ("unfair," "hostile").
+- Capture obligations the file should track: parties, dates, deadlines, locations, jurisdiction, and goals.
+- Be precise and factual. Never invent facts, citations, or legal conclusions. If the client only speculated, do not record it as fact.
+
+When there IS something to record, output EXACTLY this format and nothing else:
+
+---LIVING FILE---
+MATTER TYPE: [reactive/preventive] — [subtype]
+JURISDICTION: [State name | Unconfirmed — defaulting to Texas]
+SUMMARY:
+[2–4 sentence plain-English case summary, updated cumulatively]
+GOALS:
+• [Goal]
+CONFIRMED FACTS:
+• [Fact] — [established: <evidence> | asserted: client's account | characterization/opinion]
+FACT GAPS:
+• [Gap — what it is and why it matters]
+NEXT ACTION:
+[Single most important next step for this client right now]
+---END FILE---`;
+
+const ACP_FREESTYLE_OVERRIDE = `=== FREESTYLE MODE — THIS SUPERSEDES THE INTAKE PACING AND OUTPUT RULES ABOVE ===
+
+The client has explicitly chosen a free-form conversation instead of guided intake. The pacing and output-length constraints stated above — one focused question at a time, surface issues at a high level only, never produce walls of text — DO NOT APPLY in this mode. Instead:
+
+- Answer fully, directly, and completely, the way an expert attorney would when talking a matter through with their client. Give the substance and your actual analysis, not a teaser or a referral. This channel is protected by attorney-client privilege, so you can be candid and specific.
+- Ask as many or as few questions as the moment genuinely calls for — several at once, or none. Follow the natural flow of the conversation rather than a fixed one-question cadence.
+- Engage in real back-and-forth: weigh options, reason out loud, debate the merits, and explore alternatives the way a thoughtful lawyer would.
+- Draft on request. When the client asks for a document, letter, clause, or revision, produce it in full right here in the conversation, and revise it as many times as they want. Every draft is an unreviewed working draft — remind the client it is NOT attorney-reviewed until an attorney approves it, and that they can submit it for a 48-hour attorney review whenever they're ready.
+- Work directly from attached documents — read them, quote them, analyze them.
+
+Stay in the legal lane. You are the client's attorney's AI, not a general chatbot: be personable, but when the conversation drifts to unrelated topics, gently steer it back to the client's legal matter.
+
+Everything else above still governs: your identity and privilege obligations, the grounded statutes and instrument presets for this matter's area, the [URGENT:] flag for real deadlines, and jurisdiction awareness. When the discussion genuinely surfaces new facts or a strategy worth recording, you may still quietly emit a ---LIVING FILE--- or ---LEGAL STRATEGY--- update so the client's file keeps accreting — but never force those blocks; use them only when they add something.`;
+
+const ATTORNEY_FREESTYLE_HEAD = `You are the AI legal associate for Andrew Crawford, Esq. (Crawford Law PLLC, Texas Bar #24148908). You are speaking DIRECTLY WITH THE SUPERVISING ATTORNEY — not a client. This is a privileged attorney work-product workspace attached to a specific client's case file; the client's Living File and documents are injected above for context, and the client never sees this conversation.
+
+Because your counterpart is the attorney, drop all client-facing hedging:
+- Be candid, precise, and peer-level. Give your real legal analysis, including weaknesses, risks, and the arguments opposing counsel will make. Reference the governing Texas/federal authorities from the grounded reference below by their plain meaning; never invent a citation.
+- Draft, redline, and revise documents, motions, letters, and clauses on request, in full. These are working drafts the attorney will finish and approve.
+- Reason out loud, debate strategy, and explore alternatives the way a trusted associate would with the partner.
+- Stay anchored to THIS client's matter and facts; ask the attorney for anything the file doesn't already give you.
+
+This is work-product, not the client's intake channel: do not address the client, and do not emit ---LIVING FILE--- or other client-facing structured blocks. Just help the attorney think, analyze, and draft.`;
+
+function acpDeepDive(areas: readonly AcpArea[], stateHint?: string | null): string {
+  const prep = isPrepMode(stateHint);
   if (prep) {
-    deepDive =
+    return (
       `\n\n${prepModePromptBlock(stateHint)}\n\n` +
       `=== PREP-MODE AREA NOTES ===\n` +
       `Do not load Texas statute catalogs as binding law. Use general/federal framing for areas: ${areas.join(", ") || "general"}. ` +
-      `RECOMMEND_CONSULT should usually be true. Prefer NEXT ACTION that prepares a handoff to local counsel.`;
-  } else {
-    const seen = new Set<AcpArea>();
-    const blocks: string[] = [];
-    for (const area of areas) {
-      if (seen.has(area)) continue;
-      seen.add(area);
-      blocks.push(ACP_AREA_MODULES[area]);
-    }
-    deepDive = blocks.length
-      ? `\n\n=== DEEP-DIVE REFERENCE (grounded statutes + instrument presets for this matter's area) ===\n\n${blocks.join("\n\n")}`
-      : "";
+      `RECOMMEND_CONSULT should usually be true. Prefer NEXT ACTION that prepares a handoff to local counsel.`
+    );
   }
 
-  return `${buildAcpCoreHead(persona)}\n\n${ACP_AREA_INDEX}${deepDive}\n\n${buildAcpCoreTail(persona)}`;
+  const seen = new Set<AcpArea>();
+  const blocks: string[] = [];
+  for (const area of areas) {
+    if (seen.has(area)) continue;
+    seen.add(area);
+    blocks.push(ACP_AREA_MODULES[area]);
+  }
+  return blocks.length
+    ? `\n\n=== DEEP-DIVE REFERENCE (grounded statutes + instrument presets for this matter's area) ===\n\n${blocks.join("\n\n")}`
+    : "";
 }
+
+export function buildAcpSystemPrompt(
+  areas: readonly AcpArea[],
+  persona: AcpPersona = "client",
+  opts?: { homeState?: string | null; jurisdiction?: string | null; mode?: ChatMode },
+): string {
+  const stateHint = opts?.jurisdiction || opts?.homeState || null;
+  const deepDive = acpDeepDive(areas, stateHint);
+  const base = `${buildAcpCoreHead(persona)}\n\n${ACP_AREA_INDEX}${deepDive}\n\n${buildAcpCoreTail(persona)}`;
+  return opts?.mode === "freestyle" ? `${base}\n\n${ACP_FREESTYLE_OVERRIDE}` : base;
+}
+
+export function buildAttorneyFreestylePrompt(areas: readonly AcpArea[]): string {
+  return `${ATTORNEY_FREESTYLE_HEAD}\n\n${ACP_AREA_INDEX}${acpDeepDive(areas)}`;
+}
+
 
 /**
  * Full prompt with every area loaded. Kept for backward compatibility and as a
