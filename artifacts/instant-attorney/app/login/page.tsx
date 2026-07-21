@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
+  const isAttorneyLogin = params.get("as") === "attorney";
   // An explicit ?redirect= (set by middleware.ts when bouncing an
   // unauthenticated user away from a specific protected page) always wins —
   // that deep-link intent must survive login. Only a PLAIN /login (no param)
@@ -63,7 +64,11 @@ function LoginForm() {
         </div>
 
         <h1 className="auth-heading">Sign in to your account</h1>
-        <p className="auth-sub">Phase II · Attorney-Client Privileged</p>
+        <p className="auth-sub">
+          {isAttorneyLogin
+            ? "Subscriber login · Drafting tool for licensed attorneys"
+            : "Private case workspace · Attorney-client privileged"}
+        </p>
 
         {params.get("error") && (
           <div className="auth-error">Authentication failed. Please try again.</div>
@@ -107,7 +112,7 @@ function LoginForm() {
 
         <p className="auth-footer-link">
           Don&apos;t have an account?{" "}
-          <button className="auth-text-link" onClick={() => router.push("/register")}>
+          <button className="auth-text-link" onClick={() => router.push(isAttorneyLogin ? "/register?as=attorney" : "/register")}>
             Create one &rarr;
           </button>
         </p>

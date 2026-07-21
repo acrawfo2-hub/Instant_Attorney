@@ -8,7 +8,6 @@ export default function PostConsultCard({
   wrapUp: ConsultWrapUp;
   submittedAt: string | null;
 }) {
-  const clientActions = wrapUp.clientActions.filter((a) => a.text.trim());
   const expectedDocuments = wrapUp.expectedDocuments.filter((a) => a.text.trim());
   const dispositionLabel = wrapUp.disposition
     ? CONSULT_DISPOSITION_LABELS[wrapUp.disposition]
@@ -71,21 +70,6 @@ export default function PostConsultCard({
         </div>
       )}
 
-      {clientActions.length > 0 && (
-        <div className="lf-post-consult-actions">
-          <div className="lf-card-label">Your action plan</div>
-          <ol className="lf-post-consult-list">
-            {clientActions.map((action) => (
-              <li key={action.id}>
-                {action.text}
-                {action.kind === "document" && (
-                  <span className="lf-post-consult-tag">Upload needed</span>
-                )}
-              </li>
-            ))}
-          </ol>
-        </div>
-      )}
     </div>
   );
 }

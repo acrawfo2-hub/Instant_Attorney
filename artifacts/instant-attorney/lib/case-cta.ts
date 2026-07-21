@@ -12,8 +12,31 @@ export interface CaseHeaderCta {
 export function getCaseHeaderCta(
   guide: NextStepGuide,
   caseFileId: string,
+  options?: { inFileContext?: boolean },
 ): CaseHeaderCta {
   const chatHref = `/chat?caseFileId=${caseFileId}`;
+  const inFile = options?.inFileContext ?? false;
+
+  if (inFile) {
+    if (guide.activeStep >= 3) {
+      const href =
+        guide.cta?.href?.startsWith("#") ? guide.cta.href
+        : guide.cta?.href?.includes("/wizard/") ? "#mission-control"
+        : "#documents";
+      const label =
+        guide.activeStep === 4 ? "View review status"
+        : guide.activeStep === 5 ? shortLabel(guide.cta?.label ?? "", "Get your document")
+        : shortLabel(guide.cta?.label ?? "", "Review your draft");
+      return { label, href };
+    }
+    if (guide.cta?.href.startsWith("/chat")) {
+      return { label: shortLabel(guide.cta.label, "Continue conversation"), href: "#mission-control" };
+    }
+    return {
+      label: guide.cta ? shortLabel(guide.cta.label, "See next step") : "See next step",
+      href: "#mission-control",
+    };
+  }
 
   if (guide.cta?.href.startsWith("/chat")) {
     return { label: shortLabel(guide.cta.label, "Continue conversation"), href: guide.cta.href };

@@ -31,7 +31,7 @@ async function getData(caseFileId: string) {
     userId = user.id;
   }
 
-  const [{ data: caseFile }, { data: facts }, { data: documents }, { data: consultRow }, { data: completedConsultRow }, { data: subRow }, { data: requestedRows }, { data: formRows }, { data: attachmentRows }, { data: roadmapSnap }, { data: siblingRows }] = await Promise.all([
+  const [{ data: caseFile }, { data: facts }, { data: documents }, { data: consultRow }, { data: completedConsultRow }, { data: subRow }, { data: requestedRows }, { data: formRows }, { data: attachmentRows }, { data: roadmapSnap }, { data: siblingRows }, { data: profileRow }] = await Promise.all([
     db.from("case_files")
       .select("*")
       .eq("id", caseFileId)
@@ -93,10 +93,15 @@ async function getData(caseFileId: string) {
       .eq("user_id", userId)
       .eq("status", "open")
       .order("updated_at", { ascending: false }),
+    db
+      .from("profiles")
+      .select("account_type")
+      .eq("id", userId)
+      .maybeSingle(),
   ]);
 
   if (!BYPASS_AUTH && (!subRow || !["active", "trialing", "bypass"].includes(subRow?.status ?? ""))) {
-    redirect("/onboarding");
+    redirect(profileRow?.account_type === "attorney_user" ? "/onboarding/attorney" : "/onboarding");
   }
 
   if (!caseFile) return null;
@@ -138,6 +143,7 @@ async function getData(caseFileId: string) {
     attachments: (attachmentRows ?? []) as Attachment[],
     roadmapOverlay: parseRoadmapOverlay(roadmapSnap?.ai_overlay) as RoadmapAiOverlay,
     openMatters,
+    isAttorneyUser: profileRow?.account_type === "attorney_user",
   };
 }
 
@@ -153,11 +159,12 @@ export default async function FileDetailPage({
   const result = await getData(id);
   if (!result) notFound();
 
-  const { caseFile, facts, documents, childDocuments, consultRequest, hasConsultSub, completedConsultWrapUp, completedConsultSubmittedAt, requestedAttachments, govForms, attachments, roadmapOverlay, openMatters } = result;
+  const { caseFile, facts, documents, childDocuments, consultRequest, hasConsultSub, completedConsultWrapUp, completedConsultSubmittedAt, requestedAttachments, govForms, attachments, roadmapOverlay, openMatters, isAttorneyUser } = result;
 
   const headerCta = getCaseHeaderCta(
     computeNextStep(caseFile, documents, facts),
     caseFile.id,
+    { inFileContext: true },
   );
 
   return (
@@ -184,9 +191,11 @@ export default async function FileDetailPage({
 
         <div className="lf-header-right">
           {isBypass && <span className="ob-bypass-badge">Test Mode</span>}
-          <Link href={`/dashboard/${caseFile.id}/financials`} className="lf-logout-btn" title="Assets, debts, and income worksheet">
-            Money &amp; property
-          </Link>
+          {!isAttorneyUser && (
+            <Link href={`/dashboard/${caseFile.id}/financials`} className="lf-logout-btn" title="Assets, debts, and income worksheet">
+              Money &amp; property
+            </Link>
+          )}
           <Link href={headerCta.href} className="lf-begin-btn">
             {headerCta.label}
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -207,6 +216,7 @@ export default async function FileDetailPage({
           attachments={attachments}
           govForms={govForms}
           mode="client"
+          isAttorneyUser={isAttorneyUser}
           consultRequest={consultRequest}
           hasConsultSub={hasConsultSub}
           completedConsultWrapUp={completedConsultWrapUp}

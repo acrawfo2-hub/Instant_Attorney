@@ -60,7 +60,7 @@ export default function RoadmapPanel({
   const [disputeStage, setDisputeStage] = useState<string | null>(null);
   const [disputeNote, setDisputeNote] = useState("");
   const [toast, setToast] = useState<string | null>(null);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
 
   // Persist the client's collapse preference per file. Initialised after mount so
   // server and first client render agree (no hydration mismatch); a client who
@@ -69,7 +69,7 @@ export default function RoadmapPanel({
   useEffect(() => {
     if (!collapsible || !storageKey || typeof window === "undefined") return;
     try {
-      if (window.localStorage.getItem(storageKey) === "1") setCollapsed(true);
+      if (window.localStorage.getItem(storageKey) === "0") setCollapsed(false);
     } catch {
       /* ignore */
     }

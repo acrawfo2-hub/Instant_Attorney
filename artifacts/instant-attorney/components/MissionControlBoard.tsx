@@ -9,6 +9,7 @@ interface MissionControlBoardProps {
   board: MissionControlData;
   caseFileId: string;
   mode: "client" | "attorney";
+  isAttorneyUser?: boolean;
 }
 
 function StepDot({ state, number }: { state: "done" | "current" | "upcoming"; number: number }) {
@@ -94,7 +95,7 @@ function GapAnswerRow({
           />
           <div className="mc-gap-form-actions">
             <button type="button" className="mc-action-btn" onClick={save} disabled={saving || !value.trim()}>
-              {saving ? "Saving…" : "Save to Living File"}
+              {saving ? "Saving…" : "Save to case file"}
             </button>
             <button type="button" className="mc-action-link-btn" onClick={() => { setOpen(false); setError(""); }}>
               Cancel
@@ -107,7 +108,7 @@ function GapAnswerRow({
   );
 }
 
-export default function MissionControlBoard({ board, caseFileId, mode }: MissionControlBoardProps) {
+export default function MissionControlBoard({ board, caseFileId, mode, isAttorneyUser = false }: MissionControlBoardProps) {
   const router = useRouter();
   const { hero, actions, openCount, completedCount } = board;
   const isAttorney = mode === "attorney";
@@ -116,9 +117,15 @@ export default function MissionControlBoard({ board, caseFileId, mode }: Mission
     <section id="mission-control" className={`lf-nextstep lf-nextstep-${hero.tone} mc-board`} aria-label="Mission control">
       {!isAttorney && (
         <div className="mc-board-intro">
-          <span className="mc-board-intro-title">Generate a legal document for your file and have it reviewed</span>
+          <span className="mc-board-intro-title">
+            {isAttorneyUser
+              ? "Draft and refine documents for your client"
+              : "Generate a legal document for your file and have it reviewed"}
+          </span>
           <span className="mc-board-intro-sub">
-            These five steps take you from telling your story to a final, attorney-reviewed document.
+            {isAttorneyUser
+              ? "These five steps take you from gathering facts to a polished draft you can deliver."
+              : "These five steps take you from telling your story to a final, attorney-reviewed document."}
           </span>
         </div>
       )}
@@ -159,23 +166,6 @@ export default function MissionControlBoard({ board, caseFileId, mode }: Mission
         )}
       </div>
 
-      {/* Strategy quick link — the What-If game. Client-mode only: a prominent,
-          always-available way to think a few moves ahead ("what if…") and feed
-          those contingency intentions back into the file. */}
-      {!isAttorney && (
-        <Link href={`/what-if?caseFileId=${caseFileId}`} className="mc-whatif">
-          <span className="mc-whatif-icon" aria-hidden="true">♟</span>
-          <span className="mc-whatif-text">
-            <span className="mc-whatif-title">Think a few steps ahead</span>
-            <span className="mc-whatif-sub">
-              A legal strategy is really about understanding every possible outcome. The What-If game walks you
-              through those “what if…” scenarios so we can build a strategy that actually works for you.
-            </span>
-          </span>
-          <span className="mc-whatif-arrow" aria-hidden="true">→</span>
-        </Link>
-      )}
-
       {actions.length > 0 && (
         <div className="mc-queue">
           <div className="mc-queue-header">
@@ -183,7 +173,7 @@ export default function MissionControlBoard({ board, caseFileId, mode }: Mission
               {isAttorney ? "Client progress & open items" : hero.tone === "waiting" ? "While you wait" : "Also helpful right now"}
             </span>
             <span className="mc-queue-meta">
-              {openCount} open{completedCount > 0 ? ` · ${completedCount} items in your Living File` : ""}
+              {openCount} open{completedCount > 0 ? ` · ${completedCount} items in your case file` : ""}
             </span>
           </div>
           <ul className="mc-action-list">

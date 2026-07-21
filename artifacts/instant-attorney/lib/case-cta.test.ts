@@ -41,3 +41,13 @@ test("step 4 points to documents while waiting", () => {
   assert.equal(cta.label, "View review status");
   assert.equal(cta.href, "#documents");
 });
+
+test("in-file context scrolls to mission control for early steps", () => {
+  const cta = getCaseHeaderCta(guide({ activeStep: 1 }), CASE_ID, { inFileContext: true });
+  assert.equal(cta.href, "#mission-control");
+});
+
+test("in-file context uses documents anchor for review step", () => {
+  const cta = getCaseHeaderCta(guide({ activeStep: 4, tone: "waiting" }), CASE_ID, { inFileContext: true });
+  assert.equal(cta.href, "#documents");
+});
