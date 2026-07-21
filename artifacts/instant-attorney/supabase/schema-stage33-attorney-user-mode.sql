@@ -66,13 +66,16 @@ create table if not exists attorney_subscriber_agreements (
 
 alter table attorney_subscriber_agreements enable row level security;
 
+drop policy if exists "users_read_own_attorney_subscriber_agreements" on attorney_subscriber_agreements;
 create policy "users_read_own_attorney_subscriber_agreements"
   on attorney_subscriber_agreements for select using (auth.uid() = user_id);
 
+drop policy if exists "users_insert_own_attorney_subscriber_agreements" on attorney_subscriber_agreements;
 create policy "users_insert_own_attorney_subscriber_agreements"
   on attorney_subscriber_agreements for insert with check (auth.uid() = user_id);
 
 -- Andrew (is_attorney) needs to see pending signups to approve/reject them.
+drop policy if exists "attorneys_read_all_attorney_subscriber_agreements" on attorney_subscriber_agreements;
 create policy "attorneys_read_all_attorney_subscriber_agreements"
   on attorney_subscriber_agreements for select
   using (public.is_attorney());

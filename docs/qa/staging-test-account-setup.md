@@ -38,9 +38,19 @@ NEXT_PUBLIC_BYPASS_AUTH=false
 
 Apply SQL migrations **in order** in the Supabase SQL editor (`artifacts/instant-attorney/supabase/`):
 
+**Fast path (existing project that's behind):**
+
+1. Run `schema-verify.sql` — note which rows show `MISSING`
+2. Paste and run **`schema-catch-up-to-stage37.sql`** (idempotent; covers stages 8, 13–37)
+3. Run `schema-verify.sql` again — every row should be `OK`
+
+**Full path (brand-new Supabase project):**
+
 1. `schema.sql`
-2. `schema-stage2.sql` through `schema-stage22.sql` (and any later stage files)
-3. Optionally run `schema-verify.sql` to sanity-check
+2. `schema-stage2.sql` through `schema-stage7.sql`
+3. `schema-stage9.sql` through `schema-stage12-attorney-chat-rls.sql` (stage 8 is in the catch-up file)
+4. `schema-catch-up-to-stage37.sql`
+5. Run `schema-verify.sql` to sanity-check
 
 Playwright submit tests and `e2e.mjs` expect stage 8+ columns on `documents` (`parent_document_id`, `attorney_second_draft_prompt`).
 
