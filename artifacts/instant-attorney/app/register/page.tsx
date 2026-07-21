@@ -1,15 +1,12 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useState, FormEvent, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
-export default function RegisterPage() {
+function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  // A distinct entry point for attorneys signing up to use the drafting
-  // wizards as a professional tool for their own clients — kept separate
-  // from the ordinary lay-client signup (see app/onboarding/attorney).
   const isAttorneySignup = searchParams.get("as") === "attorney";
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -168,5 +165,19 @@ export default function RegisterPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={
+      <div className="auth-shell">
+        <div className="auth-card" style={{ textAlign: "center", color: "#64748b" }}>
+          Loading…
+        </div>
+      </div>
+    }>
+      <RegisterForm />
+    </Suspense>
   );
 }
