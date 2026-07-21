@@ -72,6 +72,9 @@ export interface MissionControlInput {
   mode?: "client" | "attorney";
   /** Client to-dos from a completed consult wrap-up — surfaced at top priority. */
   consultClientActions?: ConsultActionItem[];
+  /** When true, strategy recommends a live consult — surfaced in the action queue. */
+  recommendConsult?: boolean;
+  hasConsultSub?: boolean;
 }
 
 const MAX_OPEN_ROWS = 5;
@@ -127,6 +130,8 @@ export function computeMissionControl(input: MissionControlInput): MissionContro
     govForms = [],
     mode = "client",
     consultClientActions = [],
+    recommendConsult = false,
+    hasConsultSub = false,
   } = input;
   const isAttorney = mode === "attorney";
   const id = caseFile.id;
@@ -213,6 +218,22 @@ export function computeMissionControl(input: MissionControlInput): MissionContro
     }
   }
 
+  // ── Tier 0c: Attorney-recommended consult ─────────────────────────────────────
+  if (!isAttorney && recommendConsult) {
+    actions.push({
+      id: "consult:recommended",
+      kind: "consult",
+      status: "open",
+      priority: 6,
+      title: "Schedule a strategy consult",
+      reason: "Your attorney flagged this matter for a live session with Andrew Crawford, Esq.",
+      cta: {
+        label: "Schedule →",
+        href: hasConsultSub ? "/consult/schedule" : "/register?upgrade=consult",
+      },
+    });
+  }
+
   // ── Tier 0: Post-consult client action items ────────────────────────────────
   // Close the loop: every wrap-up to-do gets a concrete CTA into the Living File
   // (uploads → attachments; everything else → continue intake chat or Mission Control).
@@ -295,7 +316,7 @@ export function computeMissionControl(input: MissionControlInput): MissionContro
       title: isAttorney ? `Missing: ${gap.description}` : gap.description,
       reason: isAttorney
         ? "Client has not provided this detail yet"
-        : "Adds to your Living File and improves your documents",
+        : "Adds to your case file and improves your documents",
       cta: isAttorney
         ? undefined
         : { label: "Answer →", href: `#gap-${gap.id}` },
@@ -381,7 +402,7 @@ export function computeMissionControl(input: MissionControlInput): MissionContro
       status: "open",
       priority: 60,
       title: "Continue your private chat",
-      reason: "Share more context — your Living File updates as you talk",
+      reason: "Share more context — your case file updates as you talk",
       cta: { label: "Open chat →", href: chatHref },
       jumpTo: undefined,
     });

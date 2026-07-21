@@ -27,9 +27,8 @@ import RoadmapToolGroup from "@/components/RoadmapToolGroup";
 import PostConsultCard from "@/components/PostConsultCard";
 import CaseChatPanel from "@/components/CaseChatPanel";
 import DocumentExecutionPanel from "@/components/DocumentExecutionPanel";
-import type { CaseFile, FactItem, Document, Profile, WizardType, ConsultRequest, ConsultWrapUp, RequestedAttachment, GovFormInstrument, Attachment } from "@/lib/types";
-import { isValidWizardType } from "@/lib/document-utils";
-import { WIZARD_LABELS, docTypeLabel, personDisplayName, isDocumentOutOfDate, coerceWizardType } from "@/lib/types";
+import type { CaseFile, FactItem, Document, Profile, ConsultRequest, ConsultWrapUp, RequestedAttachment, GovFormInstrument, Attachment } from "@/lib/types";
+import { docTypeLabel, personDisplayName, isDocumentOutOfDate, coerceWizardType } from "@/lib/types";
 
 // A document deemed finalized — the attorney's work product is the deliverable,
 // so the client's wizard draft underneath it is never flagged out of date or
@@ -93,110 +92,11 @@ function DocStatusLine({ doc }: { doc: Document }) {
   return <span className={`lf-doc-status ${cls}`}>{label}</span>;
 }
 
-// ── Wizard card (client mode only) ──────────────────────────────────────────
-
-const WIZARD_ICONS: Record<WizardType, string> = {
-  demand_letter: "✉️",
-  complaint_letter: "📣",
-  draft_contract: "📝",
-  draft_waiver: "🤝",
-  wills_trusts: "⚖️",
-  doc_review: "🔍",
-  general_document: "📄",
-  improve_draft: "🪄",
-};
-
-function WizardCard({
-  wizardType,
-  caseFileId,
-}: {
-  wizardType: WizardType;
-  caseFileId: string;
-}) {
-  const label = WIZARD_LABELS[wizardType] ?? wizardType;
-  const href = `/wizard/${wizardType}?caseFileId=${caseFileId}`;
-
-  return (
-    <Link href={href} className="lf-wizard-card">
-      <span className="lf-wizard-icon">{WIZARD_ICONS[wizardType] ?? "📄"}</span>
-      <div className="lf-wizard-card-body">
-        <span className="lf-wizard-label">{label}</span>
-      </div>
-    </Link>
-  );
-}
-
-// ── Instrument → wizard type heuristic ──────────────────────────────────────
-// Maps instrument description text to the best matching wizard type.
-// Returns "general_document" for anything that doesn't fit a specific type.
-
-function guessWizardType(instrument: string): WizardType {
-  const lower = instrument.toLowerCase();
-
-  // Releases / waivers
-  if (lower.includes("waiver") || lower.includes("release") || lower.includes("indemnification"))
-    return "draft_waiver";
-
-  // Demand-style letters (cease & desist, strongly worded, notices of breach, etc.)
-  if (
-    lower.includes("cease and desist") ||
-    lower.includes("cease & desist") ||
-    lower.includes("demand letter") ||
-    lower.includes("strongly worded") ||
-    lower.includes("notice of breach") ||
-    lower.includes("notice of default") ||
-    lower.includes("demand")
-  ) return "demand_letter";
-
-  // Regulatory / agency complaints
-  if (
-    lower.includes("eeoc") ||
-    lower.includes("nlrb") ||
-    lower.includes("osha") ||
-    lower.includes("twc") ||
-    lower.includes("regulatory complaint") ||
-    lower.includes("agency complaint") ||
-    lower.includes("complaint letter") ||
-    lower.includes("complaint to")
-  ) return "complaint_letter";
-
-  // Estate planning
-  if (
-    lower.includes("will ") || lower.includes("wills") ||
-    lower.includes("trust") ||
-    lower.includes("estate plan") ||
-    lower.includes("power of attorney") ||
-    lower.includes("healthcare directive") ||
-    lower.includes("living will")
-  ) return "wills_trusts";
-
-  // Document review (third-party drafted, review only)
-  if (
-    lower.includes("review only") ||
-    (lower.includes("review") && (lower.includes("agreement") || lower.includes("contract") || lower.includes("document")))
-  ) return "doc_review";
-
-  // Contracts / agreements / policies
-  if (
-    lower.includes("contract") ||
-    lower.includes("agreement") ||
-    lower.includes("subcontract") ||
-    lower.includes("mou") ||
-    lower.includes("memorandum of understanding") ||
-    lower.includes("policy") ||
-    lower.includes("manual") ||
-    lower.includes("procedures")
-  ) return "draft_contract";
-
-  // Everything else → generic high-quality legal document
-  return "general_document";
-}
-
 // ── Matter badge ─────────────────────────────────────────────────────────────
 
 function MatterBadge({ type }: { type: string | null }) {
   if (!type) return null;
-  const label = type === "reactive" ? "Reactive Matter" : "Preventive Matter";
+  const label = type === "reactive" ? "Active case" : "Planning ahead";
   return <span className="lf-badge">{label}</span>;
 }
 
@@ -211,6 +111,7 @@ interface ClientFileViewProps {
   attachments?: Attachment[];
   govForms?: GovFormInstrument[];
   mode: "client" | "attorney";
+  isAttorneyUser?: boolean;
   clientProfile?: Profile;
   consultRequest?: ConsultRequest | null;
   hasConsultSub?: boolean;
@@ -228,6 +129,7 @@ export default function ClientFileView({
   attachments = [],
   govForms = [],
   mode,
+  isAttorneyUser = false,
   clientProfile,
   consultRequest,
   hasConsultSub = false,
@@ -283,7 +185,6 @@ export default function ClientFileView({
     }))
     .filter((grp) => grp.items.length > 0);
   const strategy = caseFile.legal_strategy ?? null;
-  const recommendedWizards = strategy?.recommended_wizards ?? [];
   const isAttorney = mode === "attorney";
   // Surface the child-support estimator only on family matters, detected by
   // reusing the family-instrument keyword matcher over the matter's own text.
@@ -346,6 +247,8 @@ export default function ClientFileView({
     govForms,
     mode,
     consultClientActions: completedConsultWrapUp?.clientActions ?? [],
+    recommendConsult: Boolean(strategy?.recommend_consult) && !hasActiveConsult,
+    hasConsultSub,
   });
 
   return (
@@ -382,8 +285,8 @@ export default function ClientFileView({
         );
       })()}
 
-      {/* Consult status / CTA — client mode only; pinned to the very top */}
-      {!isAttorney && (() => {
+      {/* Consult status — client Crawford Law subscribers only */}
+      {!isAttorney && !isAttorneyUser && (() => {
         const cr = consultRequest;
         if (cr?.status === "confirmed" && cr.confirmed_time) {
           const timeStr = new Date(cr.confirmed_time).toLocaleString("en-US", {
@@ -431,28 +334,25 @@ export default function ClientFileView({
             </div>
           );
         }
-        return (
-          <div className={`lf-card lf-card-full lf-consult-banner ${strategy?.recommend_consult ? "lf-consult-banner-recommended" : ""}`}>
-            <div className="lf-consult-banner-inner">
-              <div className="lf-consult-banner-text">
-                {strategy?.recommend_consult ? (
-                  <>
-                    <span className="lf-consult-rec-badge">Consult Recommended</span>
-                    <span className="lf-consult-desc">Your attorney has flagged this matter for a live strategy session.</span>
-                  </>
-                ) : (
-                  <span className="lf-consult-desc">Ready to speak with Andrew Crawford, Esq. directly? Schedule a 1-on-1 strategy session.</span>
-                )}
+        if (strategy?.recommend_consult) {
+          return (
+            <div className="lf-card lf-card-full lf-consult-banner lf-consult-banner-recommended">
+              <div className="lf-consult-banner-inner">
+                <div className="lf-consult-banner-text">
+                  <span className="lf-consult-rec-badge">Consult Recommended</span>
+                  <span className="lf-consult-desc">Your attorney has flagged this matter for a live strategy session.</span>
+                </div>
+                <Link
+                  href={hasConsultSub ? "/consult/schedule" : "/register?upgrade=consult"}
+                  className="lf-consult-btn"
+                >
+                  {hasConsultSub ? "Schedule Consult →" : "Schedule Consult · $49.99 →"}
+                </Link>
               </div>
-              <Link
-                href={hasConsultSub ? "/consult/schedule" : "/register?upgrade=consult"}
-                className="lf-consult-btn"
-              >
-                {hasConsultSub ? "Schedule Consult →" : "Schedule Consult · $49.99 →"}
-              </Link>
             </div>
-          </div>
-        );
+          );
+        }
+        return null;
       })()}
 
       {/* Post-consult action plan — client mode */}
@@ -468,6 +368,7 @@ export default function ClientFileView({
         board={missionBoard}
         caseFileId={caseFile.id}
         mode={mode}
+        isAttorneyUser={isAttorneyUser}
       />
 
       {resolvedRoadmap && (
@@ -505,7 +406,22 @@ export default function ClientFileView({
         </div>
       )}
 
-      {/* Matter + Next Action */}
+      <ExistingCounselCard
+        caseFileId={caseFile.id}
+        counselIntakeAt={caseFile.counsel_intake_at}
+        hasExistingCounsel={caseFile.has_existing_counsel}
+        existingCounselName={caseFile.existing_counsel_name}
+        counselEngagementGoal={caseFile.counsel_engagement_goal}
+        mode={isAttorney ? "attorney" : "client"}
+      />
+
+      <details className="lf-details-section">
+        <summary className="lf-details-summary">
+          <span className="lf-details-summary-main">About this matter</span>
+          <span className="lf-details-summary-hint">Summary, goals, and strategy — updates as you go</span>
+        </summary>
+        <div className="lf-details-body">
+      {/* Matter */}
       <div className="lf-card lf-card-sm">
         <div className="lf-card-label">
           Matter
@@ -521,23 +437,6 @@ export default function ClientFileView({
           <span>Opened {new Date(caseFile.opened_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</span>
         </div>
       </div>
-
-      <div className="lf-card lf-card-sm lf-card-action">
-        <div className="lf-card-label">Next Action</div>
-        <div className="lf-card-value lf-next-action">
-          {caseFile.next_action ?? "Continue intake to determine"}
-        </div>
-      </div>
-
-      {/* Existing counsel context */}
-      <ExistingCounselCard
-        caseFileId={caseFile.id}
-        counselIntakeAt={caseFile.counsel_intake_at}
-        hasExistingCounsel={caseFile.has_existing_counsel}
-        existingCounselName={caseFile.existing_counsel_name}
-        counselEngagementGoal={caseFile.counsel_engagement_goal}
-        mode={isAttorney ? "attorney" : "client"}
-      />
 
       {/* Case Summary */}
       {caseFile.summary && (
@@ -595,70 +494,40 @@ export default function ClientFileView({
             <div className="lf-instruments">
               <div className="lf-strategy-sub">
                 Suggested Instruments
-                {!isAttorney && <span className="lf-plain-caption lf-plain-caption-sub">Documents we can create for you</span>}
+                {!isAttorney && <span className="lf-plain-caption lf-plain-caption-sub">Documents we can create — start from Mission Control above</span>}
               </div>
               <ul className="lf-list">
-                {strategy.instruments.map((inst, i) => {
-                  if (isAttorney) return <li key={i}>{inst}</li>;
-
-                  const wizardType = guessWizardType(inst);
-                  const doc = documents.find((d) => d.doc_type === wizardType);
-
-                  // Build the wizard URL — pass instrument name for general_document so the AI knows what to draft
-                  const instrumentParam = wizardType === "general_document"
-                    ? `&instrument=${encodeURIComponent(inst)}`
-                    : "";
-
-                  let action: React.ReactNode;
-                  if (wizardType === "doc_review" && !hasUploadedDoc) {
-                    // Document Review needs a real document to review — point the
-                    // client to upload one first instead of starting a draft.
-                    action = (
-                      <a href="#attachments" className="lf-inst-start-btn lf-inst-locked-btn">
-                        Upload a document to review →
-                      </a>
-                    );
-                  } else if (doc?.status === "pending_review") {
-                    action = <span className="lf-inst-pending">Awaiting 48hr Review</span>;
-                  } else if (doc?.status === "approved" || doc?.status === "delivered") {
-                    action = <span className="lf-inst-done">✓ Completed</span>;
-                  } else if (doc?.status === "draft" || doc?.status === "changes_requested") {
-                    const href = `/wizard/${wizardType}?caseFileId=${caseFile.id}&docId=${doc.id}${instrumentParam}`;
-                    action = (
-                      <Link href={href} className="lf-inst-start-btn">
-                        {doc.status === "changes_requested" ? "Revisions Needed →" : "Continue Draft →"}
-                      </Link>
-                    );
-                  } else {
-                    const href = `/wizard/${wizardType}?caseFileId=${caseFile.id}${instrumentParam}`;
-                    action = <Link href={href} className="lf-inst-start-btn">Start Document →</Link>;
-                  }
-
-                  return (
-                    <li key={i} className="lf-inst-row">
-                      <span className="lf-inst-text">{inst}</span>
-                      {action}
-                    </li>
-                  );
-                })}
+                {strategy.instruments.map((inst, i) => (
+                  <li key={i}>{inst}</li>
+                ))}
               </ul>
             </div>
           )}
         </div>
       )}
 
+        </div>
+      </details>
+
       {/* Government forms detected in chat — surfaced as instruments to complete */}
       <div id="gov-forms" className="lf-span-full">
         <GovFormInstruments caseFileId={caseFile.id} />
       </div>
 
-      {/* Confirmed Facts + Gaps (side-by-side, capped at 20) + document placeholders */}
+      <details className="lf-details-section">
+        <summary className="lf-details-summary">
+          <span className="lf-details-summary-main">Facts &amp; gaps</span>
+          <span className="lf-details-summary-hint">Reference list — answer open items from Mission Control</span>
+        </summary>
+        <div className="lf-details-body">
       <FactsPanel
         confirmed={confirmed}
         gaps={realGaps}
         placeholderGroups={placeholderGroups}
         isAttorney={isAttorney}
       />
+        </div>
+      </details>
 
       {/* Contingency preferences captured by the What-If Game (hypothetical, not facts) */}
       {hypotheticals.length > 0 && (
@@ -941,63 +810,6 @@ export default function ClientFileView({
           </Link>
         </div>
         </RoadmapToolGroup>
-      )}
-
-      {/* Document Wizards — client mode only */}
-      {!isAttorney && (
-        <div className="lf-card lf-card-full lf-wizard-spotlight">
-          <div className="lf-wizard-spotlight-header">
-            <div className="lf-wizard-spotlight-eyebrow">⚡ Your Next Step</div>
-            <div className="lf-card-label">Start Your Documents</div>
-          </div>
-          {recommendedWizards.length > 0 ? (
-            <>
-              <p className="lf-wizard-hint">
-                Click a document below to start drafting — the AI will compose a complete first draft from your Living File in under 2 minutes.
-              </p>
-              <div className="lf-wizard-grid">
-                {recommendedWizards
-                  .filter(isValidWizardType)
-                  .filter((wType) => wType !== "doc_review" || hasUploadedDoc)
-                  .filter((wType) => wType !== "improve_draft")
-                  .map((wType) => (
-                  <WizardCard
-                    key={wType}
-                    wizardType={wType}
-                    caseFileId={caseFile.id}
-                  />
-                ))}
-                <WizardCard wizardType="improve_draft" caseFileId={caseFile.id} />
-              </div>
-            </>
-          ) : (
-            <>
-              <p className="lf-wizard-hint">
-                The more you share in your private chat, the better your documents will be — but
-                you don&apos;t have to wait. You can start a document right now and we&apos;ll fill
-                in the rest as we go. Missing details are never a problem.
-              </p>
-              <div className="lf-wizard-grid">
-                <Link
-                  href={`/wizard/general_document?caseFileId=${caseFile.id}`}
-                  className="lf-wizard-card"
-                >
-                  <span className="lf-wizard-icon">📄</span>
-                  <div className="lf-wizard-card-body">
-                    <span className="lf-wizard-label">Start a document now</span>
-                  </div>
-                </Link>
-                <WizardCard wizardType="improve_draft" caseFileId={caseFile.id} />
-                <Link href={`/chat?caseFileId=${caseFile.id}`} className="lf-wizard-card">
-                  <span className="lf-wizard-icon">💬</span>
-                  <div className="lf-wizard-card-body">
-                    <span className="lf-wizard-label">Tell us more first</span>
-                  </div>
-                </Link>
-              </div>
-            </>
-          )}
-        </div>
       )}
 
       {/* Documents */}

@@ -6732,10 +6732,55 @@ mark.atty-placeholder {
   border-radius: 8px;
 }
 
+/* ── Collapsible case file detail sections (reference below Mission Control) ─ */
+.lf-details-section {
+  grid-column: 1 / -1;
+  border: 0.5px solid var(--brand-border, #e5e0d8);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.55);
+  overflow: hidden;
+}
+.lf-details-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.75rem;
+  padding: 0.85rem 1rem;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.lf-details-summary::-webkit-details-marker { display: none; }
+.lf-details-summary:hover { background: rgba(26, 22, 18, 0.03); }
+.lf-details-summary-main {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand-navy);
+  letter-spacing: 0.02em;
+}
+.lf-details-summary-hint {
+  font-size: 12px;
+  color: var(--brand-text-md, #5b6675);
+  font-weight: 400;
+}
+.lf-details-body {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  padding: 0 1rem 1rem;
+  border-top: 0.5px solid var(--brand-border, #e5e0d8);
+}
+.lf-details-body > .lf-card-full,
+.lf-details-body > .lf-span-full,
+.lf-details-body > details,
+.lf-details-body > .lf-pair {
+  grid-column: 1 / -1;
+}
+@media (max-width: 720px) {
+  .lf-details-body { grid-template-columns: 1fr; }
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
-   Next-Step guidance layer (plain-language "what to do next")
-   Additive layer on top of the Living File — never replaces the detail below.
-   ═══════════════════════════════════════════════════════════════════════════ */
 .lf-nextstep {
   grid-column: 1 / -1;
   display: flex;
