@@ -8,7 +8,10 @@ import type { CaseFile, FactItem, Attachment, RequestedAttachment } from "./type
 
 // Cheap, narrow summarizer — a small file block, not legal reasoning.
 const EXTRACTOR_MODEL = "claude-haiku-4-5-20251001";
-const EXTRACTOR_MAX_TOKENS = 2000;
+// A Living File block is usually well under this, but a first sweep summarizing a
+// long back-catalog of freestyle turns can be larger — keep headroom so the
+// closing ---END FILE--- marker isn't truncated off.
+const EXTRACTOR_MAX_TOKENS = 4000;
 
 // Debounce: on the automatic per-turn sweep, don't call the model until at least
 // this many unsynced messages (~3 turns) have accumulated. A forced flush
@@ -158,14 +161,31 @@ export async function syncLivingFile(
     }) },
   }).catch((err) => console.error("[living-file-extractor] usage record error:", err));
 
-  // Messages were processed regardless of outcome — advance so we don't re-read.
-  await advanceWatermark();
+  const hasOpen = output.includes("---LIVING FILE---");
+  const hasClose = output.includes("---END FILE---");
 
-  if (!output.includes("---LIVING FILE---")) {
-    // Model judged there was nothing new to record.
+  if (!hasOpen) {
+    // Model judged there was nothing new to record — the window IS processed,
+    // so advance past it so we don't re-read the same messages forever.
+    await advanceWatermark();
     return { synced: false, processedMessages: newMessages.length, reason: "no_update" };
   }
 
+  if (!hasClose) {
+    // Truncated / malformed block: the opening marker is present but the closer
+    // is missing, so parseLivingFile would silently drop it. Do NOT advance the
+    // watermark — leave this window for the next sweep to retry (with a fresh
+    // token budget) rather than losing the facts in it.
+    console.warn(
+      "[living-file-extractor] incomplete LIVING FILE block (no ---END FILE---); leaving watermark for retry.",
+      { caseFileId, outputTokens: finalMsg.usage.output_tokens, stopReason: finalMsg.stop_reason }
+    );
+    return { synced: false, processedMessages: newMessages.length, reason: "no_update" };
+  }
+
+  // Complete block — write it, THEN advance the watermark so a parse failure
+  // never strands a window as "synced".
   await parseAndUpdateFile(db, caseFileId, userId, output);
+  await advanceWatermark();
   return { synced: true, processedMessages: newMessages.length, reason: "updated" };
 }

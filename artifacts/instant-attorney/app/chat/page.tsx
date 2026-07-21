@@ -25,6 +25,12 @@ interface PendingAttachment {
   previewUrl: string;
 }
 
+interface DocUpload {
+  key: string;
+  fileName: string;
+  status: "uploading" | "ready" | "error";
+}
+
 const INITIAL_MESSAGE: Msg = {
   role: "assistant",
   content:
@@ -149,6 +155,10 @@ function AcpChatInner() {
   const [streamingText, setStreamingText] = useState("");
   const [chatTruncated, setChatTruncated] = useState(false);
   const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
+  // Freestyle document attachments go through the storage-upload pipeline (not
+  // inline base64), so large files don't blow the request-body limit. These
+  // chips track their upload/analysis state.
+  const [docUploads, setDocUploads] = useState<DocUpload[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [showQcModal, setShowQcModal] = useState(false);
   const [showCounselModal, setShowCounselModal] = useState(false);
@@ -388,28 +398,52 @@ function AcpChatInner() {
   }
 
   const attachFile = useCallback(async (file: File) => {
-    const isImage = file.type.startsWith("image/");
-    // Intake accepts screenshots only; freestyle also accepts documents (PDF,
-    // Word, text) since the backend already handles those content blocks.
-    const allowed = isImage || (mode === "freestyle" && FREESTYLE_ATTACH_TYPES.has(file.type));
-    if (!allowed) {
+    // Images go inline (base64) — small and shown in the bubble immediately.
+    if (file.type.startsWith("image/")) {
+      if (file.size > MAX_INLINE_BYTES) {
+        alert("Screenshots must be under 4 MB. For larger files, use the Upload Documents section on your dashboard.");
+        return;
+      }
+      const data = await fileToBase64(file);
+      const previewUrl = URL.createObjectURL(file);
+      setPendingAttachment({ data, mimeType: file.type, fileName: file.name || "screenshot.png", previewUrl });
+      return;
+    }
+
+    // Documents (freestyle only) go through the storage-upload pipeline rather
+    // than inline base64, so large files don't exceed the request-body limit.
+    // They're stored, correctly typed, and analyzed into the Living File.
+    if (mode !== "freestyle" || !FREESTYLE_ATTACH_TYPES.has(file.type)) {
       if (mode === "freestyle") {
         alert("Freestyle accepts images, PDFs, Word documents, and text files.");
       }
       return;
     }
-    const cap = mode === "freestyle" ? MAX_FREESTYLE_BYTES : MAX_INLINE_BYTES;
-    if (file.size > cap) {
-      alert(
-        mode === "freestyle"
-          ? "Attachments must be under 10 MB. For larger files, use the Upload Documents section on your dashboard."
-          : "Screenshots must be under 4 MB. For larger files, use the Upload Documents section on your dashboard."
-      );
+    if (file.size > MAX_FREESTYLE_BYTES) {
+      alert("Attachments must be under 20 MB. For larger files, use the Upload Documents section on your dashboard.");
       return;
     }
-    const data = await fileToBase64(file);
-    const previewUrl = URL.createObjectURL(file);
-    setPendingAttachment({ data, mimeType: file.type, fileName: file.name || (isImage ? "screenshot.png" : "attachment"), previewUrl });
+    const id = caseFileIdRef.current;
+    if (!id) {
+      alert("Send a message first, then attach documents so they can be added to your file.");
+      return;
+    }
+    const key = `${file.name}-${Date.now()}`;
+    setDocUploads((prev) => [...prev, { key, fileName: file.name || "document", status: "uploading" }]);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("caseFileId", id);
+      const res = await fetch("/api/attachments/upload", { method: "POST", body: fd });
+      if (!res.ok) {
+        const msg = res.status === 413 ? "File is too large to upload." : "Upload failed.";
+        throw new Error(msg);
+      }
+      setDocUploads((prev) => prev.map((d) => (d.key === key ? { ...d, status: "ready" } : d)));
+    } catch (err) {
+      setDocUploads((prev) => prev.map((d) => (d.key === key ? { ...d, status: "error" } : d)));
+      alert(err instanceof Error ? err.message : "Upload failed.");
+    }
   }, [mode]);
 
   function handlePaste(e: React.ClipboardEvent) {
@@ -456,7 +490,11 @@ function AcpChatInner() {
     const userMsg: Msg = {
       role: "user",
       content: displayContent,
-      ...(attachment ? { imageUrl: attachment.previewUrl } : {}),
+      // Only images render inline as <img>; documents show as their [filename]
+      // tag in the bubble text instead of a broken image.
+      ...(attachment && attachment.mimeType.startsWith("image/")
+        ? { imageUrl: attachment.previewUrl }
+        : {}),
     };
     setModeChooserOpen(false);
     const nextMessages = [...messages, userMsg];
@@ -552,6 +590,8 @@ function AcpChatInner() {
       setMessages((prev) => [...prev, { role: "assistant", content: full }]);
       setStreamingText("");
       setPendingCounselContext(null);
+      // Resolved doc uploads are now in the file context; keep only in-flight ones.
+      setDocUploads((prev) => prev.filter((d) => d.status === "uploading"));
     } catch {
       setMessages((prev) => [
         ...prev,
@@ -861,6 +901,37 @@ function AcpChatInner() {
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
+        {/* Document uploads (freestyle) — added to the file + analyzed, not sent inline */}
+        {docUploads.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+            {docUploads.map((d) => (
+              <span
+                key={d.key}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                  padding: "4px 10px", borderRadius: 999, fontSize: 12,
+                  background: "rgba(255,255,255,0.06)",
+                  border: `1px solid ${d.status === "error" ? "rgba(220,80,80,0.5)" : "rgba(200,169,110,0.25)"}`,
+                  color: "var(--brand-cream-text)",
+                }}
+              >
+                <span aria-hidden>{d.status === "error" ? "⚠" : "📄"}</span>
+                {d.fileName}
+                <span style={{ opacity: 0.6 }}>
+                  {d.status === "uploading" ? "· adding…" : d.status === "ready" ? "· added to your file" : "· failed"}
+                </span>
+                <button
+                  onClick={() => setDocUploads((prev) => prev.filter((x) => x.key !== d.key))}
+                  aria-label="Dismiss"
+                  style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", opacity: 0.7, padding: 0, lineHeight: 1 }}
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* Attachment preview — thumbnail for images, a doc chip for files */}
         {pendingAttachment && (
           <div className="fc-attachment-preview">

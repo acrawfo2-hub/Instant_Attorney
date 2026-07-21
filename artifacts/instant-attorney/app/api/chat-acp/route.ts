@@ -360,6 +360,21 @@ export async function POST(req: NextRequest) {
             try {
               await parseAndUpdateFile(db, resolvedCaseFileId, userId, fullResponse);
 
+              // When the model emitted a COMPLETE inline Living File block this
+              // turn, advance the sync watermark so the background extractor
+              // doesn't reprocess these same messages and produce near-duplicate
+              // facts (upsertFacts only dedupes exact matches). Incomplete blocks
+              // are left un-watermarked so the extractor still catches them.
+              if (hasLivingFile && fullResponse.includes("---END FILE---")) {
+                await db
+                  .from("case_files")
+                  .update({ last_file_synced_at: new Date().toISOString() })
+                  .eq("id", resolvedCaseFileId)
+                  .then(undefined, (err) =>
+                    console.error("[chat-acp] inline watermark advance error:", err)
+                  );
+              }
+
               // Kick off grounded web lookups for any newly-detected forms that
               // aren't in the curated registry (fire-and-forget, non-blocking).
               if (hasGovForms) {
@@ -424,7 +439,7 @@ export async function POST(req: NextRequest) {
                     file_type: pendingAttachment.mimeType,
                     file_size: buffer.length,
                     storage_path: storagePath,
-                    attachment_type: "screenshot",
+                    attachment_type: pendingAttachment.mimeType.startsWith("image/") ? "screenshot" : "document",
                     status: "processing",
                   })
                   .select()
