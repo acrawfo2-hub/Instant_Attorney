@@ -148,4 +148,25 @@ union all select 'case_files.counsel_intake_at', case when exists (
   select 1 from information_schema.columns
   where table_schema = 'public' and table_name = 'case_files' and column_name = 'counsel_intake_at'
 ) then 'OK' else 'MISSING' end
+union all select 'document_executions', case when exists (
+  select 1 from information_schema.tables where table_schema = 'public' and table_name = 'document_executions'
+) then 'OK' else 'MISSING' end
+union all select 'form_verifications', case when exists (
+  select 1 from information_schema.tables where table_schema = 'public' and table_name = 'form_verifications'
+) then 'OK' else 'MISSING' end
+union all select 'case_files.chat_mode', case when exists (
+  select 1 from information_schema.columns
+  where table_schema = 'public' and table_name = 'case_files' and column_name = 'chat_mode'
+) then 'OK' else 'MISSING' end
+union all select 'attorney_workspace_messages', case when exists (
+  select 1 from information_schema.tables where table_schema = 'public' and table_name = 'attorney_workspace_messages'
+) then 'OK' else 'MISSING' end
+union all select 'case_files.last_file_synced_at', case when exists (
+  select 1 from information_schema.columns
+  where table_schema = 'public' and table_name = 'case_files' and column_name = 'last_file_synced_at'
+) then 'OK' else 'MISSING' end
+union all select 'ai_consents.signature_name', case when exists (
+  select 1 from information_schema.columns
+  where table_schema = 'public' and table_name = 'ai_consents' and column_name = 'signature_name'
+) then 'OK' else 'MISSING' end
 order by object;
