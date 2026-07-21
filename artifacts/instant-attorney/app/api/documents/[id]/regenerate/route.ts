@@ -273,6 +273,16 @@ export async function POST(
     truncated: truncated ? true : undefined,
   };
 
+  // If the client regenerates a draft that is CURRENTLY in the attorney's review
+  // queue, the reviewed text has just changed underneath the attorney. Restart
+  // the review on the new content: reset submitted_at so the 48-hour clock and
+  // queue ordering reflect the current draft (never review stale text on a stale
+  // clock, or approve a version that was never read).
+  const wasInReview = doc.status === "pending_review";
+  if (wasInReview) {
+    update.submitted_at = now;
+  }
+
   const { error: updateErr } = await writeDb
     .from("documents")
     .update(update)
@@ -285,6 +295,21 @@ export async function POST(
       { error: "We regenerated your draft but couldn't save it. Please try again.", text: fullResponse },
       { status: 500 }
     );
+  }
+
+  // Any attorney work-product (critical review / second draft) was built against
+  // the OLD text and is now stale — drop it so the attorney re-reviews the
+  // regenerated draft from scratch. Mirrors the resubmit path in
+  // finalizeDocumentSubmission. Best-effort: never fail the regeneration over it.
+  if (wasInReview) {
+    await writeDb
+      .from("documents")
+      .delete()
+      .eq("parent_document_id", documentId)
+      .in("doc_type", ["critical_review", "second_draft"])
+      .then(undefined, (err) =>
+        console.error("[documents/regenerate] stale child cleanup error:", err)
+      );
   }
 
   // Apply the same post-generation Living File writes the wizard does, so the
