@@ -6662,6 +6662,76 @@ mark.atty-placeholder {
 }
 .fc-handoff-keep:hover { color: var(--brand-navy); }
 
+/* ── Chat mode chooser (first visit) ──────────────────────────────────────── */
+.fc-mode-chooser {
+  max-width: 560px;
+  width: 100%;
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 0.5px solid rgba(200, 169, 110, 0.22);
+  border-radius: 12px;
+}
+.fc-mode-chooser-title {
+  margin: 0;
+  font-family: var(--font-playfair, "Playfair Display"), serif;
+  font-size: 17px;
+  font-weight: 500;
+  color: #f5efe6;
+  text-align: center;
+}
+.fc-mode-chooser-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+@media (min-width: 560px) {
+  .fc-mode-chooser-actions { grid-template-columns: 1fr 1fr; }
+}
+.fc-mode-chooser-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  text-align: left;
+  padding: 1rem 1.1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  cursor: pointer;
+  color: var(--brand-cream-text);
+  font-family: var(--font-dm-sans, "DM Sans"), sans-serif;
+  transition: border-color 0.15s, background 0.15s;
+}
+.fc-mode-chooser-card strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: #f5efe6;
+}
+.fc-mode-chooser-card span {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: rgba(232, 226, 217, 0.72);
+}
+.fc-mode-chooser-card:hover {
+  background: rgba(200, 169, 110, 0.1);
+  border-color: rgba(200, 169, 110, 0.35);
+}
+.fc-mode-notice {
+  align-self: center;
+  max-width: 560px;
+  width: 100%;
+  padding: 0.55rem 1rem;
+  font-size: 12.5px;
+  text-align: center;
+  color: rgba(232, 226, 217, 0.75);
+  background: rgba(200, 169, 110, 0.08);
+  border: 0.5px solid rgba(200, 169, 110, 0.2);
+  border-radius: 8px;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Next-Step guidance layer (plain-language "what to do next")
    Additive layer on top of the Living File — never replaces the detail below.

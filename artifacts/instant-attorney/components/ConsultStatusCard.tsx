@@ -65,6 +65,9 @@ export default function ConsultStatusCard({ consult: initial }: { consult: Consu
               <strong>{fmtCST(consult.confirmed_time)}</strong>
               {consult.client_phone && <> · Andrew will call you at {consult.client_phone}</>}
             </div>
+            <Link href={`/consult/${consult.id}/session`} className="consult-status-btn consult-status-btn-accept">
+              Open consult page →
+            </Link>
           </>
         )}
 

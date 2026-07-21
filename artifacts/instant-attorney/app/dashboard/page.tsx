@@ -133,7 +133,7 @@ export default async function DashboardPage() {
           Instant-Attorney
         </Link>
         <div className="lf-header-center">
-          <span className="lf-header-title">{hasFiles ? "Your matters" : "Your Files"}</span>
+          <span className="lf-header-title">Your cases</span>
         </div>
         <div className="lf-header-right">
           {isBypass && <span className="ob-bypass-badge">Test Mode</span>}
@@ -145,7 +145,7 @@ export default async function DashboardPage() {
         {/* Usage / top-up status + spend-limit controls (hidden for free users) */}
         <BillingMeter />
 
-        {/* Start Here — Living File is the product; chat is how you open/continue it */}
+        {/* Start Here — the case file is home; chat is how you add details */}
         <section className={`dash-start${hasFiles ? " dash-start--compact" : ""}`}>
           {!hasFiles && (
             <div className="dash-start-badge">
@@ -158,39 +158,51 @@ export default async function DashboardPage() {
           <div className="dash-start-body">
             {!hasFiles ? (
               <>
-                <h2 className="dash-start-title">Open your Living File</h2>
+                <h2 className="dash-start-title">Start your first case</h2>
                 <p className="dash-start-sub">
-                  A short conversation builds your file — facts, gaps, strategy, and a clear next step.
-                  The chat is intake; <strong>your Living File is the product</strong>.
+                  A short private conversation builds your case file — facts, strategy, and a clear next step.
+                  You can always come back to add more.
                 </p>
               </>
             ) : (
               <>
-                <h2 className="dash-start-title dash-start-title--compact">Pick up where you left off</h2>
+                <h2 className="dash-start-title dash-start-title--compact">Your cases</h2>
                 <p className="dash-start-sub dash-start-sub--compact">
-                  Open a Living File to see your next step, open gaps, and documents. Chat is available inside each file when you need to add facts.
+                  Open a case to see your next step. Use chat inside a case when you need to add details.
                 </p>
               </>
             )}
             <div className="dash-start-actions">
               {atLimit ? (
                 <span className="dash-limit-note">
-                  {MAX_ACTIVE_FILES}/{MAX_ACTIVE_FILES} files — archive one to open a new file
+                  {MAX_ACTIVE_FILES}/{MAX_ACTIVE_FILES} cases — archive one to start another
                 </span>
+              ) : hasFiles ? (
+                <Link href={`/dashboard/${sortedActive[0].id}`} className="dash-btn dash-btn-primary dash-btn-lg">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                  </svg>
+                  Open your case
+                </Link>
               ) : (
                 <Link href="/chat" className="dash-btn dash-btn-primary dash-btn-lg">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
                   </svg>
-                  {hasFiles ? "Open another matter" : "Start Your Living File"}
+                  Start a new case
                 </Link>
               )}
-              <Link href="/chat?type=quick_consult" className="dash-btn dash-btn-secondary">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                </svg>
-                Quick Question
-                <span className="dash-btn-hint">A privileged one-off question, unrelated to your files</span>
+              {!atLimit && hasFiles && (
+                <Link href="/chat" className="dash-btn dash-btn-secondary">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                  Start another case
+                </Link>
+              )}
+              <Link href="/chat?type=quick_consult" className="dash-btn dash-btn-ghost dash-btn-secondary">
+                One-off question
+                <span className="dash-btn-hint">Private, but not saved to a case file</span>
               </Link>
               {consult && consult.status !== "cancelled" && consult.status !== "completed" ? (
                 <a href="#consult-status" className="dash-btn dash-btn-secondary dash-btn--consult-active">

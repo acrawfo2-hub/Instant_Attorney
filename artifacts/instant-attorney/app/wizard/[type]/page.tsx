@@ -52,6 +52,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   const router = useRouter();
   const searchParams = useSearchParams();
   const caseFileId = searchParams.get("caseFileId") ?? "";
+  const fileBackHref = caseFileId ? `/dashboard/${caseFileId}` : "/dashboard";
   // A specific document to resume (an in-progress "draft" or a "changes_requested"
   // doc linked from the dashboard). Not used for any background pre-generation —
   // the draft is always composed live when the wizard opens.
@@ -678,7 +679,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
     return (
       <div className="wiz-shell wiz-shell-v2">
         <header className="wiz-header">
-          <button className="wiz-back" onClick={() => router.push("/dashboard")}>← Back to File</button>
+          <button className="wiz-back" onClick={() => router.push(fileBackHref)}>← Back to your case</button>
           <div className="wiz-title">
             <span className="wiz-type-pill">{label}</span>
           </div>
@@ -713,7 +714,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
     return (
       <div className="wiz-shell wiz-shell-v2">
         <header className="wiz-header">
-          <button className="wiz-back" onClick={() => router.push("/dashboard")}>← Back to File</button>
+          <button className="wiz-back" onClick={() => router.push(fileBackHref)}>← Back to your case</button>
           <div className="wiz-title">
             <span className="wiz-type-pill">{label}</span>
           </div>
@@ -787,7 +788,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
     <div className="wiz-shell wiz-shell-v2">
       {/* Header */}
       <header className="wiz-header">
-        <button className="wiz-back" onClick={() => router.push("/dashboard")}>← Back to File</button>
+        <button className="wiz-back" onClick={() => router.push(fileBackHref)}>← Back to your case</button>
         <div className="wiz-title">
           <span className="wiz-type-pill">{label}</span>
           <span className="wiz-acp-badge">ACP Protected</span>
@@ -820,7 +821,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
                 <button className="wiz-retry-btn" onClick={() => { setError(""); runDrafter([], true); }}>
                   Try Again →
                 </button>
-                <button className="wiz-gen-error-back" onClick={() => router.push("/dashboard")}>
+                <button className="wiz-gen-error-back" onClick={() => router.push(fileBackHref)}>
                   ← Back to my file
                 </button>
               </div>
@@ -873,7 +874,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
                   {downloading ? "Downloading…" : "Download Current Draft (.docx)"}
                 </button>
               )}
-              <button className="wiz-back-to-file" onClick={() => router.push("/dashboard")}>
+              <button className="wiz-back-to-file" onClick={() => router.push(fileBackHref)}>
                 Return to Your File →
               </button>
             </div>
