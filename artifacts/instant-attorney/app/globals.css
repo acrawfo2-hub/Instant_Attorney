@@ -2798,6 +2798,25 @@ body {
 }
 .atty-empty { font-size: 14px; color: var(--brand-text-xlt); font-style: italic; }
 
+/* Onboard-a-client inputs sit on the light cream attorney shell, so they need
+   dark text on a solid white field — not the inherited cream body text, which
+   was invisible against the light background. */
+.atty-onboard-input {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--brand-border);
+  background: var(--brand-white);
+  color: var(--brand-text-dk);
+  font-size: 14px;
+  min-width: 180px;
+}
+.atty-onboard-input::placeholder { color: var(--brand-text-lt); }
+.atty-onboard-input:focus {
+  outline: none;
+  border-color: var(--brand-gold);
+  box-shadow: 0 0 0 3px rgba(200, 169, 110, 0.15);
+}
+
 .atty-doc-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
 .atty-doc-card {
   display: block;

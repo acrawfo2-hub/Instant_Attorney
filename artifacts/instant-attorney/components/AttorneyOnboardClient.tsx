@@ -52,14 +52,14 @@ export default function AttorneyOnboardClient() {
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="Client name"
-        style={inputStyle}
+        className="atty-onboard-input"
       />
       <input
         value={email}
         onChange={(e) => setEmail(e.target.value)}
         placeholder="Client email (optional)"
         type="email"
-        style={inputStyle}
+        className="atty-onboard-input"
       />
       <button type="submit" disabled={!name.trim() || submitting} style={{ ...btnStyle, opacity: !name.trim() || submitting ? 0.5 : 1 }}>
         {submitting ? "Creating…" : "Create & start intake"}
@@ -81,14 +81,4 @@ const btnStyle: React.CSSProperties = {
   fontSize: 13,
   fontWeight: 600,
   cursor: "pointer",
-};
-
-const inputStyle: React.CSSProperties = {
-  padding: "8px 12px",
-  borderRadius: 8,
-  border: "1px solid rgba(200,169,110,0.25)",
-  background: "rgba(255,255,255,0.05)",
-  color: "inherit",
-  fontSize: 14,
-  minWidth: 180,
 };

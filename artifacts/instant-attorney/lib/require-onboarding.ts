@@ -29,13 +29,20 @@ export async function requireSubscription(): Promise<void> {
     db.from("profiles").select("account_type, is_attorney").eq("id", user.id).maybeSingle(),
   ]);
 
-  // The reviewing attorney isn't a paying subscriber — hitting a Phase II
-  // page directly should send him to his review queue, never "please subscribe."
+  const hasActiveSub = !!sub && PHASE2_ACTIVE.includes(sub.status);
+
+  // When an attorney onboards a client, we grant their account a "bypass"
+  // subscription so they can drive the client workflow surfaces (chat, wizard,
+  // drafting) on files they own. An attorney WITH that active subscription is
+  // therefore allowed straight through — bouncing them to /attorney here is what
+  // broke "Continue chat" / "Create document" on onboarded client files.
+  if (hasActiveSub) return;
+
+  // A subscription-less attorney landed on a Phase II page directly — send them
+  // to their review queue, never to "please subscribe."
   if (profile?.is_attorney) {
     redirect("/attorney");
   }
 
-  if (!sub || !PHASE2_ACTIVE.includes(sub.status)) {
-    redirect(profile?.account_type === "attorney_user" ? "/onboarding/attorney" : "/onboarding");
-  }
+  redirect(profile?.account_type === "attorney_user" ? "/onboarding/attorney" : "/onboarding");
 }
