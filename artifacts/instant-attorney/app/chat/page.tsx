@@ -169,7 +169,12 @@ function AcpChatInner() {
   } | null>(null);
   const [handoff, setHandoff] = useState<{ label: string; href: string } | null>(null);
   const [keepChatting, setKeepChatting] = useState(false);
-  const [modeChooserOpen, setModeChooserOpen] = useState(!isQuickConsult);
+  // Skip the "how would you like to talk?" chooser when a mode was chosen for the
+  // user upstream (e.g. attorney onboarding drops straight into freestyle) — they
+  // already made the choice, so show the composer, not another prompt.
+  const [modeChooserOpen, setModeChooserOpen] = useState(
+    !isQuickConsult && !searchParams.get("mode")
+  );
   const [modeNotice, setModeNotice] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
