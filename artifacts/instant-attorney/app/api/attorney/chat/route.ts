@@ -1,13 +1,24 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { buildAttorneyFreestylePrompt, buildFileContext } from "@/lib/prompts";
 import { detectAcpAreasFromContext } from "@/lib/acp-area-router";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
+import { toAnthropicBlock } from "@/lib/attachment-processor";
+import { parseDrafts } from "@/lib/freestyle-drafts";
 import { maxOutputTokensFor, limitSignalMetadata } from "@/lib/token-limits";
 import { logTruncation } from "@/lib/truncation-logger";
 import { BYPASS_USER_ID } from "@/lib/types";
-import type { CaseFile, FactItem, Attachment, RequestedAttachment } from "@/lib/types";
+import type { CaseFile, FactItem, Attachment, RequestedAttachment, WorkspaceAttachmentRef } from "@/lib/types";
+
+// A file the attorney dropped into the chat this turn.
+interface PendingAttachment {
+  fileName: string;
+  mimeType: string;
+  data: string; // base64
+}
+const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024; // 25 MB
 
 // Attorney drafting/analysis can run long — give the model room.
 export const maxDuration = 300;
@@ -19,9 +30,10 @@ const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 // context, but persisted to attorney_workspace_messages — NOT the client's
 // privileged intake_messages record. Attorney-only.
 export async function POST(req: NextRequest) {
-  const { messages, caseFileId } = await req.json() as {
+  const { messages, caseFileId, pendingAttachment } = await req.json() as {
     messages: Array<{ role: string; content: string }>;
     caseFileId?: string;
+    pendingAttachment?: PendingAttachment;
   };
 
   if (!Array.isArray(messages) || messages.length === 0) {
@@ -71,22 +83,70 @@ export async function POST(req: NextRequest) {
   const detectedAreas = detectAcpAreasFromContext(messages, caseFile);
   const systemPrompt = buildAttorneyFreestylePrompt(detectedAreas);
 
-  const anthropicMessages = messages.map((m) => ({
+  type AnthropicMessage = { role: "user" | "assistant"; content: Anthropic.MessageParam["content"] };
+  const anthropicMessages: AnthropicMessage[] = messages.map((m) => ({
     role: m.role as "user" | "assistant",
     content: m.content,
   }));
 
+  // A dropped-in file gets stored to work-product storage and folded into the
+  // last user turn as a multimodal block so the associate can actually read it.
+  let storedAttachment: WorkspaceAttachmentRef | null = null;
+  if (pendingAttachment?.data) {
+    try {
+      const buffer = Buffer.from(pendingAttachment.data, "base64");
+      if (buffer.byteLength > MAX_ATTACHMENT_BYTES) {
+        return NextResponse.json({ error: "File exceeds 25 MB limit" }, { status: 413 });
+      }
+      const fileName = pendingAttachment.fileName || "attachment";
+      const mimeType = pendingAttachment.mimeType || "application/octet-stream";
+
+      // Feed the file to the model on this turn.
+      const lastUserIdx = anthropicMessages.map((m, i) => ({ m, i }))
+        .reverse()
+        .find(({ m }) => m.role === "user")?.i ?? -1;
+      if (lastUserIdx >= 0) {
+        const blocks = await toAnthropicBlock(buffer, mimeType, fileName);
+        const textContent = typeof anthropicMessages[lastUserIdx].content === "string"
+          ? anthropicMessages[lastUserIdx].content as string
+          : "";
+        anthropicMessages[lastUserIdx] = {
+          role: "user",
+          content: [
+            ...blocks as (Anthropic.ImageBlockParam | Anthropic.DocumentBlockParam | Anthropic.TextBlockParam)[],
+            ...(textContent ? [{ type: "text" as const, text: textContent }] : []),
+          ],
+        };
+      }
+
+      // Persist to work-product storage so the chip can re-open it later.
+      const serviceDb = createServiceClient();
+      const storagePath = `workspace/${attorneyId}/${caseFileId}/${randomUUID()}-${fileName}`;
+      const { error: upErr } = await serviceDb.storage
+        .from("case-attachments")
+        .upload(storagePath, buffer, { contentType: mimeType, upsert: false });
+      if (upErr) {
+        console.error("[attorney-chat] attachment storage error:", upErr);
+      } else {
+        storedAttachment = { fileName, storagePath, mimeType };
+      }
+    } catch (err) {
+      console.error("[attorney-chat] attachment handling error:", err);
+    }
+  }
+
   // Persist the attorney's message concurrently with the stream (kept off
   // time-to-first-token). This is attorney work-product, not the client record.
   const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
-  const userMessagePromise: Promise<void> = lastUserMsg
+  const userMessagePromise: Promise<void> = (lastUserMsg || storedAttachment)
     ? (async () => {
         try {
           await db.from("attorney_workspace_messages").insert({
             case_file_id: caseFileId,
             attorney_id: attorneyId,
             role: "user",
-            content: lastUserMsg.content,
+            content: lastUserMsg?.content ?? "",
+            attachments: storedAttachment ? [storedAttachment] : [],
           });
         } catch (err) {
           console.error("[attorney-chat] persist user message error:", err);
@@ -144,6 +204,38 @@ export async function POST(req: NextRequest) {
             role: "assistant",
             content: fullResponse,
           }).then(undefined, (err) => console.error("[attorney-chat] persist assistant message error:", err));
+
+          // Land any ---DRAFT--- blocks in the side panel. A matching title
+          // updates that draft in place; a new title creates a fresh one.
+          const drafts = parseDrafts(fullResponse);
+          for (const draft of drafts) {
+            try {
+              const { data: existing } = await db
+                .from("attorney_workspace_drafts")
+                .select("id")
+                .eq("case_file_id", caseFileId)
+                .eq("attorney_id", attorneyId)
+                .eq("title", draft.title)
+                .order("updated_at", { ascending: false })
+                .limit(1)
+                .maybeSingle();
+              if (existing?.id) {
+                await db.from("attorney_workspace_drafts")
+                  .update({ content: draft.content, source: "assistant", updated_at: new Date().toISOString() })
+                  .eq("id", existing.id);
+              } else {
+                await db.from("attorney_workspace_drafts").insert({
+                  case_file_id: caseFileId,
+                  attorney_id: attorneyId,
+                  title: draft.title,
+                  content: draft.content,
+                  source: "assistant",
+                });
+              }
+            } catch (err) {
+              console.error("[attorney-chat] persist draft error:", err);
+            }
+          }
         }
 
         if (finalMsg?.stop_reason === "max_tokens") {
