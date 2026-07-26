@@ -9380,3 +9380,59 @@ mark.atty-placeholder {
   .fc-workspace-row-split .fc-workspace-main { border-right: none; }
   .fc-workspace-row .fc-draft-pane { flex: 1 1 auto; max-height: 46vh; border-top: 1px solid rgba(200, 169, 110, 0.16); }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Living File — orchestrator entry (Stage 41). The prominent "what's next" is a
+   conversation with the assistant, not a computed action board.
+   ══════════════════════════════════════════════════════════════════════════ */
+.lf-orchestrator-cta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  text-decoration: none;
+  cursor: pointer;
+  background: linear-gradient(135deg, var(--brand-navy) 0%, #1a3358 100%);
+  border: 1px solid rgba(200, 169, 110, 0.35);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.lf-orchestrator-cta:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(12, 25, 41, 0.28);
+}
+.lf-orchestrator-cta-icon {
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: rgba(200, 169, 110, 0.16);
+  color: var(--brand-gold);
+}
+.lf-orchestrator-cta-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.lf-orchestrator-cta-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--brand-cream-heading);
+}
+.lf-orchestrator-cta-sub {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: rgba(232, 226, 217, 0.82);
+}
+.lf-orchestrator-cta-arrow {
+  flex: 0 0 auto;
+  font-size: 22px;
+  color: var(--brand-gold);
+  opacity: 0.9;
+}
+@media (max-width: 560px) {
+  .lf-orchestrator-cta-arrow { display: none; }
+}
