@@ -48,6 +48,26 @@ export interface MatterTasksResult {
   counts: { done: number; doableNow: number; blocked: number };
 }
 
+// Map a task (by its wording, or the matter's area) to the orchestrator tool that
+// would help with it, so a doable-now item can name a runnable tool — the model
+// offers to run it, and the UI can surface it. Only fills where a calculator
+// clearly fits; most gaps/uploads/document tasks have no tool and stay undefined.
+function suggestTool(text: string): string | undefined {
+  const t = text.toLowerCase();
+  if (/\bdeadline\b|statute of limitations|limitations period/.test(t)) return "screen_pi_sol";
+  if (/child support/.test(t)) return "estimate_child_support";
+  if (/maintenance|alimony|spousal support/.test(t)) return "estimate_maintenance";
+  if (/property (division|split)|community (property|estate)|divide the estate/.test(t)) return "estimate_property_split";
+  if (/possession|visitation|custody schedule|parenting time/.test(t)) return "possession_schedule";
+  if (/means test|chapter 7|bankrupt/.test(t)) return "run_means_test";
+  if (/exempt/.test(t)) return "estimate_bankruptcy_exemptions";
+  if (/defamation|libel|slander/.test(t)) return "assess_defamation";
+  if (/non-?compete|noncompete/.test(t)) return "assess_noncompete";
+  if (/probate|living trust|estate plan/.test(t)) return "estimate_probate";
+  if (/comparative fault|percent(age)? (of )?fault|at fault/.test(t)) return "estimate_pi_fault";
+  return undefined;
+}
+
 const URGENCY_RANK: Record<MatterUrgency, number> = { expired: 0, critical: 1, warning: 2, normal: 3 };
 const IMPACT_RANK: Record<MatterImpact, number> = { high: 0, medium: 1, low: 2 };
 
@@ -236,6 +256,19 @@ export function buildMatterTasks(input: MatterTasksInput): MatterTasksResult {
     input.requestedAttachments ?? [],
     input.govForms ?? [],
   );
+
+  // Name a runnable tool for each open task where a calculator clearly fits. Fall
+  // back to the matter's own text so at least the top item names a tool when the
+  // area is analyzable (e.g. a family matter → estimate_child_support).
+  const matterText = `${input.caseFile.matter_subtype ?? ""} ${input.caseFile.summary ?? ""}`;
+  const matterTool = suggestTool(matterText);
+  for (const task of [...doableNow, ...blocked]) {
+    task.toolName = suggestTool(`${task.title} ${task.reason ?? ""}`) ?? undefined;
+  }
+  if (matterTool) {
+    const top = doableNow.find((t) => t.id === "hero") ?? doableNow[0];
+    if (top && !top.toolName) top.toolName = matterTool;
+  }
 
   doableNow.sort(rank);
   blocked.sort(rank);

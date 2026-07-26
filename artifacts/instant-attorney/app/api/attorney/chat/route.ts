@@ -2,7 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { buildAttorneyFreestylePrompt, buildFileContext } from "@/lib/prompts";
+import { buildAttorneyFreestylePrompt, buildFileContext, ATTORNEY_TOOLS_GUIDANCE } from "@/lib/prompts";
+import { READ_ONLY_TOOLS, dispatchTool } from "@/lib/orchestrator-tools";
 import { detectAcpAreasFromContext } from "@/lib/acp-area-router";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
 import { toAnthropicBlock } from "@/lib/attachment-processor";
@@ -19,6 +20,8 @@ interface PendingAttachment {
   data: string; // base64
 }
 const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024; // 25 MB
+// Cap on model↔tool round-trips per turn, so a tool loop can't run away.
+const MAX_TOOL_ITERATIONS = 5;
 
 // Attorney drafting/analysis can run long — give the model room.
 export const maxDuration = 300;
@@ -154,47 +157,79 @@ export async function POST(req: NextRequest) {
       })()
     : Promise.resolve();
 
-  const stream = anthropic.messages.stream({
-    model: "claude-sonnet-4-6",
-    max_tokens: maxOutputTokensFor("claude-sonnet-4-6"),
-    system: [
-      { type: "text" as const, text: systemPrompt, cache_control: { type: "ephemeral" as const } },
-      ...(fileContext ? [{ type: "text" as const, text: fileContext }] : []),
-    ],
-    messages: anthropicMessages,
-  });
+  const systemBlocks = [
+    { type: "text" as const, text: systemPrompt, cache_control: { type: "ephemeral" as const } },
+    ...(fileContext ? [{ type: "text" as const, text: fileContext }] : []),
+    { type: "text" as const, text: ATTORNEY_TOOLS_GUIDANCE },
+  ];
 
   const encoder = new TextEncoder();
   let fullResponse = "";
 
   const readable = new ReadableStream({
     async start(controller) {
+      let finalMsg: Anthropic.Message | null = null;
+      const loopMessages = [...anthropicMessages];
+      const toolDb = createServiceClient();
+
       try {
-        for await (const event of stream) {
-          if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-            fullResponse += event.delta.text;
-            controller.enqueue(encoder.encode(event.delta.text));
+        for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
+          const turn = anthropic.messages.stream({
+            model: "claude-sonnet-4-6",
+            max_tokens: maxOutputTokensFor("claude-sonnet-4-6"),
+            system: systemBlocks,
+            messages: loopMessages,
+            tools: READ_ONLY_TOOLS,
+          });
+
+          for await (const event of turn) {
+            if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+              fullResponse += event.delta.text;
+              controller.enqueue(encoder.encode(event.delta.text));
+            }
           }
+
+          finalMsg = await turn.finalMessage().catch(() => null);
+          if (finalMsg) {
+            await recordAiFromMessage(db, finalMsg, {
+              userId: attorneyId,
+              actorId: attorneyId,
+              caseFileId,
+              feature: "attorney_chat",
+              metadata: { ...limitSignalMetadata({
+                model: finalMsg.model,
+                outputTokens: finalMsg.usage.output_tokens,
+                priorLimit: 4000,
+                stopReason: finalMsg.stop_reason,
+              }) },
+            });
+          }
+
+          if (!finalMsg || finalMsg.stop_reason !== "tool_use") break;
+
+          const toolUses = finalMsg.content.filter(
+            (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
+          );
+          const toolResults: Anthropic.ToolResultBlockParam[] = [];
+          for (const tu of toolUses) {
+            controller.enqueue(encoder.encode(`\x02TOOL:${tu.name}:running\x02`));
+            const out = await dispatchTool(tu.name, tu.input, { db, userId: attorneyId, caseFileId });
+            controller.enqueue(encoder.encode(`\x02TOOL:${tu.name}:done\x02`));
+            toolResults.push({ type: "tool_result", tool_use_id: tu.id, content: out.forModel });
+            toolDb.from("orchestrator_tool_calls").insert({
+              case_file_id: caseFileId,
+              user_id: attorneyId,
+              tool_name: tu.name,
+              input: (tu.input ?? {}) as Record<string, unknown>,
+              result: out.raw ?? null,
+            }).then(undefined, (err) => console.error("[attorney-chat] tool-call persist error:", err));
+          }
+          loopMessages.push({ role: "assistant", content: finalMsg.content });
+          loopMessages.push({ role: "user", content: toolResults });
         }
       } catch (err) {
         controller.error(err);
       } finally {
-        const finalMsg = await stream.finalMessage().catch(() => null);
-        if (finalMsg) {
-          await recordAiFromMessage(db, finalMsg, {
-            userId: attorneyId,
-            actorId: attorneyId,
-            caseFileId,
-            feature: "attorney_chat",
-            metadata: { ...limitSignalMetadata({
-              model: finalMsg.model,
-              outputTokens: finalMsg.usage.output_tokens,
-              priorLimit: 4000,
-              stopReason: finalMsg.stop_reason,
-            }) },
-          });
-        }
-
         await userMessagePromise;
 
         if (fullResponse) {

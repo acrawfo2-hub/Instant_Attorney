@@ -39,7 +39,7 @@ export function formatMatterTasks(tasks: MatterTasksResult): string {
   const listFor = (label: string, items: MatterTasksResult["all"]) =>
     items.length
       ? `${label}:\n${items
-          .map((t) => `- ${t.title}${t.blockedBy?.length ? ` (waiting on: ${t.blockedBy.join(", ")})` : ""}`)
+          .map((t) => `- ${t.title}${t.blockedBy?.length ? ` (waiting on: ${t.blockedBy.join(", ")})` : ""}${t.toolName ? ` [tool: ${t.toolName}]` : ""}`)
           .join("\n")}`
       : "";
   return [

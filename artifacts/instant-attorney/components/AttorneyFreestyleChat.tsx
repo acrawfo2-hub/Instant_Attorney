@@ -8,6 +8,8 @@ import {
   stripDraftsForDisplay,
   hasOpenDraft,
 } from "@/lib/freestyle-drafts";
+import { stripToolMarkers, activeToolNames } from "@/lib/tool-markers";
+import ToolRunChips from "@/components/ToolRunChips";
 import type { AttorneyWorkspaceDraft, WorkspaceAttachmentRef } from "@/lib/types";
 
 type Msg = {
@@ -47,6 +49,7 @@ export default function AttorneyFreestyleChat({ caseFileId }: { caseFileId: stri
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [streamingText, setStreamingText] = useState("");
+  const [activeTools, setActiveTools] = useState<string[]>([]);
 
   // Inline attachment staged for the next send.
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -212,9 +215,12 @@ export default function AttorneyFreestyleChat({ caseFileId }: { caseFileId: stri
         const { done, value } = await reader.read();
         if (done) break;
         full += decoder.decode(value, { stream: true });
-        setStreamingText(full);
+        setStreamingText(stripToolMarkers(full));
+        setActiveTools(activeToolNames(full));
       }
       if (full.endsWith(TRUNC)) full = full.slice(0, -TRUNC.length);
+      setActiveTools([]);
+      full = stripToolMarkers(full);
       setMessages((prev) => [...prev, { role: "assistant", content: full }]);
       setStreamingText("");
 
@@ -234,6 +240,7 @@ export default function AttorneyFreestyleChat({ caseFileId }: { caseFileId: stri
         { role: "assistant", content: "Something went wrong — please try again." },
       ]);
       setStreamingText("");
+      setActiveTools([]);
     } finally {
       setLoading(false);
     }
@@ -392,6 +399,7 @@ export default function AttorneyFreestyleChat({ caseFileId }: { caseFileId: stri
                   <div className="fs-msg fs-msg-assistant">
                     <span className="fs-msg-role">Associate</span>
                     <div className="fs-msg-body">{stripDraftsForDisplay(streamingText)}</div>
+                    <ToolRunChips tools={activeTools} />
                     {hasOpenDraft(streamingText) && (
                       <div className="fs-draft-chip fs-draft-chip-writing">
                         <span className="fs-draft-chip-icon">✍️</span>
@@ -400,7 +408,11 @@ export default function AttorneyFreestyleChat({ caseFileId }: { caseFileId: stri
                     )}
                   </div>
                 )}
-                {loading && !streamingText && <div className="fs-thinking">Thinking…</div>}
+                {loading && !streamingText && (
+                  activeTools.length > 0
+                    ? <div className="fs-msg fs-msg-assistant"><span className="fs-msg-role">Associate</span><ToolRunChips tools={activeTools} /></div>
+                    : <div className="fs-thinking">Thinking…</div>
+                )}
                 <div ref={endRef} />
               </div>
 

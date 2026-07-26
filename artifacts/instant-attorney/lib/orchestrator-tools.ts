@@ -576,8 +576,17 @@ const TOOLS: Record<string, ToolDef> = {
   },
 };
 
-/** The Anthropic tool definitions to pass to the model (freestyle/orchestrator only). */
+// Tools that mutate the client's record. The attorney associate (work-product,
+// not the client channel) gets the read-only set only.
+const WRITE_TOOL_NAMES = new Set(["record_fact", "request_document", "add_government_form"]);
+
+/** All tool definitions — the consumer orchestrator, which may write to its own file. */
 export const ORCHESTRATOR_TOOLS: Anthropic.Tool[] = Object.values(TOOLS).map((t) => t.def);
+
+/** Analysis-only tools (calculators + assess_matter) — no writes. For the attorney associate. */
+export const READ_ONLY_TOOLS: Anthropic.Tool[] = Object.entries(TOOLS)
+  .filter(([name]) => !WRITE_TOOL_NAMES.has(name))
+  .map(([, t]) => t.def);
 
 /** True if a name is a known orchestrator tool. */
 export function isOrchestratorTool(name: string): boolean {
