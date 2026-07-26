@@ -133,6 +133,35 @@ function finishedTasks(
   return done;
 }
 
+// A live filing deadline is the top urgency signal. When a fact records one — the
+// PI statute-of-limitations screener writes "…filing deadline YYYY-MM-DD…", and a
+// saved screen_pi_sol result reads the same way — turn it into a deadline task
+// whose urgency reflects how close it is. This is the screenPiSol().urgency signal
+// the plan reserved, grounded in whatever deadline the file already carries.
+const DEADLINE_RE = /(?:deadline|file by|statute of limitations|limitations period)[^.\n]*?(\d{4}-\d{2}-\d{2})/i;
+function deadlineTasks(facts: MissionControlInput["facts"], now: Date): MatterTask[] {
+  const tasks: MatterTask[] = [];
+  for (const f of facts) {
+    const m = f.description.match(DEADLINE_RE);
+    if (!m) continue;
+    const deadline = new Date(`${m[1]}T00:00:00Z`);
+    if (Number.isNaN(deadline.getTime())) continue;
+    const days = Math.ceil((deadline.getTime() - now.getTime()) / 86_400_000);
+    const urgency: MatterUrgency = days < 0 ? "expired" : days <= 60 ? "critical" : days <= 180 ? "warning" : "normal";
+    tasks.push({
+      id: `deadline:${f.id}`,
+      title: days < 0
+        ? `A filing deadline has passed (${m[1]}) — talk to your attorney right away`
+        : `File before the deadline: ${m[1]} (${days} day${days === 1 ? "" : "s"} left)`,
+      status: "doable_now",
+      urgency,
+      impact: "high",
+      reason: f.description,
+    });
+  }
+  return tasks;
+}
+
 // Uploaded documents/screenshots the AI flagged with an urgent finding become
 // high-priority attention tasks — so "where things stand" reflects what the
 // evidence turned up, not just what the client typed. (The facts those files
@@ -190,7 +219,9 @@ export function buildMatterTasks(input: MatterTasksInput): MatterTasksResult {
   const hero = heroTask(board.hero);
   if (hero) doableNow.push(hero);
 
-  // Attachment-flagged issues rank alongside the open actions.
+  // Live filing deadlines and attachment-flagged issues rank alongside the open
+  // actions — urgency ordering floats the pressing ones to the top of the bucket.
+  doableNow.push(...deadlineTasks(input.facts, new Date()));
   doableNow.push(...attachmentTasks(input.attachments ?? []));
 
   for (const action of board.actions) {

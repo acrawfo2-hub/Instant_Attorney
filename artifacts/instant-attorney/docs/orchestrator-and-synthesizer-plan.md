@@ -305,9 +305,10 @@ then impact. The model *phrases and orders*; the task list *bounds* it.
 `lib/matter-tasks.ts` (`buildMatterTasks`, unit-tested) + `/api/assess-matter`
 endpoint (deterministic buckets + a grounded narrative) + a "Where things stand"
 card on the consumer Living File. Buckets derive only from `computeMissionControl`
-and finalized records — no invented tasks. Deferred to a later pass: seeding urgency
-from `screenPiSol()` deadlines (needs structured incident-date facts), and exposing
-`assess_matter` as an orchestrator tool (Phase 3).
+and finalized records — no invented tasks. Later passes (now done): `assess_matter`
+as an orchestrator tool (Phase 3); deadline urgency — `buildMatterTasks` now reads a
+recorded "filing deadline YYYY-MM-DD" (from the SOL screener or a saved `screen_pi_sol`
+result) and ranks it by how close it is.
 
 **Phase 2 — Agentic loop + read-only tools. ✅ Shipped.**
 `lib/orchestrator-tools.ts` (5 tools: means test, child support, PI SOL, spousal
@@ -334,8 +335,10 @@ a mocked db.
 "still needed" checklist) — both write via the tool context, dedupe, and are gated by
 prompt discipline: the model must CONFIRM before saving and must never write
 speculation (the plan's "propose, don't auto-write" default). Drafting is already
-covered by the inline `---DRAFT---` → drafts-panel path (Stage 40); `fill_gov_form`
-(a multi-step flow) is deferred. Runtime-tested insert/dedupe/missing-param paths.
+covered by the inline `---DRAFT---` → drafts-panel path (Stage 40). `add_government_form`
+adds an official form from the 6-form catalog to the client's forms checklist (by
+key, with a text fallback) — the existing lookup/guided-fill flow takes over from
+there. Runtime-tested insert/dedupe/missing-param paths. 14 tools total.
 
 **Also in this pass:**
 - **All remaining calculators wired** — property split, possession schedule,

@@ -70,6 +70,7 @@ const TOOL_LABELS: Record<string, string> = {
   assess_matter: "Reviewing where your matter stands",
   record_fact: "Saving to your file",
   request_document: "Adding to your checklist",
+  add_government_form: "Adding an official form",
 };
 
 function stripToolMarkers(text: string): string {

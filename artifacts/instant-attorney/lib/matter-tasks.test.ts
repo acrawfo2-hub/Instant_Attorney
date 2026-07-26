@@ -128,6 +128,26 @@ test("an attachment's urgent finding surfaces as a high-priority doable-now task
   assert.ok(!result.doableNow.some((t) => t.id === "attach-urgent:a2"), "'None identified' should not create a task");
 });
 
+test("a recorded filing deadline becomes a deadline task with timeline-based urgency", () => {
+  const soon = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
+  const past = new Date(Date.now() - 10 * 86_400_000).toISOString().slice(0, 10);
+  const r1 = buildMatterTasks({
+    caseFile: caseFile(),
+    facts: [fact({ id: "sol1", status: "confirmed", description: `Auto accident: filing deadline ${soon} per CPRC 16.003` })],
+    documents: [], mode: "client",
+  });
+  const t1 = r1.doableNow.find((t) => t.id === "deadline:sol1");
+  assert.ok(t1, "an upcoming deadline should surface");
+  assert.equal(t1!.urgency, "critical");
+
+  const r2 = buildMatterTasks({
+    caseFile: caseFile(),
+    facts: [fact({ id: "sol2", status: "confirmed", description: `Auto accident: filing deadline ${past} per CPRC 16.003` })],
+    documents: [], mode: "client",
+  });
+  assert.equal(r2.doableNow.find((t) => t.id === "deadline:sol2")!.urgency, "expired");
+});
+
 test("counts match bucket lengths and the flat list", () => {
   const result = buildMatterTasks({ caseFile: caseFile(), facts: [], documents: [], mode: "client" });
   assert.equal(result.counts.done, result.done.length);

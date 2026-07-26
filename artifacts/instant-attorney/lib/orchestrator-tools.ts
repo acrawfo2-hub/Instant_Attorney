@@ -9,6 +9,7 @@ import { generatePossessionSchedule, formatPossessionSchedule, type PossessionIn
 import { checkExemptions, type ExemptionAsset, type AssetCategory } from "./bankruptcy-exemptions.ts";
 import { estimateProbateVsTrust, type EstateProfile, type EstateSize } from "./estate-probate-estimate.ts";
 import { computePiFaultImpact } from "./pi-fault-calc.ts";
+import { matchFormsByText, getGovernmentForm, isKnownFormKey, GOVERNMENT_FORMS } from "./government-forms.ts";
 import { loadMatterTasks, formatMatterTasks } from "./matter-assessment.ts";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -522,6 +523,55 @@ const TOOLS: Record<string, ToolDef> = {
         return { forModel: JSON.stringify({ error: "failed", message: "Could not add it to the checklist." }), raw: null };
       }
       return { forModel: JSON.stringify({ ok: true, requested: description }), raw: { requested: description } };
+    },
+  },
+
+  add_government_form: {
+    def: {
+      name: "add_government_form",
+      description:
+        "Add an official government form to the client's file so it appears in their forms checklist and (where supported) the guided fill flow. Pass form_key from this catalog:\n" +
+        GOVERNMENT_FORMS.map((f) => `- ${f.key}: ${f.form_number} — ${f.title}. Needed when: ${f.who_needs_it}`).join("\n") +
+        "\nOnly for these official forms; for anything else use request_document. Tell the client you've added it.",
+      input_schema: {
+        type: "object",
+        properties: {
+          form_key: { type: "string", enum: GOVERNMENT_FORMS.map((f) => f.key), description: "The catalog key of the form to add." },
+          query: { type: "string", description: "Fallback: a form name/description if you're unsure of the key." },
+          reason: { type: "string", description: "Why this client needs it (optional, shown to the client)." },
+        },
+        required: [],
+      },
+    },
+    run: async (input, ctx) => {
+      const key = strOf(input.form_key);
+      let form = key && isKnownFormKey(key) ? getGovernmentForm(key) : undefined;
+      if (!form) {
+        const query = strOf(input.query);
+        if (query) form = matchFormsByText(query)[0];
+      }
+      if (!form) {
+        return {
+          forModel: JSON.stringify({ ok: false, note: "No matching official form in the catalog. If the client already has the form, use request_document instead." }),
+          raw: { matched: false },
+        };
+      }
+      const { error } = await ctx.db.from("form_instruments").upsert(
+        {
+          case_file_id: ctx.caseFileId,
+          user_id: ctx.userId,
+          form_key: form.key,
+          reason: strOf(input.reason) ?? null,
+          status: "needed",
+          source: "registry",
+        },
+        { onConflict: "case_file_id,form_key", ignoreDuplicates: true },
+      );
+      if (error) {
+        console.error("[orchestrator-tools] add_government_form upsert error:", error);
+        return { forModel: JSON.stringify({ error: "failed", message: "Could not add the form." }), raw: null };
+      }
+      return { forModel: JSON.stringify({ ok: true, added: form.title, form_key: form.key }), raw: { form_key: form.key, title: form.title } };
     },
   },
 };
