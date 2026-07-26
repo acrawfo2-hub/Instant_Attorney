@@ -4,6 +4,11 @@ import { estimateChildSupport, formatChildSupportEstimate, type ChildSupportInpu
 import { screenPiSol, formatPiSol, type PiSolInput } from "./pi-sol-calc.ts";
 import { screenMaintenance, formatMaintenanceScreen, type MaintenanceInput } from "./family-maintenance-calc.ts";
 import { assessDefamation, type DefamationInput } from "./defamation-assessment.ts";
+import { dividePropertyEstate, formatPropertyDivisionEstimate, type PropertyDivisionInput, type PropertyItem } from "./family-property-calc.ts";
+import { generatePossessionSchedule, formatPossessionSchedule, type PossessionInput } from "./family-possession-calc.ts";
+import { checkExemptions, type ExemptionAsset, type AssetCategory } from "./bankruptcy-exemptions.ts";
+import { estimateProbateVsTrust, type EstateProfile, type EstateSize } from "./estate-probate-estimate.ts";
+import { computePiFaultImpact } from "./pi-fault-calc.ts";
 import { loadMatterTasks, formatMatterTasks } from "./matter-assessment.ts";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -232,6 +237,208 @@ const TOOLS: Record<string, ToolDef> = {
     },
   },
 
+  estimate_property_split: {
+    def: {
+      name: "estimate_property_split",
+      description:
+        "Estimate a Texas community-property division. Provide the marital estate as a list of items (assets and debts), each tagged community or separate. Use for divorce property questions.",
+      input_schema: {
+        type: "object",
+        properties: {
+          items: {
+            type: "array",
+            description: "The marital estate — assets and debts.",
+            items: {
+              type: "object",
+              properties: {
+                label: { type: "string", description: "e.g. 'Marital home equity'." },
+                value: { type: "number", description: "Positive dollar amount." },
+                kind: { type: "string", enum: ["asset", "debt"] },
+                characterization: { type: "string", enum: ["community", "separate"] },
+                owner: { type: "string", enum: ["a", "b"], description: "Required for separate property: which spouse owns it." },
+              },
+              required: ["label", "value", "kind", "characterization"],
+            },
+          },
+          communityShareToA: { type: "number", description: "Fraction of the net community estate to spouse A (0–1, default 0.5)." },
+        },
+        required: ["items"],
+      },
+    },
+    run: (input) => {
+      const raw = Array.isArray(input.items) ? input.items : null;
+      if (!raw || raw.length === 0) return needParams(["items (a list of assets and debts)"]);
+      const items: PropertyItem[] = [];
+      for (const it of raw) {
+        const o = it as Record<string, unknown>;
+        const label = strOf(o.label);
+        const value = num(o.value);
+        if (label === undefined || value === undefined) continue;
+        const item: PropertyItem = {
+          label,
+          value,
+          kind: o.kind === "debt" ? "debt" : "asset",
+          characterization: o.characterization === "separate" ? "separate" : "community",
+        };
+        if (item.characterization === "separate") item.owner = o.owner === "b" ? "b" : "a";
+        items.push(item);
+      }
+      if (items.length === 0) return needParams(["valid items (each needs a label and a value)"]);
+      const args: PropertyDivisionInput = { items, communityShareToA: num(input.communityShareToA) };
+      const result = dividePropertyEstate(args);
+      return { forModel: formatPropertyDivisionEstimate(result), raw: result };
+    },
+  },
+
+  possession_schedule: {
+    def: {
+      name: "possession_schedule",
+      description:
+        "Generate the Texas Standard Possession Order calendar for a date range. Use for custody/visitation questions.",
+      input_schema: {
+        type: "object",
+        properties: {
+          startDate: { type: "string", description: "Range start, YYYY-MM-DD." },
+          endDate: { type: "string", description: "Range end, YYYY-MM-DD." },
+          distance: { type: "string", enum: ["within_100", "over_100"], description: "Whether the parents live within 100 miles of each other." },
+          expanded: { type: "boolean", description: "Expanded SPO election (longer weekends)." },
+        },
+        required: ["startDate", "endDate", "distance"],
+      },
+    },
+    run: (input) => {
+      const startDate = strOf(input.startDate);
+      const endDate = strOf(input.endDate);
+      const distance = input.distance === "over_100" ? "over_100" : input.distance === "within_100" ? "within_100" : undefined;
+      const missing: string[] = [];
+      if (!startDate) missing.push("startDate");
+      if (!endDate) missing.push("endDate");
+      if (!distance) missing.push("distance (within_100 or over_100)");
+      if (missing.length) return needParams(missing);
+      const args: PossessionInput = { startDate: startDate!, endDate: endDate!, distance: distance!, expanded: boolOf(input.expanded) };
+      const result = generatePossessionSchedule(args);
+      return { forModel: formatPossessionSchedule(result), raw: result };
+    },
+  },
+
+  estimate_bankruptcy_exemptions: {
+    def: {
+      name: "estimate_bankruptcy_exemptions",
+      description:
+        "Screen which assets are protected by Texas bankruptcy exemptions and which are at risk. Provide the assets as a list. Use when the user worries about losing property in bankruptcy.",
+      input_schema: {
+        type: "object",
+        properties: {
+          assets: {
+            type: "array",
+            description: "The user's assets.",
+            items: {
+              type: "object",
+              properties: {
+                category: {
+                  type: "string",
+                  enum: ["homestead", "vehicle", "household_goods", "tools_of_trade", "jewelry", "firearms", "retirement", "wages", "life_insurance", "cash_bank", "other_nonexempt"],
+                },
+                value: { type: "number", description: "Fair value in dollars." },
+                label: { type: "string" },
+              },
+              required: ["category", "value"],
+            },
+          },
+          isSingle: { type: "boolean", description: "Single filer (vs. married/family) — affects the personal-property cap." },
+        },
+        required: ["assets", "isSingle"],
+      },
+    },
+    run: (input) => {
+      const raw = Array.isArray(input.assets) ? input.assets : null;
+      const isSingle = boolOf(input.isSingle);
+      const missing: string[] = [];
+      if (!raw || raw.length === 0) missing.push("assets (a list of the user's assets)");
+      if (isSingle === undefined) missing.push("isSingle");
+      if (missing.length) return needParams(missing);
+      const CATS = ["homestead", "vehicle", "household_goods", "tools_of_trade", "jewelry", "firearms", "retirement", "wages", "life_insurance", "cash_bank", "other_nonexempt"];
+      const assets: ExemptionAsset[] = [];
+      for (const a of raw!) {
+        const o = a as Record<string, unknown>;
+        const category = strOf(o.category);
+        const value = num(o.value);
+        if (!category || !CATS.includes(category) || value === undefined) continue;
+        assets.push({ category: category as AssetCategory, value, label: strOf(o.label) });
+      }
+      if (assets.length === 0) return needParams(["valid assets (each needs a known category and a value)"]);
+      const result = checkExemptions(assets, isSingle!);
+      return { forModel: `${result.summary}\n\n${result.disclaimer}`, raw: result };
+    },
+  },
+
+  estimate_probate: {
+    def: {
+      name: "estimate_probate",
+      description:
+        "Compare the likely cost/route of Texas probate vs. a living trust vs. non-probate transfers for an estate. Use for estate-planning questions about avoiding probate.",
+      input_schema: {
+        type: "object",
+        properties: {
+          married: { type: "boolean" },
+          ownsHome: { type: "boolean", description: "Owns a home or other Texas real estate." },
+          outOfStateRealEstate: { type: "boolean", description: "Owns real estate in another state (ancillary probate)." },
+          estateSize: { type: "string", enum: ["modest", "moderate", "substantial"], description: "modest <~$250k, moderate ~$250k–$1M, substantial >~$1M." },
+          useNonProbateTools: { type: "boolean", description: "Willing to use TOD deeds + POD/beneficiary designations." },
+        },
+        required: ["married", "ownsHome", "estateSize"],
+      },
+    },
+    run: (input) => {
+      const married = boolOf(input.married);
+      const ownsHome = boolOf(input.ownsHome);
+      const estateSize = strOf(input.estateSize);
+      const missing: string[] = [];
+      if (married === undefined) missing.push("married");
+      if (ownsHome === undefined) missing.push("ownsHome");
+      if (!estateSize || !["modest", "moderate", "substantial"].includes(estateSize)) missing.push("estateSize (modest, moderate, or substantial)");
+      if (missing.length) return needParams(missing);
+      const profile: EstateProfile = {
+        married: married!,
+        ownsHome: ownsHome!,
+        outOfStateRealEstate: boolOf(input.outOfStateRealEstate) ?? false,
+        estateSize: estateSize as EstateSize,
+        useNonProbateTools: boolOf(input.useNonProbateTools) ?? false,
+      };
+      const result = estimateProbateVsTrust(profile);
+      return {
+        forModel: `${result.verdict}\n\nThis is a general planning comparison, not legal advice — the right route depends on the specifics, which an attorney should confirm.`,
+        raw: result,
+      };
+    },
+  },
+
+  estimate_pi_fault: {
+    def: {
+      name: "estimate_pi_fault",
+      description:
+        "Apply Texas proportionate-responsibility (modified comparative fault, 51% bar) to a personal-injury recovery. Use when the user's own share of fault affects what they could recover.",
+      input_schema: {
+        type: "object",
+        properties: {
+          totalDamages: { type: "number", description: "Total damages in dollars." },
+          claimantFaultPct: { type: "number", description: "The claimant's assigned fault percentage (0–100)." },
+        },
+        required: ["totalDamages", "claimantFaultPct"],
+      },
+    },
+    run: (input) => {
+      const totalDamages = num(input.totalDamages);
+      const claimantFaultPct = num(input.claimantFaultPct);
+      const missing: string[] = [];
+      if (totalDamages === undefined) missing.push("totalDamages");
+      if (claimantFaultPct === undefined) missing.push("claimantFaultPct");
+      if (missing.length) return needParams(missing);
+      const result = computePiFaultImpact({ totalDamages: totalDamages!, claimantFaultPct: claimantFaultPct! });
+      return { forModel: `${result.guidance}\n\n${result.disclaimer}`, raw: result };
+    },
+  },
+
   assess_matter: {
     def: {
       name: "assess_matter",
@@ -247,6 +454,74 @@ const TOOLS: Record<string, ToolDef> = {
         ? `${body}\n\n(You also have calculator tools — means test, child support, PI statute-of-limitations, spousal maintenance, defamation. If a doable-now item or the matter generally calls for one of those figures, offer to run it.)`
         : "The file has no open or completed items yet — help the user get the basics down first.";
       return { forModel, raw: tasks };
+    },
+  },
+
+  // ── Write tools (Phase 4) — these change the client's file. The prompt requires
+  // the model to CONFIRM with the user before calling them; never speculative. ──
+  record_fact: {
+    def: {
+      name: "record_fact",
+      description:
+        "Save a fact the user has CONFIRMED into their Living File — a date, name, amount, or an estimate result they asked to keep. Only call this AFTER the user agrees to save it. Never record speculation, guesses, or unconfirmed claims.",
+      input_schema: {
+        type: "object",
+        properties: { description: { type: "string", description: "The fact, as one concise sentence." } },
+        required: ["description"],
+      },
+    },
+    run: async (input, ctx) => {
+      const description = strOf(input.description);
+      if (!description) return needParams(["description"]);
+      const { data: existing } = await ctx.db
+        .from("fact_items").select("description").eq("case_file_id", ctx.caseFileId).eq("status", "confirmed");
+      const set = new Set(((existing ?? []) as { description: string }[]).map((f) => f.description.toLowerCase()));
+      if (set.has(description.toLowerCase())) {
+        return { forModel: JSON.stringify({ ok: true, note: "That's already in the file." }), raw: { deduped: true } };
+      }
+      const { error } = await ctx.db.from("fact_items").insert({
+        case_file_id: ctx.caseFileId, user_id: ctx.userId, description, status: "confirmed",
+      });
+      if (error) {
+        console.error("[orchestrator-tools] record_fact insert error:", error);
+        return { forModel: JSON.stringify({ error: "failed", message: "Could not save to the file." }), raw: null };
+      }
+      return { forModel: JSON.stringify({ ok: true, saved: description }), raw: { saved: description } };
+    },
+  },
+
+  request_document: {
+    def: {
+      name: "request_document",
+      description:
+        "Add a document to the client's 'still needed' checklist so they know to upload it. Use when a fact needs proof or a specific record would move the matter forward. Tell the user you're adding it.",
+      input_schema: {
+        type: "object",
+        properties: {
+          description: { type: "string", description: "What document is needed, e.g. 'Signed lease agreement'." },
+          reason: { type: "string", description: "Why it's needed (optional, shown to the client)." },
+        },
+        required: ["description"],
+      },
+    },
+    run: async (input, ctx) => {
+      const description = strOf(input.description);
+      if (!description) return needParams(["description"]);
+      const { data: existing } = await ctx.db
+        .from("requested_attachments").select("description").eq("case_file_id", ctx.caseFileId);
+      const set = new Set(((existing ?? []) as { description: string }[]).map((r) => r.description.toLowerCase()));
+      if (set.has(description.toLowerCase())) {
+        return { forModel: JSON.stringify({ ok: true, note: "Already on the checklist." }), raw: { deduped: true } };
+      }
+      const { error } = await ctx.db.from("requested_attachments").insert({
+        case_file_id: ctx.caseFileId, user_id: ctx.userId, description,
+        reason: strOf(input.reason) ?? null, status: "requested", source: "ai",
+      });
+      if (error) {
+        console.error("[orchestrator-tools] request_document insert error:", error);
+        return { forModel: JSON.stringify({ error: "failed", message: "Could not add it to the checklist." }), raw: null };
+      }
+      return { forModel: JSON.stringify({ ok: true, requested: description }), raw: { requested: description } };
     },
   },
 };

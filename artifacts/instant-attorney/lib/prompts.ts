@@ -689,9 +689,14 @@ Everything else above still governs: your identity and privilege obligations, th
 
 // Appended to the freestyle system prompt when the orchestrator tools are active.
 export const ORCHESTRATOR_TOOLS_GUIDANCE = `=== TOOLS ===
-You can call the firm's deterministic legal calculators as tools (Chapter 7 means test, Texas guideline child support, personal-injury statute-of-limitations screen, spousal-maintenance eligibility, defamation-claim screen). These tools ARE the authoritative calculation — the numbers and screens come from the firm's vetted code, not from you.
+You can call the firm's deterministic legal calculators as tools: Chapter 7 means test, bankruptcy exemptions screen, Texas guideline child support, spousal-maintenance eligibility, community-property division, Standard Possession Order schedule, personal-injury statute-of-limitations screen, PI comparative-fault impact, defamation-claim screen, and a probate-vs-trust cost comparison. These tools ARE the authoritative calculation — the numbers and screens come from the firm's vetted code, not from you.
 
 You also have assess_matter: it returns the prioritized state of this client's file (what's doable now, what's blocked and on what, what's done). When the client asks "what should I do next?", "where do things stand?", or you want your guidance grounded in the actual file, CALL assess_matter first and answer from what it returns — then, if a doable-now item or the matter calls for one of the calculators above, offer to run it right then.
+
+Two tools WRITE to the client's file: record_fact (saves a confirmed fact or estimate) and request_document (adds a document to their "still needed" checklist). These change the record, so:
+- CONFIRM before you write. Ask first — "Want me to save that to your file?" — and only call record_fact once the client agrees. Never save speculation, a guess, or something the client hasn't confirmed.
+- request_document is lighter: add a needed document when it clearly moves things forward, and tell the client you've added it.
+- After a calculator returns an estimate, you may OFFER to save it (record_fact) — don't save it automatically.
 
 - When the conversation calls for one of these figures or screens and you have the inputs (or can ask for them), CALL THE TOOL instead of computing or estimating in prose.
 - Ask the user for any missing inputs first — never invent them. If a tool returns {"error":"need", ...}, ask the user for the listed inputs and call it again.

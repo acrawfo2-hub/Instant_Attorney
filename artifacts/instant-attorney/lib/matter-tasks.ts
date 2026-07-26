@@ -1,4 +1,4 @@
-import type { Document, RequestedAttachment, GovFormInstrument } from "./types.ts";
+import type { Document, RequestedAttachment, GovFormInstrument, Attachment } from "./types.ts";
 import { docTypeLabel } from "./types.ts";
 import {
   computeMissionControl,
@@ -6,6 +6,10 @@ import {
   type MissionControlInput,
 } from "./mission-control.ts";
 import type { NextStepGuide } from "./next-step.ts";
+
+/** buildMatterTasks input — Mission Control's input plus the uploaded documents,
+ *  so the synthesizer accounts for attachments/screenshots, not just facts. */
+export type MatterTasksInput = MissionControlInput & { attachments?: Attachment[] };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Matter tasks — the deterministic skeleton for the "state of your matter"
@@ -129,6 +133,28 @@ function finishedTasks(
   return done;
 }
 
+// Uploaded documents/screenshots the AI flagged with an urgent finding become
+// high-priority attention tasks — so "where things stand" reflects what the
+// evidence turned up, not just what the client typed. (The facts those files
+// extracted are already first-class fact_items and flow through separately.)
+function attachmentTasks(attachments: Attachment[]): MatterTask[] {
+  const tasks: MatterTask[] = [];
+  for (const a of attachments) {
+    if (a.status !== "ready") continue;
+    if (a.urgent_findings && a.urgent_findings !== "None identified") {
+      tasks.push({
+        id: `attach-urgent:${a.id}`,
+        title: `Review what ${a.file_name} turned up`,
+        status: "doable_now",
+        urgency: "critical",
+        impact: "high",
+        reason: a.urgent_findings,
+      });
+    }
+  }
+  return tasks;
+}
+
 // The hero next step, when it's an actual action (not the passive "while you
 // wait" review state), becomes the top doable-now task.
 function heroTask(hero: NextStepGuide): MatterTask | null {
@@ -155,7 +181,7 @@ function rank(a: MatterTask, b: MatterTask): number {
 /**
  * Build the bucketed, ranked task view of a matter. Pure and deterministic.
  */
-export function buildMatterTasks(input: MissionControlInput): MatterTasksResult {
+export function buildMatterTasks(input: MatterTasksInput): MatterTasksResult {
   const board = computeMissionControl(input);
 
   const doableNow: MatterTask[] = [];
@@ -163,6 +189,9 @@ export function buildMatterTasks(input: MissionControlInput): MatterTasksResult 
 
   const hero = heroTask(board.hero);
   if (hero) doableNow.push(hero);
+
+  // Attachment-flagged issues rank alongside the open actions.
+  doableNow.push(...attachmentTasks(input.attachments ?? []));
 
   for (const action of board.actions) {
     // "more" rollup rows are UI affordances, not real tasks.

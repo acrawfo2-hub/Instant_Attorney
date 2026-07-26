@@ -329,10 +329,25 @@ the model to call `assess_matter` for "what's next / where do things stand" and 
 offer to run a calculator when a doable item calls for one. Integration-tested with
 a mocked db.
 
-**Phase 4 — Generative tools (gated).**
-`draft_document` (→ drafts panel), `request_document`, `fill_gov_form`,
-`update_living_file`. AC: a drafted document lands in the panel and can be promoted to
-review; fact writes are confirmed, not silent.
+**Phase 4 — Generative / write tools (gated). ✅ Core shipped.**
+`record_fact` (saves a confirmed fact/estimate) and `request_document` (adds to the
+"still needed" checklist) — both write via the tool context, dedupe, and are gated by
+prompt discipline: the model must CONFIRM before saving and must never write
+speculation (the plan's "propose, don't auto-write" default). Drafting is already
+covered by the inline `---DRAFT---` → drafts-panel path (Stage 40); `fill_gov_form`
+(a multi-step flow) is deferred. Runtime-tested insert/dedupe/missing-param paths.
+
+**Also in this pass:**
+- **All remaining calculators wired** — property split, possession schedule,
+  bankruptcy exemptions, probate-vs-trust, PI comparative fault. 13 tools total
+  (11 read-only + 2 write). Each runtime-tested.
+- **Attachments/screenshots in the orchestrator's view.** The chat context already
+  carries attachments (summary, key details, urgent findings) via `buildFileContext`,
+  and `processAttachment` already writes each file's extracted facts as first-class
+  `fact_items` (and clarifications as gaps) — so they flow to both the chat and the
+  synthesizer. Added: `buildMatterTasks` now surfaces an attachment's urgent finding
+  as a high-priority doable-now task, so "where things stand" reflects what the
+  evidence turned up, not just what the client typed.
 
 ---
 

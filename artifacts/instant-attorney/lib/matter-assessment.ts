@@ -1,5 +1,5 @@
 import { buildMatterTasks, type MatterTasksResult } from "./matter-tasks.ts";
-import type { CaseFile, FactItem, Document, RequestedAttachment, GovFormInstrument } from "./types.ts";
+import type { CaseFile, FactItem, Document, RequestedAttachment, GovFormInstrument, Attachment } from "./types.ts";
 
 // Shared data-loading for the matter synthesizer, used by both the
 // /api/assess-matter endpoint and the assess_matter orchestrator tool. Keeps the
@@ -10,13 +10,14 @@ type Db = any;
 
 /** Load a case's data and build its bucketed, ranked task view. */
 export async function loadMatterTasks(db: Db, caseFileId: string): Promise<MatterTasksResult | null> {
-  const [{ data: cfRow }, { data: factRows }, { data: docRows }, { data: reqRows }, { data: formRows }] =
+  const [{ data: cfRow }, { data: factRows }, { data: docRows }, { data: reqRows }, { data: formRows }, { data: attRows }] =
     await Promise.all([
       db.from("case_files").select("*").eq("id", caseFileId).single(),
       db.from("fact_items").select("*").eq("case_file_id", caseFileId),
       db.from("documents").select("*").eq("case_file_id", caseFileId),
       db.from("requested_attachments").select("*").eq("case_file_id", caseFileId),
       db.from("form_instruments").select("*").eq("case_file_id", caseFileId),
+      db.from("attachments").select("*").eq("case_file_id", caseFileId).eq("status", "ready"),
     ]);
 
   const caseFile = cfRow as CaseFile | null;
@@ -28,6 +29,7 @@ export async function loadMatterTasks(db: Db, caseFileId: string): Promise<Matte
     documents: (docRows ?? []) as Document[],
     requestedAttachments: (reqRows ?? []) as RequestedAttachment[],
     govForms: (formRows ?? []) as GovFormInstrument[],
+    attachments: (attRows ?? []) as Attachment[],
     mode: "client",
   });
 }

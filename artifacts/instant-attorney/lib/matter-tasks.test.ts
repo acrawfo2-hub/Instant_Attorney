@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildMatterTasks } from "./matter-tasks.ts";
-import type { CaseFile, FactItem, Document, RequestedAttachment, GovFormInstrument } from "./types.ts";
+import type { CaseFile, FactItem, Document, RequestedAttachment, GovFormInstrument, Attachment } from "./types.ts";
 
 // Minimal-but-valid fixtures. The transform only reads a handful of fields; the
 // casts keep the test focused on bucketing/ranking, not on filling every column.
@@ -114,6 +114,18 @@ test("ranking: within a bucket, more-urgent tasks sort ahead of normal ones", ()
       "doable-now tasks must be ordered by non-decreasing urgency rank",
     );
   }
+});
+
+test("an attachment's urgent finding surfaces as a high-priority doable-now task", () => {
+  const attachments = [
+    { id: "a1", status: "ready", file_name: "eviction-notice.pdf", urgent_findings: "10-day deadline to respond", ai_summary: "x" },
+    { id: "a2", status: "ready", file_name: "receipt.jpg", urgent_findings: "None identified" },
+  ] as unknown as Attachment[];
+  const result = buildMatterTasks({ caseFile: caseFile(), facts: [], documents: [], attachments, mode: "client" });
+  const flagged = result.doableNow.find((t) => t.id === "attach-urgent:a1");
+  assert.ok(flagged, "urgent attachment finding should appear as a task");
+  assert.equal(flagged!.urgency, "critical");
+  assert.ok(!result.doableNow.some((t) => t.id === "attach-urgent:a2"), "'None identified' should not create a task");
 });
 
 test("counts match bucket lengths and the flat list", () => {

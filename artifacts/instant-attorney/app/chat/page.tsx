@@ -62,7 +62,14 @@ const TOOL_LABELS: Record<string, string> = {
   screen_pi_sol: "Checking the filing deadline",
   estimate_maintenance: "Screening spousal maintenance",
   assess_defamation: "Screening the defamation claim",
+  estimate_property_split: "Estimating the property division",
+  possession_schedule: "Building the possession schedule",
+  estimate_bankruptcy_exemptions: "Checking your exemptions",
+  estimate_probate: "Comparing probate options",
+  estimate_pi_fault: "Applying comparative fault",
   assess_matter: "Reviewing where your matter stands",
+  record_fact: "Saving to your file",
+  request_document: "Adding to your checklist",
 };
 
 function stripToolMarkers(text: string): string {
