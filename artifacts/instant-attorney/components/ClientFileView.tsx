@@ -387,6 +387,22 @@ export default function ClientFileView({
         />
       )}
 
+      {/* Where we left off — the recap distilled when the client last left the
+          freestyle assistant ("organize on leave"). */}
+      {!isAttorney && caseFile.chat_session_summary && (
+        <div className="lf-card lf-card-full lf-session-recap">
+          <div className="lf-session-recap-head">
+            <span className="lf-session-recap-title">Where we left off</span>
+            {caseFile.chat_session_summarized_at && (
+              <span className="lf-session-recap-time">
+                {new Date(caseFile.chat_session_summarized_at).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+          <p className="lf-session-recap-body">{caseFile.chat_session_summary}</p>
+        </div>
+      )}
+
       {/* Consumer next-step entry — the prominent way to figure out (and do) what
           comes next is a conversation with the assistant that knows the whole file. */}
       {!isAttorney && (

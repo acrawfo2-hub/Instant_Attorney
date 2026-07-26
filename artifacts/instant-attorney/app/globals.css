@@ -9533,3 +9533,10 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
   animation: fc-tool-spin 0.7s linear infinite;
 }
 @keyframes fc-tool-spin { to { transform: rotate(360deg); } }
+
+/* ── Consumer "organize on leave" recap on the Living File (Stage 43) ── */
+.lf-session-recap { border-left: 3px solid var(--brand-navy-md); background: rgba(26, 46, 59, 0.04); }
+.lf-session-recap-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+.lf-session-recap-title { font-size: 13px; font-weight: 700; color: var(--brand-text-dk); }
+.lf-session-recap-time { font-size: 11.5px; color: var(--brand-text-lt); }
+.lf-session-recap-body { font-size: 14px; line-height: 1.6; color: var(--brand-text-md); }

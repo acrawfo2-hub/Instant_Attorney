@@ -279,6 +279,10 @@ export interface CaseFile {
    *  Attorney-facing working notes; written when they leave freestyle mode. */
   attorney_workspace_summary?: string | null;
   attorney_workspace_summarized_at?: string | null;
+  /** Plain-language recap of the client's last freestyle session (Stage 43),
+   *  distilled when they leave the mode and shown on their Living File. */
+  chat_session_summary?: string | null;
+  chat_session_summarized_at?: string | null;
   /** Financial Picture — per-matter representation context (Stage 23). Optional
    *  so rows predating the migration still load. */
   representation_scope?: RepresentationScope;

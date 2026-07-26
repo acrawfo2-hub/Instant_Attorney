@@ -204,6 +204,7 @@ function AcpChatInner() {
   const inputAreaRef = useRef<HTMLDivElement>(null);
   const hydratedRef = useRef(false);
   const caseFileIdRef = useRef<string | null>(caseFileId);
+  const modeRef = useRef<ChatMode>(mode);
   const hasUserMessages = messages.some((m) => m.role === "user");
   const caseHomeHref = caseFileId ? `/dashboard/${caseFileId}` : "/dashboard";
 
@@ -211,21 +212,25 @@ function AcpChatInner() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamingText, handoff]);
 
-  // Keep the latest case file id reachable from the one-time page-hide handler.
+  // Keep the latest case file id + mode reachable from the one-time page-hide handler.
   useEffect(() => {
     caseFileIdRef.current = caseFileId;
-  }, [caseFileId]);
+    modeRef.current = mode;
+  }, [caseFileId, mode]);
 
-  // Flush the Living File when the page is hidden (tab close / navigation away)
-  // via sendBeacon, so the conversation tail is never lost on exit.
+  // Organize on leave: when the page is hidden (tab close / navigation away),
+  // sendBeacon so the conversation tail is folded into the Living File and — for a
+  // freestyle session — a short "where we left off" recap is distilled for the
+  // client's next visit. The endpoint debounces the recap, so rapid tab switches
+  // with no new messages stay cheap.
   useEffect(() => {
     const onHide = () => {
       const id = caseFileIdRef.current;
       if (!id) return;
-      const blob = new Blob([JSON.stringify({ caseFileId: id, force: true })], {
+      const blob = new Blob([JSON.stringify({ caseFileId: id, mode: modeRef.current })], {
         type: "application/json",
       });
-      navigator.sendBeacon("/api/chat-acp/sync-file", blob);
+      navigator.sendBeacon("/api/chat-acp/organize", blob);
     };
     const onVisibility = () => {
       if (document.visibilityState === "hidden") onHide();
