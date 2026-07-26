@@ -1359,7 +1359,7 @@ body {
   gap: 6px;
   padding: 0.5rem 1.25rem;
   font-size: 11px;
-  color: rgba(232, 226, 217, 0.38);
+  color: rgba(232, 226, 217, 0.55);
   background: rgba(255, 255, 255, 0.02);
   border-bottom: 0.5px solid rgba(255, 255, 255, 0.06);
   text-align: center;
@@ -1615,7 +1615,7 @@ body {
   outline: none;
   transition: border-color 0.2s;
 }
-.fc-textarea::placeholder { color: rgba(232, 226, 217, 0.28); }
+.fc-textarea::placeholder { color: rgba(232, 226, 217, 0.55); }
 .fc-textarea:focus { border-color: rgba(200, 169, 110, 0.45); }
 .fc-textarea:disabled { opacity: 0.5; }
 .fc-send-btn {
@@ -1643,21 +1643,21 @@ body {
   max-width: 740px;
   margin: 0.5rem auto 0;
   font-size: 11px;
-  color: rgba(232, 226, 217, 0.25);
+  color: rgba(232, 226, 217, 0.62);
   letter-spacing: 0.01em;
 }
-.fc-input-hint-sep { opacity: 0.5; }
+.fc-input-hint-sep { opacity: 0.6; }
 .fc-input-upgrade-link {
   background: none;
   border: none;
   font-family: var(--font-dm-sans, "DM Sans"), sans-serif;
   font-size: 11px;
-  color: rgba(200, 169, 110, 0.5);
+  color: rgba(200, 169, 110, 0.9);
   cursor: pointer;
   padding: 0;
   transition: color 0.2s;
 }
-.fc-input-upgrade-link:hover { color: rgba(200, 169, 110, 0.85); }
+.fc-input-upgrade-link:hover { color: var(--brand-gold-lt); }
 
 @media (max-width: 480px) {
   .fc-topbar-center { display: none; }
@@ -1802,7 +1802,7 @@ body {
   outline: none;
   transition: border-color 0.2s;
 }
-.auth-input::placeholder { color: var(--brand-text-xlt); }
+.auth-input::placeholder { color: var(--brand-text-lt); }
 .auth-input:focus { border-color: var(--brand-gold); }
 .auth-btn {
   background: var(--brand-navy-md);
@@ -4339,11 +4339,11 @@ mark.atty-placeholder {
   border-radius: 4px;
   border: 1px solid var(--brand-border);
 }
-.fc-attachment-name { font-size: 12px; color: #aaa; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fc-attachment-name { font-size: 12px; color: #d4ccc2; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fc-attachment-clear {
   flex-shrink: 0;
   background: none; border: none; cursor: pointer;
-  color: #888; padding: 2px;
+  color: #b3aaa0; padding: 2px;
   display: flex; align-items: center; justify-content: center;
 }
 .fc-attachment-clear:hover { color: #c0392b; }
@@ -9269,3 +9269,39 @@ mark.atty-placeholder {
   .fs-draft-pane { flex: 1 1 auto; max-height: 45vh; }
   .fs-topbar-sub { display: none; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Input readability floor (Stage 39.1)
+   Every typeable control that never pinned its own text color was inheriting
+   one — which goes faint or invisible on the wrong surface (e.g. the gap input
+   on the dark Mission Control board). Pin a dark, high-contrast value on a
+   solid light field. Dark-themed inputs (.fc-*, .fs-*) set their own color
+   explicitly and are unaffected by these element/class rules.
+   ══════════════════════════════════════════════════════════════════════════ */
+.mc-gap-input,
+.lf-roadmap-dispute-input,
+.ec-input,
+.atty-comment-input,
+.fc-jurisdiction-select,
+.gf-field input,
+.gf-field select,
+.lf-exec-sign-input {
+  color: var(--brand-text-dk);
+  background: var(--brand-white);
+}
+.mc-gap-input::placeholder,
+.lf-roadmap-dispute-input::placeholder,
+.ec-input::placeholder,
+.atty-comment-input::placeholder,
+.gf-field input::placeholder {
+  color: var(--brand-text-lt);
+}
+
+/* Dark-surface freestyle inputs — pin an explicit light color and give their
+   placeholders a readable contrast instead of the faint browser default. */
+.fs-input,
+.fs-draft-body,
+.fs-draft-title { color: var(--brand-cream-text); }
+.fs-input::placeholder,
+.fs-draft-body::placeholder,
+.fs-draft-title::placeholder { color: rgba(232, 226, 217, 0.55); }
