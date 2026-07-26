@@ -320,9 +320,14 @@ thrown tool never fails the turn. The remaining calculators (property split,
 possession, exemptions, probate, fault) are one registry entry each — deferred only
 because their inputs are arrays/format-less and need a little schema work.
 
-**Phase 3 — `assess_matter` as a tool.**
-Wire the synthesizer into the registry. AC: "what should I do next" calls
-`assess_matter` and each doable-now item names a runnable tool.
+**Phase 3 — `assess_matter` as a tool. ✅ Shipped.**
+Shared `lib/matter-assessment.ts` (`loadMatterTasks` + `formatMatterTasks`) feeds
+both the `/api/assess-matter` endpoint and a new `assess_matter` orchestrator tool.
+`dispatchTool` is now async and context-aware (`{ db, userId, caseFileId }`); the
+calculators ignore ctx, `assess_matter` reads the file. The system guidance tells
+the model to call `assess_matter` for "what's next / where do things stand" and then
+offer to run a calculator when a doable item calls for one. Integration-tested with
+a mocked db.
 
 **Phase 4 — Generative tools (gated).**
 `draft_document` (→ drafts panel), `request_document`, `fill_gov_form`,

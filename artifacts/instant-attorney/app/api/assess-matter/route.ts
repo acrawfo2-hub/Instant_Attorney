@@ -1,9 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { getClientWorkspaceContext } from "@/lib/client-workspace-auth";
-import { buildMatterTasks } from "@/lib/matter-tasks";
+import { loadMatterTasks, formatMatterTasks } from "@/lib/matter-assessment";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
-import type { CaseFile, FactItem, Document, RequestedAttachment, GovFormInstrument } from "@/lib/types";
 
 export const maxDuration = 60;
 
@@ -27,38 +26,14 @@ export async function POST(req: NextRequest) {
   const ctx = await getClientWorkspaceContext(caseFileId);
   if (!ctx) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const [{ data: cfRow }, { data: factRows }, { data: docRows }, { data: reqRows }, { data: formRows }] =
-    await Promise.all([
-      ctx.db.from("case_files").select("*").eq("id", caseFileId).single(),
-      ctx.db.from("fact_items").select("*").eq("case_file_id", caseFileId),
-      ctx.db.from("documents").select("*").eq("case_file_id", caseFileId),
-      ctx.db.from("requested_attachments").select("*").eq("case_file_id", caseFileId),
-      ctx.db.from("form_instruments").select("*").eq("case_file_id", caseFileId),
-    ]);
-
-  const caseFile = cfRow as CaseFile | null;
-  if (!caseFile) return NextResponse.json({ error: "Not found" }, { status: 404 });
-
-  const tasks = buildMatterTasks({
-    caseFile,
-    facts: (factRows ?? []) as FactItem[],
-    documents: (docRows ?? []) as Document[],
-    requestedAttachments: (reqRows ?? []) as RequestedAttachment[],
-    govForms: (formRows ?? []) as GovFormInstrument[],
-    mode: "client",
-  });
+  const tasks = await loadMatterTasks(ctx.db, caseFileId);
+  if (!tasks) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   // Grounded narrative — best-effort; the buckets return regardless.
   let narrative = "";
   const total = tasks.counts.done + tasks.counts.doableNow + tasks.counts.blocked;
   if (total > 0) {
-    const listFor = (label: string, items: typeof tasks.all) =>
-      items.length ? `${label}:\n${items.map((t) => `- ${t.title}${t.blockedBy?.length ? ` (waiting on: ${t.blockedBy.join(", ")})` : ""}`).join("\n")}` : "";
-    const payload = [
-      listFor("DOABLE NOW", tasks.doableNow),
-      listFor("BLOCKED", tasks.blocked),
-      listFor("DONE", tasks.done),
-    ].filter(Boolean).join("\n\n");
+    const payload = formatMatterTasks(tasks);
 
     try {
       const result = await anthropic.messages.create({

@@ -62,6 +62,7 @@ const TOOL_LABELS: Record<string, string> = {
   screen_pi_sol: "Checking the filing deadline",
   estimate_maintenance: "Screening spousal maintenance",
   assess_defamation: "Screening the defamation claim",
+  assess_matter: "Reviewing where your matter stands",
 };
 
 function stripToolMarkers(text: string): string {

@@ -343,7 +343,7 @@ export async function POST(req: NextRequest) {
           for (const tu of toolUses) {
             // Inline status marker so the UI can show a "running…" chip.
             controller.enqueue(encoder.encode(`\x02TOOL:${tu.name}:running\x02`));
-            const out = dispatchTool(tu.name, tu.input);
+            const out = await dispatchTool(tu.name, tu.input, { db, userId, caseFileId: resolvedCaseFileId });
             controller.enqueue(encoder.encode(`\x02TOOL:${tu.name}:done\x02`));
             toolResults.push({ type: "tool_result", tool_use_id: tu.id, content: out.forModel });
             toolDb.from("orchestrator_tool_calls").insert({

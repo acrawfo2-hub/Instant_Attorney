@@ -4,6 +4,17 @@ import { estimateChildSupport, formatChildSupportEstimate, type ChildSupportInpu
 import { screenPiSol, formatPiSol, type PiSolInput } from "./pi-sol-calc.ts";
 import { screenMaintenance, formatMaintenanceScreen, type MaintenanceInput } from "./family-maintenance-calc.ts";
 import { assessDefamation, type DefamationInput } from "./defamation-assessment.ts";
+import { loadMatterTasks, formatMatterTasks } from "./matter-assessment.ts";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Db = any;
+
+/** Per-call context. Pure calculators ignore it; assess_matter reads the file. */
+export interface ToolContext {
+  db: Db;
+  userId: string;
+  caseFileId: string;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Orchestrator tools (plan Phase 2). The freestyle assistant can CALL these
@@ -43,7 +54,7 @@ const strOf = (v: unknown): string | undefined =>
 
 interface ToolDef {
   def: Anthropic.Tool;
-  run: (input: Record<string, unknown>) => ToolResult;
+  run: (input: Record<string, unknown>, ctx: ToolContext) => ToolResult | Promise<ToolResult>;
 }
 
 const TOOLS: Record<string, ToolDef> = {
@@ -220,6 +231,24 @@ const TOOLS: Record<string, ToolDef> = {
       return { forModel: `${result.headline}\n\n${result.disclaimer}`, raw: result };
     },
   },
+
+  assess_matter: {
+    def: {
+      name: "assess_matter",
+      description:
+        "Get the prioritized state of THIS client's matter: what's DOABLE NOW, what's BLOCKED (and on what), and what's DONE. Call this when the user asks what to do next or where things stand, or to ground your guidance in the current file rather than guessing.",
+      input_schema: { type: "object", properties: {}, required: [] },
+    },
+    run: async (_input, ctx) => {
+      const tasks = await loadMatterTasks(ctx.db, ctx.caseFileId);
+      if (!tasks) return { forModel: JSON.stringify({ error: "failed", message: "Could not read the file." }), raw: null };
+      const body = formatMatterTasks(tasks);
+      const forModel = body
+        ? `${body}\n\n(You also have calculator tools — means test, child support, PI statute-of-limitations, spousal maintenance, defamation. If a doable-now item or the matter generally calls for one of those figures, offer to run it.)`
+        : "The file has no open or completed items yet — help the user get the basics down first.";
+      return { forModel, raw: tasks };
+    },
+  },
 };
 
 /** The Anthropic tool definitions to pass to the model (freestyle/orchestrator only). */
@@ -231,15 +260,15 @@ export function isOrchestratorTool(name: string): boolean {
 }
 
 /**
- * Run a tool by name. Deterministic and side-effect free (Phase 2). Unknown tools
- * and thrown errors return a structured result the model can recover from rather
- * than hard-failing the turn.
+ * Run a tool by name. Calculators are deterministic and side-effect free;
+ * assess_matter reads the file via ctx. Unknown tools and thrown errors return a
+ * structured result the model can recover from rather than hard-failing the turn.
  */
-export function dispatchTool(name: string, input: unknown): ToolResult {
+export async function dispatchTool(name: string, input: unknown, ctx: ToolContext): Promise<ToolResult> {
   const tool = TOOLS[name];
   if (!tool) return { forModel: JSON.stringify({ error: "unknown_tool", name }), raw: null };
   try {
-    return tool.run((input ?? {}) as Record<string, unknown>);
+    return await tool.run((input ?? {}) as Record<string, unknown>, ctx);
   } catch (err) {
     console.error(`[orchestrator-tools] ${name} failed:`, err);
     return { forModel: JSON.stringify({ error: "failed", message: "The tool could not run with those inputs." }), raw: null };
