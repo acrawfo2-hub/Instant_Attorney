@@ -309,11 +309,16 @@ and finalized records — no invented tasks. Deferred to a later pass: seeding u
 from `screenPiSol()` deadlines (needs structured incident-date facts), and exposing
 `assess_matter` as an orchestrator tool (Phase 3).
 
-**Phase 2 — Agentic loop + read-only tools.**
-`lib/orchestrator-tools.ts` (phase-1 tools) + the loop in `chat-acp` (freestyle only)
-+ tool-status stream markers + `orchestrator_tool_calls` persistence. AC: asking "run
-my means test" triggers `run_means_test`, streams a chip, returns the real
-`formatMeansTest` output with disclaimer; intake path unchanged; iteration cap holds.
+**Phase 2 — Agentic loop + read-only tools. ✅ Shipped.**
+`lib/orchestrator-tools.ts` (5 tools: means test, child support, PI SOL, spousal
+maintenance, defamation screen — thin wrappers over the pure libs) + the loop in
+`chat-acp` (unified path: runs once with no tools in intake, iterates with tools in
+freestyle, `MAX_TOOL_ITERATIONS` cap) + `\x02TOOL:…\x02` stream markers rendered as
+running chips in the consumer chat + `orchestrator_tool_calls` audit table. Tools are
+read-only; missing/invalid params return a structured "need" the model relays; a
+thrown tool never fails the turn. The remaining calculators (property split,
+possession, exemptions, probate, fault) are one registry entry each — deferred only
+because their inputs are arrays/format-less and need a little schema work.
 
 **Phase 3 — `assess_matter` as a tool.**
 Wire the synthesizer into the registry. AC: "what should I do next" calls
