@@ -104,6 +104,9 @@ export default function MatterStandingCard({ caseFileId }: { caseFileId: string 
         <button type="button" className="ms-run-btn ms-run-btn-ghost" onClick={load}>Refresh</button>
       </div>
       {data.narrative && <p className="ms-narrative">{data.narrative}</p>}
+      {data.counts.done + data.counts.doableNow + data.counts.blocked === 0 && !data.narrative && (
+        <p className="ms-sub">Nothing on your file yet — start a conversation with your assistant to get things moving.</p>
+      )}
       <div className="ms-buckets">
         {bucket("Do now", data.doableNow, "ms-bucket-now")}
         {bucket("Blocked", data.blocked, "ms-bucket-blocked")}

@@ -81,7 +81,11 @@ export default function AttorneyFreestyleChat({ caseFileId }: { caseFileId: stri
     if (!res.ok) return [];
     const data = await res.json();
     const list = (data.drafts ?? []) as AttorneyWorkspaceDraft[];
-    setDrafts(list);
+    // Preserve an unsaved local edit of the active draft across a reload.
+    const localActive = dirtyRef.current && activeDraftIdRef.current
+      ? draftsRef.current.find((d) => d.id === activeDraftIdRef.current)
+      : undefined;
+    setDrafts(localActive ? list.map((d) => (d.id === localActive.id ? localActive : d)) : list);
     return list;
   }, [caseFileId]);
 
@@ -258,6 +262,10 @@ export default function AttorneyFreestyleChat({ caseFileId }: { caseFileId: stri
   // text, not a value captured when the timer was set.
   const draftsRef = useRef<AttorneyWorkspaceDraft[]>([]);
   useEffect(() => { draftsRef.current = drafts; }, [drafts]);
+  const dirtyRef = useRef(false);
+  const activeDraftIdRef = useRef<string | null>(null);
+  useEffect(() => { dirtyRef.current = draftDirty; }, [draftDirty]);
+  useEffect(() => { activeDraftIdRef.current = activeDraftId; }, [activeDraftId]);
 
   const saveDraft = useCallback(async (id: string, opts: { silent?: boolean } = {}) => {
     const toSave = draftsRef.current.find((d) => d.id === id);

@@ -29,6 +29,10 @@ const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 // Cap on model↔tool round-trips per user turn, so a tool loop can't run away.
 const MAX_TOOL_ITERATIONS = 5;
 
+// The freestyle tool loop can chain several model round-trips, so give the
+// function room beyond the platform default.
+export const maxDuration = 300;
+
 export async function POST(req: NextRequest) {
   const { messages, caseFileId, pendingAttachment, fileType, counselContext, mode } = await req.json() as {
     messages: Array<{ role: string; content: string }>;

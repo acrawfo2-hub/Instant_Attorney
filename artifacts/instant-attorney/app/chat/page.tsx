@@ -240,6 +240,18 @@ function AcpChatInner() {
     return () => {
       window.removeEventListener("pagehide", onHide);
       document.removeEventListener("visibilitychange", onVisibility);
+      // In-app (SPA) navigation away — e.g. clicking "Open your case" — doesn't
+      // fire pagehide, so organize here too. keepalive lets it outlive the
+      // unmount; the endpoint debounces so this stays cheap.
+      const id = caseFileIdRef.current;
+      if (id) {
+        fetch("/api/chat-acp/organize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ caseFileId: id, mode: modeRef.current }),
+          keepalive: true,
+        }).catch(() => {});
+      }
     };
   }, []);
 

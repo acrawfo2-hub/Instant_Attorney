@@ -26,6 +26,11 @@ export default function ChatDraftsPanel({
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draftsRef = useRef<ClientWorkspaceDraft[]>([]);
   useEffect(() => { draftsRef.current = drafts; }, [drafts]);
+  // Mirrored so a refresh-driven reload can avoid clobbering an unsaved edit.
+  const dirtyRef = useRef(false);
+  const activeIdRef = useRef<string | null>(null);
+  useEffect(() => { dirtyRef.current = dirty; }, [dirty]);
+  useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
 
   const active = drafts.find((d) => d.id === activeId) ?? null;
 
@@ -34,7 +39,12 @@ export default function ChatDraftsPanel({
     if (!res.ok) return;
     const data = await res.json();
     const list = (data.drafts ?? []) as ClientWorkspaceDraft[];
-    setDrafts(list);
+    // Don't overwrite an unsaved local edit of the active draft (e.g. a
+    // refreshKey bump from a just-produced draft while the user is typing).
+    const localActive = dirtyRef.current && activeIdRef.current
+      ? draftsRef.current.find((d) => d.id === activeIdRef.current)
+      : undefined;
+    setDrafts(localActive ? list.map((d) => (d.id === localActive.id ? localActive : d)) : list);
     setActiveId((cur) => (cur && list.some((d) => d.id === cur) ? cur : list[0]?.id ?? null));
   }, [caseFileId]);
 
