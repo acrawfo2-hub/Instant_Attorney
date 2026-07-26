@@ -9,7 +9,9 @@ import ExistingCounselModal from "@/components/ExistingCounselModal";
 import type { ExistingCounselFormValue } from "@/components/ExistingCounselForm";
 import VoiceInputButton, { VoiceUnsupportedNote } from "@/components/VoiceInputButton";
 import AccountMenu from "@/components/AccountMenu";
+import ChatDraftsPanel from "@/components/ChatDraftsPanel";
 import { phase2ExistingCounselNotice } from "@/lib/existing-counsel";
+import { parseDrafts, stripDraftsForDisplay } from "@/lib/freestyle-drafts";
 import type { CounselEngagementGoal } from "@/lib/types";
 
 type Msg = Pick<IntakeMessage, "role" | "content"> & {
@@ -51,7 +53,10 @@ const FREESTYLE_ATTACH_TYPES = new Set([
 ]);
 
 function renderContent(text: string) {
-  const lines = text.split("\n");
+  // Freestyle drafts live in the side panel, not the transcript — pull the
+  // document blocks out and leave a compact marker where each one was.
+  const drafted = parseDrafts(text);
+  const lines = stripDraftsForDisplay(text).split("\n");
   const elements: React.ReactNode[] = [];
   let i = 0;
 
@@ -114,6 +119,16 @@ function renderContent(text: string) {
     i++;
   }
 
+  for (const d of drafted) {
+    elements.push(
+      <div key={`draft-${d.title}`} className="fc-draft-note">
+        <span className="fc-draft-note-icon">📄</span>
+        <span className="fc-draft-note-label">{d.title}</span>
+        <span className="fc-draft-note-cta">in your drafts →</span>
+      </div>
+    );
+  }
+
   return elements;
 }
 
@@ -154,6 +169,10 @@ function AcpChatInner() {
   const [loading, setLoading] = useState(false);
   const [streamingText, setStreamingText] = useState("");
   const [chatTruncated, setChatTruncated] = useState(false);
+  // Freestyle split-screen drafts panel. `draftsRefresh` bumps to tell the panel
+  // to reload after the assistant produces a new draft.
+  const [draftsPanelOpen, setDraftsPanelOpen] = useState(false);
+  const [draftsRefresh, setDraftsRefresh] = useState(0);
   const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
   // Freestyle document attachments go through the storage-upload pipeline (not
   // inline base64), so large files don't blow the request-body limit. These
@@ -594,6 +613,11 @@ function AcpChatInner() {
       }
       setMessages((prev) => [...prev, { role: "assistant", content: full }]);
       setStreamingText("");
+      // The server persisted any ---DRAFT--- blocks; open the panel and refresh it.
+      if (mode === "freestyle" && parseDrafts(full).length > 0) {
+        setDraftsPanelOpen(true);
+        setDraftsRefresh((n) => n + 1);
+      }
       setPendingCounselContext(null);
       // Resolved doc uploads are now in the file context; keep only in-flight ones.
       setDocUploads((prev) => prev.filter((d) => d.status === "uploading"));
@@ -679,6 +703,20 @@ function AcpChatInner() {
         </div>
 
         <div className="fc-topbar-right">
+          {mode === "freestyle" && caseFileId && !isQuickConsult && (
+            <button
+              type="button"
+              className="fc-upgrade-btn"
+              style={{
+                background: draftsPanelOpen ? "var(--brand-gold)" : "rgba(255,255,255,0.07)",
+                color: draftsPanelOpen ? "#1a1206" : "var(--brand-cream-text)",
+              }}
+              onClick={() => setDraftsPanelOpen((v) => !v)}
+              title="Show or hide your drafts"
+            >
+              {draftsPanelOpen ? "Hide drafts" : "Drafts"}
+            </button>
+          )}
           {isQuickConsult && hasUserMessages ? (
             <button
               className="fc-upgrade-btn"
@@ -748,6 +786,10 @@ function AcpChatInner() {
           onClose={() => setShowQcModal(false)}
         />
       )}
+
+      {/* FREESTYLE WORKSPACE SPLIT — chat column on the left, drafts docked right */}
+      <div className={`fc-workspace-row${mode === "freestyle" && draftsPanelOpen ? " fc-workspace-row-split" : ""}`}>
+      <div className="fc-workspace-main">
 
       {/* MESSAGES */}
       <main className="fc-messages">
@@ -1006,6 +1048,16 @@ function AcpChatInner() {
       </div>
       </>
       )}
+
+      </div>{/* /fc-workspace-main */}
+      {mode === "freestyle" && draftsPanelOpen && caseFileId && (
+        <ChatDraftsPanel
+          caseFileId={caseFileId}
+          refreshKey={draftsRefresh}
+          onClose={() => setDraftsPanelOpen(false)}
+        />
+      )}
+      </div>{/* /fc-workspace-row */}
     </div>
   );
 }
