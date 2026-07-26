@@ -10,6 +10,7 @@ import { syncLivingFile } from "@/lib/living-file-extractor";
 import { triggerPendingLookups } from "@/lib/gov-form-lookup";
 import { generateCaseTitle } from "@/lib/title-generator";
 import { toAnthropicBlock, processAttachment } from "@/lib/attachment-processor";
+import { parseDrafts } from "@/lib/freestyle-drafts";
 import { recordAiFromMessage, recordStorageUpload } from "@/lib/usage-tracker";
 import { getBillingGate } from "@/lib/topup";
 import { maxOutputTokensFor, limitSignalMetadata } from "@/lib/token-limits";
@@ -338,6 +339,41 @@ export async function POST(req: NextRequest) {
             role: "assistant",
             content: fullResponse,
           });
+
+          // Freestyle split-screen: land any ---DRAFT--- blocks in the drafts
+          // panel. A matching title updates that draft in place; a new title
+          // creates a fresh one. Only in freestyle — guided intake keeps drafts
+          // inline in the transcript.
+          if (mode === "freestyle") {
+            for (const draft of parseDrafts(fullResponse)) {
+              try {
+                const { data: existing } = await db
+                  .from("client_workspace_drafts")
+                  .select("id")
+                  .eq("case_file_id", resolvedCaseFileId)
+                  .eq("user_id", userId)
+                  .eq("title", draft.title)
+                  .order("updated_at", { ascending: false })
+                  .limit(1)
+                  .maybeSingle();
+                if (existing?.id) {
+                  await db.from("client_workspace_drafts")
+                    .update({ content: draft.content, source: "assistant", updated_at: new Date().toISOString() })
+                    .eq("id", existing.id);
+                } else {
+                  await db.from("client_workspace_drafts").insert({
+                    case_file_id: resolvedCaseFileId,
+                    user_id: userId,
+                    title: draft.title,
+                    content: draft.content,
+                    source: "assistant",
+                  });
+                }
+              } catch (err) {
+                console.error("[chat-acp] persist draft error:", err);
+              }
+            }
+          }
 
           // Parse and update file if response contains structured blocks
           const hasLivingFile = fullResponse.includes("---LIVING FILE---");

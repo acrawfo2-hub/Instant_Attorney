@@ -569,6 +569,24 @@ export interface AttorneyWorkspaceDraft {
   updated_at: string;
 }
 
+/**
+ * The consumer-side equivalent: a working draft produced (or hand-started) in a
+ * client's free-form freestyle session, editable and downloadable in the panel.
+ * A potential deliverable — `promoted_document_id` is set once the client sends
+ * it into the documents -> attorney-review pipeline.
+ */
+export interface ClientWorkspaceDraft {
+  id: string;
+  case_file_id: string;
+  user_id: string;
+  title: string;
+  content: string;
+  source: "assistant" | "client";
+  promoted_document_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Document {
   id: string;
   case_file_id: string;
