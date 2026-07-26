@@ -26,6 +26,7 @@ import RoadmapSpine from "@/components/RoadmapSpine";
 import RoadmapToolGroup from "@/components/RoadmapToolGroup";
 import PostConsultCard from "@/components/PostConsultCard";
 import CaseChatPanel from "@/components/CaseChatPanel";
+import MatterStandingCard from "@/components/MatterStandingCard";
 import DocumentExecutionPanel from "@/components/DocumentExecutionPanel";
 import type { CaseFile, FactItem, Document, Profile, ConsultRequest, ConsultWrapUp, RequestedAttachment, GovFormInstrument, Attachment } from "@/lib/types";
 import { docTypeLabel, personDisplayName, isDocumentOutOfDate, coerceWizardType } from "@/lib/types";
@@ -408,6 +409,9 @@ export default function ClientFileView({
           <span className="lf-orchestrator-cta-arrow" aria-hidden>→</span>
         </Link>
       )}
+
+      {/* Matter synthesizer — prioritized "what's done / doable now / blocked". */}
+      {!isAttorney && <MatterStandingCard caseFileId={caseFile.id} />}
 
       {resolvedRoadmap && (
         <RoadmapSpine

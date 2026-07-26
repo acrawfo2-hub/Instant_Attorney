@@ -301,10 +301,13 @@ then impact. The model *phrases and orders*; the task list *bounds* it.
 
 ## 8. Phases & acceptance criteria
 
-**Phase 1 — Synthesizer (first).**
-`lib/matter-tasks.ts` + `assess_matter` endpoint. AC: for a seeded case the endpoint
-returns Done/Doable-now/Blocked buckets that match `computeMissionControl`, ranked by
-urgency then impact, with no invented tasks. Unit test on the transform.
+**Phase 1 — Synthesizer (first). ✅ Shipped.**
+`lib/matter-tasks.ts` (`buildMatterTasks`, unit-tested) + `/api/assess-matter`
+endpoint (deterministic buckets + a grounded narrative) + a "Where things stand"
+card on the consumer Living File. Buckets derive only from `computeMissionControl`
+and finalized records — no invented tasks. Deferred to a later pass: seeding urgency
+from `screenPiSol()` deadlines (needs structured incident-date facts), and exposing
+`assess_matter` as an orchestrator tool (Phase 3).
 
 **Phase 2 — Agentic loop + read-only tools.**
 `lib/orchestrator-tools.ts` (phase-1 tools) + the loop in `chat-acp` (freestyle only)
