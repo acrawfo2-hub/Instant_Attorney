@@ -58,6 +58,35 @@ const boolOf = (v: unknown): boolean | undefined =>
 const strOf = (v: unknown): string | undefined =>
   typeof v === "string" && v.trim() !== "" ? v : undefined;
 
+// Match a model-supplied description against the open "still needed" items:
+// exact, then substring either way, then significant-word overlap. Returns the
+// best match, or undefined if nothing is close enough (the model then retries).
+const STOP = new Set(["the", "a", "an", "of", "your", "for", "and", "to", "with", "any", "all", "document", "documents", "copy", "copies"]);
+function words(s: string): string[] {
+  return s.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter((w) => w.length > 2 && !STOP.has(w));
+}
+function matchRequest<T extends { id: string; description: string }>(rows: T[], query: string): T | undefined {
+  const q = query.toLowerCase().trim();
+  const exact = rows.find((r) => r.description.toLowerCase().trim() === q);
+  if (exact) return exact;
+  const sub = rows.find((r) => {
+    const d = r.description.toLowerCase();
+    return d.includes(q) || q.includes(d);
+  });
+  if (sub) return sub;
+  const qw = words(query);
+  if (qw.length === 0) return undefined;
+  let best: { row: T; score: number } | undefined;
+  for (const r of rows) {
+    const rw = new Set(words(r.description));
+    if (rw.size === 0) continue;
+    const shared = qw.filter((w) => rw.has(w)).length;
+    const score = shared / Math.min(qw.length, rw.size);
+    if (shared >= 1 && score >= 0.5 && (!best || score > best.score)) best = { row: r, score };
+  }
+  return best?.row;
+}
+
 interface ToolDef {
   def: Anthropic.Tool;
   run: (input: Record<string, unknown>, ctx: ToolContext) => ToolResult | Promise<ToolResult>;
@@ -526,6 +555,62 @@ const TOOLS: Record<string, ToolDef> = {
     },
   },
 
+  resolve_document_request: {
+    def: {
+      name: "resolve_document_request",
+      description:
+        "Check a document off the client's 'still needed' list. Call this when the client has PROVIDED a needed document (uploaded it, shared it in the chat, or given you the information it holds), OR when a needed document is NO LONGER RELEVANT because the plan changed. Match by the item's description. Tell the client what you checked off. Keep the file honest — don't leave a 'still needed' item up once it's handled.",
+      input_schema: {
+        type: "object",
+        properties: {
+          description: { type: "string", description: "The needed document to resolve, matching the 'still needed' item as closely as you can, e.g. 'Pay stubs'." },
+          resolution: {
+            type: "string",
+            enum: ["received", "no_longer_needed"],
+            description: "received = the client provided it; no_longer_needed = the approach changed and it's no longer required.",
+          },
+        },
+        required: ["description", "resolution"],
+      },
+    },
+    run: async (input, ctx) => {
+      const description = strOf(input.description);
+      const resolution = strOf(input.resolution);
+      if (!description) return needParams(["description"]);
+      if (resolution !== "received" && resolution !== "no_longer_needed") {
+        return needParams(["resolution (received or no_longer_needed)"]);
+      }
+      const { data: openRows } = await ctx.db
+        .from("requested_attachments")
+        .select("id, description")
+        .eq("case_file_id", ctx.caseFileId)
+        .eq("user_id", ctx.userId)
+        .eq("status", "requested");
+      const rows = (openRows ?? []) as { id: string; description: string }[];
+      if (rows.length === 0) {
+        return { forModel: JSON.stringify({ ok: false, note: "There are no open document requests to resolve." }), raw: { matched: false } };
+      }
+      const match = matchRequest(rows, description);
+      if (!match) {
+        return {
+          forModel: JSON.stringify({ ok: false, note: "No clear match on the 'still needed' list.", open: rows.map((r) => r.description) }),
+          raw: { matched: false, open: rows.map((r) => r.description) },
+        };
+      }
+      const newStatus = resolution === "received" ? "uploaded" : "waived";
+      const { error } = await ctx.db
+        .from("requested_attachments")
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq("id", match.id)
+        .eq("user_id", ctx.userId);
+      if (error) {
+        console.error("[orchestrator-tools] resolve_document_request error:", error);
+        return { forModel: JSON.stringify({ error: "failed", message: "Could not update the checklist." }), raw: null };
+      }
+      return { forModel: JSON.stringify({ ok: true, resolved: match.description, as: resolution }), raw: { id: match.id, resolution } };
+    },
+  },
+
   add_government_form: {
     def: {
       name: "add_government_form",
@@ -578,7 +663,7 @@ const TOOLS: Record<string, ToolDef> = {
 
 // Tools that mutate the client's record. The attorney associate (work-product,
 // not the client channel) gets the read-only set only.
-const WRITE_TOOL_NAMES = new Set(["record_fact", "request_document", "add_government_form"]);
+const WRITE_TOOL_NAMES = new Set(["record_fact", "request_document", "resolve_document_request", "add_government_form"]);
 
 /** All tool definitions — the consumer orchestrator, which may write to its own file. */
 export const ORCHESTRATOR_TOOLS: Anthropic.Tool[] = Object.values(TOOLS).map((t) => t.def);

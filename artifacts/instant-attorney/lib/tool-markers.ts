@@ -18,6 +18,7 @@ export const TOOL_LABELS: Record<string, string> = {
   assess_matter: "Reviewing where the matter stands",
   record_fact: "Saving to the file",
   request_document: "Adding to the checklist",
+  resolve_document_request: "Updating your checklist",
   add_government_form: "Adding an official form",
 };
 

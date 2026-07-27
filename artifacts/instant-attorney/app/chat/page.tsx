@@ -163,9 +163,10 @@ function AcpChatInner() {
   const isQuickConsult = searchParams.get("type") === "quick_consult";
 
   const [messages, setMessages] = useState<Msg[]>([INITIAL_MESSAGE]);
-  const [mode, setMode] = useState<ChatMode>(
-    searchParams.get("mode") === "freestyle" ? "freestyle" : "intake"
-  );
+  // One conversation, no mode toggle: the assistant is the orchestrator and paces
+  // itself (a focused question when it needs a fact, open when you want to think).
+  // It always runs in the tools-enabled "freestyle" behavior.
+  const mode: ChatMode = "freestyle";
   const [caseFileId, setCaseFileId] = useState<string | null>(urlCaseFileId);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -192,19 +193,11 @@ function AcpChatInner() {
   } | null>(null);
   const [handoff, setHandoff] = useState<{ label: string; href: string } | null>(null);
   const [keepChatting, setKeepChatting] = useState(false);
-  // Skip the "how would you like to talk?" chooser when a mode was chosen for the
-  // user upstream (e.g. attorney onboarding drops straight into freestyle) — they
-  // already made the choice, so show the composer, not another prompt.
-  const [modeChooserOpen, setModeChooserOpen] = useState(
-    !isQuickConsult && !searchParams.get("mode")
-  );
-  const [modeNotice, setModeNotice] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputAreaRef = useRef<HTMLDivElement>(null);
   const hydratedRef = useRef(false);
   const caseFileIdRef = useRef<string | null>(caseFileId);
-  const modeRef = useRef<ChatMode>(mode);
   const hasUserMessages = messages.some((m) => m.role === "user");
   const caseHomeHref = caseFileId ? `/dashboard/${caseFileId}` : "/dashboard";
 
@@ -212,11 +205,10 @@ function AcpChatInner() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamingText, handoff]);
 
-  // Keep the latest case file id + mode reachable from the one-time page-hide handler.
+  // Keep the latest case file id reachable from the one-time page-hide handler.
   useEffect(() => {
     caseFileIdRef.current = caseFileId;
-    modeRef.current = mode;
-  }, [caseFileId, mode]);
+  }, [caseFileId]);
 
   // Organize on leave: when the page is hidden (tab close / navigation away),
   // sendBeacon so the conversation tail is folded into the Living File and — for a
@@ -227,7 +219,7 @@ function AcpChatInner() {
     const onHide = () => {
       const id = caseFileIdRef.current;
       if (!id) return;
-      const blob = new Blob([JSON.stringify({ caseFileId: id, mode: modeRef.current })], {
+      const blob = new Blob([JSON.stringify({ caseFileId: id, mode: "freestyle" })], {
         type: "application/json",
       });
       navigator.sendBeacon("/api/chat-acp/organize", blob);
@@ -248,7 +240,7 @@ function AcpChatInner() {
         fetch("/api/chat-acp/organize", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ caseFileId: id, mode: modeRef.current }),
+          body: JSON.stringify({ caseFileId: id, mode: "freestyle" }),
           keepalive: true,
         }).catch(() => {});
       }
@@ -287,13 +279,8 @@ function AcpChatInner() {
           .maybeSingle(),
       ]);
       if (cancelled) return;
-      // Resume the mode the client left this file in (unless the URL forces one).
-      if (cf?.chat_mode === "freestyle" && searchParams.get("mode") !== "intake") {
-        setMode("freestyle");
-      }
       if (!msgs?.length) return;
 
-      setModeChooserOpen(false);
       const imageByMessage = new Map<string, string>();
       (atts ?? []).forEach((a: { id: string; message_id: string | null }) => {
         if (a.message_id && !imageByMessage.has(a.message_id)) {
@@ -409,39 +396,6 @@ function AcpChatInner() {
     el.style.height = Math.min(el.scrollHeight, 160) + "px";
   }
 
-  // Force a Living File sweep of the conversation tail (fire-and-forget). Used
-  // when the client leaves or switches modes, so anything since the last
-  // automatic background sweep still lands in the file.
-  const flushLivingFile = useCallback(() => {
-    const id = caseFileIdRef.current;
-    if (!id) return;
-    fetch("/api/chat-acp/sync-file", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ caseFileId: id, force: true }),
-      keepalive: true,
-    }).catch(() => {});
-  }, []);
-
-  // Switch between guided intake and freestyle. Reflect the choice in the URL so
-  // a reload keeps the mode; the server also persists it to the case file on the
-  // next send, so returning later resumes it too. Flush first so the tail of the
-  // mode being left is captured into the file.
-  function changeMode(next: ChatMode) {
-    if (next === mode) return;
-    flushLivingFile();
-    setMode(next);
-    setModeChooserOpen(false);
-    if (next === "freestyle") {
-      setModeNotice("Open conversation mode — ask freely, attach documents, and draft here. Your case file still updates in the background.");
-    } else {
-      setModeNotice("Step-by-step mode — I'll ask one focused question at a time.");
-    }
-    const params = new URLSearchParams(window.location.search);
-    params.set("mode", next);
-    window.history.replaceState(null, "", `?${params.toString()}`);
-  }
-
   const attachFile = useCallback(async (file: File) => {
     // Images go inline (base64) — small and shown in the bubble immediately.
     if (file.type.startsWith("image/")) {
@@ -521,9 +475,9 @@ function AcpChatInner() {
     setPendingAttachment(null);
   }
 
-  async function sendMessage(e: FormEvent) {
-    e.preventDefault();
-    const text = input.trim();
+  async function sendMessage(e: FormEvent | null, overrideText?: string) {
+    e?.preventDefault();
+    const text = (overrideText ?? input).trim();
     if ((!text && !pendingAttachment) || loading || showCounselModal) return;
 
     const attachment = pendingAttachment;
@@ -541,7 +495,6 @@ function AcpChatInner() {
         ? { imageUrl: attachment.previewUrl }
         : {}),
     };
-    setModeChooserOpen(false);
     const nextMessages = [...messages, userMsg];
     setMessages(nextMessages);
     setInput("");
@@ -678,55 +631,7 @@ function AcpChatInner() {
           <span>Instant-Attorney</span>
         </button>
 
-        <div className="fc-topbar-center">
-          {!isQuickConsult && (
-          <div
-            className="fc-mode-toggle"
-            role="tablist"
-            aria-label="Conversation mode"
-            style={{
-              display: "inline-flex",
-              gap: 2,
-              padding: 2,
-              borderRadius: 999,
-              background: "rgba(255,255,255,0.06)",
-              border: "1px solid rgba(200,169,110,0.18)",
-            }}
-          >
-            {(["intake", "freestyle"] as ChatMode[]).map((m) => {
-              const active = mode === m;
-              return (
-                <button
-                  key={m}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => changeMode(m)}
-                  title={
-                    m === "intake"
-                      ? "Step-by-step — one question at a time, builds your case file"
-                      : "Open conversation — talk freely, attach documents, draft here"
-                  }
-                  style={{
-                    padding: "5px 14px",
-                    borderRadius: 999,
-                    border: "none",
-                    cursor: "pointer",
-                    fontSize: 12,
-                    fontWeight: 600,
-                    letterSpacing: "0.01em",
-                    background: active ? "var(--brand-gold)" : "transparent",
-                    color: active ? "#1a1206" : "var(--brand-cream-text)",
-                    transition: "background 120ms ease, color 120ms ease",
-                  }}
-                >
-                  {m === "intake" ? "Step-by-step" : "Open conversation"}
-                </button>
-              );
-            })}
-          </div>
-          )}
-        </div>
+        <div className="fc-topbar-center" />
 
         <div className="fc-topbar-right">
           {mode === "freestyle" && caseFileId && !isQuickConsult && (
@@ -734,8 +639,8 @@ function AcpChatInner() {
               type="button"
               className="fc-upgrade-btn"
               style={{
-                background: draftsPanelOpen ? "var(--brand-gold)" : "rgba(255,255,255,0.07)",
-                color: draftsPanelOpen ? "#1a1206" : "var(--brand-cream-text)",
+                background: draftsPanelOpen ? "var(--brand-gold)" : "rgba(12,25,41,0.06)",
+                color: draftsPanelOpen ? "#1a1206" : "var(--brand-navy)",
               }}
               onClick={() => setDraftsPanelOpen((v) => !v)}
               title="Show or hide your drafts"
@@ -746,7 +651,7 @@ function AcpChatInner() {
           {isQuickConsult && hasUserMessages ? (
             <button
               className="fc-upgrade-btn"
-              style={{ background: "rgba(200,169,110,0.15)", color: "var(--brand-gold)" }}
+              style={{ background: "rgba(154,118,54,0.12)", color: "var(--chat-gold-ink, #9a7636)" }}
               onClick={() => isQuickConsult && hasUserMessages ? setShowQcModal(true) : router.push(caseHomeHref)}
             >
               Save to a case file
@@ -754,7 +659,7 @@ function AcpChatInner() {
           ) : (
             <button
               className="fc-upgrade-btn"
-              style={{ background: "rgba(255,255,255,0.07)", color: "var(--brand-cream-text)" }}
+              style={{ background: "rgba(12,25,41,0.06)", color: "var(--brand-navy)" }}
               onClick={() => isQuickConsult && hasUserMessages ? setShowQcModal(true) : router.push(caseHomeHref)}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -765,7 +670,7 @@ function AcpChatInner() {
               {isQuickConsult ? "All cases" : "Open your case"}
             </button>
           )}
-          <AccountMenu />
+          <AccountMenu onLight />
         </div>
       </header>
 
@@ -781,7 +686,7 @@ function AcpChatInner() {
 
       {/* PRIVILEGE NOTICE (standard intake only) */}
       {!isQuickConsult && (
-        <div className="fc-disclaimer" style={{ color: "rgba(200,169,110,0.6)", borderColor: "rgba(200,169,110,0.12)" }}>
+        <div className="fc-disclaimer" style={{ color: "var(--chat-gold-ink, #9a7636)", borderColor: "rgba(154,118,54,0.2)" }}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
           </svg>
@@ -819,32 +724,6 @@ function AcpChatInner() {
 
       {/* MESSAGES */}
       <main className="fc-messages">
-        {modeChooserOpen && !hasUserMessages && !isQuickConsult && (
-          <div className="fc-mode-chooser">
-            <p className="fc-mode-chooser-title">How would you like to talk?</p>
-            <div className="fc-mode-chooser-actions">
-              <button
-                type="button"
-                className="fc-mode-chooser-card"
-                onClick={() => changeMode("intake")}
-              >
-                <strong>Step-by-step</strong>
-                <span>Recommended — I ask one focused question at a time and build your case file.</span>
-              </button>
-              <button
-                type="button"
-                className="fc-mode-chooser-card"
-                onClick={() => changeMode("freestyle")}
-              >
-                <strong>Open conversation</strong>
-                <span>Talk freely, attach documents, and draft here. Your case file still updates.</span>
-              </button>
-            </div>
-          </div>
-        )}
-        {modeNotice && (
-          <div className="fc-mode-notice" role="status">{modeNotice}</div>
-        )}
         {messages.map((msg, i) => (
           <div
             key={i}
@@ -984,9 +863,9 @@ function AcpChatInner() {
                 style={{
                   display: "inline-flex", alignItems: "center", gap: 6,
                   padding: "4px 10px", borderRadius: 999, fontSize: 12,
-                  background: "rgba(255,255,255,0.06)",
-                  border: `1px solid ${d.status === "error" ? "rgba(220,80,80,0.5)" : "rgba(200,169,110,0.25)"}`,
-                  color: "var(--brand-cream-text)",
+                  background: d.status === "error" ? "rgba(192,57,43,0.07)" : "rgba(154,118,54,0.08)",
+                  border: `1px solid ${d.status === "error" ? "rgba(192,57,43,0.4)" : "rgba(154,118,54,0.28)"}`,
+                  color: d.status === "error" ? "#7f1d1d" : "var(--brand-text-md)",
                 }}
               >
                 <span aria-hidden>{d.status === "error" ? "⚠" : "📄"}</span>
@@ -1019,6 +898,18 @@ function AcpChatInner() {
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
               </svg>
+            </button>
+          </div>
+        )}
+
+        {hasUserMessages && !loading && !handoff && (
+          <div className="fc-quickrow">
+            <button
+              type="button"
+              className="fc-quickchip"
+              onClick={() => sendMessage(null, "Just give me your bottom line with what you know so far — I'd rather not go through more questions right now.")}
+            >
+              Just give me the bottom line
             </button>
           </div>
         )}

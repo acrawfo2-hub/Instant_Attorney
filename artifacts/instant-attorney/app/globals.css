@@ -1272,11 +1272,17 @@ body {
    ──────────────────────────────────────── */
 
 .fc-shell {
+  /* Light/factual chat palette (Stage 44 redesign). Warm near-white ground,
+     navy structure, a deeper gold that stays legible as ink on light. */
+  --chat-ground: #faf9f7;
+  --chat-surface: #ffffff;
+  --chat-gold-ink: #9a7636;
+  --chat-line: rgba(26, 22, 18, 0.1);
   display: flex;
   flex-direction: column;
   height: 100dvh;
-  background: var(--brand-navy);
-  color: var(--brand-cream-text);
+  background: var(--chat-ground);
+  color: var(--brand-text-dk);
   overflow: hidden;
 }
 
@@ -1286,8 +1292,8 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 0.85rem 1.25rem;
-  border-bottom: 0.5px solid var(--brand-border-lt);
-  background: var(--brand-navy);
+  border-bottom: 0.5px solid var(--chat-line);
+  background: var(--chat-surface);
   flex-shrink: 0;
   gap: 1rem;
 }
@@ -1300,7 +1306,7 @@ body {
   gap: 8px;
   font-size: 14px;
   font-weight: 500;
-  color: var(--brand-cream-text);
+  color: var(--brand-text-dk);
   background: none;
   border: none;
   cursor: pointer;
@@ -1359,9 +1365,9 @@ body {
   gap: 6px;
   padding: 0.5rem 1.25rem;
   font-size: 11px;
-  color: rgba(232, 226, 217, 0.55);
-  background: rgba(255, 255, 255, 0.02);
-  border-bottom: 0.5px solid rgba(255, 255, 255, 0.06);
+  color: var(--brand-text-lt);
+  background: var(--chat-surface);
+  border-bottom: 0.5px solid var(--chat-line);
   text-align: center;
   flex-shrink: 0;
   letter-spacing: 0.01em;
@@ -1399,8 +1405,8 @@ body {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: rgba(200, 169, 110, 0.15);
-  border: 0.5px solid rgba(200, 169, 110, 0.3);
+  background: var(--brand-navy);
+  border: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1420,15 +1426,16 @@ body {
 .fc-bubble p + p { margin-top: 0.5rem; }
 
 .fc-bubble-ai {
-  background: rgba(255, 255, 255, 0.05);
-  border: 0.5px solid rgba(255, 255, 255, 0.09);
-  color: var(--brand-cream-text);
+  background: var(--chat-surface);
+  border: 0.5px solid var(--chat-line);
+  color: var(--brand-text-dk);
   border-top-left-radius: 4px;
+  box-shadow: 0 1px 2px rgba(26, 22, 18, 0.04);
 }
 .fc-bubble-user {
-  background: var(--brand-navy-md);
-  border: 0.5px solid rgba(255, 255, 255, 0.1);
-  color: #e8e2d9;
+  background: var(--brand-navy);
+  border: none;
+  color: var(--brand-cream-text);
   border-top-right-radius: 4px;
   max-width: 80%;
 }
@@ -1439,7 +1446,7 @@ body {
   font-family: var(--font-playfair, "Playfair Display"), serif;
   font-size: 15px;
   font-weight: 500;
-  color: #f5efe6;
+  color: var(--brand-text-dk);
   margin-top: 0.9rem !important;
   margin-bottom: 0.3rem !important;
 }
@@ -1457,7 +1464,7 @@ body {
   align-items: flex-start;
   gap: 8px;
   font-size: 13.5px;
-  color: rgba(232, 226, 217, 0.85);
+  color: var(--brand-text-md);
 }
 .fc-msg-list li::before {
   content: "·";
@@ -1467,7 +1474,7 @@ body {
 }
 .fc-divider {
   border: none;
-  border-top: 0.5px solid rgba(255, 255, 255, 0.1);
+  border-top: 0.5px solid var(--chat-line);
   margin: 0.6rem 0;
 }
 .fc-spacer { height: 0.35rem; }
@@ -1580,8 +1587,8 @@ body {
 
 /* Input area */
 .fc-input-area {
-  border-top: 0.5px solid rgba(255, 255, 255, 0.08);
-  background: var(--brand-navy);
+  border-top: 0.5px solid var(--chat-line);
+  background: var(--chat-surface);
   padding: 0.9rem 1rem 0.75rem;
   padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
   flex-shrink: 0;
@@ -1600,13 +1607,13 @@ body {
 }
 .fc-textarea {
   flex: 1;
-  background: rgba(255, 255, 255, 0.05);
-  border: 0.5px solid rgba(255, 255, 255, 0.12);
+  background: var(--chat-ground);
+  border: 0.5px solid var(--brand-border);
   border-radius: 10px;
   padding: 0.7rem 1rem;
   font-size: 14px;
   line-height: 1.55;
-  color: #e8e2d9;
+  color: var(--brand-text-dk);
   font-family: var(--font-dm-sans, "DM Sans"), sans-serif;
   resize: none;
   min-height: 44px;
@@ -1615,8 +1622,8 @@ body {
   outline: none;
   transition: border-color 0.2s;
 }
-.fc-textarea::placeholder { color: rgba(232, 226, 217, 0.55); }
-.fc-textarea:focus { border-color: rgba(200, 169, 110, 0.45); }
+.fc-textarea::placeholder { color: var(--brand-text-lt); }
+.fc-textarea:focus { border-color: var(--brand-gold); }
 .fc-textarea:disabled { opacity: 0.5; }
 .fc-send-btn {
   width: 40px;
@@ -1643,7 +1650,7 @@ body {
   max-width: 740px;
   margin: 0.5rem auto 0;
   font-size: 11px;
-  color: rgba(232, 226, 217, 0.62);
+  color: var(--brand-text-lt);
   letter-spacing: 0.01em;
 }
 .fc-input-hint-sep { opacity: 0.6; }
@@ -1652,12 +1659,13 @@ body {
   border: none;
   font-family: var(--font-dm-sans, "DM Sans"), sans-serif;
   font-size: 11px;
-  color: rgba(200, 169, 110, 0.9);
+  color: var(--chat-gold-ink);
+  font-weight: 600;
   cursor: pointer;
   padding: 0;
   transition: color 0.2s;
 }
-.fc-input-upgrade-link:hover { color: var(--brand-gold-lt); }
+.fc-input-upgrade-link:hover { color: var(--brand-navy); }
 
 @media (max-width: 480px) {
   .fc-topbar-center { display: none; }
@@ -1668,9 +1676,9 @@ body {
 
 /* ── ACP chat extras ── */
 .chat-lf-block {
-  border: 0.5px solid rgba(200, 169, 110, 0.3);
+  border: 0.5px solid rgba(154, 118, 54, 0.28);
   border-radius: var(--brand-r-md);
-  background: rgba(200, 169, 110, 0.06);
+  background: rgba(154, 118, 54, 0.05);
   margin: 0.5rem 0;
   overflow: hidden;
 }
@@ -1682,44 +1690,44 @@ body {
   font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--brand-gold);
-  border-bottom: 0.5px solid rgba(200, 169, 110, 0.2);
-  background: rgba(200, 169, 110, 0.05);
+  color: var(--chat-gold-ink);
+  border-bottom: 0.5px solid rgba(154, 118, 54, 0.18);
+  background: rgba(154, 118, 54, 0.06);
 }
 .chat-lf-body { padding: 0.75rem 0.85rem; }
 .chat-lf-section {
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(232, 226, 217, 0.5);
+  color: var(--brand-text-lt);
   margin: 0.65rem 0 0.2rem;
 }
 .chat-lf-section:first-child { margin-top: 0; }
 .chat-lf-item {
   font-size: 13px;
-  color: rgba(232, 226, 217, 0.85);
+  color: var(--brand-text-dk);
   margin: 0.2rem 0;
   padding-left: 0.5rem;
 }
 .chat-lf-line {
   font-size: 13px;
-  color: rgba(232, 226, 217, 0.7);
+  color: var(--brand-text-md);
   margin: 0.15rem 0;
 }
 .chat-urgent {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  background: rgba(196, 68, 68, 0.12);
-  border: 0.5px solid rgba(196, 68, 68, 0.35);
+  background: rgba(192, 57, 43, 0.08);
+  border: 0.5px solid rgba(192, 57, 43, 0.3);
   border-radius: 6px;
   padding: 0.6rem 0.85rem;
   margin: 0.35rem 0;
   font-size: 13px;
-  color: #f0baba;
+  color: #7f1d1d;
 }
-.chat-urgent svg { flex-shrink: 0; margin-top: 1px; color: #e06060; }
+.chat-urgent svg { flex-shrink: 0; margin-top: 1px; color: #c0392b; }
 
 /* ────────────────────────────────────────
    AUTH PAGES (login / register)
@@ -4339,7 +4347,7 @@ mark.atty-placeholder {
   border-radius: 4px;
   border: 1px solid var(--brand-border);
 }
-.fc-attachment-name { font-size: 12px; color: #d4ccc2; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fc-attachment-name { font-size: 12px; color: var(--brand-text-md); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fc-attachment-clear {
   flex-shrink: 0;
   background: none; border: none; cursor: pointer;
@@ -4356,7 +4364,7 @@ mark.atty-placeholder {
   width: auto;
   height: auto;
   border-radius: 8px;
-  border: 1px solid rgba(255,255,255,0.18);
+  border: 1px solid rgba(255,255,255,0.22);
   margin-bottom: 6px;
 }
 .fc-bubble-image:last-child { margin-bottom: 0; }
@@ -6632,7 +6640,7 @@ mark.atty-placeholder {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--brand-gold);
+  color: var(--chat-gold-ink);
 }
 .fc-handoff-headline {
   font-size: 16px;
@@ -8349,9 +8357,9 @@ mark.atty-placeholder {
   padding: 10px 16px;
   font-size: 12.5px;
   line-height: 1.5;
-  color: rgba(200, 169, 110, 0.85);
-  background: rgba(70, 110, 160, 0.12);
-  border-bottom: 1px solid rgba(70, 110, 160, 0.25);
+  color: var(--brand-navy);
+  background: rgba(70, 110, 160, 0.09);
+  border-bottom: 1px solid rgba(70, 110, 160, 0.22);
 }
 
 /* ── Direct case chat (client ⇆ attorney) — shared by both Living File views ── */
@@ -9324,7 +9332,7 @@ mark.atty-placeholder {
 }
 /* When the panel is docked, the chat column gets a divider on the right. */
 .fc-workspace-row-split .fc-workspace-main {
-  border-right: 1px solid rgba(200, 169, 110, 0.16);
+  border-right: 1px solid var(--chat-line);
 }
 /* The docked panel reuses the .fs-draft-* editor styles; size it here. */
 .fc-workspace-row .fc-draft-pane {
@@ -9341,14 +9349,14 @@ mark.atty-placeholder {
   margin-top: 4px;
   padding: 7px 12px;
   border-radius: 10px;
-  border: 1px solid rgba(200, 169, 110, 0.35);
-  background: rgba(200, 169, 110, 0.1);
-  color: var(--brand-cream-text);
+  border: 1px solid rgba(154, 118, 54, 0.3);
+  background: rgba(154, 118, 54, 0.07);
+  color: var(--brand-text-dk);
   font-size: 13px;
 }
 .fc-draft-note-icon { font-size: 15px; }
 .fc-draft-note-label { font-weight: 600; }
-.fc-draft-note-cta { opacity: 0.6; font-size: 12px; }
+.fc-draft-note-cta { color: var(--chat-gold-ink); font-size: 12px; }
 
 /* Promote-to-review row at the foot of the draft editor. */
 .fc-draft-promote-row {
@@ -9378,8 +9386,64 @@ mark.atty-placeholder {
 @media (max-width: 820px) {
   .fc-workspace-row { flex-direction: column; }
   .fc-workspace-row-split .fc-workspace-main { border-right: none; }
-  .fc-workspace-row .fc-draft-pane { flex: 1 1 auto; max-height: 46vh; border-top: 1px solid rgba(200, 169, 110, 0.16); }
+  .fc-workspace-row .fc-draft-pane { flex: 1 1 auto; max-height: 46vh; border-top: 1px solid var(--chat-line); }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Consumer chat — light-theme overrides (Stage 44). The docked drafts panel
+   reuses the attorney workspace's dark .fs-draft-* styles; on the consumer's
+   light chat it carries the extra .fc-draft-pane class, so scope every dark
+   surface back to light here. The attorney workspace (plain .fs-draft-pane,
+   no .fc-draft-pane) is untouched.
+   ══════════════════════════════════════════════════════════════════════════ */
+.fc-draft-pane.fs-draft-pane { background: var(--chat-surface); }
+.fc-draft-pane .fs-draft-tabs { border-bottom-color: var(--chat-line); }
+.fc-draft-pane .fs-draft-tab {
+  border-color: rgba(154, 118, 54, 0.28);
+  color: var(--brand-text-md);
+}
+.fc-draft-pane .fs-draft-tab-active {
+  background: var(--brand-navy);
+  color: var(--brand-cream-heading);
+  border-color: var(--brand-navy);
+}
+.fc-draft-pane .fs-draft-new {
+  border-color: rgba(154, 118, 54, 0.3);
+  color: var(--brand-text-md);
+}
+.fc-draft-pane .fs-draft-new:hover { border-color: var(--brand-navy); color: var(--brand-navy); }
+.fc-draft-pane .fs-draft-title { color: var(--brand-text-dk); }
+.fc-draft-pane .fs-draft-title:focus { border-bottom-color: var(--chat-gold-ink); }
+.fc-draft-pane .fs-draft-title::placeholder { color: var(--brand-text-lt); }
+.fc-draft-pane .fs-draft-dl { color: var(--chat-gold-ink); }
+.fc-draft-pane .fs-draft-del { color: #c0392b; }
+.fc-draft-pane .fs-draft-body {
+  border-color: var(--brand-border);
+  background: var(--chat-ground);
+  color: var(--brand-text-dk);
+}
+.fc-draft-pane .fs-draft-body:focus { border-color: var(--chat-gold-ink); }
+.fc-draft-pane .fs-draft-body::placeholder { color: var(--brand-text-lt); }
+.fc-draft-pane .fs-draft-save-state { color: var(--brand-text-lt); opacity: 1; }
+.fc-draft-pane .fs-draft-empty { color: var(--brand-text-lt); opacity: 1; }
+.fc-draft-pane .fc-draft-notice { color: var(--brand-text-md); opacity: 1; }
+.fc-draft-pane .fc-draft-promoted { color: #2e7d5b; }
+
+/* Quick-consult banner — a one-off-question notice on light ground. */
+.fc-qc-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 16px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--chat-gold-ink);
+  background: rgba(154, 118, 54, 0.07);
+  border-bottom: 1px solid rgba(154, 118, 54, 0.2);
+  text-align: center;
+}
+.fc-qc-banner svg { flex-shrink: 0; }
 
 /* ══════════════════════════════════════════════════════════════════════════
    Living File — orchestrator entry (Stage 41). The prominent "what's next" is a
@@ -9435,6 +9499,166 @@ mark.atty-placeholder {
 }
 @media (max-width: 560px) {
   .lf-orchestrator-cta-arrow { display: none; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CaseHub — the consumer file's single live block (Stage 44). Consolidates the
+   old recap card + "what's next?" CTA + on-demand standing card into one
+   server-computed "Where things stand" read, styled light/factual: warm ground,
+   navy structure, gold accent, semantic status dots.
+   ══════════════════════════════════════════════════════════════════════════ */
+.lf-hub {
+  grid-column: 1 / -1;
+  background: var(--brand-white);
+  border: 0.5px solid var(--brand-border);
+  border-top: 3px solid var(--brand-navy);
+  border-radius: var(--brand-r-lg);
+  padding: 1.4rem 1.5rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+}
+.lf-hub-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.lf-hub-headings { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.lf-hub-title {
+  font-family: var(--font-playfair, "Playfair Display"), serif;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--brand-text-dk);
+  line-height: 1.15;
+}
+.lf-hub-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  color: var(--brand-text-lt);
+}
+.lf-hub-livedot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #2e7d5b;
+  box-shadow: 0 0 0 0 rgba(46, 125, 91, 0.5);
+  animation: lf-hub-pulse 2.4s ease-out infinite;
+}
+@keyframes lf-hub-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(46, 125, 91, 0.45); }
+  70% { box-shadow: 0 0 0 6px rgba(46, 125, 91, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(46, 125, 91, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lf-hub-livedot { animation: none; }
+}
+.lf-hub-cta {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  background: var(--brand-navy);
+  color: var(--brand-cream-heading);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.14s ease, transform 0.12s ease;
+}
+.lf-hub-cta:hover { background: #14263c; transform: translateY(-1px); }
+.lf-hub-cta svg { flex: 0 0 auto; }
+.lf-hub-recap {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  background: var(--brand-cream);
+  border-radius: var(--brand-r-md);
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--brand-text-md);
+}
+.lf-hub-recap-k {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--brand-text-xlt);
+}
+.lf-hub-empty {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--brand-text-md);
+}
+.lf-hub-buckets { display: flex; flex-direction: column; gap: 1.1rem; }
+.lf-hub-bucket { display: flex; flex-direction: column; gap: 0.6rem; }
+.lf-hub-bucket-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--brand-text-lt);
+}
+.lf-hub-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+.lf-hub-count-now { background: rgba(46, 125, 91, 0.13); color: #2e7d5b; }
+.lf-hub-count-blocked { background: rgba(183, 121, 31, 0.14); color: #b7791f; }
+.lf-hub-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.lf-hub-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--brand-r-sm);
+  transition: background 0.12s ease;
+}
+.lf-hub-item:hover { background: var(--brand-cream); }
+.lf-hub-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transform: translateY(-1px);
+}
+.lf-hub-dot-crit { background: #c0392b; }
+.lf-hub-dot-warn { background: #b7791f; }
+.lf-hub-dot-normal { background: var(--brand-gold); }
+.lf-hub-item-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.lf-hub-item-title {
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--brand-text-dk);
+  text-decoration: none;
+}
+a.lf-hub-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
+.lf-hub-item-sub { font-size: 12px; color: var(--brand-text-lt); }
+.lf-hub-done {
+  margin: 0;
+  padding-top: 0.2rem;
+  font-size: 13px;
+  font-weight: 600;
+  color: #2e7d5b;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -9518,18 +9742,18 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
   gap: 8px;
   padding: 5px 12px;
   border-radius: 999px;
-  border: 1px solid rgba(200, 169, 110, 0.35);
-  background: rgba(200, 169, 110, 0.1);
-  color: var(--brand-cream-text);
+  border: 1px solid rgba(154, 118, 54, 0.28);
+  background: rgba(154, 118, 54, 0.08);
+  color: var(--chat-gold-ink);
   font-size: 12.5px;
-  font-weight: 500;
+  font-weight: 600;
 }
 .fc-tool-chip-spinner {
   width: 11px;
   height: 11px;
   border-radius: 50%;
-  border: 2px solid rgba(200, 169, 110, 0.35);
-  border-top-color: var(--brand-gold);
+  border: 2px solid rgba(154, 118, 54, 0.3);
+  border-top-color: var(--chat-gold-ink);
   animation: fc-tool-spin 0.7s linear infinite;
 }
 @keyframes fc-tool-spin { to { transform: rotate(360deg); } }
@@ -9540,3 +9764,13 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
 .lf-session-recap-title { font-size: 13px; font-weight: 700; color: var(--brand-text-dk); }
 .lf-session-recap-time { font-size: 11.5px; color: var(--brand-text-lt); }
 .lf-session-recap-body { font-size: 14px; line-height: 1.6; color: var(--brand-text-md); }
+
+/* "Just give me the bottom line" escape-hatch chip above the composer */
+.fc-quickrow { max-width: 740px; margin: 0 auto 8px; display: flex; }
+.fc-quickchip {
+  font-size: 12.5px; font-weight: 600; color: var(--chat-gold-ink);
+  background: var(--chat-surface); border: 1px solid rgba(154,118,54,0.3);
+  border-radius: 999px; padding: 6px 14px; cursor: pointer;
+  font-family: inherit; transition: border-color .15s, background .15s, color .15s;
+}
+.fc-quickchip:hover { border-color: var(--brand-navy); color: var(--brand-navy); background: var(--chat-ground); }
