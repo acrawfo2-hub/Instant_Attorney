@@ -26,8 +26,9 @@ import RoadmapSpine from "@/components/RoadmapSpine";
 import RoadmapToolGroup from "@/components/RoadmapToolGroup";
 import PostConsultCard from "@/components/PostConsultCard";
 import CaseChatPanel from "@/components/CaseChatPanel";
-import MatterStandingCard from "@/components/MatterStandingCard";
+import CaseHub from "@/components/CaseHub";
 import DocumentExecutionPanel from "@/components/DocumentExecutionPanel";
+import { buildMatterTasks } from "@/lib/matter-tasks";
 import type { CaseFile, FactItem, Document, Profile, ConsultRequest, ConsultWrapUp, RequestedAttachment, GovFormInstrument, Attachment } from "@/lib/types";
 import { docTypeLabel, personDisplayName, isDocumentOutOfDate, coerceWizardType } from "@/lib/types";
 
@@ -196,6 +197,22 @@ export default function ClientFileView({
     .filter((grp) => grp.items.length > 0);
   const strategy = caseFile.legal_strategy ?? null;
   const isAttorney = mode === "attorney";
+
+  // The consumer file's single live block. Computed server-side from the
+  // deterministic task view (Mission Control + finalized records), so "Where
+  // things stand" renders instantly — no button, no per-view model call. The
+  // orchestrator keeps the underlying facts/documents current; this reads them.
+  const matterTasks = !isAttorney
+    ? buildMatterTasks({
+        caseFile,
+        facts,
+        documents,
+        requestedAttachments,
+        govForms,
+        attachments,
+        mode: "client",
+      })
+    : null;
   // Surface the child-support estimator only on family matters, detected by
   // reusing the family-instrument keyword matcher over the matter's own text.
   const matterText = `${caseFile.matter_subtype ?? ""} ${caseFile.summary ?? ""}`;
@@ -387,47 +404,11 @@ export default function ClientFileView({
         />
       )}
 
-      {/* Where we left off — the recap distilled when the client last left the
-          freestyle assistant ("organize on leave"). */}
-      {!isAttorney && caseFile.chat_session_summary && (
-        <div className="lf-card lf-card-full lf-session-recap">
-          <div className="lf-session-recap-head">
-            <span className="lf-session-recap-title">Where we left off</span>
-            {caseFile.chat_session_summarized_at && (
-              <span className="lf-session-recap-time">
-                {new Date(caseFile.chat_session_summarized_at).toLocaleDateString()}
-              </span>
-            )}
-          </div>
-          <p className="lf-session-recap-body">{caseFile.chat_session_summary}</p>
-        </div>
-      )}
-
-      {/* Consumer next-step entry — the prominent way to figure out (and do) what
-          comes next is a conversation with the assistant that knows the whole file. */}
-      {!isAttorney && (
-        <Link
-          href={`/chat?caseFileId=${caseFile.id}&mode=freestyle`}
-          className="lf-card lf-card-full lf-orchestrator-cta"
-        >
-          <div className="lf-orchestrator-cta-icon" aria-hidden>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            </svg>
-          </div>
-          <div className="lf-orchestrator-cta-text">
-            <span className="lf-orchestrator-cta-title">Not sure what to do next?</span>
-            <span className="lf-orchestrator-cta-sub">
-              Talk it through with your legal assistant — it knows everything in your file, and can
-              analyze, plan, and draft with you right here.
-            </span>
-          </div>
-          <span className="lf-orchestrator-cta-arrow" aria-hidden>→</span>
-        </Link>
-      )}
-
-      {/* Matter synthesizer — prioritized "what's done / doable now / blocked". */}
-      {!isAttorney && <MatterStandingCard caseFileId={caseFile.id} />}
+      {/* The consumer file's single live block — consolidates the old recap card,
+          the "what's next?" CTA, and the on-demand standing card into one
+          server-computed "Where things stand" read of the matter, with the
+          assistant one tap away. */}
+      {!isAttorney && matterTasks && <CaseHub caseFile={caseFile} tasks={matterTasks} />}
 
       {resolvedRoadmap && (
         <RoadmapSpine

@@ -9438,6 +9438,166 @@ mark.atty-placeholder {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
+   CaseHub — the consumer file's single live block (Stage 44). Consolidates the
+   old recap card + "what's next?" CTA + on-demand standing card into one
+   server-computed "Where things stand" read, styled light/factual: warm ground,
+   navy structure, gold accent, semantic status dots.
+   ══════════════════════════════════════════════════════════════════════════ */
+.lf-hub {
+  grid-column: 1 / -1;
+  background: var(--brand-white);
+  border: 0.5px solid var(--brand-border);
+  border-top: 3px solid var(--brand-navy);
+  border-radius: var(--brand-r-lg);
+  padding: 1.4rem 1.5rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+}
+.lf-hub-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.lf-hub-headings { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.lf-hub-title {
+  font-family: var(--font-playfair, "Playfair Display"), serif;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--brand-text-dk);
+  line-height: 1.15;
+}
+.lf-hub-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  color: var(--brand-text-lt);
+}
+.lf-hub-livedot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #2e7d5b;
+  box-shadow: 0 0 0 0 rgba(46, 125, 91, 0.5);
+  animation: lf-hub-pulse 2.4s ease-out infinite;
+}
+@keyframes lf-hub-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(46, 125, 91, 0.45); }
+  70% { box-shadow: 0 0 0 6px rgba(46, 125, 91, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(46, 125, 91, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lf-hub-livedot { animation: none; }
+}
+.lf-hub-cta {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  background: var(--brand-navy);
+  color: var(--brand-cream-heading);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.14s ease, transform 0.12s ease;
+}
+.lf-hub-cta:hover { background: #14263c; transform: translateY(-1px); }
+.lf-hub-cta svg { flex: 0 0 auto; }
+.lf-hub-recap {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  background: var(--brand-cream);
+  border-radius: var(--brand-r-md);
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--brand-text-md);
+}
+.lf-hub-recap-k {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--brand-text-xlt);
+}
+.lf-hub-empty {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--brand-text-md);
+}
+.lf-hub-buckets { display: flex; flex-direction: column; gap: 1.1rem; }
+.lf-hub-bucket { display: flex; flex-direction: column; gap: 0.6rem; }
+.lf-hub-bucket-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--brand-text-lt);
+}
+.lf-hub-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+.lf-hub-count-now { background: rgba(46, 125, 91, 0.13); color: #2e7d5b; }
+.lf-hub-count-blocked { background: rgba(183, 121, 31, 0.14); color: #b7791f; }
+.lf-hub-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.lf-hub-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--brand-r-sm);
+  transition: background 0.12s ease;
+}
+.lf-hub-item:hover { background: var(--brand-cream); }
+.lf-hub-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transform: translateY(-1px);
+}
+.lf-hub-dot-crit { background: #c0392b; }
+.lf-hub-dot-warn { background: #b7791f; }
+.lf-hub-dot-normal { background: var(--brand-gold); }
+.lf-hub-item-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.lf-hub-item-title {
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--brand-text-dk);
+  text-decoration: none;
+}
+a.lf-hub-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
+.lf-hub-item-sub { font-size: 12px; color: var(--brand-text-lt); }
+.lf-hub-done {
+  margin: 0;
+  padding-top: 0.2rem;
+  font-size: 13px;
+  font-weight: 600;
+  color: #2e7d5b;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
    Matter synthesizer — "Where things stand" card on the Living File (Stage 42)
    ══════════════════════════════════════════════════════════════════════════ */
 .ms-card { border-left: 3px solid var(--brand-gold); }
