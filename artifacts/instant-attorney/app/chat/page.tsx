@@ -639,8 +639,8 @@ function AcpChatInner() {
               type="button"
               className="fc-upgrade-btn"
               style={{
-                background: draftsPanelOpen ? "var(--brand-gold)" : "rgba(255,255,255,0.07)",
-                color: draftsPanelOpen ? "#1a1206" : "var(--brand-cream-text)",
+                background: draftsPanelOpen ? "var(--brand-gold)" : "rgba(12,25,41,0.06)",
+                color: draftsPanelOpen ? "#1a1206" : "var(--brand-navy)",
               }}
               onClick={() => setDraftsPanelOpen((v) => !v)}
               title="Show or hide your drafts"
@@ -651,7 +651,7 @@ function AcpChatInner() {
           {isQuickConsult && hasUserMessages ? (
             <button
               className="fc-upgrade-btn"
-              style={{ background: "rgba(200,169,110,0.15)", color: "var(--brand-gold)" }}
+              style={{ background: "rgba(154,118,54,0.12)", color: "var(--chat-gold-ink, #9a7636)" }}
               onClick={() => isQuickConsult && hasUserMessages ? setShowQcModal(true) : router.push(caseHomeHref)}
             >
               Save to a case file
@@ -659,7 +659,7 @@ function AcpChatInner() {
           ) : (
             <button
               className="fc-upgrade-btn"
-              style={{ background: "rgba(255,255,255,0.07)", color: "var(--brand-cream-text)" }}
+              style={{ background: "rgba(12,25,41,0.06)", color: "var(--brand-navy)" }}
               onClick={() => isQuickConsult && hasUserMessages ? setShowQcModal(true) : router.push(caseHomeHref)}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -670,7 +670,7 @@ function AcpChatInner() {
               {isQuickConsult ? "All cases" : "Open your case"}
             </button>
           )}
-          <AccountMenu />
+          <AccountMenu onLight />
         </div>
       </header>
 
@@ -686,7 +686,7 @@ function AcpChatInner() {
 
       {/* PRIVILEGE NOTICE (standard intake only) */}
       {!isQuickConsult && (
-        <div className="fc-disclaimer" style={{ color: "rgba(200,169,110,0.6)", borderColor: "rgba(200,169,110,0.12)" }}>
+        <div className="fc-disclaimer" style={{ color: "var(--chat-gold-ink, #9a7636)", borderColor: "rgba(154,118,54,0.2)" }}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
           </svg>
@@ -863,9 +863,9 @@ function AcpChatInner() {
                 style={{
                   display: "inline-flex", alignItems: "center", gap: 6,
                   padding: "4px 10px", borderRadius: 999, fontSize: 12,
-                  background: "rgba(255,255,255,0.06)",
-                  border: `1px solid ${d.status === "error" ? "rgba(220,80,80,0.5)" : "rgba(200,169,110,0.25)"}`,
-                  color: "var(--brand-cream-text)",
+                  background: d.status === "error" ? "rgba(192,57,43,0.07)" : "rgba(154,118,54,0.08)",
+                  border: `1px solid ${d.status === "error" ? "rgba(192,57,43,0.4)" : "rgba(154,118,54,0.28)"}`,
+                  color: d.status === "error" ? "#7f1d1d" : "var(--brand-text-md)",
                 }}
               >
                 <span aria-hidden>{d.status === "error" ? "⚠" : "📄"}</span>
