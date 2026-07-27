@@ -27,6 +27,7 @@ import RoadmapToolGroup from "@/components/RoadmapToolGroup";
 import PostConsultCard from "@/components/PostConsultCard";
 import CaseChatPanel from "@/components/CaseChatPanel";
 import CaseHub from "@/components/CaseHub";
+import AttorneyFreestyleChat from "@/components/AttorneyFreestyleChat";
 import DocumentExecutionPanel from "@/components/DocumentExecutionPanel";
 import { buildMatterTasks } from "@/lib/matter-tasks";
 import type { CaseFile, FactItem, Document, Profile, ConsultRequest, ConsultWrapUp, RequestedAttachment, GovFormInstrument, Attachment } from "@/lib/types";
@@ -409,6 +410,15 @@ export default function ClientFileView({
           server-computed "Where things stand" read of the matter, with the
           assistant one tap away. */}
       {!isAttorney && matterTasks && <CaseHub caseFile={caseFile} tasks={matterTasks} />}
+
+      {/* Attorney parity — the same "keep working with the orchestrator" entry the
+          client has, on the file. Opens the freestyle work-product workspace
+          (privileged, not shared) right here instead of a separate page. */}
+      {isAttorney && (
+        <div className="lf-card lf-card-full lf-atty-freestyle-entry">
+          <AttorneyFreestyleChat caseFileId={caseFile.id} />
+        </div>
+      )}
 
       {resolvedRoadmap && (
         <RoadmapSpine

@@ -6395,7 +6395,31 @@ mark.atty-placeholder {
   padding: 14px 16px;
   background: rgba(0, 0, 0, 0.015);
 }
-.lf-info-needed-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 12px; }
+.lf-info-needed-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  cursor: pointer;
+  list-style: none;
+  position: relative;
+  padding-right: 22px;
+}
+.lf-info-needed-head::-webkit-details-marker { display: none; }
+/* Disclosure chevron, rotates when open. */
+.lf-info-needed-head::after {
+  content: "";
+  position: absolute;
+  right: 4px;
+  top: 5px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--brand-text-lt);
+  border-bottom: 2px solid var(--brand-text-lt);
+  transform: rotate(45deg);
+  transition: transform 0.15s ease;
+}
+.lf-info-needed[open] > .lf-info-needed-head { margin-bottom: 12px; }
+.lf-info-needed[open] > .lf-info-needed-head::after { transform: rotate(-135deg); top: 8px; }
 .lf-info-needed-title { font-size: 13px; font-weight: 700; color: var(--brand-navy); }
 .lf-info-needed-sub { font-size: 12px; color: var(--brand-text-lt); }
 .lf-info-group { margin-bottom: 12px; }
@@ -6541,6 +6565,27 @@ mark.atty-placeholder {
   transform: translateY(-1px);
   box-shadow: 0 4px 14px rgba(193,154,58,0.45);
 }
+/* Handoff banner is dismissible now (composer always stays) — the X sits beside
+   the "Open my case" button on the navy banner. */
+.fc-file-cta-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.fc-file-cta-dismiss {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: var(--brand-cream-text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+.fc-file-cta-dismiss:hover { background: rgba(255, 255, 255, 0.16); }
+
+/* Attorney freestyle-workspace launcher embedded in the Living File. The card
+   frame comes from .lf-card; strip the launcher's own top margin so it sits flush. */
+.lf-atty-freestyle-entry > .atty-case-subsection { margin: 0; }
 
 /* ── Wizard loading state (improved) ──────────────────────────────────────────── */
 .wiz-doc-loading-active {

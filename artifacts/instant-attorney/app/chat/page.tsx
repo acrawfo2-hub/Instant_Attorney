@@ -192,7 +192,10 @@ function AcpChatInner() {
     goal: CounselEngagementGoal | null;
   } | null>(null);
   const [handoff, setHandoff] = useState<{ label: string; href: string } | null>(null);
-  const [keepChatting, setKeepChatting] = useState(false);
+  // Orchestrator-era: reaching a recommended document is a *milestone*, not a
+  // dead-end. The composer always stays; the handoff is a dismissible banner, so
+  // the client can open their case OR keep talking — never a loop back to the file.
+  const [handoffDismissed, setHandoffDismissed] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputAreaRef = useRef<HTMLDivElement>(null);
@@ -821,29 +824,31 @@ function AcpChatInner() {
         <div ref={messagesEndRef} />
       </main>
 
-      {/* HANDOFF ACTION / INPUT — at the "ready" point the composer is replaced by the
-          one obvious next step, with a small link back to chatting if needed. */}
-      {handoff && !keepChatting ? (
-        <div className="fc-handoff-actions">
-          <button className="fc-handoff-btn" onClick={() => router.push(handoff.href)}>
-            Open my case → Start my {handoff.label}
-          </button>
-          <button className="fc-handoff-keep" onClick={() => setKeepChatting(true)}>
-            Still have a question? Keep chatting
-          </button>
-        </div>
-      ) : (
-      <>
-      {handoff && keepChatting && (
+      {/* HANDOFF BANNER — reaching a recommended document is a milestone, not a
+          dead-end. Show it as a dismissible banner ABOVE the always-present
+          composer so the client can open their case or keep talking. */}
+      {handoff && !handoffDismissed && (
         <div className="fc-file-cta">
           <div className="fc-file-cta-inner">
             <div className="fc-file-cta-text">
-              <span className="fc-file-cta-eyebrow">⚡ Your case file is ready</span>
-              <span className="fc-file-cta-headline">Next step: create your {handoff.label}</span>
+              <span className="fc-file-cta-eyebrow">✓ Your case file is ready</span>
+              <span className="fc-file-cta-headline">Whenever you&apos;re ready: create your {handoff.label}</span>
             </div>
-            <button className="fc-file-cta-btn" onClick={() => router.push(handoff.href)}>
-              Open my case →
-            </button>
+            <div className="fc-file-cta-actions">
+              <button className="fc-file-cta-btn" onClick={() => router.push(handoff.href)}>
+                Open my case →
+              </button>
+              <button
+                className="fc-file-cta-dismiss"
+                onClick={() => setHandoffDismissed(true)}
+                aria-label="Dismiss — keep chatting"
+                title="Keep chatting"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -964,8 +969,6 @@ function AcpChatInner() {
         </p>
         <VoiceUnsupportedNote />
       </div>
-      </>
-      )}
 
       </div>{/* /fc-workspace-main */}
       {mode === "freestyle" && draftsPanelOpen && caseFileId && (

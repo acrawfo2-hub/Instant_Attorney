@@ -79,36 +79,46 @@ export default function DocumentInfoNeeded({
     );
   }
 
+  // Collapsed by default so a draft with many blanks doesn't swallow the whole
+  // file. The summary states exactly what's open, so nothing is hidden — it's one
+  // tap to fill. Opens automatically if the only thing left is a couple of blanks.
+  const fewFields = fields.length <= 2;
+
   return (
-    <div className="lf-info-needed">
-      <div className="lf-info-needed-head">
+    <details className="lf-info-needed" open={fewFields}>
+      <summary className="lf-info-needed-head">
         <span className="lf-info-needed-title">Information needed for &ldquo;{documentTitle}&rdquo;</span>
         <span className="lf-info-needed-sub">
-          Fill in what you can — each answer drops straight into your document. Anything you&apos;re unsure of can wait.
+          {required.length > 0 && `${required.length} required`}
+          {required.length > 0 && optional.length > 0 && " · "}
+          {optional.length > 0 && `${optional.length} optional`}
+          {" — tap to fill in what you can"}
         </span>
-      </div>
+      </summary>
 
-      {required.length > 0 && (
-        <div className="lf-info-group">
-          <div className="lf-info-group-label">Required to finalize</div>
-          {required.map(renderField)}
+      <div className="lf-info-needed-body">
+        {required.length > 0 && (
+          <div className="lf-info-group">
+            <div className="lf-info-group-label">Required to finalize</div>
+            {required.map(renderField)}
+          </div>
+        )}
+
+        {optional.length > 0 && (
+          <div className="lf-info-group">
+            <div className="lf-info-group-label">Helpful — can be added later</div>
+            {optional.map(renderField)}
+          </div>
+        )}
+
+        <div className="lf-info-actions">
+          <button className="lf-info-save" onClick={save} disabled={saving || filledCount === 0}>
+            {saving ? "Saving…" : `Add ${filledCount || ""} to document`.trim()}
+          </button>
+          {message && <span className="lf-info-msg">{message}</span>}
+          {error && <span className="lf-info-error">{error}</span>}
         </div>
-      )}
-
-      {optional.length > 0 && (
-        <div className="lf-info-group">
-          <div className="lf-info-group-label">Helpful — can be added later</div>
-          {optional.map(renderField)}
-        </div>
-      )}
-
-      <div className="lf-info-actions">
-        <button className="lf-info-save" onClick={save} disabled={saving || filledCount === 0}>
-          {saving ? "Saving…" : `Add ${filledCount || ""} to document`.trim()}
-        </button>
-        {message && <span className="lf-info-msg">{message}</span>}
-        {error && <span className="lf-info-error">{error}</span>}
       </div>
-    </div>
+    </details>
   );
 }
