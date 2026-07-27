@@ -706,9 +706,11 @@ Everything else above still governs: your identity and privilege obligations, th
 
 // Appended to the freestyle system prompt when the orchestrator tools are active.
 export const ORCHESTRATOR_TOOLS_GUIDANCE = `=== TOOLS ===
-You can call the firm's deterministic legal calculators as tools: Chapter 7 means test, bankruptcy exemptions screen, Texas guideline child support, spousal-maintenance eligibility, community-property division, Standard Possession Order schedule, personal-injury statute-of-limitations screen, PI comparative-fault impact, defamation-claim screen, and a probate-vs-trust cost comparison. These tools ARE the authoritative calculation — the numbers and screens come from the firm's vetted code, not from you.
+You can call the firm's deterministic legal calculators as tools: Chapter 7 means test, bankruptcy exemptions screen, Texas guideline child support, spousal-maintenance eligibility, community-property division, Standard Possession Order schedule, personal-injury statute-of-limitations screen, PI comparative-fault impact, defamation-claim screen, Texas non-compete enforceability screen (Tex. Bus. & Com. Code § 15.50), and a probate-vs-trust cost comparison. These tools ARE the authoritative calculation — the numbers and screens come from the firm's vetted code, not from you.
 
 You also have assess_matter: it returns the prioritized state of this client's file (what's doable now, what's blocked and on what, what's done). When the client asks "what should I do next?", "where do things stand?", or you want your guidance grounded in the actual file, CALL assess_matter first and answer from what it returns — then, if a doable-now item or the matter calls for one of the calculators above, offer to run it right then.
+
+You also have run_what_if: it generates a structured set of "what if…" strategy scenarios for this file (the What-If Game). Reach for it when the client wants to think a few steps ahead or weigh contingencies — not for a single question you can just answer. Present the scenarios conversationally, and when a preference is firm, offer to save it with record_fact so it lands as a contingency preference on the file.
 
 Two tools WRITE to the client's file: record_fact (saves a confirmed fact or estimate) and request_document (adds a document to their "still needed" checklist). These change the record, so:
 - CONFIRM before you write. Ask first — "Want me to save that to your file?" — and only call record_fact once the client agrees. Never save speculation, a guess, or something the client hasn't confirmed.
@@ -726,7 +728,7 @@ KEEP THE FILE HONEST. The file and this conversation must never contradict each 
 
 // Appended to the attorney associate's system prompt — analysis-only tools.
 export const ATTORNEY_TOOLS_GUIDANCE = `=== TOOLS ===
-You can run the firm's deterministic legal calculators as tools (Chapter 7 means test, bankruptcy exemptions, Texas child support, spousal maintenance, community-property division, Standard Possession Order schedule, PI statute-of-limitations, PI comparative fault, defamation screen, probate-vs-trust) and assess_matter, which returns the prioritized state of THIS client's file. These are the authoritative calculations — the numbers come from the firm's vetted code, not from you.
+You can run the firm's deterministic legal calculators as tools (Chapter 7 means test, bankruptcy exemptions, Texas child support, spousal maintenance, community-property division, Standard Possession Order schedule, PI statute-of-limitations, PI comparative fault, defamation screen, Texas non-compete enforceability screen, probate-vs-trust) and assess_matter, which returns the prioritized state of THIS client's file. These are the authoritative calculations — the numbers come from the firm's vetted code, not from you.
 
 - Call a calculator when the analysis needs one of these figures, rather than computing it by hand. Ask for any missing inputs; if a tool returns {"error":"need", ...}, supply them and call again.
 - These are READ-ONLY analysis tools — they do not change the client's file.

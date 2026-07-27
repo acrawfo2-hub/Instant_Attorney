@@ -1,9 +1,10 @@
-import type Anthropic from "@anthropic-ai/sdk";
+import Anthropic from "@anthropic-ai/sdk";
 import { runMeansTest, formatMeansTest, type MeansTestInput } from "./bankruptcy-means-test.ts";
 import { estimateChildSupport, formatChildSupportEstimate, type ChildSupportInput } from "./family-support-calc.ts";
 import { screenPiSol, formatPiSol, type PiSolInput } from "./pi-sol-calc.ts";
 import { screenMaintenance, formatMaintenanceScreen, type MaintenanceInput } from "./family-maintenance-calc.ts";
 import { assessDefamation, type DefamationInput } from "./defamation-assessment.ts";
+import { assessNoncompete, type NoncompeteInput } from "./noncompete-assessment.ts";
 import { dividePropertyEstate, formatPropertyDivisionEstimate, type PropertyDivisionInput, type PropertyItem } from "./family-property-calc.ts";
 import { generatePossessionSchedule, formatPossessionSchedule, type PossessionInput } from "./family-possession-calc.ts";
 import { checkExemptions, type ExemptionAsset, type AssetCategory } from "./bankruptcy-exemptions.ts";
@@ -11,6 +12,10 @@ import { estimateProbateVsTrust, type EstateProfile, type EstateSize } from "./e
 import { computePiFaultImpact } from "./pi-fault-calc.ts";
 import { matchFormsByText, getGovernmentForm, isKnownFormKey, GOVERNMENT_FORMS } from "./government-forms.ts";
 import { loadMatterTasks, formatMatterTasks } from "./matter-assessment.ts";
+import { buildFileContext, WHAT_IF_SYSTEM_PROMPT } from "./prompts.ts";
+import { parseWhatIfResponse } from "./what-if.ts";
+import { maxOutputTokensFor } from "./token-limits.ts";
+import type { CaseFile, FactItem } from "./types.ts";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = any;
@@ -264,6 +269,42 @@ const TOOLS: Record<string, ToolDef> = {
       };
       const result = assessDefamation(args);
       return { forModel: `${result.headline}\n\n${result.disclaimer}`, raw: result };
+    },
+  },
+
+  assess_noncompete: {
+    def: {
+      name: "assess_noncompete",
+      description:
+        "Screen a Texas non-compete's likely enforceability under Tex. Bus. & Com. Code § 15.50 (ancillary agreement + consideration, protectable interest, and reasonableness of time/geography/activity). Texas courts REFORM overbroad covenants rather than void them. Answer only the parts the user has told you; leave the rest unset.",
+      input_schema: {
+        type: "object",
+        properties: {
+          ancillaryToAgreement: { type: "boolean", description: "Tied to an otherwise enforceable agreement (e.g. received confidential info, training, or equity)?" },
+          receivedConsideration: { type: "boolean", description: "Did the employee actually receive something giving rise to the employer's interest?" },
+          protectableInterest: { type: "boolean", description: "Does the employer have a legitimate interest (trade secrets, client goodwill, confidential info)?" },
+          timeMonths: { type: "number", description: "Restriction length in months." },
+          geography: { type: "string", enum: ["reasonable", "broad", "none_specified", "unsure"], description: "Geographic reach relative to where the employee actually worked." },
+          activityScope: { type: "string", enum: ["narrow", "broad", "unsure"], description: "Scope of restricted activity relative to the employee's actual role." },
+        },
+        required: [],
+      },
+    },
+    run: (input) => {
+      const args: NoncompeteInput = {
+        ancillaryToAgreement: boolOf(input.ancillaryToAgreement),
+        receivedConsideration: boolOf(input.receivedConsideration),
+        protectableInterest: boolOf(input.protectableInterest),
+        timeMonths: num(input.timeMonths),
+        geography: strOf(input.geography) as NoncompeteInput["geography"],
+        activityScope: strOf(input.activityScope) as NoncompeteInput["activityScope"],
+      };
+      const r = assessNoncompete(args);
+      const factorLines = r.factors.map((f) => `- ${f.factor} [${f.status}]: ${f.note}`).join("\n");
+      const warnLines = r.warnings.length ? `\n\nWarnings:\n${r.warnings.map((w) => `- ${w.severe ? "(!) " : ""}${w.text}`).join("\n")}` : "";
+      const levers = r.negotiationLevers.length ? `\n\nNegotiation levers:\n${r.negotiationLevers.map((l) => `- ${l}`).join("\n")}` : "";
+      const forModel = `${r.headline}\n\nFactors:\n${factorLines}\n\n${r.reformationNote}${warnLines}${levers}\n\n${r.disclaimer}`;
+      return { forModel, raw: r };
     },
   },
 
@@ -659,11 +700,85 @@ const TOOLS: Record<string, ToolDef> = {
       return { forModel: JSON.stringify({ ok: true, added: form.title, form_key: form.key }), raw: { form_key: form.key, title: form.title } };
     },
   },
+
+  // Generative, unlike the deterministic calculators: reuses the What-If Game's
+  // specialized strategist prompt to produce a structured, saved set of "what if…"
+  // scenarios for THIS file. The orchestrator presents them and talks through the
+  // client's preferences (saving any firm one with record_fact). Scenarios persist
+  // to what_if_sessions, kept clear of legal_strategy.
+  run_what_if: {
+    def: {
+      name: "run_what_if",
+      description:
+        "Pressure-test the matter with a structured set of 'what if…' strategy scenarios (the What-If Game), generated for THIS client's file. Use when the client wants to think a few steps ahead or weigh contingencies, or to surface possibilities they haven't considered — not for a quick single question you can just answer. Returns scenarios to talk through; it decides nothing. Optionally focus it on a specific situation.",
+      input_schema: {
+        type: "object",
+        properties: {
+          scenario: { type: "string", description: "Optional: a specific situation to pressure-test. Omit to generate from the file as a whole." },
+        },
+        required: [],
+      },
+    },
+    run: async (input, ctx) => {
+      const scenarioText = strOf(input.scenario) ?? "";
+      const { data: caseFile } = await ctx.db.from("case_files").select("*").eq("id", ctx.caseFileId).maybeSingle();
+      if (!caseFile) return { forModel: JSON.stringify({ error: "no_file", note: "No case file in context." }), raw: null };
+      const { data: factRows } = await ctx.db.from("fact_items").select("*").eq("case_file_id", ctx.caseFileId);
+      const fileContext = buildFileContext(caseFile as CaseFile, (factRows ?? []) as FactItem[]);
+
+      const parts = [fileContext];
+      if (scenarioText) parts.push(`THE USER DESCRIBES THEIR SITUATION:\n${scenarioText}`);
+      parts.push("Generate the What-If scenarios now as JSON only.");
+
+      const MODEL = "claude-sonnet-4-6";
+      let text = "";
+      try {
+        const client = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney, maxRetries: 4 });
+        const stream = client.messages.stream({
+          model: MODEL,
+          max_tokens: Math.min(maxOutputTokensFor(MODEL), 8000),
+          system: WHAT_IF_SYSTEM_PROMPT,
+          messages: [{ role: "user", content: parts.join("\n\n") }],
+        });
+        const finalMsg = await stream.finalMessage();
+        text = finalMsg.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
+      } catch (err) {
+        console.error("[orchestrator-tools] run_what_if generation error:", err);
+        return { forModel: JSON.stringify({ error: "failed", message: "Could not generate scenarios right now." }), raw: null };
+      }
+
+      const parsed = parseWhatIfResponse(text);
+      if (parsed.scenarios.length === 0) {
+        return { forModel: JSON.stringify({ ok: false, note: "No scenarios generated — add a bit more detail about the situation and try again." }), raw: parsed };
+      }
+
+      // Persist to the What-If store (best-effort; never blocks the tool result).
+      try {
+        await ctx.db.from("what_if_sessions").insert({
+          user_id: ctx.userId,
+          case_file_id: ctx.caseFileId,
+          scenario_input: scenarioText || null,
+          scenarios: parsed.scenarios,
+        });
+      } catch (err) {
+        console.error("[orchestrator-tools] run_what_if session persist skipped:", err);
+      }
+
+      const list = parsed.scenarios
+        .map((s, i) => `${i + 1}. ${s.question}\n   Why it matters: ${s.why_it_matters}`)
+        .join("\n");
+      const forModel =
+        `${parsed.intro}\n\n${list}\n\n` +
+        "Present these to the client conversationally, one or a few at a time, and talk through their preferences. When a preference is firm, offer to save it with record_fact so it becomes a contingency preference on the file. These are strategy prompts, not advice or documents.";
+      return { forModel, urgency: undefined, raw: parsed };
+    },
+  },
 };
 
-// Tools that mutate the client's record. The attorney associate (work-product,
-// not the client channel) gets the read-only set only.
-const WRITE_TOOL_NAMES = new Set(["record_fact", "request_document", "resolve_document_request", "add_government_form"]);
+// Tools that mutate the client's record (or, for run_what_if, persist a client-
+// side What-If session). The attorney associate (work-product, not the client
+// channel) gets the read-only set only.
+const WRITE_TOOL_NAMES = new Set(["record_fact", "request_document", "resolve_document_request", "add_government_form", "run_what_if"]);
 
 /** All tool definitions — the consumer orchestrator, which may write to its own file. */
 export const ORCHESTRATOR_TOOLS: Anthropic.Tool[] = Object.values(TOOLS).map((t) => t.def);

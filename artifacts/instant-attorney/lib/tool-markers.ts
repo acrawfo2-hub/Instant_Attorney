@@ -10,6 +10,8 @@ export const TOOL_LABELS: Record<string, string> = {
   screen_pi_sol: "Checking the filing deadline",
   estimate_maintenance: "Screening spousal maintenance",
   assess_defamation: "Screening the defamation claim",
+  assess_noncompete: "Screening the non-compete",
+  run_what_if: "Building what-if scenarios",
   estimate_property_split: "Estimating the property division",
   possession_schedule: "Building the possession schedule",
   estimate_bankruptcy_exemptions: "Checking exemptions",
