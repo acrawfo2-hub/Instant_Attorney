@@ -475,9 +475,9 @@ function AcpChatInner() {
     setPendingAttachment(null);
   }
 
-  async function sendMessage(e: FormEvent) {
-    e.preventDefault();
-    const text = input.trim();
+  async function sendMessage(e: FormEvent | null, overrideText?: string) {
+    e?.preventDefault();
+    const text = (overrideText ?? input).trim();
     if ((!text && !pendingAttachment) || loading || showCounselModal) return;
 
     const attachment = pendingAttachment;
@@ -898,6 +898,18 @@ function AcpChatInner() {
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
               </svg>
+            </button>
+          </div>
+        )}
+
+        {hasUserMessages && !loading && !handoff && (
+          <div className="fc-quickrow">
+            <button
+              type="button"
+              className="fc-quickchip"
+              onClick={() => sendMessage(null, "Just give me your bottom line with what you know so far — I'd rather not go through more questions right now.")}
+            >
+              Just give me the bottom line
             </button>
           </div>
         )}
