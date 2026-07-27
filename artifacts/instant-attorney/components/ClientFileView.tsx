@@ -1,6 +1,5 @@
 import React from "react";
 import Link from "next/link";
-import GovFormInstruments from "@/components/GovFormInstruments";
 import MissionControlBoard from "@/components/MissionControlBoard";
 import FactsPanel from "@/components/FactsPanel";
 import ExistingCounselCard from "@/components/ExistingCounselCard";
@@ -14,11 +13,7 @@ import {
   prepModeBadgeLabel,
   stateBarReferralUrl,
 } from "@/lib/jurisdiction";
-import { detectMatterFlags, resolveRoadmapForCase } from "@/lib/roadmap-build";
-import { computeRoadmapFingerprint } from "@/lib/roadmap-fingerprint";
 import type { RoadmapAiOverlay } from "@/lib/roadmap-types";
-import RoadmapSpine from "@/components/RoadmapSpine";
-import RoadmapToolGroup from "@/components/RoadmapToolGroup";
 import PostConsultCard from "@/components/PostConsultCard";
 import CaseChatPanel from "@/components/CaseChatPanel";
 import CaseHub from "@/components/CaseHub";
@@ -29,13 +24,10 @@ import type { CaseFile, FactItem, Document, Profile, ConsultRequest, ConsultWrap
 import { docTypeLabel, personDisplayName, coerceWizardType } from "@/lib/types";
 
 // The consumer Living File no longer PRESCRIBES the next step with a computed
-// roadmap, Mission Control action board, and per-matter tool cards. "What do I
-// do next?" now happens by talking to the orchestrator (the freestyle
-// workspace), which knows every fact and can actually build. The file is a
-// reference — overview + facts known/unknown + documents. The legacy guidance
-// stack is kept in the codebase (components, libs, roadmap snapshots) and can be
-// re-enabled by flipping this flag; the attorney view is unaffected either way.
-const SHOW_LEGACY_NEXT_STEPS = false;
+// roadmap, Mission Control action board, or per-matter tool cards. "What do I do
+// next?" now happens by talking to the orchestrator, which knows every fact and
+// can run the same calculators as tools in-conversation. The file is a reference —
+// overview + facts + documents. (The attorney view still shows Mission Control.)
 
 // ── Matter badge ─────────────────────────────────────────────────────────────
 
@@ -142,36 +134,6 @@ export default function ClientFileView({
         mode: "client",
       })
     : null;
-  // Surface the child-support estimator only on family matters, detected by
-  // reusing the family-instrument keyword matcher over the matter's own text.
-  const matterText = `${caseFile.matter_subtype ?? ""} ${caseFile.summary ?? ""}`;
-  const { isFamilyMatter, isDebtMatter, isDefamationMatter, isEmploymentMatter, isPiMatter } =
-    detectMatterFlags(matterText);
-
-  // Gated off for consumers (orchestrator-first); attorney was always null here.
-  // Nulling this cascades: the roadmap spine and every per-matter tool card below
-  // hang off resolvedRoadmap, so they all stop rendering in one place.
-  const resolvedRoadmap = !isAttorney && SHOW_LEGACY_NEXT_STEPS
-    ? resolveRoadmapForCase({
-        caseFile,
-        facts,
-        documents,
-        requestedAttachments,
-        consultRequest: consultRequest ?? null,
-      })
-    : null;
-
-  const roadmapFingerprint =
-    resolvedRoadmap
-      ? computeRoadmapFingerprint({
-          caseFile,
-          facts,
-          documents,
-          requestedAttachments,
-          consultRequest: consultRequest ?? null,
-          attachmentCount: attachments.length,
-        })
-      : "";
 
   const hasActiveConsult =
     Boolean(consultRequest) &&
@@ -348,17 +310,6 @@ export default function ClientFileView({
         </div>
       )}
 
-      {resolvedRoadmap && (
-        <RoadmapSpine
-          resolved={resolvedRoadmap}
-          initialOverlay={roadmapOverlay}
-          fingerprint={roadmapFingerprint}
-          caseFileId={caseFile.id}
-          hasConsult={hasActiveConsult || hasConsultSub}
-          consultHref={hasConsultSub ? "/consult/schedule" : "/register?upgrade=consult"}
-        />
-      )}
-
       {/* Attorney banner */}
       {isAttorney && clientProfile && (
         <div className="lf-card lf-card-full lf-atty-banner">
@@ -486,11 +437,6 @@ export default function ClientFileView({
         </div>
       </details>
 
-      {/* Government forms detected in chat — surfaced as instruments to complete */}
-      <div id="gov-forms" className="lf-span-full">
-        <GovFormInstruments caseFileId={caseFile.id} />
-      </div>
-
       <details className="lf-details-section">
         <summary className="lf-details-summary">
           <span className="lf-details-summary-main">Facts &amp; gaps</span>
@@ -523,271 +469,6 @@ export default function ClientFileView({
         </div>
       )}
 
-      {/* Employment tools — employment matters only (client mode). */}
-      {!isAttorney && isEmploymentMatter && resolvedRoadmap && (
-        <RoadmapToolGroup
-          sectionId="employment-tools"
-          blueprintKey={resolvedRoadmap.blueprintKey}
-          currentStageKey={resolvedRoadmap.currentStageKey}
-        >
-        <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
-          <div className="lf-card-label">Employment Tools</div>
-          <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
-            Employment deadlines are short and unforgiving. Check what claim you may have and how much time you
-            have left, and — if you were handed a non-compete — see how much of it actually holds up in Texas.
-            General information, not legal advice.
-          </p>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-            <Link href={`/employment/claim-check?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
-              Check my claim &amp; deadline →
-            </Link>
-            <Link href={`/employment/noncompete?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
-              Is my non-compete enforceable? →
-            </Link>
-          </div>
-        </div>
-        </RoadmapToolGroup>
-      )}
-
-      {/* Debt-collection rights — debt matters only (client mode). */}
-      {!isAttorney && isDebtMatter && resolvedRoadmap && (
-        <RoadmapToolGroup
-          sectionId="debt-rights"
-          blueprintKey={resolvedRoadmap.blueprintKey}
-          currentStageKey={resolvedRoadmap.currentStageKey}
-        >
-        <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
-          <div className="lf-card-label">Know Your Debt-Collection Rights</div>
-          <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
-            Debt problems are common and solvable, and you have real protections — especially in Texas,
-            where ordinary debts usually can&apos;t touch your wages. See your rights, the steps you can take,
-            and the traps to avoid. If you&apos;ve been sued, there&apos;s a deadline to answer — start there.
-          </p>
-          <Link href={`/debt/rights?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
-            See your rights &amp; next steps →
-          </Link>
-        </div>
-        </RoadmapToolGroup>
-      )}
-
-      {/* Bankruptcy tools — debt matters only (client mode). */}
-      {!isAttorney && isDebtMatter && resolvedRoadmap && (
-        <RoadmapToolGroup
-          sectionId="bankruptcy-tools"
-          blueprintKey={resolvedRoadmap.blueprintKey}
-          currentStageKey={resolvedRoadmap.currentStageKey}
-        >
-        <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
-          <div className="lf-card-label">Weighing Bankruptcy?</div>
-          <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
-            Bankruptcy is one option among several, and it&apos;s often more manageable than people fear. Check
-            whether you could file Chapter 7 (the income screen), and think through all your options — saved to
-            this file. General information, not legal advice.
-          </p>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-            <Link href={`/bankruptcy/means-test?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
-              Run the means test →
-            </Link>
-            <Link href={`/bankruptcy/exemptions?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
-              What would I keep? →
-            </Link>
-            <Link href={`/bankruptcy/options?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
-              Weigh my options →
-            </Link>
-          </div>
-        </div>
-        </RoadmapToolGroup>
-      )}
-
-      {/* Defamation check — defamation matters only (client mode). */}
-      {!isAttorney && isDefamationMatter && resolvedRoadmap && (
-        <RoadmapToolGroup
-          sectionId="defamation"
-          blueprintKey={resolvedRoadmap.blueprintKey}
-          currentStageKey={resolvedRoadmap.currentStageKey}
-        >
-        <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
-          <div className="lf-card-label">Do You Have a Defamation Case?</div>
-          <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
-            Defamation is common online but tricky in the law. Get an honest read on whether you have a
-            claim — and learn the two things people miss: the short one-year deadline, and the anti-SLAPP
-            rule that can make you pay the other side&apos;s fees if you sue over public commentary.
-          </p>
-          <Link href={`/defamation/assess?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
-            Check my situation →
-          </Link>
-        </div>
-        </RoadmapToolGroup>
-      )}
-
-      {/* What-If Game — pressure-test this matter (client mode only) */}
-      {!isAttorney && resolvedRoadmap && (
-        <RoadmapToolGroup
-          sectionId="what-if"
-          blueprintKey={resolvedRoadmap.blueprintKey}
-          currentStageKey={resolvedRoadmap.currentStageKey}
-        >
-        <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
-          <div className="lf-card-label">Think a Few Steps Ahead</div>
-          <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
-            A legal strategy is really about understanding every possible outcome before it happens. The
-            What-If Game walks you through those &ldquo;what if&hellip;&rdquo; scenarios so we can build a
-            strategy that actually works for you. It&apos;s optional, takes a few minutes, and never changes
-            your documents — anything you decide to keep is saved here as a contingency preference.
-          </p>
-          <Link href={`/what-if?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
-            Play the What-If Game →
-          </Link>
-        </div>
-        </RoadmapToolGroup>
-      )}
-
-      {/* Child-support estimator — family matters only (client mode). Saves a
-          guideline estimate into this file so a support order/decree seeds from it. */}
-      {!isAttorney && isFamilyMatter && resolvedRoadmap && (
-        <RoadmapToolGroup
-          sectionId="family-child-support"
-          blueprintKey={resolvedRoadmap.blueprintKey}
-          currentStageKey={resolvedRoadmap.currentStageKey}
-        >
-        <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
-          <div className="lf-card-label">Estimate Child Support</div>
-          <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
-            Texas sets child support as a percentage of the paying parent&apos;s monthly net resources.
-            Get a free guideline estimate in seconds — we&apos;ll save it to this file so a support order or
-            decree can use it. It&apos;s an estimate, not legal advice, and a court may order a different amount.
-          </p>
-          <Link href={`/family/child-support?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
-            Estimate child support →
-          </Link>
-        </div>
-        </RoadmapToolGroup>
-      )}
-
-      {/* Property-division estimator — family matters only (client mode). Saves a
-          guideline community-estate split into this file so a decree seeds from it. */}
-      {!isAttorney && isFamilyMatter && resolvedRoadmap && (
-        <RoadmapToolGroup
-          sectionId="family-property"
-          blueprintKey={resolvedRoadmap.blueprintKey}
-          currentStageKey={resolvedRoadmap.currentStageKey}
-        >
-        <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
-          <div className="lf-card-label">Estimate the Property Split</div>
-          <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
-            Texas divides what you built during the marriage (the community estate) &ldquo;just and
-            right,&rdquo; while each spouse keeps their separate property. List your assets and debts for a
-            free starting-point picture — we&apos;ll save it to this file so a decree can use it. It&apos;s an
-            estimate, not legal advice, and a court may divide things differently.
-          </p>
-          <Link href={`/family/property-division?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
-            Estimate the property split →
-          </Link>
-        </div>
-        </RoadmapToolGroup>
-      )}
-
-      {/* Possession-schedule generator — family matters only (client mode). */}
-      {!isAttorney && isFamilyMatter && resolvedRoadmap && (
-        <RoadmapToolGroup
-          sectionId="family-possession"
-          blueprintKey={resolvedRoadmap.blueprintKey}
-          currentStageKey={resolvedRoadmap.currentStageKey}
-        >
-        <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
-          <div className="lf-card-label">See Your Possession Schedule</div>
-          <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
-            Texas presumes the Standard Possession Order for a child 3 or older. See the actual weekend and
-            Thursday periods on a calendar, plus the holiday and summer rules — and we&apos;ll save it to this
-            file so a parenting plan or decree can use it. It&apos;s the standard schedule; your court order controls.
-          </p>
-          <Link href={`/family/possession-schedule?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
-            Show the possession schedule →
-          </Link>
-        </div>
-        </RoadmapToolGroup>
-      )}
-
-      {/* Spousal-maintenance screen — family matters only (client mode). */}
-      {!isAttorney && isFamilyMatter && resolvedRoadmap && (
-        <RoadmapToolGroup
-          sectionId="family-maintenance"
-          blueprintKey={resolvedRoadmap.blueprintKey}
-          currentStageKey={resolvedRoadmap.currentStageKey}
-        >
-        <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
-          <div className="lf-card-label">Check Spousal Maintenance</div>
-          <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
-            Texas keeps spousal maintenance narrow. Answer a few questions for an honest read on whether it&apos;s
-            on the table, and roughly how much and how long — saved to this file for your documents. General
-            information, not legal advice; the court decides.
-          </p>
-          <Link href={`/family/maintenance?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
-            Check spousal maintenance →
-          </Link>
-        </div>
-        </RoadmapToolGroup>
-      )}
-
-      {/* PI claim guide — personal injury matters only (client mode). */}
-      {!isAttorney && isPiMatter && resolvedRoadmap && (
-        <RoadmapToolGroup
-          sectionId="pi-rights"
-          blueprintKey={resolvedRoadmap.blueprintKey}
-          currentStageKey={resolvedRoadmap.currentStageKey}
-        >
-        <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
-          <div className="lf-card-label">Injury Claim Playbook</div>
-          <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
-            Insurers move fast — often before you know your rights. See what an expert Texas PI attorney would
-            tell you: your rights, the steps to take, and the traps to avoid (especially recorded statements).
-          </p>
-          <Link href={`/personal-injury/rights?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
-            See your playbook &amp; next steps →
-          </Link>
-        </div>
-        </RoadmapToolGroup>
-      )}
-
-      {/* PI limitations screener — personal injury matters only (client mode). */}
-      {!isAttorney && isPiMatter && resolvedRoadmap && (
-        <RoadmapToolGroup
-          sectionId="pi-sol"
-          blueprintKey={resolvedRoadmap.blueprintKey}
-          currentStageKey={resolvedRoadmap.currentStageKey}
-        >
-        <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
-          <div className="lf-card-label">Check Your Filing Deadline</div>
-          <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
-            Texas generally gives you two years to sue for an injury — but malpractice timing is different.
-            Run a free limitations screener from your incident date; we&apos;ll save it to this file.
-          </p>
-          <Link href={`/personal-injury/sol?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
-            Check limitations deadline →
-          </Link>
-        </div>
-        </RoadmapToolGroup>
-      )}
-
-      {/* Comparative fault impact — personal injury matters only (client mode). */}
-      {!isAttorney && isPiMatter && resolvedRoadmap && (
-        <RoadmapToolGroup
-          sectionId="pi-fault"
-          blueprintKey={resolvedRoadmap.blueprintKey}
-          currentStageKey={resolvedRoadmap.currentStageKey}
-        >
-        <div className="lf-card lf-card-full" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
-          <div className="lf-card-label">How Fault Affects Recovery</div>
-          <p className="lf-wizard-hint" style={{ marginBottom: 14 }}>
-            If the insurer says you were partly at fault, see how Texas modified comparative negligence (§ 33.001)
-            affects your net recovery — saved to this file.
-          </p>
-          <Link href={`/personal-injury/fault?caseFileId=${caseFile.id}`} className="lf-inst-start-btn">
-            Calculate fault impact →
-          </Link>
-        </div>
-        </RoadmapToolGroup>
-      )}
 
       {/* One concise table — suggested uploads, attachments on file, and drafted
           documents — replaces the old separate Documents card + AttachmentPanel. */}
