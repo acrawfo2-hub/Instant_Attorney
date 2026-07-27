@@ -907,15 +907,27 @@ function AcpChatInner() {
           </div>
         )}
 
-        {hasUserMessages && !loading && !handoff && (
+        {hasUserMessages && !loading && (
           <div className="fc-quickrow">
             <button
               type="button"
-              className="fc-quickchip"
-              onClick={() => sendMessage(null, "Just give me your bottom line with what you know so far — I'd rather not go through more questions right now.")}
+              className="fc-quickchip fc-quickchip-draft"
+              onClick={() => sendMessage(null, "Draft the document we've been discussing. Use what's already in my file, put clearly-marked placeholders where you're missing something, and then tell me exactly what you need from me to fill those in. If it's not obvious what to draft, ask me first.")}
             >
-              Just give me the bottom line
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="12" y1="18" x2="12" y2="12" /><line x1="9" y1="15" x2="15" y2="15" />
+              </svg>
+              Draft a document
             </button>
+            {!handoff && (
+              <button
+                type="button"
+                className="fc-quickchip"
+                onClick={() => sendMessage(null, "Just give me your bottom line with what you know so far — I'd rather not go through more questions right now.")}
+              >
+                Just give me the bottom line
+              </button>
+            )}
           </div>
         )}
 

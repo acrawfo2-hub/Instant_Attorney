@@ -9404,6 +9404,69 @@ mark.atty-placeholder {
 .fc-draft-note-cta { color: var(--chat-gold-ink); font-size: 12px; }
 
 /* Promote-to-review row at the foot of the draft editor. */
+/* "Blanks to fill" strip — the placeholders the drafter left for unknowns,
+   surfaced under the editor as click-to-jump chips (light panel, amber accent). */
+.fc-draft-blanks {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 16px 12px;
+}
+.fc-draft-blanks-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #b7791f;
+}
+.fc-draft-blanks-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.fc-draft-blank-chip {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(183, 121, 31, 0.35);
+  background: rgba(183, 121, 31, 0.08);
+  color: #8a5a12;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s, border-color 0.12s;
+}
+.fc-draft-blank-chip:hover { background: rgba(183, 121, 31, 0.16); border-color: rgba(183, 121, 31, 0.55); }
+/* The attorney freestyle overlay is dark — lift the amber so it stays legible. */
+.fs-overlay .fc-draft-blanks-label { color: #dfa441; }
+.fs-overlay .fc-draft-blank-chip {
+  color: #eaca86;
+  border-color: rgba(223, 164, 65, 0.4);
+  background: rgba(223, 164, 65, 0.12);
+}
+.fs-overlay .fc-draft-blank-chip:hover { background: rgba(223, 164, 65, 0.22); border-color: rgba(223, 164, 65, 0.6); }
+
+/* "Draft a document" quick action in the attorney composer (dark overlay). */
+.fs-quickrow { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.fs-quickchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--brand-gold-lt);
+  background: rgba(200, 169, 110, 0.1);
+  border: 1px solid rgba(200, 169, 110, 0.35);
+  border-radius: 999px;
+  padding: 6px 14px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, border-color 0.15s;
+}
+.fs-quickchip:hover { background: rgba(200, 169, 110, 0.18); border-color: var(--brand-gold); }
+.fs-quickchip svg { flex-shrink: 0; }
+
 .fc-draft-promote-row {
   flex: 0 0 auto;
   display: flex;
@@ -9811,11 +9874,16 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
 .lf-session-recap-body { font-size: 14px; line-height: 1.6; color: var(--brand-text-md); }
 
 /* "Just give me the bottom line" escape-hatch chip above the composer */
-.fc-quickrow { max-width: 740px; margin: 0 auto 8px; display: flex; }
+.fc-quickrow { max-width: 740px; margin: 0 auto 8px; display: flex; gap: 8px; flex-wrap: wrap; }
 .fc-quickchip {
+  display: inline-flex; align-items: center; gap: 6px;
   font-size: 12.5px; font-weight: 600; color: var(--chat-gold-ink);
   background: var(--chat-surface); border: 1px solid rgba(154,118,54,0.3);
   border-radius: 999px; padding: 6px 14px; cursor: pointer;
   font-family: inherit; transition: border-color .15s, background .15s, color .15s;
 }
 .fc-quickchip:hover { border-color: var(--brand-navy); color: var(--brand-navy); background: var(--chat-ground); }
+/* Draft chip leads the row — navy ink on a faint fill to read as the primary action. */
+.fc-quickchip-draft { color: var(--brand-navy); border-color: rgba(12,25,41,0.28); background: rgba(12,25,41,0.04); }
+.fc-quickchip-draft:hover { border-color: var(--brand-navy); background: rgba(12,25,41,0.08); color: var(--brand-navy); }
+.fc-quickchip svg { flex-shrink: 0; }
