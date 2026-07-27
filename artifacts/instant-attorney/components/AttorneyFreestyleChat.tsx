@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useRef, useEffect, FormEvent, useCallback } from "react";
+import { useState, useRef, useEffect, FormEvent, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
   parseDrafts,
   stripDraftsForDisplay,
   hasOpenDraft,
+  findBlanks,
+  type DraftBlank,
 } from "@/lib/freestyle-drafts";
 import { stripToolMarkers, activeToolNames } from "@/lib/tool-markers";
 import ToolRunChips from "@/components/ToolRunChips";
@@ -71,6 +73,19 @@ export default function AttorneyFreestyleChat({ caseFileId }: { caseFileId: stri
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const activeDraft = drafts.find((d) => d.id === activeDraftId) ?? null;
+  const draftBodyRef = useRef<HTMLTextAreaElement>(null);
+  const blanks = useMemo(() => (activeDraft ? findBlanks(activeDraft.content) : []), [activeDraft]);
+
+  // Jump the draft editor to a blank and select it — one click to fill it in.
+  function jumpToBlank(b: DraftBlank) {
+    const el = draftBodyRef.current;
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(b.index, b.index + b.raw.length);
+    const lineHeight = parseInt(getComputedStyle(el).lineHeight) || 20;
+    const line = el.value.slice(0, b.index).split("\n").length;
+    el.scrollTop = Math.max(0, (line - 3) * lineHeight);
+  }
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -167,9 +182,9 @@ export default function AttorneyFreestyleChat({ caseFileId }: { caseFileId: stri
   }
 
   // ── Send ─────────────────────────────────────────────────────────────────
-  async function send(e: FormEvent) {
-    e.preventDefault();
-    const text = input.trim();
+  async function send(e: FormEvent | null, overrideText?: string) {
+    e?.preventDefault();
+    const text = (overrideText ?? input).trim();
     if ((!text && !pendingFile) || loading) return;
 
     let pendingAttachment: { fileName: string; mimeType: string; data: string } | null = null;
@@ -434,6 +449,20 @@ export default function AttorneyFreestyleChat({ caseFileId }: { caseFileId: stri
                   </div>
                 )}
                 {attachError && <div className="fs-attach-error">{attachError}</div>}
+                {messages.length > 0 && !loading && (
+                  <div className="fs-quickrow">
+                    <button
+                      type="button"
+                      className="fs-quickchip"
+                      onClick={() => send(null, "Draft the document we've been discussing. Work from this client's file, put clearly-marked [[placeholders]] where a fact is genuinely missing, and then tell me exactly what's needed to fill them. If it's not obvious what to draft, ask me first.")}
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="12" y1="18" x2="12" y2="12" /><line x1="9" y1="15" x2="15" y2="15" />
+                      </svg>
+                      Draft a document
+                    </button>
+                  </div>
+                )}
                 <div className="fs-composer-row">
                   <button
                     type="button"
@@ -522,6 +551,7 @@ export default function AttorneyFreestyleChat({ caseFileId }: { caseFileId: stri
                       </div>
                     </div>
                     <textarea
+                      ref={draftBodyRef}
                       className="fs-draft-body"
                       value={activeDraft.content}
                       onChange={(e) => editActiveDraft({ content: e.target.value })}
@@ -529,6 +559,26 @@ export default function AttorneyFreestyleChat({ caseFileId }: { caseFileId: stri
                       placeholder="Draft content…"
                       spellCheck
                     />
+                    {blanks.length > 0 && (
+                      <div className="fc-draft-blanks">
+                        <span className="fc-draft-blanks-label">
+                          {blanks.length} blank{blanks.length === 1 ? "" : "s"} to fill
+                        </span>
+                        <div className="fc-draft-blanks-chips">
+                          {blanks.map((b) => (
+                            <button
+                              key={b.raw}
+                              type="button"
+                              className="fc-draft-blank-chip"
+                              onClick={() => jumpToBlank(b)}
+                              title="Jump to this blank in the draft"
+                            >
+                              {b.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="fs-draft-empty">Select a draft, or start a new one with ＋.</div>

@@ -10,6 +10,28 @@ export interface ParsedDraft {
   content: string;
 }
 
+// A [[placeholder — descriptor]] the drafter left for a still-unknown value.
+export interface DraftBlank {
+  raw: string;   // the full "[[…]]" as it appears in the text
+  index: number; // character offset of the first occurrence
+  label: string; // inner descriptor, trimmed and length-capped for display
+}
+
+/** Pull every DISTINCT [[double-bracket]] blank out of a draft, in order, so a
+ *  panel can show the reader exactly what the draft is still missing. */
+export function findBlanks(text: string): DraftBlank[] {
+  const seen = new Map<string, number>();
+  const re = /\[\[([^\]]+)\]\]/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    if (!seen.has(m[0])) seen.set(m[0], m.index);
+  }
+  return [...seen.entries()].map(([raw, index]) => {
+    const inner = raw.replace(/^\[\[/, "").replace(/\]\]$/, "").trim();
+    return { raw, index, label: inner.length > 34 ? inner.slice(0, 32) + "…" : inner };
+  });
+}
+
 // Matches a full draft block. Tolerant of trailing spaces on the fence lines and
 // of the block appearing anywhere in the text. The body is lazy so back-to-back
 // drafts each match their own ---END DRAFT---.

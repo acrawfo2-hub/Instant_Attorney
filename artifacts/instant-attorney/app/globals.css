@@ -6395,7 +6395,31 @@ mark.atty-placeholder {
   padding: 14px 16px;
   background: rgba(0, 0, 0, 0.015);
 }
-.lf-info-needed-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 12px; }
+.lf-info-needed-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  cursor: pointer;
+  list-style: none;
+  position: relative;
+  padding-right: 22px;
+}
+.lf-info-needed-head::-webkit-details-marker { display: none; }
+/* Disclosure chevron, rotates when open. */
+.lf-info-needed-head::after {
+  content: "";
+  position: absolute;
+  right: 4px;
+  top: 5px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--brand-text-lt);
+  border-bottom: 2px solid var(--brand-text-lt);
+  transform: rotate(45deg);
+  transition: transform 0.15s ease;
+}
+.lf-info-needed[open] > .lf-info-needed-head { margin-bottom: 12px; }
+.lf-info-needed[open] > .lf-info-needed-head::after { transform: rotate(-135deg); top: 8px; }
 .lf-info-needed-title { font-size: 13px; font-weight: 700; color: var(--brand-navy); }
 .lf-info-needed-sub { font-size: 12px; color: var(--brand-text-lt); }
 .lf-info-group { margin-bottom: 12px; }
@@ -6541,6 +6565,27 @@ mark.atty-placeholder {
   transform: translateY(-1px);
   box-shadow: 0 4px 14px rgba(193,154,58,0.45);
 }
+/* Handoff banner is dismissible now (composer always stays) — the X sits beside
+   the "Open my case" button on the navy banner. */
+.fc-file-cta-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.fc-file-cta-dismiss {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: var(--brand-cream-text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+.fc-file-cta-dismiss:hover { background: rgba(255, 255, 255, 0.16); }
+
+/* Attorney freestyle-workspace launcher embedded in the Living File. The card
+   frame comes from .lf-card; strip the launcher's own top margin so it sits flush. */
+.lf-atty-freestyle-entry > .atty-case-subsection { margin: 0; }
 
 /* ── Wizard loading state (improved) ──────────────────────────────────────────── */
 .wiz-doc-loading-active {
@@ -9359,6 +9404,69 @@ mark.atty-placeholder {
 .fc-draft-note-cta { color: var(--chat-gold-ink); font-size: 12px; }
 
 /* Promote-to-review row at the foot of the draft editor. */
+/* "Blanks to fill" strip — the placeholders the drafter left for unknowns,
+   surfaced under the editor as click-to-jump chips (light panel, amber accent). */
+.fc-draft-blanks {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 16px 12px;
+}
+.fc-draft-blanks-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #b7791f;
+}
+.fc-draft-blanks-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.fc-draft-blank-chip {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(183, 121, 31, 0.35);
+  background: rgba(183, 121, 31, 0.08);
+  color: #8a5a12;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s, border-color 0.12s;
+}
+.fc-draft-blank-chip:hover { background: rgba(183, 121, 31, 0.16); border-color: rgba(183, 121, 31, 0.55); }
+/* The attorney freestyle overlay is dark — lift the amber so it stays legible. */
+.fs-overlay .fc-draft-blanks-label { color: #dfa441; }
+.fs-overlay .fc-draft-blank-chip {
+  color: #eaca86;
+  border-color: rgba(223, 164, 65, 0.4);
+  background: rgba(223, 164, 65, 0.12);
+}
+.fs-overlay .fc-draft-blank-chip:hover { background: rgba(223, 164, 65, 0.22); border-color: rgba(223, 164, 65, 0.6); }
+
+/* "Draft a document" quick action in the attorney composer (dark overlay). */
+.fs-quickrow { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.fs-quickchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--brand-gold-lt);
+  background: rgba(200, 169, 110, 0.1);
+  border: 1px solid rgba(200, 169, 110, 0.35);
+  border-radius: 999px;
+  padding: 6px 14px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, border-color 0.15s;
+}
+.fs-quickchip:hover { background: rgba(200, 169, 110, 0.18); border-color: var(--brand-gold); }
+.fs-quickchip svg { flex-shrink: 0; }
+
 .fc-draft-promote-row {
   flex: 0 0 auto;
   display: flex;
@@ -9766,11 +9874,205 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
 .lf-session-recap-body { font-size: 14px; line-height: 1.6; color: var(--brand-text-md); }
 
 /* "Just give me the bottom line" escape-hatch chip above the composer */
-.fc-quickrow { max-width: 740px; margin: 0 auto 8px; display: flex; }
+.fc-quickrow { max-width: 740px; margin: 0 auto 8px; display: flex; gap: 8px; flex-wrap: wrap; }
 .fc-quickchip {
+  display: inline-flex; align-items: center; gap: 6px;
   font-size: 12.5px; font-weight: 600; color: var(--chat-gold-ink);
   background: var(--chat-surface); border: 1px solid rgba(154,118,54,0.3);
   border-radius: 999px; padding: 6px 14px; cursor: pointer;
   font-family: inherit; transition: border-color .15s, background .15s, color .15s;
 }
 .fc-quickchip:hover { border-color: var(--brand-navy); color: var(--brand-navy); background: var(--chat-ground); }
+/* Draft chip leads the row — navy ink on a faint fill to read as the primary action. */
+.fc-quickchip-draft { color: var(--brand-navy); border-color: rgba(12,25,41,0.28); background: rgba(12,25,41,0.04); }
+.fc-quickchip-draft:hover { border-color: var(--brand-navy); background: rgba(12,25,41,0.08); color: var(--brand-navy); }
+.fc-quickchip svg { flex-shrink: 0; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Case documents table (Stage 45) — one concise table for suggested uploads,
+   attachments on file, and drafted documents. Light/factual; summaries and
+   controls collapse behind a per-row chevron. Replaces the old Documents card
+   + AttachmentPanel display.
+   ══════════════════════════════════════════════════════════════════════════ */
+.cdt {
+  grid-column: 1 / -1;
+  background: var(--brand-white);
+  border: 0.5px solid var(--brand-border);
+  border-radius: var(--brand-r-lg);
+  overflow: hidden;
+}
+.cdt-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 1.15rem 1.3rem 0.9rem;
+}
+.cdt-title {
+  font-family: var(--font-playfair, "Playfair Display"), serif;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--brand-text-dk);
+}
+.cdt-sub { margin-top: 3px; font-size: 12.5px; color: var(--brand-text-lt); line-height: 1.45; }
+.cdt-add {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: var(--brand-navy);
+  color: var(--brand-cream-heading);
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+.cdt-add:hover { background: #14263c; }
+
+/* Add-document panel (compact, appears on demand). */
+.cdt-addpanel { padding: 0 1.3rem 0.9rem; }
+.cdt-adding-msg { font-size: 13px; color: var(--brand-text-md); }
+.cdt-drop {
+  border: 1.5px dashed rgba(26, 22, 18, 0.2);
+  border-radius: 10px;
+  padding: 16px;
+  text-align: center;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  transition: border-color 0.15s, background 0.15s;
+}
+.cdt-drop:hover, .cdt-drop-over { border-color: var(--brand-gold); background: var(--brand-cream); }
+.cdt-drop-hint { font-size: 13px; color: var(--brand-text-md); font-weight: 500; }
+.cdt-scan-link {
+  background: none; border: none; cursor: pointer; font-family: inherit;
+  font-size: 12px; font-weight: 600; color: var(--chat-gold-ink, #9a7636); text-decoration: underline;
+}
+.cdt-confirm { display: flex; flex-direction: column; gap: 10px; padding: 4px 0; }
+.cdt-confirm-file { display: flex; align-items: center; gap: 10px; }
+.cdt-confirm-file .cdt-ricon { color: var(--brand-text-md); }
+.cdt-confirm-name { font-size: 13.5px; font-weight: 600; color: var(--brand-text-dk); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cdt-confirm-size { font-size: 12px; color: var(--brand-text-lt); font-variant-numeric: tabular-nums; }
+.cdt-confirm-x { background: none; border: none; font-size: 20px; line-height: 1; color: var(--brand-text-lt); cursor: pointer; padding: 0 4px; }
+.cdt-confirm-note { font-size: 12px; color: var(--brand-text-md); line-height: 1.5; }
+.cdt-confirm-warn { color: #8a5a12; }
+.cdt-confirm-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.cdt-btn { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; border: 1px solid transparent; }
+.cdt-btn-analyze { background: var(--brand-navy); color: var(--brand-cream-heading); }
+.cdt-btn-analyze:hover { background: #14263c; }
+.cdt-btn-store { background: transparent; color: var(--brand-text-md); border-color: var(--brand-border); }
+.cdt-btn-store:hover { border-color: var(--brand-navy); color: var(--brand-navy); }
+.cdt-error { margin-top: 8px; font-size: 12.5px; color: #c0392b; }
+.cdt-empty { padding: 0 1.3rem 1.3rem; font-size: 13.5px; color: var(--brand-text-md); line-height: 1.55; }
+
+.cdt-table { display: flex; flex-direction: column; }
+
+/* Group band header. */
+.cdt-band {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 1.3rem;
+  background: var(--brand-cream);
+  border-top: 0.5px solid var(--brand-border);
+  border-bottom: 0.5px solid rgba(26, 22, 18, 0.06);
+}
+.cdt-band-label { font-size: 11px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--brand-text-lt); }
+.cdt-band-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 6px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.cdt-count-needed { background: rgba(183, 121, 31, 0.13); color: #b7791f; }
+.cdt-count-onfile { background: rgba(46, 125, 91, 0.12); color: #2e7d5b; }
+.cdt-count-drafts { background: rgba(154, 118, 54, 0.13); color: var(--chat-gold-ink, #9a7636); }
+.cdt-band-hint { margin-left: auto; font-size: 11.5px; color: var(--brand-text-xlt); }
+
+/* Row. */
+.cdt-row { border-bottom: 0.5px solid rgba(26, 22, 18, 0.06); }
+.cdt-row:last-child { border-bottom: none; }
+.cdt-main {
+  display: grid;
+  grid-template-columns: 20px 22px minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 1.3rem;
+}
+.cdt-row-exp > .cdt-main { cursor: pointer; }
+.cdt-row-exp > .cdt-main:hover { background: var(--brand-cream); }
+.cdt-chev { width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; color: var(--brand-text-xlt); transition: transform 0.15s; }
+.cdt-chev svg { width: 15px; height: 15px; }
+.cdt-open > .cdt-main .cdt-chev { transform: rotate(90deg); }
+.cdt-chev-blank { visibility: hidden; }
+.cdt-ricon { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; color: var(--brand-text-lt); }
+.cdt-ricon svg { width: 16px; height: 16px; }
+.cdt-rbody { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.cdt-rname { font-size: 14px; color: var(--brand-text-dk); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cdt-rmeta { font-size: 11.5px; color: var(--brand-text-xlt); }
+.cdt-rflag { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: #c0392b; font-weight: 600; margin-top: 2px; }
+.cdt-rflag svg { width: 11px; height: 11px; flex-shrink: 0; }
+
+.cdt-pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.cdt-dot { width: 6px; height: 6px; border-radius: 50%; }
+.cdt-pill-needed { color: #b7791f; background: rgba(183, 121, 31, 0.1); box-shadow: inset 0 0 0 1px rgba(183, 121, 31, 0.25); }
+.cdt-pill-needed .cdt-dot { background: #b7791f; }
+.cdt-pill-analyzed, .cdt-pill-approved { color: #2e7d5b; background: rgba(46, 125, 91, 0.1); }
+.cdt-pill-analyzed .cdt-dot, .cdt-pill-approved .cdt-dot { background: #2e7d5b; }
+.cdt-pill-stored { color: var(--brand-text-lt); background: rgba(26, 22, 18, 0.05); }
+.cdt-pill-stored .cdt-dot { background: var(--brand-text-xlt); }
+.cdt-pill-processing { color: #b7791f; background: rgba(183, 121, 31, 0.1); }
+.cdt-pill-processing .cdt-dot { background: #b7791f; animation: cdt-pulse 1.2s ease-in-out infinite; }
+.cdt-pill-draft { color: var(--chat-gold-ink, #9a7636); background: rgba(154, 118, 54, 0.12); }
+.cdt-pill-draft .cdt-dot { background: var(--chat-gold-ink, #9a7636); }
+.cdt-pill-review { color: #b7791f; background: rgba(183, 121, 31, 0.1); }
+.cdt-pill-review .cdt-dot { background: #b7791f; }
+@keyframes cdt-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+.cdt-rdate { font-size: 12px; color: var(--brand-text-lt); font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; min-width: 48px; }
+.cdt-raction { display: flex; justify-content: flex-end; }
+.cdt-ghost {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 7px;
+  font-size: 12.5px; font-weight: 600; font-family: inherit; cursor: pointer; white-space: nowrap;
+  color: var(--brand-text-md); background: transparent; border: 1px solid var(--brand-border); text-decoration: none;
+}
+.cdt-ghost:hover { border-color: var(--brand-navy); color: var(--brand-navy); }
+.cdt-muted { font-size: 12.5px; color: var(--brand-text-xlt); padding: 5px 4px; }
+.cdt-split { display: inline-flex; border: 1px solid #b7791f; border-radius: 7px; overflow: hidden; }
+.cdt-split button {
+  padding: 5px 11px; font-size: 12.5px; font-weight: 600; font-family: inherit; cursor: pointer;
+  color: #fff; background: #b7791f; border: none;
+}
+.cdt-split button + button { border-left: 1px solid rgba(255, 255, 255, 0.3); }
+.cdt-split button:hover { filter: brightness(1.06); }
+.cdt-split button:disabled { opacity: 0.55; cursor: default; }
+
+/* Expanded detail panel. */
+.cdt-detail { padding: 0 1.3rem 14px calc(1.3rem + 32px); display: flex; flex-direction: column; gap: 4px; }
+.cdt-detail-k { font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--brand-text-xlt); margin-top: 4px; }
+.cdt-detail-v { font-size: 13px; line-height: 1.55; color: var(--brand-text-md); }
+.cdt-detail-status { margin: 2px 0; }
+.cdt-detail-blanks { margin-top: 6px; font-size: 12.5px; font-weight: 600; color: #b7791f; }
+.cdt-detail-urgent {
+  margin-top: 8px; padding: 9px 12px; border-radius: 8px;
+  background: rgba(192, 57, 43, 0.06); border: 0.5px solid rgba(192, 57, 43, 0.25);
+  font-size: 12.5px; line-height: 1.5; color: #7f1d1d;
+}
+.cdt-detail-links { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 14px; }
+.cdt-detail-links a { font-size: 12.5px; font-weight: 600; color: var(--chat-gold-ink, #9a7636); text-decoration: none; }
+.cdt-detail-links a:hover { text-decoration: underline; }
+.cdt-detail-ctl { margin-top: 8px; }
+
+/* On phones the date column is noise; drop it and let the action wrap under. */
+@media (max-width: 560px) {
+  .cdt-main { grid-template-columns: 18px 20px minmax(0, 1fr) auto auto; gap: 9px; padding: 11px 1rem; }
+  .cdt-rdate { display: none; }
+  .cdt-head, .cdt-band, .cdt-addpanel, .cdt-empty { padding-left: 1rem; padding-right: 1rem; }
+  .cdt-detail { padding-left: calc(1rem + 28px); padding-right: 1rem; }
+  .cdt-band-hint { display: none; }
+}

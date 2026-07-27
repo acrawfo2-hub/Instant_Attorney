@@ -1,12 +1,7 @@
 import React from "react";
 import Link from "next/link";
-import AttachmentPanel from "@/components/AttachmentPanel";
-import DocumentInfoNeeded from "@/components/DocumentInfoNeeded";
 import GovFormInstruments from "@/components/GovFormInstruments";
 import MissionControlBoard from "@/components/MissionControlBoard";
-import ReviewSlaClock from "@/components/ReviewSlaClock";
-import RegenerateDocButton from "@/components/RegenerateDocButton";
-import CancelDocButton from "@/components/CancelDocButton";
 import FactsPanel from "@/components/FactsPanel";
 import ExistingCounselCard from "@/components/ExistingCounselCard";
 import { placeholderFields } from "@/lib/wizard-parsing";
@@ -27,15 +22,11 @@ import RoadmapToolGroup from "@/components/RoadmapToolGroup";
 import PostConsultCard from "@/components/PostConsultCard";
 import CaseChatPanel from "@/components/CaseChatPanel";
 import CaseHub from "@/components/CaseHub";
-import DocumentExecutionPanel from "@/components/DocumentExecutionPanel";
+import CaseDocumentsTable from "@/components/CaseDocumentsTable";
+import AttorneyFreestyleChat from "@/components/AttorneyFreestyleChat";
 import { buildMatterTasks } from "@/lib/matter-tasks";
 import type { CaseFile, FactItem, Document, Profile, ConsultRequest, ConsultWrapUp, RequestedAttachment, GovFormInstrument, Attachment } from "@/lib/types";
-import { docTypeLabel, personDisplayName, isDocumentOutOfDate, coerceWizardType } from "@/lib/types";
-
-// A document deemed finalized — the attorney's work product is the deliverable,
-// so the client's wizard draft underneath it is never flagged out of date or
-// offered for regeneration.
-const FINALIZED_DOC_STATUSES = new Set(["approved", "delivered"]);
+import { docTypeLabel, personDisplayName, coerceWizardType } from "@/lib/types";
 
 // The consumer Living File no longer PRESCRIBES the next step with a computed
 // roadmap, Mission Control action board, and per-matter tool cards. "What do I
@@ -45,63 +36,6 @@ const FINALIZED_DOC_STATUSES = new Set(["approved", "delivered"]);
 // stack is kept in the codebase (components, libs, roadmap snapshots) and can be
 // re-enabled by flipping this flag; the attorney view is unaffected either way.
 const SHOW_LEGACY_NEXT_STEPS = false;
-
-// ── Document status display ──────────────────────────────────────────────────
-
-const DOC_STATUS_LABELS: Record<string, string> = {
-  draft: "Draft",
-  pending_review: "Under Review (48h)",
-  approved: "Approved",
-  changes_requested: "Revisions Requested",
-  delivered: "Delivered",
-};
-
-const DOC_STATUS_CLASSES: Record<string, string> = {
-  draft: "lf-doc-status-draft",
-  pending_review: "lf-doc-status-review",
-  approved: "lf-doc-status-approved",
-  changes_requested: "lf-doc-status-changes",
-  delivered: "lf-doc-status-delivered",
-};
-
-function DocStatusLine({ doc }: { doc: Document }) {
-  const label = DOC_STATUS_LABELS[doc.status] ?? doc.status;
-  const cls = DOC_STATUS_CLASSES[doc.status] ?? "";
-
-  if (doc.status === "draft") {
-    return (
-      <div className="lf-doc-status-group">
-        <span className={`lf-doc-status ${cls}`}>{label}</span>
-        <span className="lf-doc-not-submitted">Not submitted</span>
-      </div>
-    );
-  }
-
-  if (doc.status === "pending_review" && doc.submitted_at) {
-    return (
-      <div className="lf-doc-status-group">
-        <span className={`lf-doc-status ${cls}`}>{label}</span>
-        <ReviewSlaClock submittedAt={doc.submitted_at} compact />
-      </div>
-    );
-  }
-
-  if (doc.submitted_at) {
-    const submittedDate = new Date(doc.submitted_at).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-    return (
-      <div className="lf-doc-status-group">
-        <span className={`lf-doc-status ${cls}`}>{label}</span>
-        <span className="lf-doc-submitted-date">Submitted {submittedDate}</span>
-      </div>
-    );
-  }
-
-  return <span className={`lf-doc-status ${cls}`}>{label}</span>;
-}
 
 // ── Matter badge ─────────────────────────────────────────────────────────────
 
@@ -148,11 +82,6 @@ export default function ClientFileView({
   completedConsultSubmittedAt = null,
   roadmapOverlay = {},
 }: ClientFileViewProps) {
-  const childrenByParent = childDocuments.reduce<Record<string, Document[]>>((acc, child) => {
-    if (!child.parent_document_id) return acc;
-    (acc[child.parent_document_id] ??= []).push(child);
-    return acc;
-  }, {});
   // A fact is "hypothetical" if explicitly tagged (kind) OR it carries the
   // What-If Game's "What-if · " description prefix (keeps working pre-migration).
   const isHypothetical = (f: FactItem) =>
@@ -409,6 +338,15 @@ export default function ClientFileView({
           server-computed "Where things stand" read of the matter, with the
           assistant one tap away. */}
       {!isAttorney && matterTasks && <CaseHub caseFile={caseFile} tasks={matterTasks} />}
+
+      {/* Attorney parity — the same "keep working with the orchestrator" entry the
+          client has, on the file. Opens the freestyle work-product workspace
+          (privileged, not shared) right here instead of a separate page. */}
+      {isAttorney && (
+        <div className="lf-card lf-card-full lf-atty-freestyle-entry">
+          <AttorneyFreestyleChat caseFileId={caseFile.id} />
+        </div>
+      )}
 
       {resolvedRoadmap && (
         <RoadmapSpine
@@ -851,135 +789,15 @@ export default function ClientFileView({
         </RoadmapToolGroup>
       )}
 
-      {/* Documents */}
-      <div className="lf-card lf-card-full" id="documents">
-        <div className="lf-card-label">
-          {isAttorney ? "Client Documents" : "Your Documents"}
-        </div>
-        {documents.length > 0 ? (
-          <div className="lf-doc-list">
-            {documents.map((doc) => {
-              const children = childrenByParent[doc.id] ?? [];
-              const secondDraft = children.find((c) => c.doc_type === "second_draft");
-              // A drafted document is "out of date" when the client changed their
-              // facts / What-If answers after it was written. Client-only, and
-              // never for finalized deliverables.
-              const outOfDate =
-                !isAttorney &&
-                !FINALIZED_DOC_STATUSES.has(doc.status) &&
-                isDocumentOutOfDate(doc, facts);
-              const docRow = (
-                <div className="lf-doc-inner">
-                  <div className="lf-doc-info">
-                    <span className="lf-doc-title">{doc.title}</span>
-                    <span className="lf-doc-type">{docTypeLabel(doc.doc_type)}</span>
-                  </div>
-                  <div className="lf-doc-right">
-                    {outOfDate && (
-                      <span className="lf-doc-stale-badge" title="Your file changed after this draft was written.">
-                        Out of date
-                      </span>
-                    )}
-                    <DocStatusLine doc={doc} />
-                    <span className="lf-doc-date">{new Date(doc.created_at).toLocaleDateString()}</span>
-                    {!isAttorney && doc.status === "pending_review" && doc.draft_text && (
-                      <a href={`/api/documents/${doc.id}/download`} className="lf-doc-download-link">
-                        Download submitted draft (.docx)
-                      </a>
-                    )}
-                  </div>
-                </div>
-              );
-
-              // Draft docs link to wizard so client can submit; attorney gets
-              // inline downloads plus a link through to the full review screen.
-              if (isAttorney) {
-                return (
-                  <div key={doc.id} className="lf-doc-item">
-                    {docRow}
-                    <div className="lf-doc-downloads">
-                      {doc.draft_text && (
-                        <a href={`/api/documents/${doc.id}/download`} className="lf-doc-download-link">
-                          Download {secondDraft?.draft_text ? "original draft" : "document"} (.docx)
-                        </a>
-                      )}
-                      {secondDraft?.draft_text && (
-                        <a href={`/api/documents/${secondDraft.id}/download`} className="lf-doc-download-link">
-                          Download revised draft (.docx)
-                        </a>
-                      )}
-                      <Link href={`/attorney/review/${doc.id}`} className="lf-doc-download-link">
-                        Open review →
-                      </Link>
-                    </div>
-                  </div>
-                );
-              }
-              if (doc.status === "draft") {
-                const draftLink = (
-                  <Link
-                    href={`/wizard/${doc.doc_type}?caseFileId=${doc.case_file_id}&docId=${doc.id}`}
-                    className="lf-doc-item lf-doc-item-link lf-doc-item-draft"
-                  >
-                    {docRow}
-                  </Link>
-                );
-                // Keep the regenerate / cancel controls OUTSIDE the wrapping
-                // anchor — a button nested in an <a> is invalid and would also
-                // trigger the link navigation.
-                return (
-                  <div key={doc.id} className="lf-doc-stale-group">
-                    {draftLink}
-                    {outOfDate && <RegenerateDocButton documentId={doc.id} />}
-                    <CancelDocButton documentId={doc.id} />
-                  </div>
-                );
-              }
-              // Non-draft client docs are viewed inline. If the version the client
-              // will use still has [[blanks]], offer an easy fill-in panel that
-              // writes the answers straight into the document (and the Living File).
-              const fillTarget = secondDraft?.draft_text ? secondDraft : (doc.draft_text ? doc : null);
-              const approvedDownloadId =
-                secondDraft?.draft_text ? secondDraft.id : doc.id;
-              return (
-                <div key={doc.id} className="lf-doc-item">
-                  {docRow}
-                  {outOfDate && <RegenerateDocButton documentId={doc.id} subtle />}
-                  {fillTarget?.draft_text && (
-                    <DocumentInfoNeeded
-                      documentId={fillTarget.id}
-                      draftText={fillTarget.draft_text}
-                      documentTitle={doc.title}
-                    />
-                  )}
-                  {!isAttorney && (doc.status === "approved" || doc.status === "delivered") && (
-                    <DocumentExecutionPanel
-                      documentId={doc.id}
-                      documentTitle={doc.title}
-                      downloadDocumentId={approvedDownloadId}
-                    />
-                  )}
-                  {doc.status === "changes_requested" && (
-                    <CancelDocButton documentId={doc.id} />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="lf-empty-field">
-            {isAttorney
-              ? "No documents generated yet for this client."
-              : "Documents generated through wizards will appear here once attorney-reviewed."}
-          </p>
-        )}
-      </div>
-
-      {/* Attachments */}
-      <div className="lf-card lf-card-full" id="attachments">
-        <div className="lf-card-label">Documents &amp; Attachments</div>
-        <AttachmentPanel caseFileId={caseFile.id} />
-      </div>
+      {/* One concise table — suggested uploads, attachments on file, and drafted
+          documents — replaces the old separate Documents card + AttachmentPanel. */}
+      <CaseDocumentsTable
+        caseFileId={caseFile.id}
+        documents={documents}
+        childDocuments={childDocuments}
+        facts={facts}
+        isAttorney={isAttorney}
+      />
 
       {/* Direct message channel — client ⇆ attorney. Shown in both views so each
           side sees the same thread. */}

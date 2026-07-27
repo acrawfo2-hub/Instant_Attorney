@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { ClientWorkspaceDraft } from "@/lib/types";
+import { findBlanks, type DraftBlank } from "@/lib/freestyle-drafts";
 
 // Consumer freestyle drafts panel — the docked right side of the split screen.
 // Mirrors the attorney workspace panel: draft tabs, an editable title + body with
@@ -24,6 +25,7 @@ export default function ChatDraftsPanel({
   const [promoting, setPromoting] = useState(false);
   const [notice, setNotice] = useState("");
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
   const draftsRef = useRef<ClientWorkspaceDraft[]>([]);
   useEffect(() => { draftsRef.current = drafts; }, [drafts]);
   // Mirrored so a refresh-driven reload can avoid clobbering an unsaved edit.
@@ -33,6 +35,20 @@ export default function ChatDraftsPanel({
   useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
 
   const active = drafts.find((d) => d.id === activeId) ?? null;
+  const blanks = useMemo(() => (active ? findBlanks(active.content) : []), [active]);
+
+  // Jump the editor to a blank and select it, so "fill this in" is one click.
+  function jumpToBlank(b: DraftBlank) {
+    const el = bodyRef.current;
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(b.index, b.index + b.raw.length);
+    // Textareas don't reliably scroll a selection into view — approximate from
+    // the line the blank sits on so it lands a few lines down from the top.
+    const lineHeight = parseInt(getComputedStyle(el).lineHeight) || 20;
+    const line = el.value.slice(0, b.index).split("\n").length;
+    el.scrollTop = Math.max(0, (line - 3) * lineHeight);
+  }
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/workspace/drafts?caseFileId=${caseFileId}`);
@@ -160,6 +176,7 @@ export default function ChatDraftsPanel({
             </div>
           </div>
           <textarea
+            ref={bodyRef}
             className="fs-draft-body"
             value={active.content}
             onChange={(e) => edit({ content: e.target.value })}
@@ -167,6 +184,26 @@ export default function ChatDraftsPanel({
             placeholder="Draft content…"
             spellCheck
           />
+          {blanks.length > 0 && (
+            <div className="fc-draft-blanks">
+              <span className="fc-draft-blanks-label">
+                {blanks.length} blank{blanks.length === 1 ? "" : "s"} to fill
+              </span>
+              <div className="fc-draft-blanks-chips">
+                {blanks.map((b) => (
+                  <button
+                    key={b.raw}
+                    type="button"
+                    className="fc-draft-blank-chip"
+                    onClick={() => jumpToBlank(b)}
+                    title="Jump to this blank in the draft"
+                  >
+                    {b.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="fc-draft-promote-row">
             {active.promoted_document_id ? (
               <span className="fc-draft-promoted">✓ Sent for attorney review</span>

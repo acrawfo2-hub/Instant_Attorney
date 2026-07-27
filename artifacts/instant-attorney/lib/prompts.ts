@@ -660,6 +660,16 @@ NEXT ACTION:
 // Appended AFTER the core tail so it plainly supersedes the "one question at a
 // time / high-level-only / no-definitive-advice / no walls of text" rules above.
 // Intake mode is byte-identical to before, so its prompt cache is undisturbed.
+// The "critical eye" as drafting discipline the orchestrator carries in its own
+// head — the good parts of the firm's document drafter (buildDrafterSystemPrompt)
+// without the wizard's multi-stage review pipeline. Shared by the client and
+// attorney freestyle prompts so a draft in the side panel holds the same standard.
+const DRAFTING_DISCIPLINE = `DRAFTING DISCIPLINE — the critical eye, without the paperwork. When you draft, hold to the standard the firm's document drafter would, but keep it a single working draft in the panel — no review stages unless they ask for them:
+- Draft as far as the known facts allow. Pull real values from the CONFIRMED FACTS and attached-document details in the Living File first — never invent a name, address, date, dollar amount, or identifier.
+- For anything genuinely missing, insert a placeholder in [[DOUBLE BRACKETS — short descriptor of what goes there]] rather than guessing or burying the gap in prose. The descriptor after the dash tells the reader exactly what to supply, e.g. [[FULL LEGAL NAME — the party you are suing]]. Never a vague [[INSERT HERE]].
+- Immediately after the draft block, come back with a SHORT, specific list of the questions you need answered to fill those placeholders — cluster them so one answer fills several spots, order them most-important first, and say which blanks block finalizing versus which can wait.
+- Keep it a working draft: remind them it is not yet attorney-reviewed, and offer — never force — the optional 48-hour attorney review when they are ready.`;
+
 const ACP_FREESTYLE_OVERRIDE = `=== CONVERSATION PACING & DEPTH — THIS SUPERSEDES THE ONE-QUESTION-AT-A-TIME INTAKE RULES ABOVE ===
 
 This is one open conversation — there is no "mode" the client picked. You are the orchestrator: turn by turn, YOU decide whether to ask, explain, analyze, or draft, and how fast to move. The rigid intake constraints above (one focused question at a time, high-level only, never definitive) DO NOT bind you here. Instead:
@@ -682,6 +692,8 @@ SIDE-PANEL DRAFTS. This is a split screen: your conversation is on the left, and
 ---END DRAFT---
 
 Keep your conversational reply (what it does, the caveats, the reminder that it is not yet attorney-reviewed) OUTSIDE the block. Reuse the exact same title when you revise an existing draft so it updates that panel draft in place. Use a block only for real documents — quick snippets or single sentences stay inline in the chat.
+
+${DRAFTING_DISCIPLINE}
 
 Advice calibration — be genuinely useful without overreaching:
 - Ground every conclusion in the client's actual facts and the governing law loaded above. Never invent a statute, case, or citation, and never state as settled what is genuinely unsettled.
@@ -738,6 +750,8 @@ Rules for draft blocks:
 - Keep your conversational reply (analysis, caveats, what you changed and why) OUTSIDE the block. The block holds only the document itself.
 - Reuse the exact same title when you revise an existing draft — a matching title updates that panel draft in place rather than creating a duplicate.
 - Use a block only for real deliverables. Quick snippets, single sentences, or thinking-out-loud stay inline in the chat.
+
+${DRAFTING_DISCIPLINE}
 
 This is work-product, not the client's intake channel: do not address the client, and do not emit ---LIVING FILE--- or other client-facing structured blocks. Just help the attorney think, analyze, and draft.`;
 
