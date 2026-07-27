@@ -9,7 +9,11 @@ import ExistingCounselModal from "@/components/ExistingCounselModal";
 import type { ExistingCounselFormValue } from "@/components/ExistingCounselForm";
 import VoiceInputButton, { VoiceUnsupportedNote } from "@/components/VoiceInputButton";
 import AccountMenu from "@/components/AccountMenu";
+import ChatDraftsPanel from "@/components/ChatDraftsPanel";
 import { phase2ExistingCounselNotice } from "@/lib/existing-counsel";
+import { parseDrafts, stripDraftsForDisplay } from "@/lib/freestyle-drafts";
+import { stripToolMarkers, activeToolNames } from "@/lib/tool-markers";
+import ToolRunChips from "@/components/ToolRunChips";
 import type { CounselEngagementGoal } from "@/lib/types";
 
 type Msg = Pick<IntakeMessage, "role" | "content"> & {
@@ -51,7 +55,10 @@ const FREESTYLE_ATTACH_TYPES = new Set([
 ]);
 
 function renderContent(text: string) {
-  const lines = text.split("\n");
+  // Freestyle drafts live in the side panel, not the transcript — pull the
+  // document blocks out and leave a compact marker where each one was.
+  const drafted = parseDrafts(text);
+  const lines = stripDraftsForDisplay(text).split("\n");
   const elements: React.ReactNode[] = [];
   let i = 0;
 
@@ -114,6 +121,16 @@ function renderContent(text: string) {
     i++;
   }
 
+  for (const d of drafted) {
+    elements.push(
+      <div key={`draft-${d.title}`} className="fc-draft-note">
+        <span className="fc-draft-note-icon">📄</span>
+        <span className="fc-draft-note-label">{d.title}</span>
+        <span className="fc-draft-note-cta">in your drafts →</span>
+      </div>
+    );
+  }
+
   return elements;
 }
 
@@ -154,6 +171,12 @@ function AcpChatInner() {
   const [loading, setLoading] = useState(false);
   const [streamingText, setStreamingText] = useState("");
   const [chatTruncated, setChatTruncated] = useState(false);
+  // Freestyle split-screen drafts panel. `draftsRefresh` bumps to tell the panel
+  // to reload after the assistant produces a new draft.
+  const [draftsPanelOpen, setDraftsPanelOpen] = useState(false);
+  const [draftsRefresh, setDraftsRefresh] = useState(0);
+  // Orchestrator tools currently running this turn (transient "running…" chips).
+  const [activeTools, setActiveTools] = useState<string[]>([]);
   const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
   // Freestyle document attachments go through the storage-upload pipeline (not
   // inline base64), so large files don't blow the request-body limit. These
@@ -181,6 +204,7 @@ function AcpChatInner() {
   const inputAreaRef = useRef<HTMLDivElement>(null);
   const hydratedRef = useRef(false);
   const caseFileIdRef = useRef<string | null>(caseFileId);
+  const modeRef = useRef<ChatMode>(mode);
   const hasUserMessages = messages.some((m) => m.role === "user");
   const caseHomeHref = caseFileId ? `/dashboard/${caseFileId}` : "/dashboard";
 
@@ -188,21 +212,25 @@ function AcpChatInner() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamingText, handoff]);
 
-  // Keep the latest case file id reachable from the one-time page-hide handler.
+  // Keep the latest case file id + mode reachable from the one-time page-hide handler.
   useEffect(() => {
     caseFileIdRef.current = caseFileId;
-  }, [caseFileId]);
+    modeRef.current = mode;
+  }, [caseFileId, mode]);
 
-  // Flush the Living File when the page is hidden (tab close / navigation away)
-  // via sendBeacon, so the conversation tail is never lost on exit.
+  // Organize on leave: when the page is hidden (tab close / navigation away),
+  // sendBeacon so the conversation tail is folded into the Living File and — for a
+  // freestyle session — a short "where we left off" recap is distilled for the
+  // client's next visit. The endpoint debounces the recap, so rapid tab switches
+  // with no new messages stay cheap.
   useEffect(() => {
     const onHide = () => {
       const id = caseFileIdRef.current;
       if (!id) return;
-      const blob = new Blob([JSON.stringify({ caseFileId: id, force: true })], {
+      const blob = new Blob([JSON.stringify({ caseFileId: id, mode: modeRef.current })], {
         type: "application/json",
       });
-      navigator.sendBeacon("/api/chat-acp/sync-file", blob);
+      navigator.sendBeacon("/api/chat-acp/organize", blob);
     };
     const onVisibility = () => {
       if (document.visibilityState === "hidden") onHide();
@@ -212,6 +240,18 @@ function AcpChatInner() {
     return () => {
       window.removeEventListener("pagehide", onHide);
       document.removeEventListener("visibilitychange", onVisibility);
+      // In-app (SPA) navigation away — e.g. clicking "Open your case" — doesn't
+      // fire pagehide, so organize here too. keepalive lets it outlive the
+      // unmount; the endpoint debounces so this stays cheap.
+      const id = caseFileIdRef.current;
+      if (id) {
+        fetch("/api/chat-acp/organize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ caseFileId: id, mode: modeRef.current }),
+          keepalive: true,
+        }).catch(() => {});
+      }
     };
   }, []);
 
@@ -581,7 +621,8 @@ function AcpChatInner() {
           firstChunk = false;
         }
 
-        setStreamingText(full);
+        setStreamingText(stripToolMarkers(full));
+        setActiveTools(activeToolNames(full));
       }
 
       // Detect structured truncation sentinel emitted by the server
@@ -592,8 +633,16 @@ function AcpChatInner() {
       } else {
         setChatTruncated(false);
       }
+      setActiveTools([]);
+      // Strip the transient tool markers before the message is stored.
+      full = stripToolMarkers(full);
       setMessages((prev) => [...prev, { role: "assistant", content: full }]);
       setStreamingText("");
+      // The server persisted any ---DRAFT--- blocks; open the panel and refresh it.
+      if (mode === "freestyle" && parseDrafts(full).length > 0) {
+        setDraftsPanelOpen(true);
+        setDraftsRefresh((n) => n + 1);
+      }
       setPendingCounselContext(null);
       // Resolved doc uploads are now in the file context; keep only in-flight ones.
       setDocUploads((prev) => prev.filter((d) => d.status === "uploading"));
@@ -603,6 +652,7 @@ function AcpChatInner() {
         { role: "assistant", content: "I'm sorry — something went wrong. Please try again." },
       ]);
       setStreamingText("");
+      setActiveTools([]);
     } finally {
       setLoading(false);
     }
@@ -679,6 +729,20 @@ function AcpChatInner() {
         </div>
 
         <div className="fc-topbar-right">
+          {mode === "freestyle" && caseFileId && !isQuickConsult && (
+            <button
+              type="button"
+              className="fc-upgrade-btn"
+              style={{
+                background: draftsPanelOpen ? "var(--brand-gold)" : "rgba(255,255,255,0.07)",
+                color: draftsPanelOpen ? "#1a1206" : "var(--brand-cream-text)",
+              }}
+              onClick={() => setDraftsPanelOpen((v) => !v)}
+              title="Show or hide your drafts"
+            >
+              {draftsPanelOpen ? "Hide drafts" : "Drafts"}
+            </button>
+          )}
           {isQuickConsult && hasUserMessages ? (
             <button
               className="fc-upgrade-btn"
@@ -749,6 +813,10 @@ function AcpChatInner() {
         />
       )}
 
+      {/* FREESTYLE WORKSPACE SPLIT — chat column on the left, drafts docked right */}
+      <div className={`fc-workspace-row${mode === "freestyle" && draftsPanelOpen ? " fc-workspace-row-split" : ""}`}>
+      <div className="fc-workspace-main">
+
       {/* MESSAGES */}
       <main className="fc-messages">
         {modeChooserOpen && !hasUserMessages && !isQuickConsult && (
@@ -817,6 +885,7 @@ function AcpChatInner() {
             </div>
             <div className="fc-bubble fc-bubble-ai fc-bubble-streaming">
               {renderContent(streamingText)}
+              <ToolRunChips tools={activeTools} />
               <span className="fc-cursor" />
             </div>
           </div>
@@ -839,7 +908,7 @@ function AcpChatInner() {
               </svg>
             </div>
             <div className="fc-bubble fc-bubble-ai fc-thinking">
-              <span /><span /><span />
+              {activeTools.length > 0 ? <ToolRunChips tools={activeTools} /> : <><span /><span /><span /></>}
             </div>
           </div>
         )}
@@ -1006,6 +1075,16 @@ function AcpChatInner() {
       </div>
       </>
       )}
+
+      </div>{/* /fc-workspace-main */}
+      {mode === "freestyle" && draftsPanelOpen && caseFileId && (
+        <ChatDraftsPanel
+          caseFileId={caseFileId}
+          refreshKey={draftsRefresh}
+          onClose={() => setDraftsPanelOpen(false)}
+        />
+      )}
+      </div>{/* /fc-workspace-row */}
     </div>
   );
 }

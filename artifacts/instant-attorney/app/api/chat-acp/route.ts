@@ -3,13 +3,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { logTruncation } from "@/lib/truncation-logger";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { buildAcpSystemPrompt, buildFileContext } from "@/lib/prompts";
+import { buildAcpSystemPrompt, buildFileContext, ORCHESTRATOR_TOOLS_GUIDANCE } from "@/lib/prompts";
+import { ORCHESTRATOR_TOOLS, dispatchTool } from "@/lib/orchestrator-tools";
 import { detectAcpAreasFromContext } from "@/lib/acp-area-router";
 import { parseAndUpdateFile, isCompleteFileUpdate } from "@/lib/file-parser";
 import { syncLivingFile } from "@/lib/living-file-extractor";
 import { triggerPendingLookups } from "@/lib/gov-form-lookup";
 import { generateCaseTitle } from "@/lib/title-generator";
 import { toAnthropicBlock, processAttachment } from "@/lib/attachment-processor";
+import { parseDrafts } from "@/lib/freestyle-drafts";
 import { recordAiFromMessage, recordStorageUpload } from "@/lib/usage-tracker";
 import { getBillingGate } from "@/lib/topup";
 import { maxOutputTokensFor, limitSignalMetadata } from "@/lib/token-limits";
@@ -24,6 +26,12 @@ import {
 
 const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney, maxRetries: 4 });
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
+// Cap on model↔tool round-trips per user turn, so a tool loop can't run away.
+const MAX_TOOL_ITERATIONS = 5;
+
+// The freestyle tool loop can chain several model round-trips, so give the
+// function room beyond the platform default.
+export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
   const { messages, caseFileId, pendingAttachment, fileType, counselContext, mode } = await req.json() as {
@@ -274,20 +282,15 @@ export async function POST(req: NextRequest) {
     mode: chatMode,
   });
 
-  // Stream from Anthropic
-  const stream = anthropic.messages.stream({
-    model: "claude-sonnet-4-6",
-    max_tokens: maxOutputTokensFor("claude-sonnet-4-6"),
-    system: [
-      {
-        type: "text" as const,
-        text: acpSystemPrompt,
-        cache_control: { type: "ephemeral" as const },
-      },
-      ...(fileContext ? [{ type: "text" as const, text: fileContext }] : []),
-    ],
-    messages: anthropicMessages,
-  });
+  // Orchestrator tools are available only in freestyle. The system blocks and the
+  // agentic loop below are shared by both modes: with no tools, the loop runs
+  // exactly once and behaves like the previous single-stream path.
+  const useTools = mode === "freestyle";
+  const systemBlocks = [
+    { type: "text" as const, text: acpSystemPrompt, cache_control: { type: "ephemeral" as const } },
+    ...(fileContext ? [{ type: "text" as const, text: fileContext }] : []),
+    ...(useTools ? [{ type: "text" as const, text: ORCHESTRATOR_TOOLS_GUIDANCE }] : []),
+  ];
 
   const encoder = new TextEncoder();
   let fullResponse = "";
@@ -296,35 +299,73 @@ export async function POST(req: NextRequest) {
     async start(controller) {
       controller.enqueue(encoder.encode(`\x00${resolvedCaseFileId}\x00`));
 
+      // The last model turn's final message — used below for truncation/usage.
+      let finalMsg: Anthropic.Message | null = null;
+      const loopMessages: AnthropicMessage[] = [...anthropicMessages];
+      const toolDb = createServiceClient();
+
       try {
-        for await (const event of stream) {
-          if (
-            event.type === "content_block_delta" &&
-            event.delta.type === "text_delta"
-          ) {
-            fullResponse += event.delta.text;
-            controller.enqueue(encoder.encode(event.delta.text));
+        for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
+          const turn = anthropic.messages.stream({
+            model: "claude-sonnet-4-6",
+            max_tokens: maxOutputTokensFor("claude-sonnet-4-6"),
+            system: systemBlocks,
+            messages: loopMessages,
+            ...(useTools ? { tools: ORCHESTRATOR_TOOLS } : {}),
+          });
+
+          for await (const event of turn) {
+            if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+              fullResponse += event.delta.text;
+              controller.enqueue(encoder.encode(event.delta.text));
+            }
           }
+
+          finalMsg = await turn.finalMessage().catch(() => null);
+          if (finalMsg) {
+            await recordAiFromMessage(db, finalMsg, {
+              userId,
+              actorId: userId,
+              caseFileId: resolvedCaseFileId,
+              feature: "chat_acp",
+              metadata: { ...limitSignalMetadata({
+                model: finalMsg.model,
+                outputTokens: finalMsg.usage.output_tokens,
+                priorLimit: 4000,
+                stopReason: finalMsg.stop_reason,
+              }) },
+            });
+          }
+
+          // Done unless the model asked to call tools.
+          if (!finalMsg || finalMsg.stop_reason !== "tool_use") break;
+
+          const toolUses = finalMsg.content.filter(
+            (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
+          );
+          const toolResults: Anthropic.ToolResultBlockParam[] = [];
+          for (const tu of toolUses) {
+            // Inline status marker so the UI can show a "running…" chip.
+            controller.enqueue(encoder.encode(`\x02TOOL:${tu.name}:running\x02`));
+            const out = await dispatchTool(tu.name, tu.input, { db, userId, caseFileId: resolvedCaseFileId });
+            controller.enqueue(encoder.encode(`\x02TOOL:${tu.name}:done\x02`));
+            toolResults.push({ type: "tool_result", tool_use_id: tu.id, content: out.forModel });
+            toolDb.from("orchestrator_tool_calls").insert({
+              case_file_id: resolvedCaseFileId,
+              user_id: userId,
+              tool_name: tu.name,
+              input: (tu.input ?? {}) as Record<string, unknown>,
+              result: out.raw ?? null,
+            }).then(undefined, (err) => console.error("[chat-acp] tool-call persist error:", err));
+          }
+
+          // Feed the assistant's tool_use turn and the results back for the next turn.
+          loopMessages.push({ role: "assistant", content: finalMsg.content });
+          loopMessages.push({ role: "user", content: toolResults });
         }
       } catch (err) {
         controller.error(err);
       } finally {
-        const finalMsg = await stream.finalMessage().catch(() => null);
-        if (finalMsg) {
-          await recordAiFromMessage(db, finalMsg, {
-            userId,
-            actorId: userId,
-            caseFileId: resolvedCaseFileId,
-            feature: "chat_acp",
-            metadata: { ...limitSignalMetadata({
-              model: finalMsg.model,
-              outputTokens: finalMsg.usage.output_tokens,
-              priorLimit: 4000,
-              stopReason: finalMsg.stop_reason,
-            }) },
-          });
-        }
-
         // The user-message insert was kicked off before the stream to keep it
         // off time-to-first-token; await it here so its id is available for the
         // screenshot path below and persistence is flushed before the response
@@ -338,6 +379,41 @@ export async function POST(req: NextRequest) {
             role: "assistant",
             content: fullResponse,
           });
+
+          // Freestyle split-screen: land any ---DRAFT--- blocks in the drafts
+          // panel. A matching title updates that draft in place; a new title
+          // creates a fresh one. Only in freestyle — guided intake keeps drafts
+          // inline in the transcript.
+          if (mode === "freestyle") {
+            for (const draft of parseDrafts(fullResponse)) {
+              try {
+                const { data: existing } = await db
+                  .from("client_workspace_drafts")
+                  .select("id")
+                  .eq("case_file_id", resolvedCaseFileId)
+                  .eq("user_id", userId)
+                  .eq("title", draft.title)
+                  .order("updated_at", { ascending: false })
+                  .limit(1)
+                  .maybeSingle();
+                if (existing?.id) {
+                  await db.from("client_workspace_drafts")
+                    .update({ content: draft.content, source: "assistant", updated_at: new Date().toISOString() })
+                    .eq("id", existing.id);
+                } else {
+                  await db.from("client_workspace_drafts").insert({
+                    case_file_id: resolvedCaseFileId,
+                    user_id: userId,
+                    title: draft.title,
+                    content: draft.content,
+                    source: "assistant",
+                  });
+                }
+              } catch (err) {
+                console.error("[chat-acp] persist draft error:", err);
+              }
+            }
+          }
 
           // Parse and update file if response contains structured blocks
           const hasLivingFile = fullResponse.includes("---LIVING FILE---");

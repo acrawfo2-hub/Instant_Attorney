@@ -11,8 +11,6 @@ import MatterSwitcher from "@/components/MatterSwitcher";
 import { parseRoadmapOverlay } from "@/lib/roadmap-snapshot";
 import type { RoadmapAiOverlay } from "@/lib/roadmap-types";
 import { toMatterSwitcherItem } from "@/lib/matter-switcher";
-import { computeNextStep } from "@/lib/next-step";
-import { getCaseHeaderCta } from "@/lib/case-cta";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
@@ -161,11 +159,14 @@ export default async function FileDetailPage({
 
   const { caseFile, facts, documents, childDocuments, consultRequest, hasConsultSub, completedConsultWrapUp, completedConsultSubmittedAt, requestedAttachments, govForms, attachments, roadmapOverlay, openMatters, isAttorneyUser } = result;
 
-  const headerCta = getCaseHeaderCta(
-    computeNextStep(caseFile, documents, facts),
-    caseFile.id,
-    { inFileContext: true },
-  );
+  // The header action now points to the orchestrator rather than a computed
+  // next-step path — figuring out (and doing) what's next is a conversation with
+  // the assistant that knows the whole file. computeNextStep/getCaseHeaderCta are
+  // kept in the codebase (still used by the attorney/legacy surfaces).
+  const headerCta = {
+    href: `/chat?caseFileId=${caseFile.id}&mode=freestyle`,
+    label: "Ask your assistant",
+  };
 
   return (
     <div className="lf-shell">

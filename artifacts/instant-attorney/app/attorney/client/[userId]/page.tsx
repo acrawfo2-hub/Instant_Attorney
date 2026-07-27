@@ -315,6 +315,25 @@ export default async function ClientFilePage({
               {/* Attorney freestyle work-product chat for this case file */}
               <AttorneyFreestyleChat caseFileId={cf.id} />
 
+              {/* Organized digest from the last freestyle session (work-product) */}
+              {cf.attorney_workspace_summary && (
+                <div className="fs-digest">
+                  <div className="fs-digest-head">
+                    <span className="fs-digest-title">
+                      From your freestyle workspace
+                    </span>
+                    {cf.attorney_workspace_summarized_at && (
+                      <span className="fs-digest-time">
+                        {new Date(cf.attorney_workspace_summarized_at).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                  <div className="fs-digest-body">
+                    {cf.attorney_workspace_summary}
+                  </div>
+                </div>
+              )}
+
               {/* Attachments for this case file */}
               {cf.attachments.length > 0 && (
                 <div className="atty-case-subsection">

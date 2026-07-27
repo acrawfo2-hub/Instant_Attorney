@@ -1,13 +1,27 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { buildAttorneyFreestylePrompt, buildFileContext } from "@/lib/prompts";
+import { buildAttorneyFreestylePrompt, buildFileContext, ATTORNEY_TOOLS_GUIDANCE } from "@/lib/prompts";
+import { READ_ONLY_TOOLS, dispatchTool } from "@/lib/orchestrator-tools";
 import { detectAcpAreasFromContext } from "@/lib/acp-area-router";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
+import { toAnthropicBlock } from "@/lib/attachment-processor";
+import { parseDrafts } from "@/lib/freestyle-drafts";
 import { maxOutputTokensFor, limitSignalMetadata } from "@/lib/token-limits";
 import { logTruncation } from "@/lib/truncation-logger";
 import { BYPASS_USER_ID } from "@/lib/types";
-import type { CaseFile, FactItem, Attachment, RequestedAttachment } from "@/lib/types";
+import type { CaseFile, FactItem, Attachment, RequestedAttachment, WorkspaceAttachmentRef } from "@/lib/types";
+
+// A file the attorney dropped into the chat this turn.
+interface PendingAttachment {
+  fileName: string;
+  mimeType: string;
+  data: string; // base64
+}
+const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024; // 25 MB
+// Cap on model↔tool round-trips per turn, so a tool loop can't run away.
+const MAX_TOOL_ITERATIONS = 5;
 
 // Attorney drafting/analysis can run long — give the model room.
 export const maxDuration = 300;
@@ -19,9 +33,10 @@ const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 // context, but persisted to attorney_workspace_messages — NOT the client's
 // privileged intake_messages record. Attorney-only.
 export async function POST(req: NextRequest) {
-  const { messages, caseFileId } = await req.json() as {
+  const { messages, caseFileId, pendingAttachment } = await req.json() as {
     messages: Array<{ role: string; content: string }>;
     caseFileId?: string;
+    pendingAttachment?: PendingAttachment;
   };
 
   if (!Array.isArray(messages) || messages.length === 0) {
@@ -71,22 +86,70 @@ export async function POST(req: NextRequest) {
   const detectedAreas = detectAcpAreasFromContext(messages, caseFile);
   const systemPrompt = buildAttorneyFreestylePrompt(detectedAreas);
 
-  const anthropicMessages = messages.map((m) => ({
+  type AnthropicMessage = { role: "user" | "assistant"; content: Anthropic.MessageParam["content"] };
+  const anthropicMessages: AnthropicMessage[] = messages.map((m) => ({
     role: m.role as "user" | "assistant",
     content: m.content,
   }));
 
+  // A dropped-in file gets stored to work-product storage and folded into the
+  // last user turn as a multimodal block so the associate can actually read it.
+  let storedAttachment: WorkspaceAttachmentRef | null = null;
+  if (pendingAttachment?.data) {
+    try {
+      const buffer = Buffer.from(pendingAttachment.data, "base64");
+      if (buffer.byteLength > MAX_ATTACHMENT_BYTES) {
+        return NextResponse.json({ error: "File exceeds 25 MB limit" }, { status: 413 });
+      }
+      const fileName = pendingAttachment.fileName || "attachment";
+      const mimeType = pendingAttachment.mimeType || "application/octet-stream";
+
+      // Feed the file to the model on this turn.
+      const lastUserIdx = anthropicMessages.map((m, i) => ({ m, i }))
+        .reverse()
+        .find(({ m }) => m.role === "user")?.i ?? -1;
+      if (lastUserIdx >= 0) {
+        const blocks = await toAnthropicBlock(buffer, mimeType, fileName);
+        const textContent = typeof anthropicMessages[lastUserIdx].content === "string"
+          ? anthropicMessages[lastUserIdx].content as string
+          : "";
+        anthropicMessages[lastUserIdx] = {
+          role: "user",
+          content: [
+            ...blocks as (Anthropic.ImageBlockParam | Anthropic.DocumentBlockParam | Anthropic.TextBlockParam)[],
+            ...(textContent ? [{ type: "text" as const, text: textContent }] : []),
+          ],
+        };
+      }
+
+      // Persist to work-product storage so the chip can re-open it later.
+      const serviceDb = createServiceClient();
+      const storagePath = `workspace/${attorneyId}/${caseFileId}/${randomUUID()}-${fileName}`;
+      const { error: upErr } = await serviceDb.storage
+        .from("case-attachments")
+        .upload(storagePath, buffer, { contentType: mimeType, upsert: false });
+      if (upErr) {
+        console.error("[attorney-chat] attachment storage error:", upErr);
+      } else {
+        storedAttachment = { fileName, storagePath, mimeType };
+      }
+    } catch (err) {
+      console.error("[attorney-chat] attachment handling error:", err);
+    }
+  }
+
   // Persist the attorney's message concurrently with the stream (kept off
   // time-to-first-token). This is attorney work-product, not the client record.
   const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
-  const userMessagePromise: Promise<void> = lastUserMsg
+  const userMessagePromise: Promise<void> = (lastUserMsg || storedAttachment)
     ? (async () => {
         try {
           await db.from("attorney_workspace_messages").insert({
             case_file_id: caseFileId,
             attorney_id: attorneyId,
             role: "user",
-            content: lastUserMsg.content,
+            content: lastUserMsg?.content ?? "",
+            attachments: storedAttachment ? [storedAttachment] : [],
           });
         } catch (err) {
           console.error("[attorney-chat] persist user message error:", err);
@@ -94,47 +157,79 @@ export async function POST(req: NextRequest) {
       })()
     : Promise.resolve();
 
-  const stream = anthropic.messages.stream({
-    model: "claude-sonnet-4-6",
-    max_tokens: maxOutputTokensFor("claude-sonnet-4-6"),
-    system: [
-      { type: "text" as const, text: systemPrompt, cache_control: { type: "ephemeral" as const } },
-      ...(fileContext ? [{ type: "text" as const, text: fileContext }] : []),
-    ],
-    messages: anthropicMessages,
-  });
+  const systemBlocks = [
+    { type: "text" as const, text: systemPrompt, cache_control: { type: "ephemeral" as const } },
+    ...(fileContext ? [{ type: "text" as const, text: fileContext }] : []),
+    { type: "text" as const, text: ATTORNEY_TOOLS_GUIDANCE },
+  ];
 
   const encoder = new TextEncoder();
   let fullResponse = "";
 
   const readable = new ReadableStream({
     async start(controller) {
+      let finalMsg: Anthropic.Message | null = null;
+      const loopMessages = [...anthropicMessages];
+      const toolDb = createServiceClient();
+
       try {
-        for await (const event of stream) {
-          if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-            fullResponse += event.delta.text;
-            controller.enqueue(encoder.encode(event.delta.text));
+        for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
+          const turn = anthropic.messages.stream({
+            model: "claude-sonnet-4-6",
+            max_tokens: maxOutputTokensFor("claude-sonnet-4-6"),
+            system: systemBlocks,
+            messages: loopMessages,
+            tools: READ_ONLY_TOOLS,
+          });
+
+          for await (const event of turn) {
+            if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+              fullResponse += event.delta.text;
+              controller.enqueue(encoder.encode(event.delta.text));
+            }
           }
+
+          finalMsg = await turn.finalMessage().catch(() => null);
+          if (finalMsg) {
+            await recordAiFromMessage(db, finalMsg, {
+              userId: attorneyId,
+              actorId: attorneyId,
+              caseFileId,
+              feature: "attorney_chat",
+              metadata: { ...limitSignalMetadata({
+                model: finalMsg.model,
+                outputTokens: finalMsg.usage.output_tokens,
+                priorLimit: 4000,
+                stopReason: finalMsg.stop_reason,
+              }) },
+            });
+          }
+
+          if (!finalMsg || finalMsg.stop_reason !== "tool_use") break;
+
+          const toolUses = finalMsg.content.filter(
+            (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
+          );
+          const toolResults: Anthropic.ToolResultBlockParam[] = [];
+          for (const tu of toolUses) {
+            controller.enqueue(encoder.encode(`\x02TOOL:${tu.name}:running\x02`));
+            const out = await dispatchTool(tu.name, tu.input, { db, userId: attorneyId, caseFileId });
+            controller.enqueue(encoder.encode(`\x02TOOL:${tu.name}:done\x02`));
+            toolResults.push({ type: "tool_result", tool_use_id: tu.id, content: out.forModel });
+            toolDb.from("orchestrator_tool_calls").insert({
+              case_file_id: caseFileId,
+              user_id: attorneyId,
+              tool_name: tu.name,
+              input: (tu.input ?? {}) as Record<string, unknown>,
+              result: out.raw ?? null,
+            }).then(undefined, (err) => console.error("[attorney-chat] tool-call persist error:", err));
+          }
+          loopMessages.push({ role: "assistant", content: finalMsg.content });
+          loopMessages.push({ role: "user", content: toolResults });
         }
       } catch (err) {
         controller.error(err);
       } finally {
-        const finalMsg = await stream.finalMessage().catch(() => null);
-        if (finalMsg) {
-          await recordAiFromMessage(db, finalMsg, {
-            userId: attorneyId,
-            actorId: attorneyId,
-            caseFileId,
-            feature: "attorney_chat",
-            metadata: { ...limitSignalMetadata({
-              model: finalMsg.model,
-              outputTokens: finalMsg.usage.output_tokens,
-              priorLimit: 4000,
-              stopReason: finalMsg.stop_reason,
-            }) },
-          });
-        }
-
         await userMessagePromise;
 
         if (fullResponse) {
@@ -144,6 +239,38 @@ export async function POST(req: NextRequest) {
             role: "assistant",
             content: fullResponse,
           }).then(undefined, (err) => console.error("[attorney-chat] persist assistant message error:", err));
+
+          // Land any ---DRAFT--- blocks in the side panel. A matching title
+          // updates that draft in place; a new title creates a fresh one.
+          const drafts = parseDrafts(fullResponse);
+          for (const draft of drafts) {
+            try {
+              const { data: existing } = await db
+                .from("attorney_workspace_drafts")
+                .select("id")
+                .eq("case_file_id", caseFileId)
+                .eq("attorney_id", attorneyId)
+                .eq("title", draft.title)
+                .order("updated_at", { ascending: false })
+                .limit(1)
+                .maybeSingle();
+              if (existing?.id) {
+                await db.from("attorney_workspace_drafts")
+                  .update({ content: draft.content, source: "assistant", updated_at: new Date().toISOString() })
+                  .eq("id", existing.id);
+              } else {
+                await db.from("attorney_workspace_drafts").insert({
+                  case_file_id: caseFileId,
+                  attorney_id: attorneyId,
+                  title: draft.title,
+                  content: draft.content,
+                  source: "assistant",
+                });
+              }
+            } catch (err) {
+              console.error("[attorney-chat] persist draft error:", err);
+            }
+          }
         }
 
         if (finalMsg?.stop_reason === "max_tokens") {

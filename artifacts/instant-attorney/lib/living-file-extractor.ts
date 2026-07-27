@@ -33,6 +33,9 @@ function stripStructuredBlocks(text: string): string {
     .replace(/---LEGAL STRATEGY---[\s\S]*?---END STRATEGY---/g, "")
     .replace(/---REQUESTED ATTACHMENTS---[\s\S]*?---END REQUESTED---/g, "")
     .replace(/---GOVERNMENT FORMS---[\s\S]*?---END FORMS---/g, "")
+    // A freestyle draft is a working document, not case dialogue — keep the whole
+    // instrument out of the Living File so it doesn't get mined into facts.
+    .replace(/---DRAFT:[ \t]*.*?[ \t]*---\r?\n[\s\S]*?\r?\n?---END DRAFT---/g, "")
     .replace(/\x01TRUNCATED\x01/g, "")
     .trim();
 }

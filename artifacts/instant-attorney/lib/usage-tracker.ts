@@ -23,6 +23,7 @@ export type UsageFeature =
   | "attorney_consult_closeout"
   | "attorney_brainstorm"
   | "roadmap_refresh"
+  | "matter_synthesis"
   | "storage_upload";
 
 export type UsageCategory = "ai" | "storage" | "infra";

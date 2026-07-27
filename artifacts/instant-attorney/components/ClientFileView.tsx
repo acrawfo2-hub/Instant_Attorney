@@ -26,6 +26,7 @@ import RoadmapSpine from "@/components/RoadmapSpine";
 import RoadmapToolGroup from "@/components/RoadmapToolGroup";
 import PostConsultCard from "@/components/PostConsultCard";
 import CaseChatPanel from "@/components/CaseChatPanel";
+import MatterStandingCard from "@/components/MatterStandingCard";
 import DocumentExecutionPanel from "@/components/DocumentExecutionPanel";
 import type { CaseFile, FactItem, Document, Profile, ConsultRequest, ConsultWrapUp, RequestedAttachment, GovFormInstrument, Attachment } from "@/lib/types";
 import { docTypeLabel, personDisplayName, isDocumentOutOfDate, coerceWizardType } from "@/lib/types";
@@ -34,6 +35,15 @@ import { docTypeLabel, personDisplayName, isDocumentOutOfDate, coerceWizardType 
 // so the client's wizard draft underneath it is never flagged out of date or
 // offered for regeneration.
 const FINALIZED_DOC_STATUSES = new Set(["approved", "delivered"]);
+
+// The consumer Living File no longer PRESCRIBES the next step with a computed
+// roadmap, Mission Control action board, and per-matter tool cards. "What do I
+// do next?" now happens by talking to the orchestrator (the freestyle
+// workspace), which knows every fact and can actually build. The file is a
+// reference — overview + facts known/unknown + documents. The legacy guidance
+// stack is kept in the codebase (components, libs, roadmap snapshots) and can be
+// re-enabled by flipping this flag; the attorney view is unaffected either way.
+const SHOW_LEGACY_NEXT_STEPS = false;
 
 // ── Document status display ──────────────────────────────────────────────────
 
@@ -192,7 +202,10 @@ export default function ClientFileView({
   const { isFamilyMatter, isDebtMatter, isDefamationMatter, isEmploymentMatter, isPiMatter } =
     detectMatterFlags(matterText);
 
-  const resolvedRoadmap = !isAttorney
+  // Gated off for consumers (orchestrator-first); attorney was always null here.
+  // Nulling this cascades: the roadmap spine and every per-matter tool card below
+  // hang off resolvedRoadmap, so they all stop rendering in one place.
+  const resolvedRoadmap = !isAttorney && SHOW_LEGACY_NEXT_STEPS
     ? resolveRoadmapForCase({
         caseFile,
         facts,
@@ -363,13 +376,58 @@ export default function ClientFileView({
         />
       )}
 
-      {/* Mission Control — ranked actions + hero next step; strategy & instruments remain below */}
-      <MissionControlBoard
-        board={missionBoard}
-        caseFileId={caseFile.id}
-        mode={mode}
-        isAttorneyUser={isAttorneyUser}
-      />
+      {/* Mission Control — attorney view only; the consumer decides next steps by
+          talking to the orchestrator (below) rather than a computed action board. */}
+      {isAttorney && (
+        <MissionControlBoard
+          board={missionBoard}
+          caseFileId={caseFile.id}
+          mode={mode}
+          isAttorneyUser={isAttorneyUser}
+        />
+      )}
+
+      {/* Where we left off — the recap distilled when the client last left the
+          freestyle assistant ("organize on leave"). */}
+      {!isAttorney && caseFile.chat_session_summary && (
+        <div className="lf-card lf-card-full lf-session-recap">
+          <div className="lf-session-recap-head">
+            <span className="lf-session-recap-title">Where we left off</span>
+            {caseFile.chat_session_summarized_at && (
+              <span className="lf-session-recap-time">
+                {new Date(caseFile.chat_session_summarized_at).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+          <p className="lf-session-recap-body">{caseFile.chat_session_summary}</p>
+        </div>
+      )}
+
+      {/* Consumer next-step entry — the prominent way to figure out (and do) what
+          comes next is a conversation with the assistant that knows the whole file. */}
+      {!isAttorney && (
+        <Link
+          href={`/chat?caseFileId=${caseFile.id}&mode=freestyle`}
+          className="lf-card lf-card-full lf-orchestrator-cta"
+        >
+          <div className="lf-orchestrator-cta-icon" aria-hidden>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+          </div>
+          <div className="lf-orchestrator-cta-text">
+            <span className="lf-orchestrator-cta-title">Not sure what to do next?</span>
+            <span className="lf-orchestrator-cta-sub">
+              Talk it through with your legal assistant — it knows everything in your file, and can
+              analyze, plan, and draft with you right here.
+            </span>
+          </div>
+          <span className="lf-orchestrator-cta-arrow" aria-hidden>→</span>
+        </Link>
+      )}
+
+      {/* Matter synthesizer — prioritized "what's done / doable now / blocked". */}
+      {!isAttorney && <MatterStandingCard caseFileId={caseFile.id} />}
 
       {resolvedRoadmap && (
         <RoadmapSpine
