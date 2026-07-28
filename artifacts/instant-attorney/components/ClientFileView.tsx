@@ -15,7 +15,6 @@ import {
 } from "@/lib/jurisdiction";
 import type { RoadmapAiOverlay } from "@/lib/roadmap-types";
 import PostConsultCard from "@/components/PostConsultCard";
-import CaseChatPanel from "@/components/CaseChatPanel";
 import CaseHub from "@/components/CaseHub";
 import CaseDocumentsTable from "@/components/CaseDocumentsTable";
 import AttorneyFreestyleChat from "@/components/AttorneyFreestyleChat";
@@ -462,21 +461,6 @@ export default function ClientFileView({
         facts={facts}
         isAttorney={isAttorney}
       />
-
-      {/* Direct message channel — client ⇆ attorney. Shown in both views so each
-          side sees the same thread. */}
-      <div className="lf-card lf-card-full">
-        <div className="lf-card-label">
-          {isAttorney ? "Messages with Client" : "Messages with Crawford Law"}
-        </div>
-        <CaseChatPanel
-          caseFileId={caseFile.id}
-          viewerRole={isAttorney ? "attorney" : "client"}
-          counterpartLabel={
-            isAttorney ? personDisplayName(clientProfile) : "Crawford Law"
-          }
-        />
-      </div>
 
       {/* Attorney Assessment */}
       <div className="lf-card lf-card-full">
