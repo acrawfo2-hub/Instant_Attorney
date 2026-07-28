@@ -19,12 +19,25 @@ change**:
 - **FIXED — grounded government-form lookup** (`gov-form-lookup.ts`) ran a Sonnet call
   with `web_search`/`web_fetch` and **no usage recording** → margin leak on every dynamic
   form detected.
-- **OPEN — pricing floor.** If the live top-up charge is the **$7.50** you remember (the
-  repo example says `$8.50`), the current margin is only **~29.8%**, below the documented
-  **≥35%** floor. This is the strongest reason to move to a **$9.99** top-up now.
+- **FIXED — margin floor is now self-enforcing.** Rather than trusting a hand-set
+  threshold that can drift out of range (at a $7.50 charge, the old $4.75 threshold was
+  only ~29.8%), the trigger threshold is now **clamped into a 35–50% margin band** for
+  whatever the live charge is. The **price is unchanged**; the threshold moves to protect
+  margin.
 
-The remaining findings (gate coverage, uncosted web-search server-tool fees, config
-drift, UI polish) are laid out with a prioritized plan in §6.
+### Decisions locked in (2026-07-28)
+
+- **Top-up price: unchanged.** No change to `USAGE_TOPUP_CHARGE_USD`.
+- **Threshold: auto-maintained at 35–50% margin.** Implemented as a clamp in
+  `getBillingConfig` (see §4). At the committed $8.50 charge nothing changes (37.7%); at a
+  lower live charge the threshold self-corrects up to the floor edge.
+- **Monthly auto-charge default: $25/mo — unchanged** (`USAGE_DEFAULT_MONTHLY_TOPUP_LIMIT_USD=25`,
+  already the default).
+- **Attorney usage: metered against the consumer ledger** (no exemption). This is now
+  confirmed intended behavior — see F8.
+
+The remaining findings (gate coverage, uncosted web-search server-tool fees, UI polish)
+are laid out with a prioritized plan in §6.
 
 ---
 
@@ -77,12 +90,15 @@ one gated `chat-acp` request can run up to `MAX_TOOL_ITERATIONS = 5` model turns
 tool AI calls after a single gate check, so "bounded overshoot" is really "one request,"
 not "one model call."
 
-### F4 — Config drift: is the live charge $7.50 or $8.50?  ·  Severity: HIGH (margin)
-`.env.local.example` and the `getBillingConfig` default say **$8.50 @ $4.75** (≈37.7%).
-You referred to a **$7.50** top-up. At **$7.50 @ $4.75 the margin is only ~29.8%** — below
-the documented ≥35% floor. **Action:** confirm the live `USAGE_TOPUP_CHARGE_USD` /
-`USAGE_TOPUP_THRESHOLD_USD` in the deployed environment before anything else; the pricing
-decision in §4 depends on knowing the real starting point.
+### F4 — Config drift: is the live charge $7.50 or $8.50?  ·  Severity: HIGH (margin)  ·  **RESOLVED STRUCTURALLY**
+`.env.local.example` and the `getBillingConfig` default say **$8.50 @ $4.75** (≈37.7%),
+but the live charge may be **$7.50**, at which $4.75 is only ~29.8% — below the ≥35% floor.
+Rather than depend on knowing the exact live number, `getBillingConfig` now **clamps the
+threshold into the 35–50% margin band for the actual charge** (`clampThresholdToMarginBand`).
+So whether the charge is $7.50 or $8.50, realized margin stays in band; at $8.50 the
+existing $4.75 is untouched. It still logs a warning when it adjusts, so the drift stays
+visible. **Residual action:** confirm the live `USAGE_TOPUP_CHARGE_USD` so you know which
+end of the band you're operating at (informational now, not a margin risk).
 
 ### F5 — Unknown-model pricing falls back to Sonnet (silent undercount)  ·  Severity: MED
 `computeAiCostUsd` uses `DEFAULT_MODEL_PRICING = Sonnet` for any model not in the map.
@@ -103,11 +119,14 @@ The landing-page free chat has no user, no gate, no metering. That's an intentio
 marketing cost, but it is an uncapped Sonnet surface. **Action:** confirm it's rate-limited
 upstream; consider a lightweight per-IP/day cap so it can't be abused into real spend.
 
-### F8 — Attorney work meters against the consumer top-up ledger  ·  Severity: LOW (policy)
-`attorney/*` AI usage accrues to the same `top_up_ledger` unless the profile is
-`billing_exempt`. If attorneys are meant to be flat-rate (`attorney_pro`), they should be
-`billing_exempt` or on a separate meter. **Action:** decide the attorney billing model and
-make it explicit rather than incidental.
+### F8 — Attorney work meters against the consumer top-up ledger  ·  **DECIDED: intended**
+`attorney/*` AI usage accrues to the same `top_up_ledger`. **This is the intended model** —
+attorneys are metered against the consumer ledger just like clients. Verified: no code path
+auto-sets attorneys `billing_exempt` (the flag is a manual per-profile override only), and
+all seven attorney AI routes call `recordAiUsage`, so attorney spend is fully metered
+today. **Follow-on (P1):** because attorney routes are billable, they should also get the
+pre-call `getBillingGate` (see F3) so a blocked attorney is stopped the same way a blocked
+client is — especially on the Opus second-draft route.
 
 ### F9 — Healthy things worth keeping (verified)
 - Prompt-cache write (×1.25) / read (×0.1) pricing is correct.
@@ -118,43 +137,35 @@ make it explicit rather than incidental.
 
 ---
 
-## 4. Pricing: moving the top-up to $9.99
+## 4. Pricing: price held; threshold self-maintains 35–50% margin
 
-Stripe US card fee = **2.9% + $0.30**. Margin = `(charge − COGS_per_charge − fee) / charge`.
+**Decision: the top-up price stays as configured; the threshold is the lever.** Stripe US
+card fee = **2.9% + $0.30**. Steady-state margin = `(charge − threshold − fee) / charge`
+(carry-forward makes one charge ⇔ `threshold` of COGS).
 
-| Scenario | Stripe fee | Profit / charge | Margin | COGS covered / charge |
-|---|---:|---:|---:|---:|
-| Current example ($8.50 @ $4.75) | $0.546 | $3.20 | **37.7%** | $4.75 |
-| **If live is $7.50 @ $4.75** | $0.517 | $2.23 | **29.8%** ⚠ | $4.75 |
-| A) $9.99 @ $4.75 (price hike, same cadence) | $0.590 | $4.65 | **46.5%** | $4.75 |
-| B) $9.99 @ $5.50 | $0.590 | $3.90 | **39.0%** | $5.50 |
-| **C) $9.99 @ $5.75 (recommended)** | $0.590 | $3.65 | **36.5%** | $5.75 |
-| D) $9.99 @ $6.00 | $0.590 | $3.40 | 34.0% ⚠ | $6.00 |
+`getBillingConfig` now clamps the configured threshold into the **35–50% band** for the
+live charge (`clampThresholdToMarginBand`), so margin holds regardless of the exact price:
 
-**Recommendation: $9.99 charge with threshold $5.75 (scenario C).**
-- Keeps margin at **36.5%**, safely above the ≥35% floor.
-- Each charge covers **$5.75** of COGS vs $4.75 today → **~21% fewer top-up events**,
-  which means fewer fixed $0.30 Stripe fees, fewer card-decline moments, and a cleaner
-  statement for the customer (better UX *and* better unit economics).
-- The bigger, rounder $9.99 number reads as intentional rather than nickel-and-diming.
-- Set `graceBufferUsd` to track the new charge ($9.99), same as today's "one charge"
-  default.
+| Live charge | Allowed threshold band (50%→35%) | Old $4.75 threshold | After clamp |
+|---|---|---:|---|
+| $8.50 | $3.70 – $4.98 | 37.7% ✓ in band | **$4.75 unchanged** |
+| $7.50 | $3.23 – $4.36 | 29.8% ⚠ below floor | **→ $4.36 (≈35%)** |
 
-If you'd rather maximize margin over cadence, scenario **A** ($9.99 @ $4.75) yields 46.5%
-but charges just as often as today — a straight price increase. Scenario **B** is the
-middle ground.
+Properties:
+- An **in-band** explicit threshold is respected exactly (no surprise change at $8.50).
+- An **out-of-band** one is pulled only to the nearest boundary — never past it — and a
+  warning is logged so the adjustment is visible in logs.
+- Works for any future price change without re-tuning the threshold by hand.
 
-**All of this is env-only — no deploy required** (per `billing-config.ts`):
+If you later want to bias toward the *middle* of the band (~42%) instead of "respect an
+in-band value, clamp an out-of-band one," that's a one-line change to target a fixed
+margin via `thresholdForMargin(charge, 0.42)`. Left as clamp-to-band so an operator's
+explicit in-band choice is honored.
 
-```
-USAGE_TOPUP_CHARGE_USD=9.99
-USAGE_TOPUP_THRESHOLD_USD=5.75   # scenario C
-USAGE_GRACE_BUFFER_USD=9.99
-```
-
-⚠ **Legal/disclosure check before flipping:** the top-up amount is a customer-facing price.
-Confirm `artifacts/instant-attorney/legal/05-billing-and-refund-disclosure.md` and any
-in-product copy that names the top-up figure are updated in the same change.
+_No customer-facing price value changed, so no billing-disclosure copy change is required
+by this PR. If you ever do move the price, update
+`artifacts/instant-attorney/legal/05-billing-and-refund-disclosure.md` and in-product copy
+in the same change._
 
 ---
 
@@ -194,13 +205,16 @@ copy/number-translation approach is chosen.
 ### P0 — do now (margin correctness)
 - [x] Meter `run_what_if` orchestrator tool (F1).
 - [x] Meter grounded gov-form lookup + tag server-tool usage (F2).
-- [ ] **Confirm the live `USAGE_TOPUP_CHARGE_USD` / `THRESHOLD_USD`** in the deployed env (F4).
-- [ ] **Decide + set the $9.99 top-up** (recommend scenario C: `$9.99 @ $5.75`, grace `$9.99`),
-      and update billing-disclosure copy in the same change (§4).
+- [x] **Self-maintaining threshold** — clamp into the 35–50% margin band; price unchanged (F4).
+- [x] **Attorney usage metered on the consumer ledger** — confirmed intended; no exemption (F8).
+- [x] **$25/mo auto-charge default** — confirmed unchanged.
+- [ ] _Informational:_ confirm the live `USAGE_TOPUP_CHARGE_USD` so you know which end of the
+      band you're operating at (no longer a margin risk).
 
 ### P1 — near term (close exposure + blind spots)
 - [ ] Extend `getBillingGate` to the ungated spend routes, especially Opus
-      `attorney/documents/[id]/second-draft`; decide the attorney billing model (F3, F8).
+      `attorney/documents/[id]/second-draft` (attorneys are billable, so they should be
+      gated like clients) (F3, F8).
 - [ ] Make unknown-model pricing loud and/or default to the **Opus** rate (F5).
 - [ ] Add a `server_tool_cost_usd` component to COGS (or a reconciliation job on the
       `web_search_requests` metadata this change records) (F6).
@@ -223,7 +237,11 @@ copy/number-translation approach is chosen.
   requests for later fee reconciliation. Recorder is lazily imported to keep pure helpers
   unit-testable.
 - `lib/usage-tracker.ts` — added `gov_form_lookup` to `UsageFeature`.
-- Typecheck clean; full test suite (616 tests) green.
+- `lib/billing-config.ts` — added `stripeFeeUsd`, `thresholdForMargin`, and
+  `clampThresholdToMarginBand`; `getBillingConfig` now clamps the trigger threshold into
+  the 35–50% margin band for the live charge (price untouched) and warns when it adjusts.
+- `lib/billing-config.test.ts` — new tests locking the margin-band invariant.
+- Typecheck clean; full test suite (623 tests) green.
 
-_No pricing values were changed in code — the $9.99 move is an env + copy decision for you
-to approve (§4)._
+_No customer-facing price value was changed. The threshold is now self-maintaining within
+35–50% margin; the $25/mo default and attorney-metering behavior are confirmed as-is._
