@@ -24,6 +24,7 @@ export type UsageFeature =
   | "attorney_brainstorm"
   | "roadmap_refresh"
   | "matter_synthesis"
+  | "gov_form_lookup"
   | "storage_upload";
 
 export type UsageCategory = "ai" | "storage" | "infra";

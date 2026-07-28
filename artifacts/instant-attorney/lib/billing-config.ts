@@ -13,6 +13,57 @@ function num(envName: string, fallback: number): number {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
+/** Stripe US card fee on a single charge (2.9% + $0.30). */
+export function stripeFeeUsd(chargeUsd: number): number {
+  return chargeUsd * 0.029 + 0.3;
+}
+
+/**
+ * Target gross-margin band the top-up meter must stay inside. The top-up amount
+ * (price) is held fixed by product decision; the *threshold* (COGS consumed per
+ * charge) is the lever that sets margin, so we keep it inside this band rather
+ * than trusting a hand-set env value that can drift out of range when the price
+ * changes. Steady-state margin on a cycle is
+ *   (charge − threshold − stripeFee) / charge
+ * because carry-forward makes one charge correspond to exactly `threshold` COGS.
+ */
+export const TARGET_MARGIN_FLOOR = 0.35;
+export const TARGET_MARGIN_CEIL = 0.5;
+
+/**
+ * The COGS threshold that yields a given gross margin for a fixed charge.
+ * A HIGHER threshold means more COGS per charge and therefore a LOWER margin,
+ * so `thresholdForMargin(c, FLOOR) >= thresholdForMargin(c, CEIL)`.
+ */
+export function thresholdForMargin(chargeUsd: number, marginPct: number): number {
+  return roundUsd(chargeUsd * (1 - marginPct) - stripeFeeUsd(chargeUsd));
+}
+
+function roundUsd(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+/**
+ * Clamp a configured threshold into the margin band for the given charge.
+ * Returns the effective threshold plus whether it had to be adjusted (so the
+ * caller can log the drift). An explicitly-set in-band threshold is respected
+ * exactly; an out-of-band one is pulled to the nearest boundary — never past it.
+ */
+export function clampThresholdToMarginBand(
+  chargeUsd: number,
+  thresholdUsd: number
+): { thresholdUsd: number; clamped: boolean; marginPct: number } {
+  // margin CEIL → smallest allowed threshold; margin FLOOR → largest allowed.
+  const lo = Math.max(0, thresholdForMargin(chargeUsd, TARGET_MARGIN_CEIL));
+  const hi = Math.max(lo, thresholdForMargin(chargeUsd, TARGET_MARGIN_FLOOR));
+  const effective = Math.min(hi, Math.max(lo, thresholdUsd));
+  return {
+    thresholdUsd: effective,
+    clamped: Math.abs(effective - thresholdUsd) > 1e-9,
+    marginPct: topUpMarginPct(chargeUsd, effective),
+  };
+}
+
 export interface BillingConfig {
   /** Master switch. When false, usage is still metered but never charged/blocked. */
   enabled: boolean;
@@ -47,9 +98,32 @@ export interface BillingConfig {
 
 export function getBillingConfig(): BillingConfig {
   const chargeUsd = num("USAGE_TOPUP_CHARGE_USD", 8.5);
+
+  // The price is fixed by product decision; keep the trigger threshold inside
+  // the target margin band (35–50%) so a price value that drifts (or a stale
+  // env threshold) can never quietly push realized margin out of range. At the
+  // committed $8.50 charge the default $4.75 threshold is already in band
+  // (≈37.7%) and is left untouched; if the live charge is lower (e.g. $7.50),
+  // $4.75 would yield ≈29.8% and is pulled up to the floor boundary instead.
+  const band = clampThresholdToMarginBand(
+    chargeUsd,
+    num("USAGE_TOPUP_THRESHOLD_USD", 4.75)
+  );
+  if (band.clamped) {
+    console.warn(
+      `[billing-config] top-up threshold adjusted into the ${Math.round(
+        TARGET_MARGIN_FLOOR * 100
+      )}–${Math.round(TARGET_MARGIN_CEIL * 100)}% margin band for a $${chargeUsd.toFixed(
+        2
+      )} charge → $${band.thresholdUsd.toFixed(2)} (≈${Math.round(
+        band.marginPct * 100
+      )}% margin).`
+    );
+  }
+
   return {
     enabled: process.env.USAGE_TOPUP_ENABLED !== "false",
-    thresholdUsd: num("USAGE_TOPUP_THRESHOLD_USD", 4.75),
+    thresholdUsd: band.thresholdUsd,
     chargeUsd,
     includedAllowanceUsd: num("USAGE_INCLUDED_ALLOWANCE_USD", 0),
     productId: process.env.STRIPE_TOPUP_PRODUCT_ID ?? "",
@@ -64,7 +138,6 @@ export function getBillingConfig(): BillingConfig {
  * Used for reporting / guard-rails. Stripe US card fee = 2.9% + $0.30.
  */
 export function topUpMarginPct(chargeUsd: number, cogsUsd: number): number {
-  const stripeFee = chargeUsd * 0.029 + 0.3;
-  const profit = chargeUsd - cogsUsd - stripeFee;
+  const profit = chargeUsd - cogsUsd - stripeFeeUsd(chargeUsd);
   return chargeUsd > 0 ? profit / chargeUsd : 0;
 }
