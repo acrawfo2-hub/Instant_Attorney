@@ -821,6 +821,53 @@ export interface DocumentComment {
   updated_at: string;
 }
 
+// ── Attorney review orchestrator (schema-stage44) ───────────────────────────
+export type ReviewRunStatus =
+  | "queued"
+  | "running"
+  | "awaiting_attorney"
+  | "complete"
+  | "failed";
+
+export interface DocumentReviewRun {
+  id: string;
+  document_id: string;
+  case_file_id: string;
+  status: ReviewRunStatus;
+  stage: string | null;
+  error: string | null;
+  input_tokens: number;
+  output_tokens: number;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+}
+
+export type ImprovementKind =
+  | "blocking"
+  | "goal_gap"
+  | "clarity"
+  | "risk"
+  | "compliance"
+  | "citation";
+export type ImprovementSeverity = "high" | "medium" | "low";
+export type ImprovementStatus = "proposed" | "accepted" | "rejected" | "superseded";
+
+export interface DocumentImprovement {
+  id: string;
+  run_id: string;
+  document_id: string;
+  seq: number;
+  section: string | null;
+  kind: ImprovementKind;
+  severity: ImprovementSeverity;
+  title: string;
+  rationale: string;
+  proposed_change: string;
+  status: ImprovementStatus;
+  created_at: string;
+}
+
 // The bypass user used in dev when BYPASS_AUTH=true
 export const BYPASS_USER_ID = "00000000-0000-0000-0000-000000000001";
 export const BYPASS_EMAIL = "test@instant-attorney.dev";

@@ -3,7 +3,7 @@
 import { use, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import type { Attachment, Document, DocumentComment } from "@/lib/types";
+import type { Attachment, Document, DocumentComment, DocumentReviewRun, DocumentImprovement } from "@/lib/types";
 import { docTypeLabel, personDisplayName } from "@/lib/types";
 import AccountMenu from "@/components/AccountMenu";
 import { parseDrafterResponse } from "@/lib/wizard-parsing";
@@ -147,13 +147,78 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
   const [chatSending, setChatSending] = useState(false);
   const [chatError, setChatError] = useState("");
 
+  // Orchestrator review run (schema-stage44): auto-kicks off on submission and
+  // drives issue-spotting -> revised draft. This page reads its live state and
+  // renders the structured improvements list.
+  const [reviewRun, setReviewRun] = useState<DocumentReviewRun | null>(null);
+  const [improvements, setImprovements] = useState<DocumentImprovement[]>([]);
+  const runStartedRef = useRef(false);
+
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const runPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     load();
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+    loadReviewRun({ allowAutoStart: true });
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+      if (runPollRef.current) clearInterval(runPollRef.current);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // Read the orchestrator run + structured improvements. On first load, if the
+  // document is awaiting review and no run has ever started (e.g. the submit-time
+  // fire-and-forget was cut off), kick one off — the self-heal path.
+  async function loadReviewRun(opts: { allowAutoStart?: boolean } = {}) {
+    const res = await fetch(`/api/attorney/documents/${id}/review-run`);
+    if (!res.ok) return;
+    const data = (await res.json()) as {
+      run: DocumentReviewRun | null;
+      improvements: DocumentImprovement[];
+    };
+    setReviewRun(data.run);
+    setImprovements(data.improvements ?? []);
+
+    if (!data.run && opts.allowAutoStart && !runStartedRef.current) {
+      runStartedRef.current = true;
+      await startReviewRun();
+      return;
+    }
+    if (data.run && (data.run.status === "queued" || data.run.status === "running")) {
+      startRunPolling();
+    }
+  }
+
+  async function startReviewRun() {
+    runStartedRef.current = true;
+    const res = await fetch(`/api/attorney/documents/${id}/review-run`, { method: "POST" });
+    if (res.ok) {
+      const data = (await res.json()) as { run: DocumentReviewRun };
+      setReviewRun(data.run);
+      startRunPolling();
+    }
+  }
+
+  function startRunPolling() {
+    if (runPollRef.current) return;
+    runPollRef.current = setInterval(async () => {
+      const res = await fetch(`/api/attorney/documents/${id}/review-run`);
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        run: DocumentReviewRun | null;
+        improvements: DocumentImprovement[];
+      };
+      setReviewRun(data.run);
+      setImprovements(data.improvements ?? []);
+      if (!data.run || (data.run.status !== "queued" && data.run.status !== "running")) {
+        if (runPollRef.current) clearInterval(runPollRef.current);
+        runPollRef.current = null;
+        // Pull in the freshly-generated revised draft + critical review children.
+        load();
+      }
+    }, 4000);
+  }
 
   async function load() {
     const res = await fetch(`/api/documents/${id}`);
@@ -502,6 +567,53 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
         </div>
 
         <div className="atty-review-content">
+          {/* Orchestrator auto-review (schema-stage44): live run status + the
+              structured improvements it produced. */}
+          {reviewRun && (
+            <section className="arr-panel">
+              <div className="arr-head">
+                <div className="arr-title">
+                  <span className={`arr-status arr-status-${reviewRun.status}`}>
+                    {reviewRun.status === "queued" && "Auto-review queued…"}
+                    {reviewRun.status === "running" &&
+                      `Auto-review running${reviewRun.stage ? ` · ${reviewRun.stage.replace(/_/g, " ")}` : ""}…`}
+                    {reviewRun.status === "awaiting_attorney" && "Auto-review · needs your input"}
+                    {reviewRun.status === "complete" &&
+                      `Auto-review complete · ${improvements.length} improvement${improvements.length === 1 ? "" : "s"}`}
+                    {reviewRun.status === "failed" && "Auto-review failed"}
+                  </span>
+                  {(reviewRun.status === "queued" || reviewRun.status === "running") && (
+                    <span className="arr-spinner" aria-hidden />
+                  )}
+                </div>
+                {(reviewRun.status === "complete" || reviewRun.status === "failed") && (
+                  <button type="button" className="atty-btn" onClick={startReviewRun}>
+                    Re-run review
+                  </button>
+                )}
+              </div>
+              {reviewRun.status === "failed" && reviewRun.error && (
+                <p className="arr-error">{reviewRun.error}</p>
+              )}
+              {improvements.length > 0 && (
+                <ol className="arr-list">
+                  {improvements.map((imp) => (
+                    <li key={imp.id} className="arr-item">
+                      <div className="arr-item-head">
+                        <span className={`arr-sev arr-sev-${imp.severity}`}>{imp.severity}</span>
+                        <span className="arr-kind">{imp.kind.replace(/_/g, " ")}</span>
+                        <span className="arr-section">{imp.section}</span>
+                      </div>
+                      <p className="arr-item-title">{imp.title}</p>
+                      {imp.proposed_change && <p className="arr-item-change">{imp.proposed_change}</p>}
+                      {imp.rationale && <p className="arr-item-rationale">{imp.rationale}</p>}
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </section>
+          )}
+
           <div className="atty-two-doc-grid">
             <section className="atty-standalone-doc">
               <div className="atty-standalone-doc-header">
