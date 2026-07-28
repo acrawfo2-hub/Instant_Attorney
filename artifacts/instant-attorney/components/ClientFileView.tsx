@@ -206,74 +206,52 @@ export default function ClientFileView({
         );
       })()}
 
-      {/* Consult status — client Crawford Law subscribers only */}
+      {/* Consult status — client Crawford Law subscribers only. One compact,
+          data-driven strip instead of four near-identical full-width banners. */}
       {!isAttorney && !isAttorneyUser && (() => {
         const cr = consultRequest;
+        const fmt = (iso: string, weekday: "long" | "short", month: "long" | "short") =>
+          new Date(iso).toLocaleString("en-US", {
+            timeZone: "America/Chicago", weekday, month, day: "numeric",
+            hour: "numeric", minute: "2-digit", timeZoneName: "short",
+          });
+
+        let tone = "", label = "";
+        let message: React.ReactNode = null;
+        let action: { label: string; href: string } | null = null;
+
         if (cr?.status === "confirmed" && cr.confirmed_time) {
-          const timeStr = new Date(cr.confirmed_time).toLocaleString("en-US", {
-            timeZone: "America/Chicago", weekday: "long", month: "long", day: "numeric",
-            hour: "numeric", minute: "2-digit", timeZoneName: "short",
-          });
-          return (
-            <div className="lf-card lf-card-full lf-consult-banner lf-consult-banner-confirmed">
-              <div className="lf-consult-banner-inner">
-                <div className="lf-consult-banner-text">
-                  <span className="lf-consult-rec-badge lf-consult-rec-badge-confirmed">Consult confirmed</span>
-                  <span className="lf-consult-desc"><strong>{timeStr}</strong> · Andrew will call {cr.client_phone ?? "you"}</span>
-                </div>
-                <Link href={`/consult/${cr.id}/session`} className="lf-consult-btn">Open consult page →</Link>
-              </div>
-            </div>
-          );
+          tone = "green"; label = "Consult confirmed";
+          message = <><strong>{fmt(cr.confirmed_time, "long", "long")}</strong> · Andrew will call {cr.client_phone ?? "you"}</>;
+          action = { label: "Open consult page", href: `/consult/${cr.id}/session` };
+        } else if (cr?.status === "attorney_proposed" && cr.attorney_proposed_time) {
+          tone = "amber"; label = "New time proposed";
+          message = <>Andrew suggested <strong>{fmt(cr.attorney_proposed_time, "short", "short")}</strong></>;
+          action = { label: "Respond", href: "/dashboard#consult-status" };
+        } else if (cr?.status === "pending") {
+          tone = "blue"; label = "Awaiting confirmation";
+          message = "Your 3 preferred times are in — Andrew will confirm one shortly.";
+        } else if (strategy?.recommend_consult) {
+          tone = "gold"; label = "Consult recommended";
+          message = "Your attorney flagged this matter for a live strategy session.";
+          action = {
+            label: hasConsultSub ? "Schedule consult" : "Schedule consult · $49.99",
+            href: hasConsultSub ? "/consult/schedule" : "/register?upgrade=consult",
+          };
+        } else {
+          return null;
         }
-        if (cr?.status === "attorney_proposed" && cr.attorney_proposed_time) {
-          const timeStr = new Date(cr.attorney_proposed_time).toLocaleString("en-US", {
-            timeZone: "America/Chicago", weekday: "short", month: "short", day: "numeric",
-            hour: "numeric", minute: "2-digit", timeZoneName: "short",
-          });
-          return (
-            <div className="lf-card lf-card-full lf-consult-banner lf-consult-banner-proposed">
-              <div className="lf-consult-banner-inner">
-                <div className="lf-consult-banner-text">
-                  <span className="lf-consult-rec-badge lf-consult-rec-badge-proposed">New Time Proposed</span>
-                  <span className="lf-consult-desc">Andrew suggested: <strong>{timeStr}</strong></span>
-                </div>
-                <Link href="/dashboard#consult-status" className="lf-consult-btn">Respond →</Link>
-              </div>
+
+        return (
+          <div className={`lf-consult-strip lf-consult-${tone}`} role="status">
+            <span className="lf-consult-dot" aria-hidden />
+            <div className="lf-consult-strip-body">
+              <span className="lf-consult-strip-label">{label}</span>
+              <span className="lf-consult-strip-msg">{message}</span>
             </div>
-          );
-        }
-        if (cr?.status === "pending") {
-          return (
-            <div className="lf-card lf-card-full lf-consult-banner lf-consult-banner-pending">
-              <div className="lf-consult-banner-inner">
-                <div className="lf-consult-banner-text">
-                  <span className="lf-consult-rec-badge lf-consult-rec-badge-pending">Awaiting Confirmation</span>
-                  <span className="lf-consult-desc">Your 3 preferred times have been submitted. Andrew will confirm one shortly.</span>
-                </div>
-              </div>
-            </div>
-          );
-        }
-        if (strategy?.recommend_consult) {
-          return (
-            <div className="lf-card lf-card-full lf-consult-banner lf-consult-banner-recommended">
-              <div className="lf-consult-banner-inner">
-                <div className="lf-consult-banner-text">
-                  <span className="lf-consult-rec-badge">Consult Recommended</span>
-                  <span className="lf-consult-desc">Your attorney has flagged this matter for a live strategy session.</span>
-                </div>
-                <Link
-                  href={hasConsultSub ? "/consult/schedule" : "/register?upgrade=consult"}
-                  className="lf-consult-btn"
-                >
-                  {hasConsultSub ? "Schedule Consult →" : "Schedule Consult · $49.99 →"}
-                </Link>
-              </div>
-            </div>
-          );
-        }
-        return null;
+            {action && <Link href={action.href} className="lf-consult-strip-cta">{action.label} →</Link>}
+          </div>
+        );
       })()}
 
       {/* Post-consult action plan — client mode */}
@@ -440,7 +418,7 @@ export default function ClientFileView({
       <details className="lf-details-section">
         <summary className="lf-details-summary">
           <span className="lf-details-summary-main">Facts &amp; gaps</span>
-          <span className="lf-details-summary-hint">Reference list — answer open items from Mission Control</span>
+          <span className="lf-details-summary-hint">Reference list — what&apos;s known, what&apos;s still open, and your what-if preferences</span>
         </summary>
         <div className="lf-details-body">
       <FactsPanel
@@ -449,18 +427,21 @@ export default function ClientFileView({
         placeholderGroups={placeholderGroups}
         isAttorney={isAttorney}
       />
-        </div>
-      </details>
 
-      {/* Contingency preferences captured by the What-If Game (hypothetical, not facts) */}
+      {/* Contingency preferences from the What-If Game — hypothetical, not facts.
+          Folded in here as a subsection of the reference list rather than a
+          separate card. */}
       {hypotheticals.length > 0 && (
-        <div className="lf-card lf-card-full" id="contingency-preferences" style={{ borderLeft: "3px solid var(--brand-gold)" }}>
-          <div className="lf-card-label">
-            Contingency Preferences
+        <div className="lf-facts-contingency" id="contingency-preferences">
+          <div className="lf-facts-contingency-head">
+            Contingency preferences
             <span className="lf-count">{hypotheticals.length}</span>
-            {!isAttorney && <span className="lf-plain-caption">Your wishes for &ldquo;what if…&rdquo; situations — used to add backup plans to your documents, not treated as facts</span>}
-            {isAttorney && <span className="lf-plain-caption">Hypothetical intentions from the What-If Game — not asserted facts</span>}
           </div>
+          <p className="lf-plain-caption">
+            {isAttorney
+              ? "Hypothetical intentions from the What-If Game — not asserted facts."
+              : "Your wishes for “what if…” situations — used to add backup plans to your documents, not treated as facts."}
+          </p>
           <ul className="lf-list">
             {hypotheticals.map((f) => (
               <li key={f.id}>{f.description.replace(/^What-if · /i, "")}</li>
@@ -468,6 +449,8 @@ export default function ClientFileView({
           </ul>
         </div>
       )}
+        </div>
+      </details>
 
 
       {/* One concise table — suggested uploads, attachments on file, and drafted
