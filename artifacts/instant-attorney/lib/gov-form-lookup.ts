@@ -172,6 +172,10 @@ interface LookupDeps {
   instrumentId: string;
   candidate: DynamicCandidate;
   model?: string;
+  // Attribution for usage metering. Optional so ad-hoc callers still work, but
+  // the chat path always supplies them so grounded lookups land on the ledger.
+  userId?: string;
+  caseFileId?: string;
 }
 
 /** Grounded lookup for one dynamic form, run fire-and-forget after detection.
@@ -200,6 +204,32 @@ export async function lookupGovernmentForm(deps: LookupDeps): Promise<void> {
     });
 
     const finalMsg = await stream.finalMessage();
+
+    // Meter the grounded lookup's token spend. NOTE: this call also invokes the
+    // Anthropic web_search / web_fetch server tools, which carry a per-use fee
+    // (billed separately from tokens) that this token-only cost does NOT capture.
+    // The server_tools flag on the event marks it for the server-tool reconciliation
+    // pass on the /admin dashboard so that fee tail stays visible.
+    if (deps.userId) {
+      const searchRequests =
+        (finalMsg.usage as { server_tool_use?: { web_search_requests?: number } })
+          .server_tool_use?.web_search_requests ?? 0;
+      // Lazy import so the pure helpers in this module stay loadable in the node
+      // test runner (usage-tracker → supabase/server pulls in next/headers).
+      const { recordAiFromMessage } = await import("./usage-tracker.ts");
+      await recordAiFromMessage(db, finalMsg, {
+        userId: deps.userId,
+        actorId: deps.userId,
+        caseFileId: deps.caseFileId ?? null,
+        feature: "gov_form_lookup",
+        metadata: {
+          source: "gov_form_lookup",
+          server_tools: true,
+          web_search_requests: searchRequests,
+        },
+      });
+    }
+
     const text: string = (finalMsg.content ?? [])
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .filter((b: any) => b.type === "text")
@@ -259,6 +289,6 @@ export async function triggerPendingLookups(
       official_url: def?.official_url || undefined,
       reason: row.reason ?? undefined,
     };
-    void lookupGovernmentForm({ anthropic, db, instrumentId: row.id, candidate }).catch(() => {});
+    void lookupGovernmentForm({ anthropic, db, instrumentId: row.id, candidate, userId, caseFileId }).catch(() => {});
   }
 }

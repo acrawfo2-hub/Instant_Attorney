@@ -15,6 +15,7 @@ import { loadMatterTasks, formatMatterTasks } from "./matter-assessment.ts";
 import { buildFileContext, WHAT_IF_SYSTEM_PROMPT } from "./prompts.ts";
 import { parseWhatIfResponse } from "./what-if.ts";
 import { maxOutputTokensFor } from "./token-limits.ts";
+import { recordAiFromMessage } from "./usage-tracker.ts";
 import type { CaseFile, FactItem } from "./types.ts";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -742,6 +743,16 @@ const TOOLS: Record<string, ToolDef> = {
         });
         const finalMsg = await stream.finalMessage();
         text = finalMsg.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
+        // Meter this tool's own model call: run_what_if runs a full Sonnet
+        // generation inside the orchestrator loop, so its tokens must land on
+        // the ledger like any other AI spend or the margin silently leaks.
+        await recordAiFromMessage(ctx.db, finalMsg, {
+          userId: ctx.userId,
+          actorId: ctx.userId,
+          caseFileId: ctx.caseFileId,
+          feature: "what_if",
+          metadata: { source: "orchestrator_tool", tool: "run_what_if" },
+        });
       } catch (err) {
         console.error("[orchestrator-tools] run_what_if generation error:", err);
         return { forModel: JSON.stringify({ error: "failed", message: "Could not generate scenarios right now." }), raw: null };
