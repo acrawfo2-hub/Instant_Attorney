@@ -21,6 +21,19 @@ import ScanToPdfModal from "@/components/ScanToPdfModal";
 const LARGE_FILE_BYTES = 5 * 1024 * 1024;
 const FINALIZED = new Set(["approved", "delivered"]);
 
+// Government form detected in chat, enriched by /api/gov-forms with registry
+// detail + completion progress (same shape GovFormInstruments consumed).
+interface GovForm {
+  id: string;
+  status: string;
+  source: string;
+  lookup_status?: string | null;
+  reason: string | null;
+  verified: boolean;
+  form: { form_number: string; title: string; agency: string; jurisdiction: string; official_url: string; deadline: string; field_count: number };
+  progress: { percent: number };
+}
+
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
@@ -42,6 +55,11 @@ const DraftIcon = () => (
 const ImgIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" />
+  </svg>
+);
+const FormIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 2h6a1 1 0 0 1 1 1v1h1a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h1V3a1 1 0 0 1 1-1z" /><line x1="9" y1="11" x2="15" y2="11" /><line x1="9" y1="15" x2="13" y2="15" />
   </svg>
 );
 const Chevron = () => (
@@ -114,6 +132,7 @@ export default function CaseDocumentsTable({
 }) {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [requested, setRequested] = useState<RequestedAttachment[]>([]);
+  const [forms, setForms] = useState<GovForm[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -126,11 +145,19 @@ export default function CaseDocumentsTable({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
-    const res = await fetch(`/api/attachments?caseFileId=${caseFileId}`);
-    if (!res.ok) return;
-    const data = await res.json();
-    setAttachments((data.attachments ?? []).filter((a: Attachment) => a.status !== "failed"));
-    setRequested(data.requestedAttachments ?? []);
+    const [attRes, formRes] = await Promise.all([
+      fetch(`/api/attachments?caseFileId=${caseFileId}`),
+      fetch(`/api/gov-forms?caseFileId=${caseFileId}`),
+    ]);
+    if (attRes.ok) {
+      const data = await attRes.json();
+      setAttachments((data.attachments ?? []).filter((a: Attachment) => a.status !== "failed"));
+      setRequested(data.requestedAttachments ?? []);
+    }
+    if (formRes.ok) {
+      const data = await formRes.json();
+      setForms(data.instruments ?? []);
+    }
   }, [caseFileId]);
 
   useEffect(() => { load(); }, [load]);
@@ -198,7 +225,7 @@ export default function CaseDocumentsTable({
   }
 
   const pendingRequested = requested.filter((r) => r.status === "requested");
-  const total = pendingRequested.length + attachments.length + documents.length;
+  const total = pendingRequested.length + forms.length + attachments.length + documents.length;
 
   return (
     <section className="cdt">
@@ -294,6 +321,59 @@ export default function CaseDocumentsTable({
                   >
                     <div className="cdt-detail-k">Why it&apos;s needed</div>
                     <div className="cdt-detail-v">{r.reason}</div>
+                  </Row>
+                );
+              })}
+            </>
+          )}
+
+          {/* ── FORMS TO COMPLETE ── */}
+          {forms.length > 0 && (
+            <>
+              <div className="cdt-band">
+                <span className="cdt-band-label">Forms to complete</span>
+                <span className="cdt-band-count cdt-count-needed">{forms.length}</span>
+                <span className="cdt-band-hint">official forms detected for this matter</span>
+              </div>
+              {forms.map((inst) => {
+                const key = `form:${inst.id}`;
+                const completed = inst.status === "completed";
+                const looking = inst.source === "dynamic" && inst.lookup_status === "pending";
+                const lookupFailed = inst.source === "dynamic" && inst.lookup_status === "failed";
+                const guidable = inst.form.field_count > 0;
+
+                const pill = completed ? <Pill kind="approved" label="Completed" />
+                  : looking ? <Pill kind="processing" label="Looking up…" />
+                  : inst.status === "in_progress" ? <Pill kind="review" label={`In progress · ${inst.progress.percent}%`} />
+                  : <Pill kind="needed" label="To complete" />;
+
+                const action = completed ? <span className="cdt-muted">✓ Done</span>
+                  : looking ? <span className="cdt-muted">…</span>
+                  : guidable ? <Link className="cdt-ghost" href={`/forms/${inst.id}`}>{inst.status === "in_progress" ? "Continue →" : "Start →"}</Link>
+                  : inst.form.official_url ? <a className="cdt-ghost" href={inst.form.official_url} target="_blank" rel="noopener noreferrer">Official ↗</a>
+                  : <span className="cdt-muted">—</span>;
+
+                return (
+                  <Row
+                    key={key}
+                    expandable
+                    expanded={expanded.has(key)}
+                    onToggle={() => toggle(key)}
+                    icon={<FormIcon />}
+                    name={`${inst.form.form_number} — ${inst.form.title}`}
+                    meta={inst.form.agency}
+                    flag={!inst.verified ? "Confirm at source" : undefined}
+                    pill={pill}
+                    date="—"
+                    action={action}
+                  >
+                    <div className="cdt-detail-v">{inst.form.agency} · {inst.form.jurisdiction} · deadline {inst.form.deadline}</div>
+                    {inst.reason && <><div className="cdt-detail-k">Why it&apos;s needed</div><div className="cdt-detail-v">{inst.reason}</div></>}
+                    {!inst.verified && <div className="cdt-detail-v">Auto-detected and not source-verified — confirm the form number and version at the official site.</div>}
+                    {lookupFailed && !guidable && <div className="cdt-detail-v">We couldn&apos;t auto-build a guide for this one — use the official link.</div>}
+                    {inst.form.official_url && (
+                      <div className="cdt-detail-links"><a href={inst.form.official_url} target="_blank" rel="noopener noreferrer">Open official form ↗</a></div>
+                    )}
                   </Row>
                 );
               })}
