@@ -42,6 +42,27 @@ export async function POST(
     );
   }
 
+  // Authorities gate (schema-stage45): a mis-identified case must never reach the
+  // client. Block approval while any citation on this document is unverified,
+  // unsupported, or errored and has not been explicitly waived by the attorney.
+  if (action === "approve") {
+    const { data: unresolved } = await db
+      .from("document_qa_citations")
+      .select("id, raw, verdict")
+      .eq("document_id", id)
+      .eq("waived", false)
+      .neq("verdict", "verified");
+    if (unresolved && unresolved.length > 0) {
+      return NextResponse.json(
+        {
+          error: `${unresolved.length} citation${unresolved.length === 1 ? "" : "s"} could not be verified. Verify, remove, or waive each one before approving.`,
+          unresolvedCitations: unresolved,
+        },
+        { status: 409 }
+      );
+    }
+  }
+
   const newStatus = action === "approve" ? "approved" : "changes_requested";
   const now = new Date().toISOString();
 

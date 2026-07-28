@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { startDocumentReview } from "@/lib/attorney-review";
 import { BYPASS_USER_ID } from "@/lib/types";
-import type { DocumentImprovement, DocumentReviewRun } from "@/lib/types";
+import type { DocumentImprovement, DocumentReviewRun, DocumentQaCitation } from "@/lib/types";
 
 // Attorney review orchestrator run (schema-stage44). GET returns the latest run
 // plus its structured improvements and the revised-draft child so the review page
@@ -56,7 +56,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     .eq("doc_type", "second_draft")
     .maybeSingle();
 
-  return NextResponse.json({ run, improvements, revisedDraft: revised ?? null });
+  const { data: citRows } = await ctx.db
+    .from("document_qa_citations")
+    .select("*")
+    .eq("document_id", id)
+    .order("created_at", { ascending: true });
+  const citations = (citRows ?? []) as DocumentQaCitation[];
+
+  return NextResponse.json({ run, improvements, revisedDraft: revised ?? null, citations });
 }
 
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

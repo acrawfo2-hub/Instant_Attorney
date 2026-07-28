@@ -3,8 +3,8 @@
 import { use, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import type { Attachment, Document, DocumentComment, DocumentReviewRun, DocumentImprovement } from "@/lib/types";
-import { docTypeLabel, personDisplayName } from "@/lib/types";
+import type { Attachment, Document, DocumentComment, DocumentReviewRun, DocumentImprovement, DocumentQaCitation } from "@/lib/types";
+import { docTypeLabel, personDisplayName, citationBlocksApproval } from "@/lib/types";
 import AccountMenu from "@/components/AccountMenu";
 import { parseDrafterResponse } from "@/lib/wizard-parsing";
 
@@ -152,6 +152,8 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
   // renders the structured improvements list.
   const [reviewRun, setReviewRun] = useState<DocumentReviewRun | null>(null);
   const [improvements, setImprovements] = useState<DocumentImprovement[]>([]);
+  const [citations, setCitations] = useState<DocumentQaCitation[]>([]);
+  const [waivingId, setWaivingId] = useState<string | null>(null);
   const runStartedRef = useRef(false);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -176,9 +178,11 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
     const data = (await res.json()) as {
       run: DocumentReviewRun | null;
       improvements: DocumentImprovement[];
+      citations?: DocumentQaCitation[];
     };
     setReviewRun(data.run);
     setImprovements(data.improvements ?? []);
+    setCitations(data.citations ?? []);
 
     if (!data.run && opts.allowAutoStart && !runStartedRef.current) {
       runStartedRef.current = true;
@@ -200,6 +204,23 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
     }
   }
 
+  async function waiveCitation(citationId: string, waived: boolean) {
+    setWaivingId(citationId);
+    try {
+      const res = await fetch(`/api/attorney/documents/${id}/citations/${citationId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ waived }),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { citation: DocumentQaCitation };
+        setCitations((prev) => prev.map((c) => (c.id === data.citation.id ? data.citation : c)));
+      }
+    } finally {
+      setWaivingId(null);
+    }
+  }
+
   function startRunPolling() {
     if (runPollRef.current) return;
     runPollRef.current = setInterval(async () => {
@@ -208,9 +229,11 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
       const data = (await res.json()) as {
         run: DocumentReviewRun | null;
         improvements: DocumentImprovement[];
+        citations?: DocumentQaCitation[];
       };
       setReviewRun(data.run);
       setImprovements(data.improvements ?? []);
+      setCitations(data.citations ?? []);
       if (!data.run || (data.run.status !== "queued" && data.run.status !== "running")) {
         if (runPollRef.current) clearInterval(runPollRef.current);
         runPollRef.current = null;
@@ -614,6 +637,58 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
             </section>
           )}
 
+          {/* Authorities QA gate (schema-stage45): every citation verified, or
+              approval is blocked until it's verified/removed/waived. */}
+          {citations.length > 0 && (() => {
+            const blocking = citations.filter(citationBlocksApproval);
+            return (
+              <section className="arr-panel arr-authorities">
+                <div className="arr-head">
+                  <span className={`arr-status ${blocking.length ? "arr-status-failed" : "arr-status-complete"}`}>
+                    {blocking.length
+                      ? `Authorities check · ${blocking.length} unverified — approval blocked`
+                      : `Authorities check · all ${citations.length} citation${citations.length === 1 ? "" : "s"} verified`}
+                  </span>
+                </div>
+                <ul className="arr-cite-list">
+                  {citations.map((c) => {
+                    const blocks = citationBlocksApproval(c);
+                    return (
+                      <li key={c.id} className={`arr-cite${blocks ? " arr-cite-block" : ""}`}>
+                        <div className="arr-cite-head">
+                          <span className={`arr-verdict arr-verdict-${c.waived ? "waived" : c.verdict}`}>
+                            {c.waived ? "waived" : c.verdict}
+                          </span>
+                          <span className="arr-cite-type">{c.citation_type}</span>
+                          <span className="arr-cite-raw">{c.raw}</span>
+                        </div>
+                        {c.claim && <p className="arr-cite-claim">Claimed to support: {c.claim}</p>}
+                        {c.evidence && <p className="arr-cite-evidence">{c.evidence}</p>}
+                        <div className="arr-cite-actions">
+                          {c.source_url && (
+                            <a href={c.source_url} target="_blank" rel="noopener noreferrer" className="arr-cite-src">
+                              Source ↗
+                            </a>
+                          )}
+                          {c.verdict !== "verified" && (
+                            <button
+                              type="button"
+                              className="atty-comment-link"
+                              onClick={() => waiveCitation(c.id, !c.waived)}
+                              disabled={waivingId === c.id}
+                            >
+                              {waivingId === c.id ? "…" : c.waived ? "Un-waive" : "Waive (I verified this)"}
+                            </button>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            );
+          })()}
+
           <div className="atty-two-doc-grid">
             <section className="atty-standalone-doc">
               <div className="atty-standalone-doc-header">
@@ -865,11 +940,21 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
 
           {error && <div className="atty-review-error-inline">{error}</div>}
 
+          {(() => {
+            const blocking = citations.filter(citationBlocksApproval).length;
+            if (!blocking) return null;
+            return (
+              <div className="arr-approve-block" role="status">
+                ⚠ Approval is blocked — {blocking} citation{blocking === 1 ? "" : "s"} still need to be verified, removed, or waived in the Authorities check above.
+              </div>
+            );
+          })()}
+
           <div className="atty-review-actions">
             <button
               className="atty-btn atty-btn-approve"
               onClick={() => handleAction("approve")}
-              disabled={submitting}
+              disabled={submitting || citations.some(citationBlocksApproval)}
             >
               {submitting
                 ? "Submitting…"

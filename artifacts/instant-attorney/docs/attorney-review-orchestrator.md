@@ -4,7 +4,7 @@ Living spec for moving the attorney document-review flow from a fixed button
 "rail" to an orchestrator-driven, auto-running pipeline that produces structured,
 individually-actionable artifacts and hard QA guarantees.
 
-Status: **Phase 1 in progress.** This document is the reference for the whole
+Status: **Phases 1–2 landed.** This document is the reference for the whole
 multi-phase build; each phase ships independently.
 
 ---
@@ -103,11 +103,29 @@ idempotent (replace children + improvements for the run).
 
 ## Phased rollout
 
-1. **Auto-kickoff + structured improvements + revised draft.** ← current
-2. **Authorities QA gate + Approve gating.** (the "no bad cases" guarantee)
-3. **Structured memo + client email (send in-app).**
+1. **Auto-kickoff + structured improvements + revised draft.** ✅ done (stage44)
+2. **Authorities QA gate + Approve gating.** ✅ done (stage45) — the "no bad cases" guarantee
+3. **Structured memo + client email (send in-app).** ← next
 4. **One-click questions loop.**
 5. **Formatting/court-requirements gate + side-by-side diff workspace.**
+
+### Phase 2 as built (Authorities gate, schema-stage45)
+
+- Runs as **stage 3** of the auto-run (`runAuthoritiesGate`), on a **low-cost model
+  (Haiku)** to minimize spend: one extraction call (formal citations only — plain-
+  meaning references are ignored) + one **batched** web-search verification call
+  (skipped entirely when the draft cites nothing, which is the common case).
+- Each citation → a `document_qa_citations` row with a verdict (`verified` /
+  `unverified` / `unsupported` / `error`). Verification failure marks `error`,
+  which blocks — failing safe.
+- **Approve is gated**: `/api/documents/[id]/approve` refuses while any citation is
+  not `verified` and not waived. The attorney can **waive** a citation one-click
+  (`PATCH …/citations/[citationId]`) as a deliberate "I checked this myself"
+  override. UI: an Authorities panel on the review page + a block banner on Approve.
+- Server-tool (web_search) fees are metered via `usage-tracker` with
+  `server_tools: true` so the spend stays visible on the admin dashboard.
+- Not yet: auto-*stripping* an unverified cite from the draft (currently flag +
+  block + waive); that re-draft pass is a follow-up.
 
 ## Phase 1 scope (this change)
 

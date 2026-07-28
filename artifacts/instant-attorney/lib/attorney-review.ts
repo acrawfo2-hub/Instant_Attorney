@@ -11,6 +11,7 @@ import {
   type ParsedImprovement,
 } from "@/lib/prompts";
 import { upsertCriticalReviewChild, upsertSecondDraftChild } from "@/lib/document-utils";
+import { runAuthoritiesGate } from "@/lib/attorney-review-authorities";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
 import { maxOutputTokensFor, maxOutputTokensForDoc } from "@/lib/token-limits";
 import { logTruncation } from "@/lib/truncation-logger";
@@ -249,6 +250,18 @@ export async function runDocumentReview(runId: string): Promise<void> {
     const { draftText, changes } = parseSecondDraft(rawDraft);
     if (draftText.trim()) {
       await upsertSecondDraftChild(db, parentDoc, draftText, changes);
+    }
+
+    // ── Stage 3: Authorities QA gate (verify every citation) ─────────────────
+    // Runs on the revised draft (the version that would reach the client). A
+    // gate failure is contained inside runAuthoritiesGate (marks citations as
+    // "error", which blocks approval) so it never fails the whole run.
+    if (draftText.trim()) {
+      await db
+        .from("document_review_runs")
+        .update({ stage: "authorities", updated_at: new Date().toISOString() })
+        .eq("id", runId);
+      await runAuthoritiesGate(db, runId, parentDoc, draftText);
     }
 
     // ── Done ────────────────────────────────────────────────────────────────
