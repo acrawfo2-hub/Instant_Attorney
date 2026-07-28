@@ -21,6 +21,7 @@ import AttorneyFreestyleChat from "@/components/AttorneyFreestyleChat";
 import { buildMatterTasks } from "@/lib/matter-tasks";
 import type { CaseFile, FactItem, Document, Profile, ConsultRequest, ConsultWrapUp, RequestedAttachment, GovFormInstrument, Attachment } from "@/lib/types";
 import { docTypeLabel, personDisplayName, coerceWizardType } from "@/lib/types";
+import { FIRM_CONTACT_EMAIL } from "@/lib/firm";
 
 // The consumer Living File no longer PRESCRIBES the next step with a computed
 // roadmap, Mission Control action board, or per-matter tool cards. "What do I do
@@ -461,6 +462,19 @@ export default function ClientFileView({
         facts={facts}
         isAttorney={isAttorney}
       />
+
+      {/* Questions? — clients reach the firm by email (replaces the in-file
+          messaging channel). */}
+      {!isAttorney && (
+        <div className="lf-card lf-card-full lf-contact-card">
+          <div className="lf-card-label">Questions?</div>
+          <p className="lf-contact-text">
+            Email us at{" "}
+            <a className="lf-contact-email" href={`mailto:${FIRM_CONTACT_EMAIL}`}>{FIRM_CONTACT_EMAIL}</a>{" "}
+            and we&apos;ll get back to you.
+          </p>
+        </div>
+      )}
 
       {/* Attorney Assessment */}
       <div className="lf-card lf-card-full">

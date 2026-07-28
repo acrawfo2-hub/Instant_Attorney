@@ -151,7 +151,6 @@ export default function ChatDraftsPanel({
 
   async function promote(id: string) {
     if (dirty) await save(id, { silent: true });
-    if (!confirm("Send this draft to your attorney for review? You'll get it back within 48 hours.")) return;
     setPromoting(true);
     setNotice("");
     try {
@@ -236,16 +235,19 @@ export default function ChatDraftsPanel({
           )}
           <div className="fc-draft-promote-row">
             {active.promoted_document_id ? (
-              <span className="fc-draft-promoted">✓ Sent for attorney review</span>
+              <span className="fc-draft-promoted">✓ Sent to your attorney for review — you&apos;ll find it under your documents.</span>
             ) : (
-              <button
-                type="button"
-                className="fc-draft-promote-btn"
-                onClick={() => promote(active.id)}
-                disabled={promoting || !active.content.trim()}
-              >
-                {promoting ? "Sending…" : "Send to my attorney for review"}
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="fc-draft-promote-btn fc-draft-promote-btn-block"
+                  onClick={() => promote(active.id)}
+                  disabled={promoting || !active.content.trim()}
+                >
+                  {promoting ? "Sending…" : "Send to my attorney for review →"}
+                </button>
+                <span className="fc-draft-promote-hint">Andrew Crawford, Esq. reviews it and returns it within 48 hours.</span>
+              </>
             )}
             {notice && <span className="fc-draft-notice">{notice}</span>}
           </div>

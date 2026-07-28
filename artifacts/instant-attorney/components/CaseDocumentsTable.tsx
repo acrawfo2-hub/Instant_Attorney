@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { Attachment, Document, FactItem, ClientWorkspaceDraft } from "@/lib/types";
 import { docTypeLabel, isDocumentOutOfDate } from "@/lib/types";
 import { findBlanks } from "@/lib/freestyle-drafts";
@@ -142,7 +143,10 @@ export default function CaseDocumentsTable({
   const [adding, setAdding] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   const [scanContextLabel, setScanContextLabel] = useState<string | null>(null);
+  const [promotingId, setPromotingId] = useState<string | null>(null);
+  const [draftNotice, setDraftNotice] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
 
   const load = useCallback(async () => {
     const [attRes, formRes, draftRes] = await Promise.all([
@@ -221,6 +225,29 @@ export default function CaseDocumentsTable({
     setUploadError("");
     setPendingRequestedId(null);
     fileInputRef.current?.click();
+  }
+
+  // One-click "send to attorney for review" straight from the file. Promotes the
+  // workspace draft into the documents pipeline and submits it for review; the row
+  // then moves to "Drafts & documents" as In review.
+  async function sendDraftForReview(id: string) {
+    setPromotingId(id);
+    setDraftNotice("");
+    try {
+      const res = await fetch(`/api/workspace/drafts/${id}/promote`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setDraftNotice("✓ Sent to your attorney for review — find it below under Drafts & documents.");
+        await load();
+        router.refresh();
+      } else {
+        setDraftNotice(data.error ?? "Could not send for review — please try again.");
+      }
+    } catch {
+      setDraftNotice("Could not send for review — please try again.");
+    } finally {
+      setPromotingId(null);
+    }
   }
 
   // Assistant-drafted / hand-started drafts still being worked (not yet sent to
@@ -302,11 +329,13 @@ export default function CaseDocumentsTable({
               <div className="cdt-band">
                 <span className="cdt-band-label">Working drafts</span>
                 <span className="cdt-band-count cdt-count-drafts">{pendingWorkspaceDrafts.length}</span>
-                <span className="cdt-band-hint">in progress with your assistant · open to keep editing</span>
+                <span className="cdt-band-hint">in progress with your assistant · send to your attorney when ready</span>
               </div>
+              {draftNotice && <div className="cdt-draft-notice">{draftNotice}</div>}
               {pendingWorkspaceDrafts.map((d) => {
                 const key = `wsdraft:${d.id}`;
                 const blanks = d.content ? findBlanks(d.content) : [];
+                const emptyDraft = !d.content.trim();
                 return (
                   <Row
                     key={key}
@@ -319,9 +348,22 @@ export default function CaseDocumentsTable({
                     pill={<Pill kind="draft" label="Draft" />}
                     date={fmtDate(d.updated_at)}
                     action={
-                      isAttorney
-                        ? <span className="cdt-muted">—</span>
-                        : <Link className="cdt-ghost" href={`/chat?caseFileId=${caseFileId}&draft=${d.id}`}>Open &amp; edit →</Link>
+                      isAttorney ? (
+                        <span className="cdt-muted">—</span>
+                      ) : (
+                        <span className="cdt-draft-actions">
+                          <button
+                            type="button"
+                            className="cdt-review-btn"
+                            onClick={() => sendDraftForReview(d.id)}
+                            disabled={promotingId === d.id || emptyDraft}
+                            title={emptyDraft ? "Add content before sending for review" : "Send this draft to your attorney for review"}
+                          >
+                            {promotingId === d.id ? "Sending…" : "Send for review"}
+                          </button>
+                          <Link className="cdt-ghost" href={`/chat?caseFileId=${caseFileId}&draft=${d.id}`}>Open</Link>
+                        </span>
+                      )
                     }
                   >
                     {blanks.length > 0 && (
