@@ -15,13 +15,13 @@ import {
 } from "@/lib/jurisdiction";
 import type { RoadmapAiOverlay } from "@/lib/roadmap-types";
 import PostConsultCard from "@/components/PostConsultCard";
-import CaseChatPanel from "@/components/CaseChatPanel";
 import CaseHub from "@/components/CaseHub";
 import CaseDocumentsTable from "@/components/CaseDocumentsTable";
 import AttorneyFreestyleChat from "@/components/AttorneyFreestyleChat";
 import { buildMatterTasks } from "@/lib/matter-tasks";
 import type { CaseFile, FactItem, Document, Profile, ConsultRequest, ConsultWrapUp, RequestedAttachment, GovFormInstrument, Attachment } from "@/lib/types";
 import { docTypeLabel, personDisplayName, coerceWizardType } from "@/lib/types";
+import { FIRM_CONTACT_EMAIL } from "@/lib/firm";
 
 // The consumer Living File no longer PRESCRIBES the next step with a computed
 // roadmap, Mission Control action board, or per-matter tool cards. "What do I do
@@ -463,20 +463,18 @@ export default function ClientFileView({
         isAttorney={isAttorney}
       />
 
-      {/* Direct message channel — client ⇆ attorney. Shown in both views so each
-          side sees the same thread. */}
-      <div className="lf-card lf-card-full">
-        <div className="lf-card-label">
-          {isAttorney ? "Messages with Client" : "Messages with Crawford Law"}
+      {/* Questions? — clients reach the firm by email (replaces the in-file
+          messaging channel). */}
+      {!isAttorney && (
+        <div className="lf-card lf-card-full lf-contact-card">
+          <div className="lf-card-label">Questions?</div>
+          <p className="lf-contact-text">
+            Email us at{" "}
+            <a className="lf-contact-email" href={`mailto:${FIRM_CONTACT_EMAIL}`}>{FIRM_CONTACT_EMAIL}</a>{" "}
+            and we&apos;ll get back to you.
+          </p>
         </div>
-        <CaseChatPanel
-          caseFileId={caseFile.id}
-          viewerRole={isAttorney ? "attorney" : "client"}
-          counterpartLabel={
-            isAttorney ? personDisplayName(clientProfile) : "Crawford Law"
-          }
-        />
-      </div>
+      )}
 
       {/* Attorney Assessment */}
       <div className="lf-card lf-card-full">

@@ -12,10 +12,19 @@ import { findBlanks, type DraftBlank } from "@/lib/freestyle-drafts";
 export default function ChatDraftsPanel({
   caseFileId,
   refreshKey,
+  focusId = null,
+  focusTitle = null,
+  focusNonce = 0,
   onClose,
 }: {
   caseFileId: string;
   refreshKey: number;
+  /** Select the draft with this id once loaded (deep link from the case file). */
+  focusId?: string | null;
+  /** Or select by title (in-chat draft chip click). */
+  focusTitle?: string | null;
+  /** Bump to re-apply the focus even when id/title are unchanged. */
+  focusNonce?: number;
   onClose: () => void;
 }) {
   const [drafts, setDrafts] = useState<ClientWorkspaceDraft[]>([]);
@@ -33,6 +42,10 @@ export default function ChatDraftsPanel({
   const activeIdRef = useRef<string | null>(null);
   useEffect(() => { dirtyRef.current = dirty; }, [dirty]);
   useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
+  // A one-shot "jump to this draft" request from the chat (chip click or deep
+  // link). Consumed by the next load() so it survives the async fetch, then cleared
+  // so it never overrides the user's later manual tab selection.
+  const pendingFocusRef = useRef<{ id: string | null; title: string | null } | null>(null);
 
   const active = drafts.find((d) => d.id === activeId) ?? null;
   const blanks = useMemo(() => (active ? findBlanks(active.content) : []), [active]);
@@ -61,11 +74,28 @@ export default function ChatDraftsPanel({
       ? draftsRef.current.find((d) => d.id === activeIdRef.current)
       : undefined;
     setDrafts(localActive ? list.map((d) => (d.id === localActive.id ? localActive : d)) : list);
-    setActiveId((cur) => (cur && list.some((d) => d.id === cur) ? cur : list[0]?.id ?? null));
+
+    // Honor a pending "jump to this draft" request (from a chip click / deep link).
+    const focus = pendingFocusRef.current;
+    const focusMatch = focus
+      ? list.find((d) => (focus.id && d.id === focus.id) || (focus.title && d.title === focus.title))
+      : undefined;
+    if (focusMatch) pendingFocusRef.current = null;
+    setActiveId((cur) =>
+      focusMatch ? focusMatch.id : cur && list.some((d) => d.id === cur) ? cur : list[0]?.id ?? null,
+    );
   }, [caseFileId]);
 
   // Reload on mount and whenever the parent bumps refreshKey (a new draft arrived).
   useEffect(() => { load(); }, [load, refreshKey]);
+
+  // A focus request from the chat — record it and reload so the just-produced
+  // draft is present, then select it.
+  useEffect(() => {
+    if (!focusNonce) return;
+    pendingFocusRef.current = { id: focusId, title: focusTitle };
+    load();
+  }, [focusNonce, focusId, focusTitle, load]);
 
   const save = useCallback(async (id: string, opts: { silent?: boolean } = {}) => {
     const toSave = draftsRef.current.find((d) => d.id === id);
@@ -121,7 +151,6 @@ export default function ChatDraftsPanel({
 
   async function promote(id: string) {
     if (dirty) await save(id, { silent: true });
-    if (!confirm("Send this draft to your attorney for review? You'll get it back within 48 hours.")) return;
     setPromoting(true);
     setNotice("");
     try {
@@ -206,16 +235,19 @@ export default function ChatDraftsPanel({
           )}
           <div className="fc-draft-promote-row">
             {active.promoted_document_id ? (
-              <span className="fc-draft-promoted">✓ Sent for attorney review</span>
+              <span className="fc-draft-promoted">✓ Sent to your attorney for review — you&apos;ll find it under your documents.</span>
             ) : (
-              <button
-                type="button"
-                className="fc-draft-promote-btn"
-                onClick={() => promote(active.id)}
-                disabled={promoting || !active.content.trim()}
-              >
-                {promoting ? "Sending…" : "Send to my attorney for review"}
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="fc-draft-promote-btn fc-draft-promote-btn-block"
+                  onClick={() => promote(active.id)}
+                  disabled={promoting || !active.content.trim()}
+                >
+                  {promoting ? "Sending…" : "Send to my attorney for review →"}
+                </button>
+                <span className="fc-draft-promote-hint">Andrew Crawford, Esq. reviews it and returns it within 48 hours.</span>
+              </>
             )}
             {notice && <span className="fc-draft-notice">{notice}</span>}
           </div>

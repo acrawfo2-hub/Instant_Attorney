@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
-import type { Attachment, RequestedAttachment, Document, FactItem } from "@/lib/types";
+import { useRouter } from "next/navigation";
+import type { Attachment, Document, FactItem, ClientWorkspaceDraft } from "@/lib/types";
 import { docTypeLabel, isDocumentOutOfDate } from "@/lib/types";
 import { findBlanks } from "@/lib/freestyle-drafts";
 import DocumentInfoNeeded from "@/components/DocumentInfoNeeded";
@@ -131,7 +132,7 @@ export default function CaseDocumentsTable({
   isAttorney: boolean;
 }) {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [requested, setRequested] = useState<RequestedAttachment[]>([]);
+  const [workspaceDrafts, setWorkspaceDrafts] = useState<ClientWorkspaceDraft[]>([]);
   const [forms, setForms] = useState<GovForm[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [uploading, setUploading] = useState(false);
@@ -142,21 +143,28 @@ export default function CaseDocumentsTable({
   const [adding, setAdding] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   const [scanContextLabel, setScanContextLabel] = useState<string | null>(null);
+  const [promotingId, setPromotingId] = useState<string | null>(null);
+  const [draftNotice, setDraftNotice] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
 
   const load = useCallback(async () => {
-    const [attRes, formRes] = await Promise.all([
+    const [attRes, formRes, draftRes] = await Promise.all([
       fetch(`/api/attachments?caseFileId=${caseFileId}`),
       fetch(`/api/gov-forms?caseFileId=${caseFileId}`),
+      fetch(`/api/workspace/drafts?caseFileId=${caseFileId}`),
     ]);
     if (attRes.ok) {
       const data = await attRes.json();
       setAttachments((data.attachments ?? []).filter((a: Attachment) => a.status !== "failed"));
-      setRequested(data.requestedAttachments ?? []);
     }
     if (formRes.ok) {
       const data = await formRes.json();
       setForms(data.instruments ?? []);
+    }
+    if (draftRes.ok) {
+      const data = await draftRes.json();
+      setWorkspaceDrafts(data.drafts ?? []);
     }
   }, [caseFileId]);
 
@@ -202,11 +210,6 @@ export default function CaseDocumentsTable({
     }
   }
 
-  function startRequestedUpload(id: string) {
-    setUploadError("");
-    setPendingRequestedId(id);
-    fileInputRef.current?.click();
-  }
   function openScan(id: string | null, label: string | null) {
     setUploadError("");
     setPendingRequestedId(id);
@@ -224,8 +227,33 @@ export default function CaseDocumentsTable({
     fileInputRef.current?.click();
   }
 
-  const pendingRequested = requested.filter((r) => r.status === "requested");
-  const total = pendingRequested.length + forms.length + attachments.length + documents.length;
+  // One-click "send to attorney for review" straight from the file. Promotes the
+  // workspace draft into the documents pipeline and submits it for review; the row
+  // then moves to "Drafts & documents" as In review.
+  async function sendDraftForReview(id: string) {
+    setPromotingId(id);
+    setDraftNotice("");
+    try {
+      const res = await fetch(`/api/workspace/drafts/${id}/promote`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setDraftNotice("✓ Sent to your attorney for review — find it below under Drafts & documents.");
+        await load();
+        router.refresh();
+      } else {
+        setDraftNotice(data.error ?? "Could not send for review — please try again.");
+      }
+    } catch {
+      setDraftNotice("Could not send for review — please try again.");
+    } finally {
+      setPromotingId(null);
+    }
+  }
+
+  // Assistant-drafted / hand-started drafts still being worked (not yet sent to
+  // the attorney — promoted ones show under "Drafts & documents" via `documents`).
+  const pendingWorkspaceDrafts = workspaceDrafts.filter((d) => !d.promoted_document_id);
+  const total = forms.length + attachments.length + documents.length + pendingWorkspaceDrafts.length;
 
   return (
     <section className="cdt">
@@ -292,35 +320,60 @@ export default function CaseDocumentsTable({
         <p className="cdt-empty">Nothing on the file yet. Attachments you upload and documents you draft with your assistant will appear here.</p>
       ) : (
         <div className="cdt-table">
-          {/* ── NEEDS YOUR UPLOAD ── */}
-          {pendingRequested.length > 0 && (
+          {/* ── WORKING DRAFTS ── drafts created with the assistant in chat (or
+              started by hand). They live in the chat side-panel; surfaced here so
+              the file is the one place to find them, with a click straight back
+              into the conversation to keep editing. */}
+          {pendingWorkspaceDrafts.length > 0 && (
             <>
               <div className="cdt-band">
-                <span className="cdt-band-label">Needs your upload</span>
-                <span className="cdt-band-count cdt-count-needed">{pendingRequested.length}</span>
-                <span className="cdt-band-hint">suggested by your assistant</span>
+                <span className="cdt-band-label">Working drafts</span>
+                <span className="cdt-band-count cdt-count-drafts">{pendingWorkspaceDrafts.length}</span>
+                <span className="cdt-band-hint">in progress with your assistant · send to your attorney when ready</span>
               </div>
-              {pendingRequested.map((r) => {
-                const key = `req:${r.id}`;
+              {draftNotice && <div className="cdt-draft-notice">{draftNotice}</div>}
+              {pendingWorkspaceDrafts.map((d) => {
+                const key = `wsdraft:${d.id}`;
+                const blanks = d.content ? findBlanks(d.content) : [];
+                const emptyDraft = !d.content.trim();
                 return (
                   <Row
                     key={key}
-                    expandable={!!r.reason}
+                    expandable={blanks.length > 0}
                     expanded={expanded.has(key)}
                     onToggle={() => toggle(key)}
-                    icon={<FileIcon />}
-                    name={r.description}
-                    pill={<Pill kind="needed" label="Needed" />}
-                    date="—"
+                    icon={<DraftIcon />}
+                    name={d.title}
+                    meta={d.source === "assistant" ? "Drafted with your assistant" : "Your draft"}
+                    pill={<Pill kind="draft" label="Draft" />}
+                    date={fmtDate(d.updated_at)}
                     action={
-                      <span className="cdt-split">
-                        <button type="button" onClick={() => startRequestedUpload(r.id)} disabled={uploading}>Upload</button>
-                        <button type="button" onClick={() => openScan(r.id, r.description)} disabled={uploading}>Scan</button>
-                      </span>
+                      isAttorney ? (
+                        <span className="cdt-muted">—</span>
+                      ) : (
+                        <span className="cdt-draft-actions">
+                          <button
+                            type="button"
+                            className="cdt-review-btn"
+                            onClick={() => sendDraftForReview(d.id)}
+                            disabled={promotingId === d.id || emptyDraft}
+                            title={emptyDraft ? "Add content before sending for review" : "Send this draft to your attorney for review"}
+                          >
+                            {promotingId === d.id ? "Sending…" : "Send for review"}
+                          </button>
+                          <Link className="cdt-ghost" href={`/chat?caseFileId=${caseFileId}&draft=${d.id}`}>Open</Link>
+                        </span>
+                      )
                     }
                   >
-                    <div className="cdt-detail-k">Why it&apos;s needed</div>
-                    <div className="cdt-detail-v">{r.reason}</div>
+                    {blanks.length > 0 && (
+                      <div className="cdt-detail-blanks">
+                        {blanks.length} blank{blanks.length === 1 ? "" : "s"} still to fill in — open the draft to complete it.
+                      </div>
+                    )}
+                    <div className="cdt-detail-links">
+                      <a href={`/api/workspace/drafts/${d.id}/download`}>Download draft</a>
+                    </div>
                   </Row>
                 );
               })}

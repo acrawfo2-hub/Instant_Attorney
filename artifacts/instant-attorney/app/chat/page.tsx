@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback, FormEvent, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { IntakeMessage, WIZARD_LABELS, LegalStrategy, ChatMode } from "@/lib/types";
+import { IntakeMessage, ChatMode } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
 import QuickConsultModal from "@/components/QuickConsultModal";
 import ExistingCounselModal from "@/components/ExistingCounselModal";
@@ -54,7 +54,7 @@ const FREESTYLE_ATTACH_TYPES = new Set([
   "application/json", "application/rtf", "text/rtf",
 ]);
 
-function renderContent(text: string) {
+function renderContent(text: string, onOpenDraft?: (title: string) => void) {
   // Freestyle drafts live in the side panel, not the transcript — pull the
   // document blocks out and leave a compact marker where each one was.
   const drafted = parseDrafts(text);
@@ -123,11 +123,18 @@ function renderContent(text: string) {
 
   for (const d of drafted) {
     elements.push(
-      <div key={`draft-${d.title}`} className="fc-draft-note">
+      <button
+        key={`draft-${d.title}`}
+        type="button"
+        className="fc-draft-note fc-draft-note-btn"
+        onClick={onOpenDraft ? () => onOpenDraft(d.title) : undefined}
+        disabled={!onOpenDraft}
+        title="Open this draft"
+      >
         <span className="fc-draft-note-icon">📄</span>
         <span className="fc-draft-note-label">{d.title}</span>
-        <span className="fc-draft-note-cta">in your drafts →</span>
-      </div>
+        <span className="fc-draft-note-cta">open draft →</span>
+      </button>
     );
   }
 
@@ -160,6 +167,7 @@ function AcpChatInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const urlCaseFileId = searchParams.get("caseFileId");
+  const urlFocusDraftId = searchParams.get("draft");
   const isQuickConsult = searchParams.get("type") === "quick_consult";
 
   const [messages, setMessages] = useState<Msg[]>([INITIAL_MESSAGE]);
@@ -191,11 +199,11 @@ function AcpChatInner() {
     name: string | null;
     goal: CounselEngagementGoal | null;
   } | null>(null);
-  const [handoff, setHandoff] = useState<{ label: string; href: string } | null>(null);
-  // Orchestrator-era: reaching a recommended document is a *milestone*, not a
-  // dead-end. The composer always stays; the handoff is a dismissible banner, so
-  // the client can open their case OR keep talking — never a loop back to the file.
-  const [handoffDismissed, setHandoffDismissed] = useState(false);
+  // Which draft the panel should jump to. Bumping `draftFocusNonce` re-triggers
+  // the selection even when the same draft is clicked twice in a row.
+  const [draftFocus, setDraftFocus] = useState<{ id: string | null; title: string | null; nonce: number }>(
+    { id: urlFocusDraftId, title: null, nonce: urlFocusDraftId ? 1 : 0 },
+  );
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputAreaRef = useRef<HTMLDivElement>(null);
@@ -206,12 +214,25 @@ function AcpChatInner() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, streamingText, handoff]);
+  }, [messages, streamingText]);
+
+  // Open the drafts panel and jump it to a specific draft (by title or id). Wired
+  // to the in-chat draft chips and to a ?draft= deep link from the case file.
+  const openDraft = useCallback((opts: { id?: string | null; title?: string | null }) => {
+    setDraftsPanelOpen(true);
+    setDraftsRefresh((n) => n + 1);
+    setDraftFocus((prev) => ({ id: opts.id ?? null, title: opts.title ?? null, nonce: prev.nonce + 1 }));
+  }, []);
 
   // Keep the latest case file id reachable from the one-time page-hide handler.
   useEffect(() => {
     caseFileIdRef.current = caseFileId;
   }, [caseFileId]);
+
+  // Deep link from the case file — ?draft=<id> opens the panel to that draft.
+  useEffect(() => {
+    if (urlFocusDraftId) setDraftsPanelOpen(true);
+  }, [urlFocusDraftId]);
 
   // Organize on leave: when the page is hidden (tab close / navigation away),
   // sendBeacon so the conversation tail is folded into the Living File and — for a
@@ -250,58 +271,36 @@ function AcpChatInner() {
     };
   }, []);
 
-  // ── Resume an existing conversation ─────────────────────────────────────────
-  // When the page is opened with ?caseFileId=… (returning to an existing file),
-  // rehydrate the saved messages so a reload restores the chat instead of starting
-  // blank. Inline screenshots are reattached to their original bubble via the
-  // attachment→message link, using the durable /api/attachments/[id] URL (which
-  // 302-redirects to a signed storage URL) so they survive the session. New chats
-  // (no URL param) never hydrate, so a freshly-sent conversation is never clobbered.
+  // ── Fresh conversation on return ────────────────────────────────────────────
+  // Reopening an existing file (?caseFileId=…) does NOT replay the whole prior
+  // transcript — that made the chat feel like a long, confusing thread to catch up
+  // on. Instead we open a fresh conversation with a short "welcome back" that names
+  // where we left off (the distilled session recap). The orchestrator still sees
+  // the full file server-side via buildFileContext, and the complete message
+  // history remains in the file/DB — it's just not dumped into the thread here.
   useEffect(() => {
-    if (hydratedRef.current || !urlCaseFileId) return;
+    if (hydratedRef.current || !urlCaseFileId || isQuickConsult) return;
     hydratedRef.current = true;
     let cancelled = false;
     (async () => {
       const supabase = createClient();
-      const [{ data: msgs }, { data: atts }, { data: cf }] = await Promise.all([
-        supabase
-          .from("intake_messages")
-          .select("id, role, content, created_at")
-          .eq("case_file_id", urlCaseFileId)
-          .order("created_at", { ascending: true }),
-        supabase
-          .from("attachments")
-          .select("id, message_id")
-          .eq("case_file_id", urlCaseFileId)
-          .eq("attachment_type", "screenshot")
-          .not("message_id", "is", null),
-        supabase
-          .from("case_files")
-          .select("chat_mode")
-          .eq("id", urlCaseFileId)
-          .maybeSingle(),
-      ]);
+      const { data: cf } = await supabase
+        .from("case_files")
+        .select("chat_session_summary")
+        .eq("id", urlCaseFileId)
+        .maybeSingle();
       if (cancelled) return;
-      if (!msgs?.length) return;
-
-      const imageByMessage = new Map<string, string>();
-      (atts ?? []).forEach((a: { id: string; message_id: string | null }) => {
-        if (a.message_id && !imageByMessage.has(a.message_id)) {
-          imageByMessage.set(a.message_id, `/api/attachments/${a.id}`);
-        }
-      });
-
-      const restored: Msg[] = msgs.map((m: { id: string; role: string; content: string }) => ({
-        role: m.role as Msg["role"],
-        content: m.content,
-        ...(imageByMessage.has(m.id) ? { imageUrl: imageByMessage.get(m.id) } : {}),
-      }));
-      setMessages([INITIAL_MESSAGE, ...restored]);
+      const recap = (cf?.chat_session_summary as string | null)?.trim() || null;
+      const welcome =
+        "Welcome back — your case file is open in front of me, so there's no need to catch me up.\n\n" +
+        (recap ? `Last time: ${recap}\n\n` : "") +
+        "What would you like to do next? We can talk anything through, or I can draft the next document you need.";
+      setMessages([{ role: "assistant", content: welcome }]);
     })();
     return () => {
       cancelled = true;
     };
-  }, [urlCaseFileId]);
+  }, [urlCaseFileId, isQuickConsult]);
 
   // ── Existing-counsel intake gate ─────────────────────────────────────────────
   useEffect(() => {
@@ -358,39 +357,6 @@ function AcpChatInner() {
   function handleCounselSkip() {
     setShowCounselModal(false);
   }
-
-  // ── Ready signal ───────────────────────────────────────────────────────────
-  // The conversation reaches its handoff point once the attorney strategy has
-  // actually been established (a document is recommended) — NOT just a message
-  // count. We read the case file's legal_strategy directly (browser client) and
-  // name the recommended document so the next step is unmistakable. The strategy
-  // is written server-side just after a reply, so we retry briefly to win the race.
-  useEffect(() => {
-    if (isQuickConsult || !caseFileId || handoff || loading) return;
-    let cancelled = false;
-    (async () => {
-      const supabase = createClient();
-      for (let attempt = 0; attempt < 4 && !cancelled; attempt++) {
-        const { data } = await supabase
-          .from("case_files")
-          .select("legal_strategy")
-          .eq("id", caseFileId)
-          .single();
-        const strategy = data?.legal_strategy as LegalStrategy | null;
-        const wType = (strategy?.recommended_wizards ?? []).find((w) => Object.hasOwn(WIZARD_LABELS, w));
-        if (wType) {
-          if (!cancelled) {
-            setHandoff({ label: WIZARD_LABELS[wType], href: `/dashboard/${caseFileId}` });
-          }
-          return;
-        }
-        await new Promise((r) => setTimeout(r, 1300));
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [messages, loading, caseFileId, handoff, isQuickConsult]);
 
   function autoResize() {
     const el = textareaRef.current;
@@ -745,7 +711,7 @@ function AcpChatInner() {
             )}
             <div className={msg.role === "user" ? "fc-bubble fc-bubble-user" : "fc-bubble fc-bubble-ai"}>
               {msg.role === "assistant" ? (
-                renderContent(msg.content)
+                renderContent(msg.content, (title) => openDraft({ title }))
               ) : msg.imageUrl ? (
                 <>
                   <img src={msg.imageUrl} alt="attached screenshot" className="fc-bubble-image" />
@@ -770,7 +736,7 @@ function AcpChatInner() {
               </svg>
             </div>
             <div className="fc-bubble fc-bubble-ai fc-bubble-streaming">
-              {renderContent(streamingText)}
+              {renderContent(streamingText, (title) => openDraft({ title }))}
               <ToolRunChips tools={activeTools} />
               <span className="fc-cursor" />
             </div>
@@ -799,63 +765,9 @@ function AcpChatInner() {
           </div>
         )}
 
-        {/* CLOSING HANDOFF MESSAGE — appears once a strategy/document is recommended */}
-        {handoff && !loading && (
-          <div className="fc-msg-row fc-msg-row-ai">
-            <div className="fc-avatar">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-              </svg>
-            </div>
-            <div className="fc-bubble fc-bubble-ai">
-              <div className="fc-handoff-card">
-                <span className="fc-handoff-eyebrow">✓ Your case file is ready</span>
-                <p className="fc-handoff-headline">Here&apos;s what happens next</p>
-                <p>
-                  I&apos;ve built your case file and mapped out your legal strategy. Your
-                  recommended next step is to create your <strong>{handoff.label}</strong>.
-                </p>
-                <p>
-                  Open your case to review everything and start the document — I&apos;ll draft it for
-                  you, and Andrew Crawford, Esq. will review it once you send it. You can come back
-                  and keep chatting here anytime.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
         <div ref={messagesEndRef} />
       </main>
 
-      {/* HANDOFF BANNER — reaching a recommended document is a milestone, not a
-          dead-end. Show it as a dismissible banner ABOVE the always-present
-          composer so the client can open their case or keep talking. */}
-      {handoff && !handoffDismissed && (
-        <div className="fc-file-cta">
-          <div className="fc-file-cta-inner">
-            <div className="fc-file-cta-text">
-              <span className="fc-file-cta-eyebrow">✓ Your case file is ready</span>
-              <span className="fc-file-cta-headline">Whenever you&apos;re ready: create your {handoff.label}</span>
-            </div>
-            <div className="fc-file-cta-actions">
-              <button className="fc-file-cta-btn" onClick={() => router.push(handoff.href)}>
-                Open my case →
-              </button>
-              <button
-                className="fc-file-cta-dismiss"
-                onClick={() => setHandoffDismissed(true)}
-                aria-label="Dismiss — keep chatting"
-                title="Keep chatting"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       <div
         ref={inputAreaRef}
         className={`fc-input-area${dragOver ? " fc-input-area-dragover" : ""}`}
@@ -923,15 +835,13 @@ function AcpChatInner() {
               </svg>
               Draft a document
             </button>
-            {!handoff && (
-              <button
-                type="button"
-                className="fc-quickchip"
-                onClick={() => sendMessage(null, "Just give me your bottom line with what you know so far — I'd rather not go through more questions right now.")}
-              >
-                Just give me the bottom line
-              </button>
-            )}
+            <button
+              type="button"
+              className="fc-quickchip"
+              onClick={() => sendMessage(null, "Just give me your bottom line with what you know so far — I'd rather not go through more questions right now.")}
+            >
+              Just give me the bottom line
+            </button>
           </div>
         )}
 
@@ -978,10 +888,6 @@ function AcpChatInner() {
           {mode === "freestyle"
             ? "Paste or drag images, PDFs, or Word docs"
             : "Paste or drag a screenshot to attach"}
-          <span className="fc-input-hint-sep">·</span>
-          <button className="fc-input-upgrade-link" onClick={() => router.push(caseHomeHref)}>
-            Open your case
-          </button>
         </p>
         <VoiceUnsupportedNote />
       </div>
@@ -991,6 +897,9 @@ function AcpChatInner() {
         <ChatDraftsPanel
           caseFileId={caseFileId}
           refreshKey={draftsRefresh}
+          focusId={draftFocus.id}
+          focusTitle={draftFocus.title}
+          focusNonce={draftFocus.nonce}
           onClose={() => setDraftsPanelOpen(false)}
         />
       )}
