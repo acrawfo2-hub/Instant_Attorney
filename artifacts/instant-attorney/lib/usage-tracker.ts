@@ -2,6 +2,9 @@ import type Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceClient } from "@/lib/supabase/server";
 import { accrueUsage } from "@/lib/topup";
+import { computeAiCostUsd } from "@/lib/ai/pricing";
+
+export { computeAiCostUsd } from "@/lib/ai/pricing";
 
 /** Known AI features — used for cost attribution and future billing dashboards. */
 export type UsageFeature =
@@ -29,16 +32,6 @@ export type UsageFeature =
 
 export type UsageCategory = "ai" | "storage" | "infra";
 
-/** USD per 1M tokens — update when Anthropic pricing changes. */
-const MODEL_PRICING_USD_PER_M: Record<string, { input: number; output: number }> = {
-  "claude-sonnet-4-6": { input: 3, output: 15 },
-  "claude-haiku-4-5-20251001": { input: 0.8, output: 4 },
-  "claude-opus-4-6": { input: 15, output: 75 },
-  "claude-opus-4-8": { input: 15, output: 75 },
-};
-
-const DEFAULT_MODEL_PRICING = MODEL_PRICING_USD_PER_M["claude-sonnet-4-6"];
-
 /** Amortized monthly storage cost per GB (Supabase overage ~$0.021/GB/mo). */
 function storageUsdPerGbMonth(): number {
   const raw = process.env.USAGE_STORAGE_USD_PER_GB_MONTH;
@@ -64,23 +57,6 @@ export interface UsageEventInput {
   outputTokens?: number | null;
   bytes?: number | null;
   metadata?: Record<string, unknown>;
-}
-
-export function computeAiCostUsd(
-  model: string,
-  inputTokens: number,
-  outputTokens: number,
-  costMultiplier = 1,
-  cacheCreationTokens = 0,
-  cacheReadTokens = 0
-): number {
-  const pricing = MODEL_PRICING_USD_PER_M[model] ?? DEFAULT_MODEL_PRICING;
-  const inputCost = (inputTokens / 1_000_000) * pricing.input;
-  // Anthropic prompt caching: writes cost 1.25x input, reads cost 0.1x input.
-  const cacheWriteCost = (cacheCreationTokens / 1_000_000) * pricing.input * 1.25;
-  const cacheReadCost = (cacheReadTokens / 1_000_000) * pricing.input * 0.1;
-  const outputCost = (outputTokens / 1_000_000) * pricing.output;
-  return roundUsd((inputCost + cacheWriteCost + cacheReadCost + outputCost) * costMultiplier);
 }
 
 /** One month of storage cost attributed at upload time (bytes × $/GB/mo). */

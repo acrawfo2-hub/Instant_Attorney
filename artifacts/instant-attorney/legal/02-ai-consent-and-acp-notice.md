@@ -1,7 +1,7 @@
 # Consent to AI-Assisted Services & Attorney-Client Privilege Notice
 
-**DRAFT v2.0 — FOR ATTORNEY REVIEW. NOT EFFECTIVE UNTIL APPROVED.**
-**Effective date: [TO BE SET] · Supersedes v1.0.**
+**DRAFT v2.1 — FOR ATTORNEY REVIEW. NOT EFFECTIVE UNTIL APPROVED.**
+**Effective date: [TO BE SET] · Supersedes v2.0.**
 
 This document is part of your engagement with **Crawford Law PLLC** and is
 incorporated into your Client Representation Agreement (Document 1). By signing,
@@ -14,9 +14,11 @@ and you acknowledge the attorney-client privilege notice below.
 
 ### A.1 How AI is used
 The Firm uses artificial intelligence tools, including large language models
-provided by **Anthropic, PBC**, to assist with: (a) intake and fact-gathering;
-(b) analysis of legal issues; and (c) drafting of legal documents. AI accelerates
-and supports the work; **it does not replace the judgment of a licensed attorney
+provided by **Anthropic, PBC (Claude)** and, when you select it in account
+settings, **xAI (Grok)**, to assist with: (a) intake and fact-gathering;
+(b) analysis of legal issues; and (c) drafting of legal documents. Some features
+may continue to use Anthropic even if you prefer Grok. AI accelerates and
+supports the work; **it does not replace the judgment of a licensed attorney
 and is not your attorney.**
 
 ### A.2 Attorney review and supervision
@@ -35,12 +37,14 @@ should raise any concern about a document with the Firm before acting on it.
 
 ### A.4 Confidentiality and data handling
 The Firm treats the information you provide in Phase II as confidential client
-information under Tex. Disciplinary R. 1.05. The Firm uses a **single AI provider
-(Anthropic, PBC)** under confidentiality and data-processing obligations, **does not
-permit your communications to be used to train AI models**, and is implementing
-**zero-data-retention (ZDR) processing before the service is offered to the public**
-so that your prompt and output content is not retained by the AI provider. See the
-Privacy Policy (Document 4) for full detail.
+information under Tex. Disciplinary R. 1.05. The Firm uses **AI providers under
+confidentiality and data-processing obligations** — **Anthropic, PBC** by default,
+and **xAI** when you select Grok or when a feature requires Anthropic-only
+capabilities — **does not permit your communications to be used to train AI
+models**, and is implementing **zero-data-retention (ZDR) processing with each AI
+provider before that provider is used for public client content** so that your
+prompt and output content is not retained by that provider. See the Privacy Policy
+(Document 4) for full detail.
 
 ### A.5 Consent to third-party service providers
 You consent to processing of your information by the categories of service
@@ -55,6 +59,9 @@ Policy.
 You acknowledge that AI usage has a cost and that the Firm charges for it through
 the subscription and automatic usage top-ups described in your Representation
 Agreement (Section 4) and the Billing and Refund Disclosure (Document 5).
+Different models have different underlying costs; the Firm meters usage in
+dollars of model cost, so a lower-cost model preference can reduce how quickly
+usage top-ups are triggered.
 
 ### A.7 Revocation
 You may revoke this consent at any time by contacting the Firm in writing. Because

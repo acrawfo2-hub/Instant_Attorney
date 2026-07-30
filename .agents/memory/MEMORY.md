@@ -1,6 +1,7 @@
 - [Screenshotting Vite previews](canvas-vite-preview-screenshots.md) — external_url shots of mockup-sandbox previews go blank/flaky; use app_preview instead.
 - [Bash background process reaping](replit-bash-background-process-reaping.md) — long detached bash jobs get SIGKILLed silently; run long one-shots as a managed workflow.
 - [AI model pricing coupling](instant-attorney-model-pricing.md) — every model used by a route must have a usage-tracker pricing entry or cost silently falls back to Sonnet's.
+- [Dual AI provider preference](instant-attorney-ai-providers.md) — Claude default + optional Grok workhorse; XAI_API_KEY/ZDR gates; use resolveModel().
 - [Instant-Attorney on Supabase](instant-attorney-supabase.md) — this app uses Supabase directly (not Drizzle); Anthropic key env is process.env.Claude_Instant_Attorney.
 - [Instant-Attorney routing & build isolation](instant-attorney-routing.md) — npm-isolated (excluded from pnpm workspace); api-server owns `/api`, so unlisted `/api/*` routes added to instant-attorney are silently shadowed.
 - [Anthropic "Streaming is required"](anthropic-streaming-required.md) — sync messages.create() with large max_tokens throws+502s; use messages.stream().finalMessage(), return JSON.

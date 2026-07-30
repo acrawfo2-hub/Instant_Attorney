@@ -51,21 +51,23 @@ tracking is added, update this Policy and add a consent mechanism as required.]
   obligations (including conflicts checks and records duties).
 
 ## 4. AI Processing
-We use a **single AI provider, Anthropic, PBC**, to process your content to deliver
-the services. We configure AI processing under confidentiality and data-processing
-terms and **prohibit use of your content to train AI models.** **Zero-data-retention
-(ZDR) processing will be enabled before the service is offered to the public**, so
-that prompt and output content is not retained by the AI provider. AI output is
-reviewed by an attorney before being delivered as approved. See the AI Consent
-(Document 2). [ATTORNEY REVIEW: confirm ZDR is in place before launch; do not
-publish ZDR claims until enabled.]
+We use **AI providers** to process your content to deliver the services:
+**Anthropic, PBC (Claude)** by default, and **xAI (Grok)** when you select that
+preference in account settings (or when a feature still requires Anthropic). We
+configure AI processing under confidentiality and data-processing terms and
+**prohibit use of your content to train AI models.** **Zero-data-retention (ZDR)
+processing will be enabled with each AI provider before that provider is used for
+public client content**, so that prompt and output content is not retained by that
+provider. AI output is reviewed by an attorney before being delivered as approved.
+See the AI Consent (Document 2). [ATTORNEY REVIEW: confirm ZDR is in place for
+each enabled provider before launch; do not publish ZDR claims until enabled.]
 
 ## 5. How We Share Information
 We share information only as needed to provide the service or as required by law:
-- **Service providers (our agents):** AI inference (**Anthropic**), cloud hosting
-  and storage (**Supabase**), payment processing (**Stripe**), and transactional
-  email (**Resend**), each under contractual confidentiality and data-protection
-  obligations.
+- **Service providers (our agents):** AI inference (**Anthropic**; **xAI** when
+  selected or required), cloud hosting and storage (**Supabase**), payment
+  processing (**Stripe**), and transactional email (**Resend**), each under
+  contractual confidentiality and data-protection obligations.
 - **Legal and ethical compliance:** where required by law, court order, or the Texas
   Disciplinary Rules, including the **crime-fraud** limitation on privilege.
 - **With your direction or consent.**

@@ -1,6 +1,6 @@
 # Crawford Law PLLC — Client Representation Agreement (Limited Scope)
 
-**DRAFT v2.0 — FOR ATTORNEY REVIEW. NOT EFFECTIVE UNTIL APPROVED.**
+**DRAFT v2.1 — FOR ATTORNEY REVIEW. NOT EFFECTIVE UNTIL APPROVED.**
 **Effective date: [TO BE SET] · Supersedes v1.0.**
 
 This Client Representation Agreement ("Agreement") is entered into between
@@ -57,9 +57,10 @@ engagement if a conflict or other professional obligation requires it.
 ## 3. AI-Assisted Services and Attorney Supervision
 
 You acknowledge and consent that the Firm uses artificial intelligence tools
-(including models provided by Anthropic, PBC) to assist with intake, analysis, and
-document drafting. AI is a tool used under the supervision of a licensed attorney;
-it is not itself your attorney and does not exercise legal judgment.
+(including models provided by Anthropic, PBC and, when you select it, xAI) to
+assist with intake, analysis, and document drafting. AI is a tool used under the
+supervision of a licensed attorney; it is not itself your attorney and does not
+exercise legal judgment.
 
 **A licensed attorney reviews AI-generated documents before they are delivered to
 you as attorney-approved.** Drafts shown to you before attorney approval are

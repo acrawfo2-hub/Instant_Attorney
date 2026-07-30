@@ -130,17 +130,18 @@ we treat Phase II client information as confidential.
 
 Our data practices include:
 
-- **Single AI provider.** We use **Anthropic, PBC** as our AI inference provider,
-  deliberately limiting vendor complexity so we can enforce strong data-handling
-  terms.
+- **Vetted AI providers.** We use **Anthropic, PBC (Claude)** as the default AI
+  inference provider and may offer **xAI (Grok)** as a user-selectable alternative
+  for supported features. We limit the set of providers so we can enforce strong
+  data-handling terms with each.
 
 - **No training on your content.** We do not permit your communications to be used
   to train AI models.
 
-- **Zero-data-retention (ZDR).** We are implementing ZDR processing with our AI
-  provider before public launch, so that prompt and output content is not retained
-  by the provider. *[ATTORNEY REVIEW: confirm ZDR is enabled before publishing this
-  claim.]*
+- **Zero-data-retention (ZDR).** We are implementing ZDR processing with each AI
+  provider before that provider is used for public client content, so that prompt
+  and output content is not retained by that provider. *[ATTORNEY REVIEW: confirm
+  ZDR is enabled for each enabled provider before publishing this claim.]*
 
 - **Vetted service providers.** Cloud hosting, payments, and email are handled by
   service providers under contractual confidentiality and data-protection
