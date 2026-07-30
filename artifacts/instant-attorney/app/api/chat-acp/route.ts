@@ -29,6 +29,17 @@ const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 // Cap on model↔tool round-trips per user turn, so a tool loop can't run away.
 const MAX_TOOL_ITERATIONS = 5;
 
+// Anthropic server-side web tools, offered alongside the custom orchestrator
+// tools in freestyle. They let the assistant actually LOOK at a client's live
+// website (or an official source) instead of guessing — Anthropic executes them
+// inline within the same stream. max_uses caps the per-turn server-tool fee, and
+// max_content_tokens keeps a fetched page from blowing out the context window.
+// Same proven pattern as the grounded gov-form lookup (see lib/gov-form-lookup.ts).
+const WEB_TOOLS = [
+  { type: "web_search_20260209", name: "web_search", max_uses: 3 },
+  { type: "web_fetch_20260209", name: "web_fetch", max_uses: 3, max_content_tokens: 30000 },
+] as unknown as Anthropic.Tool[];
+
 // The freestyle tool loop can chain several model round-trips, so give the
 // function room beyond the platform default.
 export const maxDuration = 300;
@@ -311,7 +322,7 @@ export async function POST(req: NextRequest) {
             max_tokens: maxOutputTokensFor("claude-sonnet-4-6"),
             system: systemBlocks,
             messages: loopMessages,
-            ...(useTools ? { tools: ORCHESTRATOR_TOOLS } : {}),
+            ...(useTools ? { tools: [...ORCHESTRATOR_TOOLS, ...WEB_TOOLS] } : {}),
           });
 
           for await (const event of turn) {
@@ -323,22 +334,47 @@ export async function POST(req: NextRequest) {
 
           finalMsg = await turn.finalMessage().catch(() => null);
           if (finalMsg) {
+            // Web tools carry a per-use server-tool fee billed separately from
+            // tokens; flag it (with the request counts) so it lands on the
+            // admin server-tool reconciliation pass instead of leaking margin.
+            const serverToolUse = (finalMsg.usage as {
+              server_tool_use?: { web_search_requests?: number; web_fetch_requests?: number };
+            }).server_tool_use;
             await recordAiFromMessage(db, finalMsg, {
               userId,
               actorId: userId,
               caseFileId: resolvedCaseFileId,
               feature: "chat_acp",
-              metadata: { ...limitSignalMetadata({
-                model: finalMsg.model,
-                outputTokens: finalMsg.usage.output_tokens,
-                priorLimit: 4000,
-                stopReason: finalMsg.stop_reason,
-              }) },
+              metadata: {
+                ...limitSignalMetadata({
+                  model: finalMsg.model,
+                  outputTokens: finalMsg.usage.output_tokens,
+                  priorLimit: 4000,
+                  stopReason: finalMsg.stop_reason,
+                }),
+                ...(serverToolUse
+                  ? {
+                      server_tools: true,
+                      web_search_requests: serverToolUse.web_search_requests ?? 0,
+                      web_fetch_requests: serverToolUse.web_fetch_requests ?? 0,
+                    }
+                  : {}),
+              },
             });
           }
 
-          // Done unless the model asked to call tools.
-          if (!finalMsg || finalMsg.stop_reason !== "tool_use") break;
+          if (!finalMsg) break;
+
+          // A server-side web tool (web_search/web_fetch) can pause the turn
+          // mid-research: resend the accumulated assistant content so Anthropic
+          // resumes it — there are no tool results of ours to add.
+          if (finalMsg.stop_reason === "pause_turn") {
+            loopMessages.push({ role: "assistant", content: finalMsg.content });
+            continue;
+          }
+
+          // Done unless the model asked to call one of OUR custom tools.
+          if (finalMsg.stop_reason !== "tool_use") break;
 
           const toolUses = finalMsg.content.filter(
             (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",

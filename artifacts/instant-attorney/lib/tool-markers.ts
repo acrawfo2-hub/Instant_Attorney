@@ -22,6 +22,7 @@ export const TOOL_LABELS: Record<string, string> = {
   request_document: "Adding to the checklist",
   resolve_document_request: "Updating your checklist",
   add_government_form: "Adding an official form",
+  open_uploaded_document: "Opening your document to edit",
 };
 
 /** Remove tool markers (including a trailing partial one still streaming) for display. */

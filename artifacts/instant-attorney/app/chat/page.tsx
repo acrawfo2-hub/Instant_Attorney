@@ -590,12 +590,16 @@ function AcpChatInner() {
         setChatTruncated(false);
       }
       setActiveTools([]);
+      // open_uploaded_document creates a panel draft server-side (no ---DRAFT---
+      // block in the text), so detect its tool marker before we strip markers.
+      const openedUpload = /\x02TOOL:open_uploaded_document:done\x02/.test(full);
       // Strip the transient tool markers before the message is stored.
       full = stripToolMarkers(full);
       setMessages((prev) => [...prev, { role: "assistant", content: full }]);
       setStreamingText("");
-      // The server persisted any ---DRAFT--- blocks; open the panel and refresh it.
-      if (mode === "freestyle" && parseDrafts(full).length > 0) {
+      // The server persisted any ---DRAFT--- blocks (or opened an uploaded doc as a
+      // draft via the tool); open the panel and refresh it.
+      if (mode === "freestyle" && (parseDrafts(full).length > 0 || openedUpload)) {
         setDraftsPanelOpen(true);
         setDraftsRefresh((n) => n + 1);
       }
