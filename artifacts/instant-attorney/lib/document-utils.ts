@@ -3,9 +3,7 @@ import { notifyAttorneyDocumentReady } from "./notify.ts";
 import { WIZARD_LABELS, coerceWizardType } from "./types.ts";
 import type { WizardType, Document, CaseFile, Profile } from "./types";
 
-export function isValidWizardType(type: string): type is WizardType {
-  return type in WIZARD_LABELS;
-}
+export { isValidWizardType } from "./types.ts";
 
 /**
  * Best-effort: record that document `docId` was just generated/regenerated

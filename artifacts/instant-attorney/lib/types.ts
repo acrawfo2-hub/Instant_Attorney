@@ -725,6 +725,10 @@ export function personDisplayName(
  * or `RECOMMEND_CONSULT: true`; we take the leading identifier token and
  * keep it only if it maps to a real wizard type. Returns null otherwise.
  */
+export function isValidWizardType(type: string): type is WizardType {
+  return type in WIZARD_LABELS;
+}
+
 export function coerceWizardType(raw: string | null | undefined): WizardType | null {
   if (!raw) return null;
   const token = raw.trim().split(/[^a-zA-Z_]/)[0]?.toLowerCase();

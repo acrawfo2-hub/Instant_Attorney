@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { BYPASS_USER_ID, BYPASS_EMAIL, personDisplayName } from "@/lib/types";
+import { ensureTesterSubscription, isTesterEmail } from "@/lib/testers";
 import type { CaseFile, ConsultRequest } from "@/lib/types";
 import CaseFileCard from "@/components/CaseFileCard";
 import ConsultStatusCard from "@/components/ConsultStatusCard";
@@ -78,7 +79,13 @@ async function getData() {
   }
 
   if (!BYPASS_AUTH && (!subRow || !["active", "trialing", "bypass"].includes(subRow.status ?? ""))) {
-    redirect(profileRow?.account_type === "attorney_user" ? "/onboarding/attorney" : "/onboarding");
+    // QA testers are always treated as paid — grant bypass instead of bouncing
+    // them to the paywall (covers first-ever visit right after registration).
+    if (isTesterEmail(email)) {
+      await ensureTesterSubscription(userId, email);
+    } else {
+      redirect(profileRow?.account_type === "attorney_user" ? "/onboarding/attorney" : "/onboarding");
+    }
   }
 
   const files = (allFiles ?? []) as CaseFile[];

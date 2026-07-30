@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { ensureTesterSubscription, isTesterEmail } from "@/lib/testers";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
@@ -37,6 +38,13 @@ export async function requireSubscription(): Promise<void> {
   // therefore allowed straight through — bouncing them to /attorney here is what
   // broke "Continue chat" / "Create document" on onboarded client files.
   if (hasActiveSub) return;
+
+  // QA testers are always treated as paid — grant bypass on the fly (safety
+  // net if they registered without hitting the login route's grant).
+  if (isTesterEmail(user.email)) {
+    await ensureTesterSubscription(user.id, user.email);
+    return;
+  }
 
   // A subscription-less attorney landed on a Phase II page directly — send them
   // to their review queue, never to "please subscribe."

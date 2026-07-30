@@ -1,6 +1,6 @@
 import type { CaseFile, Document, FactItem, WizardType } from "@/lib/types";
 import { WIZARD_LABELS } from "@/lib/types";
-import { isValidWizardType } from "@/lib/document-utils";
+import { isValidWizardType } from "@/lib/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Next-Step engine

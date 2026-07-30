@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { hasApplicableUpdate } from "@/lib/file-parser";
+import { hasApplicableUpdate } from "@/lib/brainstorm-detect";
 import type { CaseBrainstormMessage } from "@/lib/types";
 
 interface Props {

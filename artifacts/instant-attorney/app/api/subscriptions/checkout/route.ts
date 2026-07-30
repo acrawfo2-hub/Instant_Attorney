@@ -13,12 +13,14 @@ export async function POST(req: NextRequest) {
   // BYPASS: skip Stripe entirely, provision subscription directly
   if (BYPASS_AUTH) {
     const db = createServiceClient();
+    const resolvedPlan = plan ?? "phase2";
     await db.from("subscriptions").upsert({
       user_id: BYPASS_USER_ID,
       status: "bypass",
-      plan: plan ?? "phase2",
+      plan: resolvedPlan,
     }, { onConflict: "user_id" });
-    return NextResponse.json({ url: `${origin}/dashboard?welcome=true` });
+    const dest = resolvedPlan === "consult" ? "/consult/schedule" : "/dashboard?welcome=true";
+    return NextResponse.json({ url: `${origin}${dest}` });
   }
 
   const supabase = await createClient();

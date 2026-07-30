@@ -31,7 +31,7 @@ export default async function SchedulePage() {
       .select("status, plan, consult_credits")
       .eq("user_id", userId)
       .maybeSingle();
-    const isActive = !!sub && ["active", "trialing"].includes(sub.status ?? "");
+    const isActive = !!sub && ["active", "trialing", "bypass"].includes(sub.status ?? "");
     const credits = (sub as { consult_credits?: number | null } | null)?.consult_credits ?? 0;
     const hasConsultAccess = isActive && (sub?.plan === "consult" || credits > 0);
     if (!hasConsultAccess) {

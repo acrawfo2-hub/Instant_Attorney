@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
       .select("status, plan, consult_credits")
       .eq("user_id", userId)
       .maybeSingle();
-    const isActive = sub && ["active", "bypass"].includes(sub.status);
+    const isActive = sub && ["active", "trialing", "bypass"].includes(sub.status);
     const hasAccess = isActive && (sub.plan === "consult" || (sub.consult_credits ?? 0) > 0);
     if (!hasAccess) {
       return NextResponse.json({ error: "Consult credit required" }, { status: 403 });
