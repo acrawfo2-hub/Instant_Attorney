@@ -161,6 +161,33 @@ export async function loadAttachmentAsContentBlocks(
   return { blocks, fileName: attachment.file_name };
 }
 
+/**
+ * Load an uploaded document's VERBATIM text so the client can iterate on it as an
+ * editable draft (the open_uploaded_document orchestrator tool). Word (.docx) and
+ * plain-text files extract natively; PDFs and images have no extractable text
+ * layer here, so those return `{ text: null, reason }` and the caller asks the
+ * client for the editable/pasted version instead of guessing. Scoped to the
+ * caller's case + user by loadAttachmentAsContentBlocks; null when not found.
+ */
+export async function loadAttachmentText(
+  db: SupabaseClient,
+  attachmentId: string,
+  caseFileId: string,
+  userId: string
+): Promise<{ text: string; fileName: string } | { text: null; fileName: string; reason: string } | null> {
+  const loaded = await loadAttachmentAsContentBlocks(db, attachmentId, caseFileId, userId);
+  if (!loaded) return null;
+  const text = loaded.blocks
+    .filter((b): b is Extract<AttachmentContentBlock, { type: "text" }> => b.type === "text")
+    .map((b) => b.text)
+    .join("\n\n")
+    .trim();
+  if (!text) {
+    return { text: null, fileName: loaded.fileName, reason: "no_text_layer" };
+  }
+  return { text, fileName: loaded.fileName };
+}
+
 // Standard structured-analysis prompt for documents (PDFs, Word, text, etc.).
 function buildDocumentPrompt(fileContext: string): string {
   return `You are analyzing a file attached to an ACP-protected legal case file at Crawford Law PLLC. Produce a concise structured analysis that will be added to the client's Living File.

@@ -16,6 +16,8 @@ import { buildFileContext, WHAT_IF_SYSTEM_PROMPT } from "./prompts.ts";
 import { parseWhatIfResponse } from "./what-if.ts";
 import { maxOutputTokensFor } from "./token-limits.ts";
 import { recordAiFromMessage } from "./usage-tracker.ts";
+import { loadAttachmentText } from "./attachment-processor.ts";
+import { createServiceClient } from "./supabase/server.ts";
 import type { CaseFile, FactItem } from "./types.ts";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -653,6 +655,96 @@ const TOOLS: Record<string, ToolDef> = {
     },
   },
 
+  open_uploaded_document: {
+    def: {
+      name: "open_uploaded_document",
+      description:
+        "Open a document the client has ALREADY UPLOADED as an editable draft in their side panel, so they can iterate on it — with you — instead of starting over. Use this when the client wants to revise, tighten, update, or build on a document they uploaded (an agreement, contract, letter, policy, or similar). It pulls the file's exact text into the drafts panel; the tool result also returns that full text to you so you can propose specific revisions. After it opens, revise it by emitting a ---DRAFT: <same title>--- block. Word (.docx) and plain-text files open cleanly; PDFs and images have no editable text layer, so for those ask the client to paste the text or upload the Word version.",
+      input_schema: {
+        type: "object",
+        properties: {
+          description: { type: "string", description: "Which uploaded document to open — match its file name or what it is as closely as you can, e.g. 'operating agreement' or 'driver contract'." },
+        },
+        required: ["description"],
+      },
+    },
+    run: async (input, ctx) => {
+      const description = strOf(input.description);
+      if (!description) return needParams(["description"]);
+      const { data: attRows } = await ctx.db
+        .from("attachments")
+        .select("id, file_name, attachment_type")
+        .eq("case_file_id", ctx.caseFileId)
+        .eq("user_id", ctx.userId)
+        .eq("status", "ready");
+      const rows = (attRows ?? []) as { id: string; file_name: string; attachment_type: string }[];
+      if (rows.length === 0) {
+        return { forModel: JSON.stringify({ ok: false, note: "No uploaded documents on this file yet. Ask the client to upload it first." }), raw: { matched: false } };
+      }
+      // Prefer real documents over screenshots/images when matching, but fall back
+      // to the full set so a mislabeled upload still resolves.
+      const docRows = rows.filter((r) => r.attachment_type !== "screenshot");
+      const pool = docRows.length ? docRows : rows;
+      const match = matchRequest(pool.map((r) => ({ id: r.id, description: r.file_name })), description)
+        ?? (pool.length === 1 ? { id: pool[0].id, description: pool[0].file_name } : undefined);
+      if (!match) {
+        return {
+          forModel: JSON.stringify({ ok: false, note: "No clear match among the uploaded documents.", uploaded: rows.map((r) => r.file_name) }),
+          raw: { matched: false, uploaded: rows.map((r) => r.file_name) },
+        };
+      }
+
+      // Service client for the storage read: the download bypasses RLS the same
+      // way the "Improve My Draft" wizard does, while the query inside stays
+      // scoped to this case + user. Avoids any SSR-client storage-auth edge.
+      const loaded = await loadAttachmentText(createServiceClient(), match.id, ctx.caseFileId, ctx.userId);
+      if (!loaded) {
+        return { forModel: JSON.stringify({ error: "failed", message: "Could not read that document from storage." }), raw: null };
+      }
+      if (loaded.text === null) {
+        return {
+          forModel: JSON.stringify({
+            ok: false,
+            note: `"${loaded.fileName}" has no editable text layer (it's a PDF or image). Ask the client to paste the text here, or upload the Word (.docx) or plain-text version, and I'll open it as an editable draft.`,
+          }),
+          raw: { matched: true, no_text: true, file_name: loaded.fileName },
+        };
+      }
+
+      // Title from the file name (extension stripped) — reused as the ---DRAFT---
+      // title so later revisions update this same panel draft in place.
+      const title = loaded.fileName.replace(/\.[a-z0-9]+$/i, "").trim() || "Uploaded document";
+      const { data: existing } = await ctx.db
+        .from("client_workspace_drafts")
+        .select("id")
+        .eq("case_file_id", ctx.caseFileId)
+        .eq("user_id", ctx.userId)
+        .eq("title", title)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (existing?.id) {
+        await ctx.db.from("client_workspace_drafts")
+          .update({ content: loaded.text, source: "client", updated_at: new Date().toISOString() })
+          .eq("id", existing.id);
+      } else {
+        const { error } = await ctx.db.from("client_workspace_drafts").insert({
+          case_file_id: ctx.caseFileId, user_id: ctx.userId, title, content: loaded.text, source: "client",
+        });
+        if (error) {
+          console.error("[orchestrator-tools] open_uploaded_document insert error:", error);
+          return { forModel: JSON.stringify({ error: "failed", message: "Could not open the document as a draft." }), raw: null };
+        }
+      }
+
+      const forModel =
+        `Opened "${loaded.fileName}" as an editable draft titled "${title}" in the client's side panel. ` +
+        `Its full text is below so you can propose specific revisions. To change it, emit the revised document as a ---DRAFT: ${title}--- block (reuse this exact title so it updates the same panel draft in place). Tell the client it's open and ask what they'd like to change.\n\n` +
+        `--- FULL TEXT OF ${loaded.fileName} ---\n${loaded.text}`;
+      return { forModel, raw: { opened: title, file_name: loaded.fileName, chars: loaded.text.length } };
+    },
+  },
+
   add_government_form: {
     def: {
       name: "add_government_form",
@@ -789,7 +881,7 @@ const TOOLS: Record<string, ToolDef> = {
 // Tools that mutate the client's record (or, for run_what_if, persist a client-
 // side What-If session). The attorney associate (work-product, not the client
 // channel) gets the read-only set only.
-const WRITE_TOOL_NAMES = new Set(["record_fact", "request_document", "resolve_document_request", "add_government_form", "run_what_if"]);
+const WRITE_TOOL_NAMES = new Set(["record_fact", "request_document", "resolve_document_request", "add_government_form", "run_what_if", "open_uploaded_document"]);
 
 /** All tool definitions — the consumer orchestrator, which may write to its own file. */
 export const ORCHESTRATOR_TOOLS: Anthropic.Tool[] = Object.values(TOOLS).map((t) => t.def);
