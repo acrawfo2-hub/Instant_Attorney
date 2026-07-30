@@ -1585,6 +1585,132 @@ Produce the refined second draft now. Output only the final document text.`;
   ];
 }
 
+// ── Attorney review orchestrator — structured improvements (schema-stage44) ──
+// Stage 1 of the auto-run review: issue-spot the client draft into a structured,
+// individually-actionable list of improvements (>=3, unbounded). This list is
+// the source of truth that drives the revised draft (stage 2) and, later, the
+// rendered attorney memo. See docs/attorney-review-orchestrator.md.
+
+export const REVIEW_IMPROVEMENTS_SYSTEM_PROMPT = `You are a senior attorney at Crawford Law PLLC reviewing a client-facing legal document. Produce a structured, decision-ready list of concrete improvements that will drive a materially better second draft.
+
+WHAT TO PRODUCE
+- Identify EVERY improvement a senior attorney would make on sight. Find at least 3; do not stop at 3 if more genuinely matter. Do not pad with trivia to look thorough — every item must be a real, actionable change.
+- Order the list most important first. Blocking defects (an unresolved [[placeholder]], a missing required term, a legal defect) come first.
+- Measure the draft against the client's goals in the Living File. Assume the goals are valid if lawful and plausible. The central question is whether the document accomplishes them cleanly and enforceably.
+- Treat length as a cost: call out redundancy, hedging, legalese, and exhaustive enumerations as clarity improvements. But recommend cutting an entire clause only when it is genuinely inapt for this matter — never a standard protective/boilerplate provision (governing law, severability, indemnity, dispute resolution, succession, notices) unless it conflicts with the matter.
+- Never invent facts, parties, dates, or citations. If a fact is missing, the improvement is to mark it with a [[placeholder]], not to guess.
+
+EACH IMPROVEMENT HAS
+- section: the section/clause it touches, in plain text (e.g. "Section 3", "Signature block", "Preamble"). Use "General" if it spans the whole document.
+- kind: exactly one of blocking | goal_gap | clarity | risk | compliance | citation
+  - blocking: legally prevents execution (unresolved placeholder, missing required term, defect)
+  - goal_gap: the draft fails to accomplish a stated client goal
+  - clarity: tighten/restructure/plain-language (includes redundancy and length cuts)
+  - risk: a genuine legal or judgment risk to weigh before execution
+  - compliance: a formatting or jurisdiction/court requirement issue
+  - citation: a statute/case/authority reference issue
+- severity: exactly one of high | medium | low
+- title: a short imperative label (<= 80 chars), e.g. "Add governing-law clause".
+- rationale: one or two sentences on why it matters. Plain prose.
+- proposed_change: the exact change to make — add/cut/tighten/rewrite — specific enough to act on.
+
+OUTPUT FORMAT — output ONLY a JSON array inside these markers, nothing else. No prose before or after. No Markdown. Valid JSON (double-quoted keys and strings, no trailing commas):
+
+---IMPROVEMENTS JSON---
+[
+  {"section":"...","kind":"...","severity":"...","title":"...","rationale":"...","proposed_change":"..."}
+]
+---END IMPROVEMENTS---`;
+
+export function buildImprovementsUserMessage(
+  doc: Document,
+  caseFile: CaseFile,
+  facts: FactItem[],
+  attachments: Attachment[]
+): string {
+  const fileContext = buildFileContext(caseFile, facts, attachments);
+  const draftText = doc.draft_text ?? "(No draft text — review structured data only)";
+  return `${fileContext}
+
+---DOCUMENT UNDER REVIEW---
+Type: ${doc.doc_type.replace(/_/g, " ")}
+Title: ${doc.title}
+
+${draftText}
+---END DOCUMENT---`;
+}
+
+const IMPROVEMENT_KINDS = new Set(["blocking", "goal_gap", "clarity", "risk", "compliance", "citation"]);
+const IMPROVEMENT_SEVERITIES = new Set(["high", "medium", "low"]);
+
+export interface ParsedImprovement {
+  section: string;
+  kind: string;
+  severity: string;
+  title: string;
+  rationale: string;
+  proposed_change: string;
+}
+
+/**
+ * Extract the structured improvements from the model output. Prefers the JSON
+ * block between markers; falls back to the first bare JSON array in the text.
+ * Coerces kind/severity into the allowed sets and drops entries with no title so
+ * a malformed row never becomes an empty improvement. Returns [] if nothing
+ * usable parses (the caller treats that as a failed run).
+ */
+export function parseImprovements(text: string): ParsedImprovement[] {
+  const marked = text.match(/---IMPROVEMENTS JSON---([\s\S]*?)---END IMPROVEMENTS---/);
+  let jsonText = marked?.[1]?.trim() ?? "";
+  if (!jsonText) {
+    const bare = text.match(/\[\s*\{[\s\S]*\}\s*\]/);
+    jsonText = bare?.[0] ?? "";
+  }
+  if (!jsonText) return [];
+
+  let raw: unknown;
+  try {
+    raw = JSON.parse(jsonText);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(raw)) return [];
+
+  const out: ParsedImprovement[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const r = item as Record<string, unknown>;
+    const title = typeof r.title === "string" ? r.title.trim() : "";
+    if (!title) continue;
+    const kind = typeof r.kind === "string" && IMPROVEMENT_KINDS.has(r.kind) ? r.kind : "clarity";
+    const severity =
+      typeof r.severity === "string" && IMPROVEMENT_SEVERITIES.has(r.severity) ? r.severity : "medium";
+    out.push({
+      section: typeof r.section === "string" && r.section.trim() ? r.section.trim() : "General",
+      kind,
+      severity,
+      title: title.slice(0, 200),
+      rationale: typeof r.rationale === "string" ? r.rationale.trim() : "",
+      proposed_change: typeof r.proposed_change === "string" ? r.proposed_change.trim() : "",
+    });
+  }
+  return out;
+}
+
+/** Render the structured improvements as the plain-text "review" the second-draft
+ *  prompt consumes, so the revised-draft stage reuses the tuned SECOND_DRAFT prompt. */
+export function improvementsAsReviewText(improvements: ParsedImprovement[]): string {
+  const lines = ["PRIORITY EDITS (resolve every one):"];
+  improvements.forEach((imp, i) => {
+    lines.push(
+      `${i + 1}. [${imp.severity.toUpperCase()} · ${imp.kind}] ${imp.section}: ${imp.title}` +
+        (imp.proposed_change ? ` — ${imp.proposed_change}` : "") +
+        (imp.rationale ? ` (${imp.rationale})` : ""),
+    );
+  });
+  return lines.join("\n");
+}
+
 // ── What-If Game (standalone strategy tool) ─────────────────────────────────
 //
 // Powers app/api/what-if/route.ts. This is a SEPARATE, optional tool — it is

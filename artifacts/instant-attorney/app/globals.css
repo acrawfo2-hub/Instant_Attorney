@@ -6283,6 +6283,81 @@ mark.atty-placeholder {
 @media (max-width: 1100px) {
   .atty-two-doc-grid { grid-template-columns: 1fr; }
 }
+
+/* ── Orchestrator auto-review panel (schema-stage44) ──────────────────────── */
+.arr-panel {
+  background: var(--brand-white);
+  border: 1px solid var(--brand-border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 20px;
+}
+.arr-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.arr-title { display: inline-flex; align-items: center; gap: 10px; }
+.arr-status { font-size: 14px; font-weight: 700; color: var(--brand-navy); }
+.arr-status-running, .arr-status-queued { color: #1d4ed8; }
+.arr-status-complete { color: #2e7d5b; }
+.arr-status-failed { color: #c0392b; }
+.arr-spinner {
+  width: 13px; height: 13px; border-radius: 50%;
+  border: 2px solid rgba(29, 78, 216, 0.25); border-top-color: #1d4ed8;
+  animation: arr-spin 0.8s linear infinite;
+}
+@keyframes arr-spin { to { transform: rotate(360deg); } }
+.arr-error { margin-top: 8px; font-size: 13px; color: #c0392b; }
+.arr-list { list-style: none; margin: 14px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.arr-item {
+  border: 1px solid var(--brand-border);
+  border-left: 3px solid var(--brand-gold);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: rgba(200, 169, 110, 0.04);
+}
+.arr-item-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap; }
+.arr-sev {
+  font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em;
+  padding: 2px 7px; border-radius: 999px; color: #fff;
+}
+.arr-sev-high { background: #c0392b; }
+.arr-sev-medium { background: #b7791f; }
+.arr-sev-low { background: #6b7280; }
+.arr-kind {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+  color: var(--brand-text-md);
+}
+.arr-section { font-size: 12px; color: var(--brand-text-xlt); margin-left: auto; }
+.arr-item-title { font-size: 13.5px; font-weight: 700; color: var(--brand-navy); margin: 2px 0; }
+.arr-item-change { font-size: 13px; color: var(--brand-text-dk); margin: 3px 0; }
+.arr-item-rationale { font-size: 12.5px; color: var(--brand-text-md); font-style: italic; margin: 3px 0 0; }
+
+/* Authorities QA gate — citation verification list. */
+.arr-cite-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.arr-cite {
+  border: 1px solid var(--brand-border); border-radius: 8px; padding: 9px 11px;
+  background: rgba(46, 125, 91, 0.04);
+}
+.arr-cite-block { background: rgba(192, 57, 43, 0.05); border-left: 3px solid #c0392b; }
+.arr-cite-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.arr-verdict {
+  font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em;
+  padding: 2px 7px; border-radius: 999px; color: #fff; flex-shrink: 0;
+}
+.arr-verdict-verified { background: #2e7d5b; }
+.arr-verdict-unverified { background: #c0392b; }
+.arr-verdict-unsupported { background: #c0392b; }
+.arr-verdict-error { background: #b7791f; }
+.arr-verdict-waived { background: #6b7280; }
+.arr-cite-type { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--brand-text-md); }
+.arr-cite-raw { font-size: 13px; font-weight: 600; color: var(--brand-navy); }
+.arr-cite-claim { font-size: 12px; color: var(--brand-text-md); margin: 4px 0 0; }
+.arr-cite-evidence { font-size: 12.5px; color: var(--brand-text-dk); margin: 3px 0 0; }
+.arr-cite-actions { display: flex; align-items: center; gap: 14px; margin-top: 6px; }
+.arr-cite-src { font-size: 12px; font-weight: 600; color: var(--chat-gold-ink, #9a7636); }
+.arr-approve-block {
+  margin: 8px 0 4px; padding: 10px 14px; border-radius: 8px;
+  background: rgba(192, 57, 43, 0.08); border: 1px solid rgba(192, 57, 43, 0.3);
+  color: #a02219; font-size: 13px; font-weight: 600;
+}
 .atty-standalone-doc {
   background: var(--brand-white);
   border: 1px solid var(--brand-border);

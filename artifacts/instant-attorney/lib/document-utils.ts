@@ -383,6 +383,13 @@ export async function finalizeDocumentSubmission(
     doc.profiles as Profile
   ).catch((err) => console.error("[document-utils] notify error:", err));
 
+  // Auto-kick off the orchestrator review run (fire-and-forget). Dynamic import
+  // avoids a static import cycle — attorney-review imports the upsert*Child
+  // helpers from this module. The run guards against double-starts itself.
+  import("@/lib/attorney-review")
+    .then(({ startDocumentReview }) => startDocumentReview(docId, doc.case_file_id))
+    .catch((err) => console.error("[document-utils] review kickoff error:", err));
+
   return doc as Document;
 }
 
