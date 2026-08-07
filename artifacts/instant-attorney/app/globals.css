@@ -4348,7 +4348,32 @@ mark.atty-placeholder {
 }
 
 /* Chat input attachment styles */
-.fc-input-area-dragover { background: rgba(200,169,110,0.06); border-top-color: var(--brand-gold) !important; }
+.fc-input-area-dragover {
+  background: rgba(200,169,110,0.10);
+  border-top-color: var(--brand-gold) !important;
+  outline: 2px dashed var(--brand-gold);
+  outline-offset: -4px;
+}
+.fc-attach-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: transparent;
+  border: 0.5px solid var(--brand-border);
+  color: var(--brand-text-md);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.fc-attach-btn:hover:not(:disabled) {
+  background: rgba(200,169,110,0.10);
+  border-color: var(--brand-gold);
+  color: var(--brand-navy);
+}
+.fc-attach-btn:disabled { opacity: 0.35; cursor: default; }
 .fc-attachment-preview {
   display: flex; align-items: center; gap: 8px;
   padding: 8px 12px 0;

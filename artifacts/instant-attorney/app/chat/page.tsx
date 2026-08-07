@@ -191,6 +191,9 @@ function AcpChatInner() {
   // inline base64), so large files don't blow the request-body limit. These
   // chips track their upload/analysis state.
   const [docUploads, setDocUploads] = useState<DocUpload[]>([]);
+  // Docs queued before the first message (no caseFileId yet). Uploaded as soon
+  // as caseFileId becomes available.
+  const [queuedDocFiles, setQueuedDocFiles] = useState<File[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [showQcModal, setShowQcModal] = useState(false);
   const [showCounselModal, setShowCounselModal] = useState(false);
@@ -207,6 +210,7 @@ function AcpChatInner() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputAreaRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const hydratedRef = useRef(false);
   const caseFileIdRef = useRef<string | null>(caseFileId);
   const hasUserMessages = messages.some((m) => m.role === "user");
@@ -215,6 +219,30 @@ function AcpChatInner() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamingText]);
+
+  // When caseFileId becomes available (first message sent), upload any docs the
+  // user had already attached before the conversation started.
+  useEffect(() => {
+    if (!caseFileId || queuedDocFiles.length === 0) return;
+    const files = [...queuedDocFiles];
+    setQueuedDocFiles([]);
+    files.forEach((file) => {
+      const key = `${file.name}-${Date.now()}`;
+      setDocUploads((prev) => [...prev, { key, fileName: file.name || "document", status: "uploading" }]);
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("caseFileId", caseFileId);
+      fetch("/api/attachments/upload", { method: "POST", body: fd })
+        .then((res) => {
+          if (!res.ok) throw new Error(res.status === 413 ? "File is too large." : "Upload failed.");
+          setDocUploads((prev) => prev.map((d) => (d.key === key ? { ...d, status: "ready" } : d)));
+        })
+        .catch(() => {
+          setDocUploads((prev) => prev.map((d) => (d.key === key ? { ...d, status: "error" } : d)));
+        });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [caseFileId]);
 
   // Open the drafts panel and jump it to a specific draft (by title or id). Wired
   // to the in-chat draft chips and to a ?draft= deep link from the case file.
@@ -393,7 +421,13 @@ function AcpChatInner() {
     }
     const id = caseFileIdRef.current;
     if (!id) {
-      alert("Send a message first, then attach documents so they can be added to your file.");
+      // No case file yet — queue the doc. It will be uploaded automatically as
+      // soon as the user sends their first message and a case file is created.
+      setQueuedDocFiles((prev) => [...prev, file]);
+      setDocUploads((prev) => [
+        ...prev,
+        { key: `${file.name}-queued-${Date.now()}`, fileName: file.name || "document", status: "uploading" },
+      ]);
       return;
     }
     const key = `${file.name}-${Date.now()}`;
@@ -845,16 +879,40 @@ function AcpChatInner() {
           </div>
         )}
 
+        {/* Hidden file input — triggered by the paperclip button */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,text/plain,text/markdown,text/csv,application/rtf,text/rtf"
+          style={{ display: "none" }}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) attachFile(file);
+            e.target.value = "";
+          }}
+        />
         <form className="fc-input-form" onSubmit={sendMessage}>
+          <button
+            type="button"
+            className="fc-attach-btn"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={loading}
+            aria-label="Attach file"
+            title="Attach image, PDF, or document"
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+            </svg>
+          </button>
           <textarea
             ref={textareaRef}
             className="fc-textarea"
             placeholder={
               dragOver
-                ? mode === "freestyle" ? "Drop a file here…" : "Drop screenshot here…"
+                ? "Drop file here…"
                 : mode === "freestyle"
-                  ? "Ask anything, think it through, or ask me to draft… attach a document to work from"
-                  : "Share the details of your situation… or paste a screenshot"
+                  ? "Ask anything, or attach a document to work from…"
+                  : "Share details of your situation… or paste a screenshot"
             }
             value={input}
             onChange={(e) => { setInput(e.target.value); autoResize(); }}
@@ -885,9 +943,7 @@ function AcpChatInner() {
         <p className="fc-input-hint">
           Enter to send · Shift+Enter for new line
           <span className="fc-input-hint-sep">·</span>
-          {mode === "freestyle"
-            ? "Paste or drag images, PDFs, or Word docs"
-            : "Paste or drag a screenshot to attach"}
+          Attach images, PDFs, or Word docs
         </p>
         <VoiceUnsupportedNote />
       </div>
