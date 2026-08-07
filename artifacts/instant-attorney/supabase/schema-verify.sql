@@ -191,4 +191,29 @@ union all select 'every auth user has a profile', case when not exists (
 union all select 'on_auth_user_created trigger', case when exists (
   select 1 from pg_trigger where tgname = 'on_auth_user_created'
 ) then 'OK' else 'MISSING' end
+-- Stage 9 — never folded into schema-catch-up-to-stage37.sql, so a project
+-- brought up via the fast path is missing the whole usage ledger.
+union all select 'usage_events', case when exists (
+  select 1 from information_schema.tables where table_schema = 'public' and table_name = 'usage_events'
+) then 'OK' else 'MISSING' end
+union all select 'usage_period_totals', case when exists (
+  select 1 from information_schema.tables where table_schema = 'public' and table_name = 'usage_period_totals'
+) then 'OK' else 'MISSING' end
+-- Stages 42–45
+union all select 'orchestrator_tool_calls', case when exists (
+  select 1 from information_schema.tables where table_schema = 'public' and table_name = 'orchestrator_tool_calls'
+) then 'OK' else 'MISSING' end
+union all select 'case_files.chat_session_summary', case when exists (
+  select 1 from information_schema.columns
+  where table_schema = 'public' and table_name = 'case_files' and column_name = 'chat_session_summary'
+) then 'OK' else 'MISSING' end
+union all select 'document_review_runs', case when exists (
+  select 1 from information_schema.tables where table_schema = 'public' and table_name = 'document_review_runs'
+) then 'OK' else 'MISSING' end
+union all select 'document_improvements', case when exists (
+  select 1 from information_schema.tables where table_schema = 'public' and table_name = 'document_improvements'
+) then 'OK' else 'MISSING' end
+union all select 'document_qa_citations', case when exists (
+  select 1 from information_schema.tables where table_schema = 'public' and table_name = 'document_qa_citations'
+) then 'OK' else 'MISSING' end
 order by object;
