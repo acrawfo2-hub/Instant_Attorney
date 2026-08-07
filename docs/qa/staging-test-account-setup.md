@@ -42,7 +42,9 @@ Apply SQL migrations **in order** in the Supabase SQL editor (`artifacts/instant
 
 1. Run `schema-verify.sql` — note which rows show `MISSING`
 2. Paste and run **`schema-catch-up-to-stage37.sql`** (idempotent; covers stages 8, 13–37)
-3. Run `schema-verify.sql` again — every row should be `OK`
+3. Paste and run **`schema-catch-up-post-stage37.sql`** (stages 38+)
+4. Paste and run **`schema-stage46-auth-access-repair.sql`** — repairs the things that lock a valid account out: the `subscriptions.status` check that predates `'bypass'`, the `subscriptions_user_id_unique` index every upsert needs, `profiles` rows missing for older `auth.users`, and the signup trigger. Ends with a per-tester report.
+5. Run `schema-verify.sql` again — every row should be `OK`
 
 **Full path (brand-new Supabase project):**
 
@@ -50,7 +52,9 @@ Apply SQL migrations **in order** in the Supabase SQL editor (`artifacts/instant
 2. `schema-stage2.sql` through `schema-stage7.sql`
 3. `schema-stage9.sql` through `schema-stage12-attorney-chat-rls.sql` (stage 8 is in the catch-up file)
 4. `schema-catch-up-to-stage37.sql`
-5. Run `schema-verify.sql` to sanity-check
+5. `schema-catch-up-post-stage37.sql`
+6. `schema-stage46-auth-access-repair.sql`
+7. Run `schema-verify.sql` to sanity-check
 
 Playwright submit tests and `e2e.mjs` expect stage 8+ columns on `documents` (`parent_document_id`, `attorney_second_draft_prompt`).
 
@@ -91,6 +95,23 @@ Store credentials in GitHub Actions secrets or local env:
 E2E_EMAIL=qa-client@staging.test
 E2E_PASSWORD=YourSecurePw1!
 ```
+
+**Option 3 — allowlisted tester (fastest, no Stripe at all)**
+
+Emails in `lib/testers.ts` `TESTER_EMAILS` are auto-granted a `bypass` phase2
+subscription and auto-confirmed on login, so they never see the paywall and are
+never blocked by an undelivered confirmation email. To provision or repair one
+in a single step:
+
+```bash
+cd artifacts/instant-attorney
+node scripts/ensure-tester.mjs vicky.crawford12@gmail.com --password 'YourSecurePw1!'
+```
+
+It creates the auth user if missing, marks the email confirmed, backfills the
+`profiles` row, and grants the bypass subscription — all with the service role
+key from `.env.local`. Omit `--password` to repair an existing account without
+changing its password.
 
 ### B. Attorney test account (`E2E_ATTORNEY_EMAIL`, optional)
 
@@ -213,7 +234,8 @@ Periodically purge test `case_files` and `documents` if fixtures fail mid-run.
 | Symptom | Likely cause |
 |---------|--------------|
 | Redirects don't fire | `NEXT_PUBLIC_SUPABASE_URL` / anon key missing — middleware passes through |
-| Login 401 | Wrong password or user not email-confirmed |
+| Login 401 | Wrong password, or user not email-confirmed. The login page now says which, offers **Resend the confirmation email**, and links **Forgot your password?** For an allowlisted tester the server confirms the address and retries automatically. |
+| Tester bounced to the paywall | `subscriptions.status` check constraint has no `'bypass'` value, or the `profiles` row is missing — run `schema-stage46-auth-access-repair.sql` |
 | Submit 404 | Migration drift — run `e2e.mjs` schema check |
 | Submit succeeds but attorney queue empty | Logged in as wrong user; doc `user_id` mismatch |
 | Stripe checkout fails | Test keys on live Price IDs (or vice versa) |

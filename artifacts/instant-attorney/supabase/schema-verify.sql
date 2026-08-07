@@ -169,4 +169,26 @@ union all select 'ai_consents.signature_name', case when exists (
   select 1 from information_schema.columns
   where table_schema = 'public' and table_name = 'ai_consents' and column_name = 'signature_name'
 ) then 'OK' else 'MISSING' end
+-- The QA-tester grant writes status 'bypass'; a table created before that
+-- value existed silently rejects every grant (see stage 46).
+union all select 'subscriptions.status allows bypass', case when exists (
+  select 1 from information_schema.check_constraints
+  where constraint_name = 'subscriptions_status_check'
+    and check_clause like '%bypass%'
+) then 'OK' else 'MISSING' end
+union all select 'subscriptions.plan allows attorney_pro', case when exists (
+  select 1 from information_schema.check_constraints
+  where constraint_name = 'subscriptions_plan_check'
+    and check_clause like '%attorney_pro%'
+) then 'OK' else 'MISSING' end
+-- subscriptions.user_id references profiles(id), so a missing profile row
+-- turns every subscription write into a foreign-key violation.
+union all select 'every auth user has a profile', case when not exists (
+  select 1 from auth.users u
+  left join public.profiles p on p.id = u.id
+  where p.id is null and u.email is not null
+) then 'OK' else 'MISSING' end
+union all select 'on_auth_user_created trigger', case when exists (
+  select 1 from pg_trigger where tgname = 'on_auth_user_created'
+) then 'OK' else 'MISSING' end
 order by object;
