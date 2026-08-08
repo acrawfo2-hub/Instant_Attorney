@@ -1,6 +1,6 @@
 # Design Note: The Admin Console — Detect, Repair, Endure
 
-**Status:** Architecture proposal (no code yet).
+**Status:** Phases 0 and 1 shipped; phases 2–4 proposed. See §5 for what is built.
 **Author:** Instant Attorney engineering
 **Related:** `app/admin/page.tsx` (today's Token Limit Monitor), `lib/admin-auth.ts`,
 `lib/testers.ts`, `scripts/ensure-tester.mjs`, `supabase/schema-stage46-auth-access-repair.sql`,
@@ -219,16 +219,50 @@ so routine ops work never incidentally surfaces privileged material.
 
 Ordered by (incidents retired) ÷ (effort), not by visual payoff.
 
-| Phase | Scope | Why here |
+| Phase | Scope | State |
 |---|---|---|
-| **0** | Admin shell + nav; break-glass auth; `admin_audit_log`; refuse `BYPASS_AUTH` in prod | Everything else is unsafe without it. Small. |
-| **1** | **People**: account 360, verdict line, the seven repairs | Retires the lockout class — your stated top pain — using logic that already exists |
-| **2** | **Health**: check registry + the ten probes | Turns three invisible failure classes visible |
-| **3** | **Repairs**: `schema_migrations` ledger, DB tester allowlist, cron + job actions | Kills the silent-migration class outright |
-| **4** | **Usage & Audit**: absorb the Token Limit Monitor, cost-per-feature, audit search | The existing page finds its right home |
+| **0** | Admin shell + nav; break-glass auth; `admin_audit_log`; refuse `BYPASS_AUTH` in prod | **Shipped** |
+| **1** | **People**: account 360, verdict line, the repairs | **Shipped** |
+| **2** | **Health**: check registry + the ten probes | Proposed |
+| **3** | **Repairs**: `schema_migrations` ledger, DB tester allowlist, cron + job actions | Proposed |
+| **4** | **Usage & Audit**: cost-per-feature, audit search | Partly shipped — the Token Limit Monitor moved to `/admin/usage` and the audit trail is on the Overview |
 
 Phase 1 is the one that changes your week. Phase 3 is the one that changes the
 system's failure rate.
+
+### What phases 0–1 actually built
+
+| Piece | Where |
+|---|---|
+| Shell, nav, single gate, break-glass banner | `app/admin/layout.tsx`, `components/admin/AdminNav.tsx` |
+| Admin auth: prod bypass refusal + `ADMIN_EMAILS` | `lib/admin-auth.ts` (`requireAdmin`) |
+| Audit trail | `supabase/schema-stage47-admin-console.sql`, `lib/admin/audit.ts` |
+| Verdict + repair rules (pure, 22 unit tests) | `lib/admin/account-diagnosis.ts` |
+| Reads, degrading | `lib/admin/account-lookup.ts` |
+| Repair executors | `lib/admin/account-repairs.ts` |
+| API | `app/api/admin/accounts/…` |
+| UI | `app/admin/page.tsx`, `app/admin/people/page.tsx`, `components/admin/AccountConsole.tsx` |
+
+Six repairs ship: force-confirm email, create missing profile row, grant/repair
+subscription, clear lockout, send reset link, set temporary password.
+
+**One repair from §3.1 was cut.** "Sign out everywhere" is not implementable
+against supabase-js today — `auth.admin` exposes no per-user session revoke, only
+`signOut(jwt)` with the user's own token. Shipping a button that might 404
+against this project's GoTrue would undermine the point of the console, so it was
+left out; setting a temporary password is the credential-rotation tool until an
+admin revoke is verified against the live instance. "Change email address" was
+also deferred — it needs its own confirmation flow, not a one-click button.
+
+**Two properties were verified, not just intended.** With `BYPASS_AUTH=true`
+under `next start`, `/admin` 307s to `/login` and logs the refusal. With an
+unreachable Supabase, `/admin`, `/admin/people` and `/admin/usage` all return 200
+and render per-panel error text — no 500, and counts show `—` rather than a
+misleading `0`.
+
+**Before this is useful in production:** apply
+`supabase/schema-stage47-admin-console.sql` and set `ADMIN_EMAILS`. Repairs work
+without the migration, but run unaudited — and the UI says so on every action.
 
 ---
 
