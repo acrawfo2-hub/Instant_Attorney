@@ -5,6 +5,13 @@ description: How a file tracks several documents — one "lead" drives the 5-ste
 
 # A file is multiple documents; the spine tracks ONE "lead"
 
+> **⚠️ Partly superseded.** The 5-step spine and roadmap UI are now dead code
+> (`NextStepGuide` / `RoadmapSpine` have zero importers), and the client no
+> longer sees Mission Control — the orchestrator decides what's next. The
+> `document_plan` data structure is still written and read, and is retired in
+> Phase 3 of `docs/orchestrator-migration-plan.md`. Read paths must keep
+> tolerating existing rows. See `instant-attorney-orchestrator-migration.md`.
+
 A case file usually needs several documents. The source of truth is
 `legal_strategy.document_plan: PlanEntry[]` — an ordered list (index 0 = lead).
 Each `PlanEntry` has `{ key, title, engine, rationale }` where:

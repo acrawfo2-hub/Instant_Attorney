@@ -6,6 +6,7 @@ import {
   type MissionControlInput,
 } from "./mission-control.ts";
 import type { NextStepGuide } from "./next-step.ts";
+import { computeDocket, DOCKET_CAVEAT } from "./docket.ts";
 
 /** buildMatterTasks input — Mission Control's input plus the uploaded documents,
  *  so the synthesizer accounts for attachments/screenshots, not just facts. */
@@ -153,33 +154,31 @@ function finishedTasks(
   return done;
 }
 
-// A live filing deadline is the top urgency signal. When a fact records one — the
-// PI statute-of-limitations screener writes "…filing deadline YYYY-MM-DD…", and a
-// saved screen_pi_sol result reads the same way — turn it into a deadline task
-// whose urgency reflects how close it is. This is the screenPiSol().urgency signal
-// the plan reserved, grounded in whatever deadline the file already carries.
-const DEADLINE_RE = /(?:deadline|file by|statute of limitations|limitations period)[^.\n]*?(\d{4}-\d{2}-\d{2})/i;
-function deadlineTasks(facts: MissionControlInput["facts"], now: Date): MatterTask[] {
-  const tasks: MatterTask[] = [];
-  for (const f of facts) {
-    const m = f.description.match(DEADLINE_RE);
-    if (!m) continue;
-    const deadline = new Date(`${m[1]}T00:00:00Z`);
-    if (Number.isNaN(deadline.getTime())) continue;
-    const days = Math.ceil((deadline.getTime() - now.getTime()) / 86_400_000);
-    const urgency: MatterUrgency = days < 0 ? "expired" : days <= 60 ? "critical" : days <= 180 ? "warning" : "normal";
-    tasks.push({
-      id: `deadline:${f.id}`,
-      title: days < 0
-        ? `A filing deadline has passed (${m[1]}) — talk to your attorney right away`
-        : `File before the deadline: ${m[1]} (${days} day${days === 1 ? "" : "s"} left)`,
-      status: "doable_now",
-      urgency,
-      impact: "high",
-      reason: f.description,
-    });
-  }
-  return tasks;
+// A live deadline is the top urgency signal. The docket engine (lib/docket.ts)
+// computes deadlines deterministically from dated trigger facts ("Key date ·
+// served_lawsuit · 2026-07-20 — …") and from facts that already carry an
+// explicit ISO deadline (the PI SOL screener writes "…filing deadline
+// YYYY-MM-DD…"). Each computed entry becomes a high-impact task whose urgency
+// reflects how close it is — this is the screenPiSol().urgency signal the plan
+// reserved, now generalized across practice areas.
+function deadlineTasks(
+  facts: MissionControlInput["facts"],
+  now: Date,
+  jurisdiction?: string | null
+): MatterTask[] {
+  return computeDocket(facts, now, jurisdiction).map((e) => ({
+    // Explicit-deadline facts keep the historical `deadline:<factId>` id;
+    // rule-computed entries key on the docket entry (one fact can yield several).
+    id: `deadline:${e.event === "explicit_deadline" && e.sourceFactId ? e.sourceFactId : e.id}`,
+    title:
+      e.daysRemaining < 0
+        ? `A key deadline has passed — ${e.label.toLowerCase()} was ${e.deadlineDate}. Talk to your attorney right away`
+        : `${e.label}: ${e.deadlineDate} (${e.daysRemaining} day${e.daysRemaining === 1 ? "" : "s"} left)`,
+    status: "doable_now" as const,
+    urgency: e.urgency,
+    impact: "high" as const,
+    reason: `${e.explain} Basis: ${e.basis}. ${DOCKET_CAVEAT}`,
+  }));
 }
 
 // Uploaded documents/screenshots the AI flagged with an urgent finding become
@@ -241,7 +240,7 @@ export function buildMatterTasks(input: MatterTasksInput): MatterTasksResult {
 
   // Live filing deadlines and attachment-flagged issues rank alongside the open
   // actions — urgency ordering floats the pressing ones to the top of the bucket.
-  doableNow.push(...deadlineTasks(input.facts, new Date()));
+  doableNow.push(...deadlineTasks(input.facts, new Date(), input.caseFile.jurisdiction));
   doableNow.push(...attachmentTasks(input.attachments ?? []));
 
   for (const action of board.actions) {

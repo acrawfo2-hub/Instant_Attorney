@@ -12,6 +12,8 @@ import { triggerPendingLookups } from "@/lib/gov-form-lookup";
 import { generateCaseTitle } from "@/lib/title-generator";
 import { toAnthropicBlock, processAttachment } from "@/lib/attachment-processor";
 import { parseDrafts } from "@/lib/freestyle-drafts";
+import { stripToolMarkers } from "@/lib/tool-markers";
+import { createAcpJob, getAcpJob, getPredecessorChain, emitAcpChunk, finishAcpJob } from "@/lib/acp-jobs";
 import { recordAiFromMessage, recordStorageUpload } from "@/lib/usage-tracker";
 import { getBillingGate } from "@/lib/topup";
 import { maxOutputTokensFor, limitSignalMetadata } from "@/lib/token-limits";
@@ -304,15 +306,28 @@ export async function POST(req: NextRequest) {
   ];
 
   const encoder = new TextEncoder();
-  let fullResponse = "";
 
-  const readable = new ReadableStream({
-    async start(controller) {
-      controller.enqueue(encoder.encode(`\x00${resolvedCaseFileId}\x00`));
+  // Register this turn as a background job so the status endpoint can report
+  // it and a reconnecting client can recover the finished text. createAcpJob
+  // queues it behind any still-unfinished turn for this case; waiting on the
+  // immediate predecessor is transitive (that predecessor waits on ITS
+  // predecessor before it starts), so turns execute strictly in order.
+  const job = createAcpJob(resolvedCaseFileId, userId);
+  const waitForPrev = job.predecessorId ? getAcpJob(job.predecessorId) : null;
+  // Never wait forever on a predecessor — if it somehow never finishes (crash
+  // before finish, swept as stale), proceed without its reply.
+  const PREV_WAIT_TIMEOUT_MS = 10 * 60 * 1000;
 
+  // Runs the model/tool loop and ALL persistence to completion, detached from
+  // the HTTP response — if the browser disconnects or the user navigates away
+  // mid-generation, the run keeps going and the assistant message, drafts, and
+  // file updates still land in the DB. Progress fans out to any connected
+  // stream via the job's listeners.
+  const executeTurn = async (loopMessages: AnthropicMessage[]) => {
+      let fullResponse = "";
+      let runError: string | null = null;
       // The last model turn's final message — used below for truncation/usage.
       let finalMsg: Anthropic.Message | null = null;
-      const loopMessages: AnthropicMessage[] = [...anthropicMessages];
       const toolDb = createServiceClient();
 
       try {
@@ -328,7 +343,7 @@ export async function POST(req: NextRequest) {
           for await (const event of turn) {
             if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
               fullResponse += event.delta.text;
-              controller.enqueue(encoder.encode(event.delta.text));
+              emitAcpChunk(job, event.delta.text);
             }
           }
 
@@ -382,9 +397,9 @@ export async function POST(req: NextRequest) {
           const toolResults: Anthropic.ToolResultBlockParam[] = [];
           for (const tu of toolUses) {
             // Inline status marker so the UI can show a "running…" chip.
-            controller.enqueue(encoder.encode(`\x02TOOL:${tu.name}:running\x02`));
+            emitAcpChunk(job, `\x02TOOL:${tu.name}:running\x02`);
             const out = await dispatchTool(tu.name, tu.input, { db, userId, caseFileId: resolvedCaseFileId });
-            controller.enqueue(encoder.encode(`\x02TOOL:${tu.name}:done\x02`));
+            emitAcpChunk(job, `\x02TOOL:${tu.name}:done\x02`);
             toolResults.push({ type: "tool_result", tool_use_id: tu.id, content: out.forModel });
             toolDb.from("orchestrator_tool_calls").insert({
               case_file_id: resolvedCaseFileId,
@@ -400,8 +415,10 @@ export async function POST(req: NextRequest) {
           loopMessages.push({ role: "user", content: toolResults });
         }
       } catch (err) {
-        controller.error(err);
+        console.error("[chat-acp] generation error:", err);
+        runError = err instanceof Error ? err.message : "The model run failed.";
       } finally {
+        try {
         // The user-message insert was kicked off before the stream to keep it
         // off time-to-first-token; await it here so its id is available for the
         // screenshot path below and persistence is flushed before the response
@@ -587,12 +604,116 @@ export async function POST(req: NextRequest) {
             caseFileId: resolvedCaseFileId,
             outputTokens: finalMsg.usage.output_tokens,
           });
-          // Sentinel the client can detect to show a soft truncation notice.
-          // \x01 is a non-printable ASCII control character that never appears in AI text.
-          controller.enqueue(encoder.encode("\x01TRUNCATED\x01"));
         }
-        controller.close();
+        } catch (persistErr) {
+          // Post-stream persistence must never leave the job unfinished — a
+          // dangling job would make later turns wait on it and the client poll
+          // forever.
+          console.error("[chat-acp] post-processing error:", persistErr);
+          runError = runError ?? "Post-processing failed.";
+        } finally {
+          finishAcpJob(job, {
+            finalText: fullResponse,
+            truncated: finalMsg?.stop_reason === "max_tokens",
+            error: runError,
+          });
+        }
       }
+  };
+
+  // The turn runs detached from the HTTP stream: it starts whether or not the
+  // client ever consumes the response, waits for its predecessor (transitively
+  // serializing all turns for the case), and splices any predecessor replies
+  // the client's history is missing before calling the model.
+  const runTurn = async () => {
+    const loopMessages: AnthropicMessage[] = [...anthropicMessages];
+
+    if (waitForPrev && !waitForPrev.done) {
+      // Keep-alive tool markers while the previous turn finishes (the client
+      // strips these into a "running…" chip; without traffic the proxy would
+      // drop a silent multi-minute connection). Emitted through the job so
+      // any subscriber — live stream or a re-attached one — receives them.
+      emitAcpChunk(job, "\x02TOOL:previous_turn:running\x02");
+      const hb = setInterval(() => emitAcpChunk(job, "\x02TOOL:previous_turn:running\x02"), 8000);
+      let waitTimer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          waitForPrev.promise,
+          new Promise<void>((res) => { waitTimer = setTimeout(res, PREV_WAIT_TIMEOUT_MS); }),
+        ]);
+      } finally {
+        clearInterval(hb);
+        if (waitTimer) clearTimeout(waitTimer);
+      }
+      emitAcpChunk(job, "\x02TOOL:previous_turn:done\x02");
+    }
+
+    // The client's history can't contain replies it never received — splice
+    // every finished predecessor reply that's missing from the history in
+    // ahead of the new user message (oldest first) so the model sees a
+    // coherent conversation.
+    const missingReplies = getPredecessorChain(job)
+      .filter((p) => p.done)
+      .map((p) => stripToolMarkers(p.finalText ?? "").trim())
+      .filter((txt) => txt.length > 0)
+      .filter((txt) => !loopMessages.some(
+        (m) => m.role === "assistant" && typeof m.content === "string" && m.content.trim() === txt
+      ));
+    if (missingReplies.length > 0) {
+      let lastUserIdx = -1;
+      for (let i = loopMessages.length - 1; i >= 0; i--) {
+        if (loopMessages[i].role === "user") { lastUserIdx = i; break; }
+      }
+      if (lastUserIdx >= 0) {
+        loopMessages.splice(lastUserIdx, 0, ...missingReplies.map(
+          (txt) => ({ role: "assistant" as const, content: txt })
+        ));
+      }
+    }
+
+    await executeTurn(loopMessages);
+  };
+  void runTurn().catch((err) => {
+    console.error("[chat-acp] turn failed to start:", err);
+    if (!job.done) {
+      finishAcpJob(job, { finalText: "", truncated: false, error: "The turn failed to start." });
+    }
+  });
+
+  const readable = new ReadableStream({
+    async start(controller) {
+      let closed = false;
+      const safeEnqueue = (s: string) => {
+        if (closed) return;
+        try { controller.enqueue(encoder.encode(s)); } catch { closed = true; }
+      };
+      // Header frame: case file id + job id, so the client can re-attach via
+      // the status endpoint if it lets go of this stream.
+      safeEnqueue(`\x00${resolvedCaseFileId}|${job.id}\x00`);
+
+      // Subscribe, then replay whatever the detached run already emitted.
+      // (Synchronous block — no await between snapshot, add, and replay — so
+      // nothing is lost or duplicated.)
+      const listener = (chunk: string) => safeEnqueue(chunk);
+      const alreadyEmitted = job.text;
+      job.listeners.add(listener);
+      if (alreadyEmitted) safeEnqueue(alreadyEmitted);
+      await job.promise;
+      job.listeners.delete(listener);
+
+      if (job.truncated) {
+        // Sentinel the client can detect to show a soft truncation notice.
+        // \x01 is a non-printable ASCII control character that never appears in AI text.
+        safeEnqueue("\x01TRUNCATED\x01");
+      }
+      if (job.error && !closed) {
+        try { controller.error(new Error(job.error)); } catch { /* already closed */ }
+        return;
+      }
+      try { controller.close(); } catch { /* client already gone */ }
+    },
+    cancel() {
+      // Browser disconnected — executeTurn keeps running and persists results.
     },
   });
 

@@ -238,6 +238,10 @@ export interface LegalStrategy {
   lead_override?: WizardType | null;
   /** One-line rationale for why the lead document is the priority. */
   lead_rationale?: string;
+  /** Client-facing adversarial stress test (lib/strength-check.ts). Stored here
+   *  (JSONB) so it needs no migration; file-parser preserves it across strategy
+   *  rewrites. */
+  strength_check?: import("./strength-check-types.ts").StrengthCheck;
 }
 
 /**

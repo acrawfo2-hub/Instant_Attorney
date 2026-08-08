@@ -1,3 +1,4 @@
+- [Wizard → orchestrator migration (IN FLIGHT)](instant-attorney-orchestrator-migration.md) — the product is the orchestrator; intake guardrails still contradict it in prompts.ts, some client links still exit to /wizard, 14 components are dead. Read before touching prompts or chat flow. Plan: docs/orchestrator-migration-plan.md.
 - [Screenshotting Vite previews](canvas-vite-preview-screenshots.md) — external_url shots of mockup-sandbox previews go blank/flaky; use app_preview instead.
 - [Bash background process reaping](replit-bash-background-process-reaping.md) — long detached bash jobs get SIGKILLed silently; run long one-shots as a managed workflow.
 - [AI model pricing coupling](instant-attorney-model-pricing.md) — every model used by a route must have a usage-tracker pricing entry or cost silently falls back to Sonnet's.
@@ -31,4 +32,8 @@
 - [Dependency vuln fixes](dependency-vuln-fixes.md) — transitive vulns fixed via pnpm-workspace overrides; instant-attorney is npm so needs its own overrides; next pins exact postcss.
 - [Doc staleness & Regenerate](instant-attorney-doc-staleness.md) — documents.facts_synced_at vs max(fact updated_at) flags out-of-date drafts; stamp LAST, degrade gracefully if column missing, client-only, preserve status.
 - [QA tester allowlist](instant-attorney-tester-allowlist.md) — lib/testers.ts auto-grants bypass subs AND auto-confirms email on login/gates; add testers by email there, never per-route checks; `scripts/ensure-tester.mjs` is the ops escape hatch.
+- [Deadline docketing engine](instant-attorney-docket.md) — deadlines computed from "Key date · <event> · YYYY-MM-DD" facts; Texas rules gated on jurisdiction; new rules must declare scope.
+- [Inline blank-fill placement](instant-attorney-blank-fill-placement.md) — DocumentInfoNeeded must be in BOTH the reviewDocs and otherDocs sections of CaseDocumentsTable or it silently disappears for submitted docs.
+- [Strength Check storage](instant-attorney-strength-check.md) — lives in legal_strategy JSONB: carry key across extractor rewrites, write via guarded compare-and-retry, never swallow save errors.
+- [Background chat turns](instant-attorney-background-turns.md) — chat-acp turns run as detached in-process jobs; finishAcpJob must be unbypassable; client anchors bg replies via placeholder pendingId, never indexes.
 - [Consult credits for Phase 2 add-on](instant-attorney-consult-credits.md) — subscriptions.consult_credits (integer, DB migration required) tracks paid consult add-ons for phase2 users; webhook/confirm must not overwrite plan when existing=phase2.

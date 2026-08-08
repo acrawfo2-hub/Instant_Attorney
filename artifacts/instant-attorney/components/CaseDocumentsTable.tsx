@@ -7,6 +7,7 @@ import type { Attachment, Document, FactItem, ClientWorkspaceDraft } from "@/lib
 import { docTypeLabel, isDocumentOutOfDate } from "@/lib/types";
 import { findBlanks } from "@/lib/freestyle-drafts";
 import DocumentInfoNeeded from "@/components/DocumentInfoNeeded";
+import WorkspaceDraftInfoNeeded from "@/components/WorkspaceDraftInfoNeeded";
 import DocumentExecutionPanel from "@/components/DocumentExecutionPanel";
 import RegenerateDocButton from "@/components/RegenerateDocButton";
 import CancelDocButton from "@/components/CancelDocButton";
@@ -21,6 +22,13 @@ import ScanToPdfModal from "@/components/ScanToPdfModal";
 
 const LARGE_FILE_BYTES = 5 * 1024 * 1024;
 const FINALIZED = new Set(["approved", "delivered"]);
+
+// Draft-in-progress poll cadence. Tight while a turn is actually generating so
+// the banner clears promptly; slow while idle, because the loop must keep
+// running to notice a turn that STARTS after this page mounted (the user can
+// kick one off from chat in another tab).
+const DRAFT_POLL_ACTIVE_MS = 5000;
+const DRAFT_POLL_IDLE_MS = 20000;
 
 // Government form detected in chat, enriched by /api/gov-forms with registry
 // detail + completion progress (same shape GovFormInstruments consumed).
@@ -145,6 +153,11 @@ export default function CaseDocumentsTable({
   const [scanContextLabel, setScanContextLabel] = useState<string | null>(null);
   const [promotingId, setPromotingId] = useState<string | null>(null);
   const [draftNotice, setDraftNotice] = useState("");
+  const [draftInProgress, setDraftInProgress] = useState(false);
+  const draftPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Local content overrides for workspace drafts filled inline — avoids a full
+  // network reload just to rerender the snippet after blanks are filled.
+  const [draftContentOverrides, setDraftContentOverrides] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
@@ -175,6 +188,98 @@ export default function CaseDocumentsTable({
     const timer = setTimeout(load, 4000);
     return () => clearTimeout(timer);
   }, [attachments, load]);
+
+  // Poll the background chat-turn status so we can surface a "draft in progress"
+  // indicator while the assistant generates a document and the user is away from
+  // chat. The loop NEVER stops on its own: a turn can start at any time from the
+  // chat page in another tab, so an idle response reschedules rather than
+  // returning (an early version returned, which meant only a turn already
+  // running at mount was ever noticed).
+  useEffect(() => {
+    let cancelled = false;
+    // Last observed running state, held in a plain effect-scoped box rather than
+    // read off `draftInProgress`. The effect deliberately runs once per
+    // caseFileId, so a captured state value would be pinned to its mount-time
+    // value (always false) and the running -> finished transition below would
+    // never fire.
+    const wasRunning = { current: false };
+    // Set while the tab is backgrounded and we stop looking. On return we can no
+    // longer tell whether a turn came and went, so we revalidate once.
+    let missedWhileHidden = false;
+
+    const rearm = (ms: number) => {
+      if (!cancelled) draftPollRef.current = setTimeout(poll, ms);
+    };
+
+    async function poll() {
+      // A hidden tab can't show the banner, so skip the request and check again
+      // later. `wasRunning` is deliberately left intact across the hidden
+      // stretch, so a turn that finishes in the background is still recognised
+      // as a completion when the tab comes back.
+      if (typeof document !== "undefined" && document.hidden) {
+        missedWhileHidden = true;
+        rearm(DRAFT_POLL_IDLE_MS);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/chat-acp/status?caseFileId=${caseFileId}`);
+        if (cancelled) return;
+        if (!res.ok) {
+          rearm(DRAFT_POLL_IDLE_MS);
+          return;
+        }
+        const data = await res.json();
+        if (cancelled) return;
+
+        if (data.running) {
+          wasRunning.current = true;
+          // We're watching live again; the completion edge below will catch it.
+          missedWhileHidden = false;
+          setDraftInProgress(true);
+          rearm(DRAFT_POLL_ACTIVE_MS);
+          return;
+        }
+
+        setDraftInProgress(false);
+        // Refresh on the running -> finished EDGE, or after a blind stretch in
+        // the background. Keying off data.done instead would re-fire on every
+        // mount while a finished job is still in the registry (15-min TTL, see
+        // lib/acp-jobs.ts) and refresh for nothing.
+        if (wasRunning.current || missedWhileHidden) {
+          wasRunning.current = false;
+          missedWhileHidden = false;
+          await load();
+          if (!cancelled) router.refresh();
+        }
+        rearm(DRAFT_POLL_IDLE_MS);
+      } catch {
+        // Network hiccup — retry quietly.
+        rearm(DRAFT_POLL_IDLE_MS);
+      }
+    }
+
+    // Coming back to the tab: catch up now rather than waiting out the idle
+    // interval. `missedWhileHidden` makes that poll revalidate, which covers the
+    // case the completion edge alone can't see — a turn that both started AND
+    // finished while the tab was hidden, so `wasRunning` never flipped.
+    const onVisibilityChange = () => {
+      if (cancelled || document.hidden) return;
+      if (draftPollRef.current) clearTimeout(draftPollRef.current);
+      void poll();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    poll();
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      if (draftPollRef.current) clearTimeout(draftPollRef.current);
+    };
+    // `load` and `router` are stable for a given caseFileId; re-running this
+    // effect on their identity would restart the poll loop and lose wasRunning.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [caseFileId]);
 
   function toggle(key: string) {
     setExpanded((prev) => {
@@ -253,6 +358,9 @@ export default function CaseDocumentsTable({
   // Assistant-drafted / hand-started drafts still being worked (not yet sent to
   // the attorney — promoted ones show under "Drafts & documents" via `documents`).
   const pendingWorkspaceDrafts = workspaceDrafts.filter((d) => !d.promoted_document_id);
+  // Docs pending attorney review get their own prominent band so they're never buried.
+  const reviewDocs = documents.filter((d) => d.status === "pending_review");
+  const otherDocs = documents.filter((d) => d.status !== "pending_review");
   const total = forms.length + attachments.length + documents.length + pendingWorkspaceDrafts.length;
 
   return (
@@ -271,6 +379,15 @@ export default function CaseDocumentsTable({
           </button>
         )}
       </div>
+
+      {/* Draft-in-progress indicator — appears while a background chat turn is
+          generating a document, disappears (and refreshes the list) when done. */}
+      {draftInProgress && (
+        <div className="cdt-draft-progress" role="status" aria-live="polite">
+          <span className="cdt-draft-progress-dot" aria-hidden="true" />
+          <span className="cdt-draft-progress-text">A draft is being written — check back in a couple of minutes.</span>
+        </div>
+      )}
 
       <input ref={fileInputRef} type="file" accept="image/*,.pdf,.doc,.docx,.txt,.csv,.rtf" style={{ display: "none" }} onChange={handleFileInput} />
 
@@ -326,26 +443,33 @@ export default function CaseDocumentsTable({
               into the conversation to keep editing. */}
           {pendingWorkspaceDrafts.length > 0 && (
             <>
-              <div className="cdt-band">
-                <span className="cdt-band-label">Working drafts</span>
+              <div className="cdt-band cdt-band-drafts">
+                <span className="cdt-band-label">✏️ Working drafts</span>
                 <span className="cdt-band-count cdt-count-drafts">{pendingWorkspaceDrafts.length}</span>
-                <span className="cdt-band-hint">in progress with your assistant · send to your attorney when ready</span>
+                <span className="cdt-band-hint">drafted with your assistant — read, edit, or send for attorney review</span>
               </div>
               {draftNotice && <div className="cdt-draft-notice">{draftNotice}</div>}
               {pendingWorkspaceDrafts.map((d) => {
                 const key = `wsdraft:${d.id}`;
-                const blanks = d.content ? findBlanks(d.content) : [];
-                const emptyDraft = !d.content.trim();
+                // Use locally-applied content if the user filled blanks inline;
+                // otherwise fall back to what came from the server.
+                const content = draftContentOverrides[d.id] ?? d.content;
+                const blanks = content ? findBlanks(content) : [];
+                const emptyDraft = !content.trim();
                 return (
                   <Row
                     key={key}
-                    expandable={blanks.length > 0}
+                    expandable
                     expanded={expanded.has(key)}
                     onToggle={() => toggle(key)}
                     icon={<DraftIcon />}
                     name={d.title}
                     meta={d.source === "assistant" ? "Drafted with your assistant" : "Your draft"}
-                    pill={<Pill kind="draft" label="Draft" />}
+                    pill={
+                      blanks.length > 0
+                        ? <Pill kind="draft" label={`Draft · ${blanks.length} blank${blanks.length === 1 ? "" : "s"}`} />
+                        : <Pill kind="draft" label="Draft" />
+                    }
                     date={fmtDate(d.updated_at)}
                     action={
                       isAttorney ? (
@@ -361,15 +485,36 @@ export default function CaseDocumentsTable({
                           >
                             {promotingId === d.id ? "Sending…" : "Send for review"}
                           </button>
-                          <Link className="cdt-ghost" href={`/chat?caseFileId=${caseFileId}&draft=${d.id}`}>Open</Link>
+                          <Link className="cdt-open-draft" href={`/chat?caseFileId=${caseFileId}&draft=${d.id}`}>
+                            Open draft →
+                          </Link>
                         </span>
                       )
                     }
                   >
-                    {blanks.length > 0 && (
-                      <div className="cdt-detail-blanks">
-                        {blanks.length} blank{blanks.length === 1 ? "" : "s"} still to fill in — open the draft to complete it.
-                      </div>
+                    {/* Expandable preview: highlighted blanks + inline fill-in form */}
+                    <div className="cdt-detail-draft-preview">
+                      {content && (
+                        <p className="cdt-detail-draft-snippet">
+                          {content.split(/(\[\[[^\]]+\]\])/g).slice(0, 20).map((part, i) =>
+                            /^\[\[[^\]]+\]\]$/.test(part)
+                              ? <mark key={i} className="cdt-draft-blank-mark">{part.slice(2, -2)}</mark>
+                              : <span key={i}>{part.slice(0, 300)}</span>
+                          )}
+                          {content.length > 300 && <span className="cdt-muted"> …</span>}
+                        </p>
+                      )}
+                    </div>
+                    {/* Inline blank-fill form — only for clients, only when blanks remain */}
+                    {!isAttorney && content && (
+                      <WorkspaceDraftInfoNeeded
+                        draftId={d.id}
+                        draftText={content}
+                        draftTitle={d.title}
+                        onSaved={(newContent) =>
+                          setDraftContentOverrides((prev) => ({ ...prev, [d.id]: newContent }))
+                        }
+                      />
                     )}
                     <div className="cdt-detail-links">
                       <a href={`/api/workspace/drafts/${d.id}/download`}>Download draft</a>
@@ -471,15 +616,77 @@ export default function CaseDocumentsTable({
             </>
           )}
 
+          {/* ── WITH YOUR ATTORNEY (pending review) ── */}
+          {reviewDocs.length > 0 && (
+            <>
+              <div className="cdt-band cdt-band-review">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ flexShrink: 0 }}>
+                  <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                </svg>
+                <span className="cdt-band-label">With your attorney</span>
+                <span className="cdt-band-count cdt-count-review">{reviewDocs.length}</span>
+                <span className="cdt-band-hint">submitted for review · awaiting response within 48 hrs</span>
+              </div>
+              {reviewDocs.map((doc) => {
+                const key = `doc:${doc.id}`;
+                const children = childDocuments.filter((c) => c.parent_document_id === doc.id);
+                const secondDraft = children.find((c) => c.doc_type === "second_draft");
+                const fillTarget = secondDraft?.draft_text ? secondDraft : (doc.draft_text ? doc : null);
+                const blanks = fillTarget?.draft_text ? findBlanks(fillTarget.draft_text) : [];
+                return (
+                  <Row
+                    key={key}
+                    expandable
+                    expanded={expanded.has(key)}
+                    onToggle={() => toggle(key)}
+                    icon={<FileIcon />}
+                    name={doc.title}
+                    meta={docTypeLabel(doc.doc_type)}
+                    pill={<Pill kind="review" label="In review" />}
+                    date={fmtDate(doc.created_at)}
+                    action={
+                      isAttorney
+                        ? <Link className="cdt-ghost" href={`/attorney/review/${doc.id}`}>Review →</Link>
+                        : doc.draft_text ? <a className="cdt-ghost" href={`/api/documents/${doc.id}/download`}>Download</a>
+                        : <span className="cdt-muted">—</span>
+                    }
+                  >
+                    {doc.submitted_at ? (
+                      <div className="cdt-detail-status"><ReviewSlaClock submittedAt={doc.submitted_at} compact /></div>
+                    ) : null}
+
+                    {blanks.length > 0 && (
+                      <div className="cdt-detail-blanks">{blanks.length} blank{blanks.length === 1 ? "" : "s"} still to fill in below.</div>
+                    )}
+
+                    <div className="cdt-detail-links">
+                      {doc.draft_text && (
+                        <a href={`/api/documents/${doc.id}/download`}>Download submitted draft (.docx)</a>
+                      )}
+                      {secondDraft?.draft_text && (
+                        <a href={`/api/documents/${secondDraft.id}/download`}>Download revised draft (.docx)</a>
+                      )}
+                    </div>
+
+                    {/* Fill-in blanks — client, review docs that still have [[blanks]]. */}
+                    {!isAttorney && fillTarget?.draft_text && (
+                      <DocumentInfoNeeded documentId={fillTarget.id} draftText={fillTarget.draft_text} documentTitle={doc.title} />
+                    )}
+                  </Row>
+                );
+              })}
+            </>
+          )}
+
           {/* ── DRAFTS & DOCUMENTS ── */}
-          {documents.length > 0 && (
+          {otherDocs.length > 0 && (
             <>
               <div className="cdt-band">
                 <span className="cdt-band-label">Drafts &amp; documents</span>
-                <span className="cdt-band-count cdt-count-drafts">{documents.length}</span>
+                <span className="cdt-band-count cdt-count-drafts">{otherDocs.length}</span>
                 <span className="cdt-band-hint">created with your assistant · kept &amp; searchable</span>
               </div>
-              {documents.map((doc) => {
+              {otherDocs.map((doc) => {
                 const key = `doc:${doc.id}`;
                 const children = childDocuments.filter((c) => c.parent_document_id === doc.id);
                 const secondDraft = children.find((c) => c.doc_type === "second_draft");

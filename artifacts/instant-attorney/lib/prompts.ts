@@ -26,6 +26,7 @@ import {
 } from "./lien-statutes.ts";
 import { lienInstrumentsForPrompt } from "./lien-instruments.ts";
 import { isFullDepthState, isPrepMode, prepModePromptBlock, stateName } from "./jurisdiction.ts";
+import { computeDocket, formatDocketForPrompt } from "./docket.ts";
 
 // ── Free chat (Phase I) ──────────────────────────────────────────────────────
 
@@ -150,6 +151,10 @@ export function buildFileContext(
     lines.push("", "FACT GAPS:");
     gaps.forEach((f) => lines.push(`• ${f.description}`));
   }
+
+  // Deterministic docket — computed deadlines from dated trigger facts. The
+  // model answers timing questions from THESE dates instead of re-deriving them.
+  lines.push(...formatDocketForPrompt(computeDocket(facts, new Date(), caseFile.jurisdiction)));
 
   if (caseFile.legal_strategy) {
     const s = caseFile.legal_strategy;
@@ -631,6 +636,7 @@ Rules:
 - If the new conversation contains nothing worth recording (chit-chat, clarifying questions, drafting back-and-forth with no new facts), output the single line: NO UPDATE — and nothing else.
 - Tag every fact in CONFIRMED FACTS by how it can be shown, matching the file's convention: "[fact] — established: <what evidence shows it>" when a document/record/attachment backs it, "[fact] — asserted: client's account" when it rests on what the client said in conversation (this is the default for anything stated in chat), or "[fact] — characterization/opinion" for non-provable characterizations ("unfair," "hostile").
 - Capture obligations the file should track: parties, dates, deadlines, locations, jurisdiction, and goals.
+- KEY DATES (docketing): when the client gives a CONCRETE calendar date for a legal trigger event, record it as its own confirmed fact in EXACTLY this format: "Key date · <event> · YYYY-MM-DD — <short description> — [established: <evidence> | asserted: client's account]". Allowed <event> values (use ONLY these): served_lawsuit (served with a lawsuit/citation), incident_injury (accident/injury date), publication (defamatory statement published), termination (fired/demoted/adverse employment action), debt_last_due (debt's last due date/last payment), collector_notice (debt collector's first written notice), contract_breach (contract breached), explicit_deadline (a stated deadline date itself — from a letter, court order, or notice; the description names what is due). Resolve relative dates ("last Tuesday") to YYYY-MM-DD using the TODAY'S DATE line provided with the input; if there is no TODAY'S DATE or only a month/approximation is known, do NOT emit a Key date fact — record it as a FACT GAP asking for the exact date, because deadlines are computed from these entries.
 - Be precise and factual. Never invent facts, citations, or legal conclusions. If the client only speculated, do not record it as fact.
 
 When there IS something to record, output EXACTLY this format and nothing else:

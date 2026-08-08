@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { ClientWorkspaceDraft } from "@/lib/types";
 import { findBlanks, type DraftBlank } from "@/lib/freestyle-drafts";
+import { runPromoteWithSaveGuard } from "@/lib/draft-promote-guard";
 
 // Consumer freestyle drafts panel — the docked right side of the split screen.
 // Mirrors the attorney workspace panel: draft tabs, an editable title + body with
@@ -33,7 +34,12 @@ export default function ChatDraftsPanel({
   const [saving, setSaving] = useState(false);
   const [promoting, setPromoting] = useState(false);
   const [notice, setNotice] = useState("");
+  // preview = rendered view with highlighted [[placeholders]]; edit = raw textarea
+  const [viewMode, setViewMode] = useState<"preview" | "edit">("preview");
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Tracks the promise of any currently in-flight save so promote() can await
+  // it even if dirty has already been cleared by the time promote is called.
+  const savePromiseRef = useRef<Promise<boolean> | null>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
   const draftsRef = useRef<ClientWorkspaceDraft[]>([]);
   useEffect(() => { draftsRef.current = drafts; }, [drafts]);
@@ -97,22 +103,28 @@ export default function ChatDraftsPanel({
     load();
   }, [focusNonce, focusId, focusTitle, load]);
 
-  const save = useCallback(async (id: string, opts: { silent?: boolean } = {}) => {
+  const save = useCallback(async (id: string, opts: { silent?: boolean } = {}): Promise<boolean> => {
     const toSave = draftsRef.current.find((d) => d.id === id);
-    if (!toSave) return;
+    if (!toSave) return true; // nothing to save — treat as success
     if (!opts.silent) setSaving(true);
+    let ok = false;
     try {
       const res = await fetch(`/api/workspace/drafts/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: toSave.title, content: toSave.content }),
       });
-      if (res.ok) setDirty(false);
+      ok = res.ok;
+      if (ok) setDirty(false);
     } catch {
       /* keep dirty; retry on next edit or blur */
     } finally {
       if (!opts.silent) setSaving(false);
+      // Clear the in-flight ref once this save settles so future promotes
+      // don't await a long-gone promise.
+      if (savePromiseRef.current !== null) savePromiseRef.current = null;
     }
+    return ok;
   }, []);
 
   function edit(patch: Partial<Pick<ClientWorkspaceDraft, "title" | "content">>) {
@@ -121,7 +133,11 @@ export default function ChatDraftsPanel({
     setDirty(true);
     if (saveTimer.current) clearTimeout(saveTimer.current);
     const id = activeId;
-    saveTimer.current = setTimeout(() => save(id), 900);
+    saveTimer.current = setTimeout(() => {
+      // Store the in-flight promise so promote() can await it if it fires
+      // before this save has settled.
+      savePromiseRef.current = save(id);
+    }, 900);
   }
 
   async function newDraft() {
@@ -150,23 +166,37 @@ export default function ChatDraftsPanel({
   }
 
   async function promote(id: string) {
-    if (dirty) await save(id, { silent: true });
     setPromoting(true);
     setNotice("");
-    try {
-      const res = await fetch(`/api/workspace/drafts/${id}/promote`, { method: "POST" });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        setNotice("Sent for attorney review — you'll find it under your documents.");
-        setDrafts((prev) => prev.map((d) => (d.id === id ? { ...d, promoted_document_id: data.documentId } : d)));
-      } else {
-        setNotice(data.error ?? "Could not send for review.");
-      }
-    } catch {
-      setNotice("Could not send for review.");
-    } finally {
-      setPromoting(false);
+
+    const saveError = await runPromoteWithSaveGuard({
+      // Hand the guard the current in-flight save promise (may be null).
+      inFlightSave: savePromiseRef.current,
+      // Read the live dirty flag *after* any in-flight save settles.
+      isDirty: () => dirtyRef.current,
+      // Fresh save if still dirty — store the promise so concurrent calls see it.
+      save: () => {
+        const p = save(id, { silent: true });
+        savePromiseRef.current = p;
+        return p;
+      },
+      promote: async () => {
+        const res = await fetch(`/api/workspace/drafts/${id}/promote`, { method: "POST" });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          setNotice("Sent for attorney review — you'll find it under your documents.");
+          setDrafts((prev) => prev.map((d) => (d.id === id ? { ...d, promoted_document_id: data.documentId } : d)));
+        } else {
+          setNotice(data.error ?? "Could not send for review.");
+        }
+      },
+    });
+
+    if (saveError) {
+      setNotice(saveError);
     }
+
+    setPromoting(false);
   }
 
   return (
@@ -199,24 +229,62 @@ export default function ChatDraftsPanel({
               placeholder="Draft title"
             />
             <div className="fs-draft-editor-actions">
+              {/* Edit / Preview toggle */}
+              <button
+                type="button"
+                className={`fc-draft-mode-btn${viewMode === "preview" ? " fc-draft-mode-btn-active" : ""}`}
+                onClick={() => setViewMode(viewMode === "preview" ? "edit" : "preview")}
+                title={viewMode === "preview" ? "Switch to edit mode" : "Switch to preview (highlights blanks)"}
+              >
+                {viewMode === "preview" ? "Edit" : "Preview"}
+              </button>
               <span className="fs-draft-save-state">{saving ? "Saving…" : dirty ? "Unsaved" : "Saved"}</span>
-              <a className="fs-draft-dl" href={`/api/workspace/drafts/${active.id}/download`} title="Download as Markdown">Download</a>
+              <a className="fs-draft-dl" href={`/api/workspace/drafts/${active.id}/download`} title="Download as Word document">Download</a>
               <button type="button" className="fs-draft-del" onClick={() => remove(active.id)} title="Delete draft">Delete</button>
             </div>
           </div>
-          <textarea
-            ref={bodyRef}
-            className="fs-draft-body"
-            value={active.content}
-            onChange={(e) => edit({ content: e.target.value })}
-            onBlur={() => dirty && activeId && save(activeId)}
-            placeholder="Draft content…"
-            spellCheck
-          />
-          {blanks.length > 0 && (
+
+          {viewMode === "preview" ? (
+            /* Rendered preview — [[placeholder]] tokens appear as yellow highlighted chips */
+            <div className="fc-draft-preview fs-draft-body" onClick={() => setViewMode("edit")}>
+              {active.content.trim() ? (
+                active.content.split(/(\[\[[^\]]+\]\])/g).map((part, i) => {
+                  if (/^\[\[[^\]]+\]\]$/.test(part)) {
+                    return (
+                      <mark key={i} className="fc-draft-blank-mark" title="Click Edit to fill this in">
+                        {part.slice(2, -2)}
+                      </mark>
+                    );
+                  }
+                  return <span key={i} style={{ whiteSpace: "pre-wrap" }}>{part}</span>;
+                })
+              ) : (
+                <span className="fc-draft-preview-empty">Nothing drafted yet — ask your assistant to write a document, or switch to Edit and start typing.</span>
+              )}
+              {blanks.length > 0 && (
+                <div className="fc-draft-preview-hint">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  {blanks.length} highlighted blank{blanks.length === 1 ? "" : "s"} — tap Edit to fill them in
+                </div>
+              )}
+            </div>
+          ) : (
+            <textarea
+              ref={bodyRef}
+              className="fs-draft-body"
+              value={active.content}
+              onChange={(e) => edit({ content: e.target.value })}
+              onBlur={() => { if (dirty && activeId) savePromiseRef.current = save(activeId); }}
+              placeholder="Draft content…"
+              spellCheck
+            />
+          )}
+
+          {/* Blanks strip — only in edit mode so clicking a chip jumps the textarea */}
+          {viewMode === "edit" && blanks.length > 0 && (
             <div className="fc-draft-blanks">
               <span className="fc-draft-blanks-label">
-                {blanks.length} blank{blanks.length === 1 ? "" : "s"} to fill
+                {blanks.length} blank{blanks.length === 1 ? "" : "s"} to fill in
               </span>
               <div className="fc-draft-blanks-chips">
                 {blanks.map((b) => (
@@ -233,9 +301,13 @@ export default function ChatDraftsPanel({
               </div>
             </div>
           )}
+
           <div className="fc-draft-promote-row">
             {active.promoted_document_id ? (
-              <span className="fc-draft-promoted">✓ Sent to your attorney for review — you&apos;ll find it under your documents.</span>
+              <span className="fc-draft-promoted">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ verticalAlign: "middle", marginRight: 4 }}><polyline points="20 6 9 17 4 12"/></svg>
+                Sent to your attorney for review — you&apos;ll find it under &ldquo;With your attorney&rdquo; on your case file.
+              </span>
             ) : (
               <>
                 <button
@@ -243,10 +315,22 @@ export default function ChatDraftsPanel({
                   className="fc-draft-promote-btn fc-draft-promote-btn-block"
                   onClick={() => promote(active.id)}
                   disabled={promoting || !active.content.trim()}
+                  title={!active.content.trim() ? "Add content before sending for review" : "Submit this draft to your attorney"}
                 >
-                  {promoting ? "Sending…" : "Send to my attorney for review →"}
+                  {promoting ? (
+                    "Sending…"
+                  ) : (
+                    <>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ verticalAlign: "middle", marginRight: 5 }}><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                      Send to my attorney for review
+                    </>
+                  )}
                 </button>
-                <span className="fc-draft-promote-hint">Andrew Crawford, Esq. reviews it and returns it within 48 hours.</span>
+                <span className="fc-draft-promote-hint">
+                  {!active.content.trim()
+                    ? "Finish drafting before sending — ask your assistant to write it, or type directly above."
+                    : "Andrew Crawford, Esq. reviews it and returns it within 48 hours."}
+                </span>
               </>
             )}
             {notice && <span className="fc-draft-notice">{notice}</span>}

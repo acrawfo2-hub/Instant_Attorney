@@ -24,6 +24,7 @@ export type UsageFeature =
   | "attorney_brainstorm"
   | "roadmap_refresh"
   | "matter_synthesis"
+  | "strength_check"
   | "gov_form_lookup"
   | "storage_upload";
 

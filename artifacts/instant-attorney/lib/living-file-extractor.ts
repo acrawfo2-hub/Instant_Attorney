@@ -128,7 +128,11 @@ export async function syncLivingFile(
     return { synced: false, processedMessages: newMessages.length, reason: "no_update" };
   }
 
+  // Authoritative "as of" date so KEY DATES can resolve relative references
+  // ("last Tuesday") deterministically instead of guessing.
+  const todayIso = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
   const userMessage =
+    `TODAY'S DATE: ${todayIso}\n\n` +
     `=== CURRENT LIVING FILE ===\n${fileContext || "(empty — no file yet)"}\n\n` +
     `=== NEW CONVERSATION SINCE LAST UPDATE ===\n${transcript}`;
 

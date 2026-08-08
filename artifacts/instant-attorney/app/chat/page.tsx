@@ -13,6 +13,8 @@ import ChatDraftsPanel from "@/components/ChatDraftsPanel";
 import { phase2ExistingCounselNotice } from "@/lib/existing-counsel";
 import { parseDrafts, stripDraftsForDisplay } from "@/lib/freestyle-drafts";
 import { stripToolMarkers, activeToolNames } from "@/lib/tool-markers";
+import { placeholderFields } from "@/lib/wizard-parsing";
+import { computeDocket, describePressingDeadline } from "@/lib/docket";
 import ToolRunChips from "@/components/ToolRunChips";
 import type { CounselEngagementGoal } from "@/lib/types";
 
@@ -20,6 +22,10 @@ type Msg = Pick<IntakeMessage, "role" | "content"> & {
   // Local-only: object URL for a screenshot the user attached to this turn, so the
   // image stays visible in the chat history instead of collapsing to a [filename] tag.
   imageUrl?: string;
+  // Local-only: placeholder for a turn still generating in the background. It
+  // renders as nothing and is replaced in place when the reply arrives, so the
+  // reply lands BEFORE any messages the user sent afterwards.
+  pendingId?: string;
 };
 
 interface PendingAttachment {
@@ -191,7 +197,15 @@ function AcpChatInner() {
   // inline base64), so large files don't blow the request-body limit. These
   // chips track their upload/analysis state.
   const [docUploads, setDocUploads] = useState<DocUpload[]>([]);
+  // Docs queued before the first message (no caseFileId yet). Uploaded as soon
+  // as caseFileId becomes available.
+  const [queuedDocFiles, setQueuedDocFiles] = useState<File[]>([]);
   const [dragOver, setDragOver] = useState(false);
+  // When the AI saves a new draft, show a dismissible banner so users know where it went.
+  const [draftSavedTitle, setDraftSavedTitle] = useState<string | null>(null);
+  // Count badge on the Drafts button — loaded once caseFileId is known, refreshed
+  // each time draftsRefresh bumps.
+  const [draftCount, setDraftCount] = useState(0);
   const [showQcModal, setShowQcModal] = useState(false);
   const [showCounselModal, setShowCounselModal] = useState(false);
   const [pendingCounselContext, setPendingCounselContext] = useState<ExistingCounselFormValue | null>(null);
@@ -204,17 +218,161 @@ function AcpChatInner() {
   const [draftFocus, setDraftFocus] = useState<{ id: string | null; title: string | null; nonce: number }>(
     { id: urlFocusDraftId, title: null, nonce: urlFocusDraftId ? 1 : 0 },
   );
+  // Background turns: a long generation (e.g. a document draft) keeps running
+  // server-side after the client lets go of its stream. Each entry is polled
+  // via /api/chat-acp/status until the finished text can be placed into the
+  // transcript. pendingId anchors the reply to a placeholder message (stable
+  // even as more messages arrive); null means append at the end.
+  const [bgJobs, setBgJobs] = useState<Array<{ jobId: string; pendingId: string | null; startedAt: number }>>([]);
+  const currentJobIdRef = useRef<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const sendSeqRef = useRef(0);
+  // Scroll pinning: only auto-follow new output while the user is at the
+  // bottom of the transcript. Scrolling up stops the auto-scroll (so long
+  // generations can be read through) until they jump back down.
+  const messagesMainRef = useRef<HTMLElement>(null);
+  const pinnedRef = useRef(true);
+  const [showJump, setShowJump] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputAreaRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const hydratedRef = useRef(false);
   const caseFileIdRef = useRef<string | null>(caseFileId);
   const hasUserMessages = messages.some((m) => m.role === "user");
   const caseHomeHref = caseFileId ? `/dashboard/${caseFileId}` : "/dashboard";
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (pinnedRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages, streamingText]);
+
+  function handleMessagesScroll() {
+    const el = messagesMainRef.current;
+    if (!el) return;
+    const pinned = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    pinnedRef.current = pinned;
+    setShowJump(!pinned);
+  }
+
+  function jumpToLatest() {
+    pinnedRef.current = true;
+    setShowJump(false);
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }
+
+  // Resume a still-running background turn on page load: reopening the chat
+  // while a long draft generates shows the progress card again instead of
+  // silently dropping the run.
+  useEffect(() => {
+    if (!urlCaseFileId) return;
+    let cancelled = false;
+    fetch(`/api/chat-acp/status?caseFileId=${urlCaseFileId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { running?: boolean; jobId?: string; startedAt?: number } | null) => {
+        if (cancelled || !d?.running || !d.jobId) return;
+        const jobId = d.jobId;
+        setBgJobs((prev) =>
+          prev.some((j) => j.jobId === jobId)
+            ? prev
+            : [...prev, { jobId, pendingId: null, startedAt: d.startedAt ?? Date.now() }]
+        );
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [urlCaseFileId]);
+
+  // Poll background turns until they finish, then place the reply into the
+  // transcript and surface any drafts it produced.
+  useEffect(() => {
+    if (bgJobs.length === 0) return;
+    let cancelled = false;
+
+    const resolveJob = (job: (typeof bgJobs)[number], data: { finalText?: string | null; truncated?: boolean }) => {
+      setBgJobs((prev) => prev.filter((j) => j !== job));
+      if (data.truncated) setChatTruncated(true);
+      const raw = typeof data.finalText === "string" ? data.finalText : "";
+      const text = stripToolMarkers(raw).trim();
+      setMessages((prev) => {
+        // Replace the turn's placeholder in place (stable anchor even after
+        // later messages arrived); fall back to appending.
+        if (job.pendingId) {
+          const idx = prev.findIndex((m) => m.pendingId === job.pendingId);
+          if (idx !== -1) {
+            const next = [...prev];
+            if (text) next[idx] = { role: "assistant", content: text };
+            else next.splice(idx, 1);
+            return next;
+          }
+        }
+        return text ? [...prev, { role: "assistant", content: text }] : prev;
+      });
+      if (text) {
+        const newDrafts = parseDrafts(raw);
+        const openedUpload = /\x02TOOL:open_uploaded_document:done\x02/.test(raw);
+        if (newDrafts.length > 0 || openedUpload) {
+          setDraftsPanelOpen(true);
+          setDraftsRefresh((n) => n + 1);
+          if (newDrafts.length > 0) setDraftSavedTitle(newDrafts[0].title);
+        }
+      } else {
+        // Job unknown (e.g. server restarted) or empty — refresh drafts in
+        // case results were persisted before it went away.
+        setDraftsRefresh((n) => n + 1);
+      }
+    };
+
+    const tick = async () => {
+      for (const job of bgJobs) {
+        try {
+          const res = await fetch(`/api/chat-acp/status?jobId=${encodeURIComponent(job.jobId)}`);
+          if (!res.ok) continue;
+          const data = await res.json() as { running?: boolean; finalText?: string | null; truncated?: boolean };
+          if (cancelled) return;
+          if (data.running) continue;
+          resolveJob(job, data);
+        } catch { /* transient network error — retry on next tick */ }
+      }
+    };
+
+    const t = setInterval(tick, 4000);
+    tick();
+    return () => { cancelled = true; clearInterval(t); };
+  }, [bgJobs]);
+
+  // Keep the draft count badge on the Drafts button current.
+  useEffect(() => {
+    if (!caseFileId) return;
+    fetch(`/api/workspace/drafts?caseFileId=${caseFileId}`)
+      .then((r) => r.ok ? r.json() : { drafts: [] })
+      .then((d) => setDraftCount((d.drafts ?? []).length))
+      .catch(() => {});
+  }, [caseFileId, draftsRefresh]);
+
+  // When caseFileId becomes available (first message sent), upload any docs the
+  // user had already attached before the conversation started.
+  useEffect(() => {
+    if (!caseFileId || queuedDocFiles.length === 0) return;
+    const files = [...queuedDocFiles];
+    setQueuedDocFiles([]);
+    files.forEach((file) => {
+      const key = `${file.name}-${Date.now()}`;
+      setDocUploads((prev) => [...prev, { key, fileName: file.name || "document", status: "uploading" }]);
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("caseFileId", caseFileId);
+      fetch("/api/attachments/upload", { method: "POST", body: fd })
+        .then((res) => {
+          if (!res.ok) throw new Error(res.status === 413 ? "File is too large." : "Upload failed.");
+          setDocUploads((prev) => prev.map((d) => (d.key === key ? { ...d, status: "ready" } : d)));
+        })
+        .catch(() => {
+          setDocUploads((prev) => prev.map((d) => (d.key === key ? { ...d, status: "error" } : d)));
+        });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [caseFileId]);
 
   // Open the drafts panel and jump it to a specific draft (by title or id). Wired
   // to the in-chat draft chips and to a ?draft= deep link from the case file.
@@ -275,7 +433,8 @@ function AcpChatInner() {
   // Reopening an existing file (?caseFileId=…) does NOT replay the whole prior
   // transcript — that made the chat feel like a long, confusing thread to catch up
   // on. Instead we open a fresh conversation with a short "welcome back" that names
-  // where we left off (the distilled session recap). The orchestrator still sees
+  // the concrete next step from next_action (written by the Living File extractor),
+  // then lists any drafts that still have blanks to fill. The orchestrator still sees
   // the full file server-side via buildFileContext, and the complete message
   // history remains in the file/DB — it's just not dumped into the thread here.
   useEffect(() => {
@@ -284,18 +443,76 @@ function AcpChatInner() {
     let cancelled = false;
     (async () => {
       const supabase = createClient();
-      const { data: cf } = await supabase
-        .from("case_files")
-        .select("chat_session_summary")
-        .eq("id", urlCaseFileId)
-        .maybeSingle();
+
+      // Fetch case-file metadata, pending drafts, and facts (for the computed
+      // docket) in parallel
+      const [cfRes, docsRes, factsRes] = await Promise.all([
+        supabase
+          .from("case_files")
+          .select("chat_session_summary, next_action, jurisdiction")
+          .eq("id", urlCaseFileId)
+          .maybeSingle(),
+        supabase
+          .from("documents")
+          .select("title, draft_text, status")
+          .eq("case_file_id", urlCaseFileId)
+          .in("status", ["draft", "pending_review"]),
+        supabase
+          .from("fact_items")
+          .select("id, description, status, kind")
+          .eq("case_file_id", urlCaseFileId),
+      ]);
+
       if (cancelled) return;
-      const recap = (cf?.chat_session_summary as string | null)?.trim() || null;
-      const welcome =
-        "Welcome back — your case file is open in front of me, so there's no need to catch me up.\n\n" +
-        (recap ? `Last time: ${recap}\n\n` : "") +
-        "What would you like to do next? We can talk anything through, or I can draft the next document you need.";
-      setMessages([{ role: "assistant", content: welcome }]);
+
+      const cf = cfRes.data as { chat_session_summary: string | null; next_action: string | null; jurisdiction: string | null } | null;
+      const docs = (docsRes.data ?? []) as { title: string; draft_text: string | null; status: string }[];
+
+      const recap = cf?.chat_session_summary?.trim() || null;
+      const nextAction = cf?.next_action?.trim() || null;
+
+      // An imminent or passed deadline outranks everything — name it first.
+      const factRows = (factsRes.data ?? []) as { id: string; description: string; status: string; kind?: string }[];
+      const deadlineAlert = describePressingDeadline(
+        computeDocket(factRows, new Date(), cf?.jurisdiction ?? null)
+      );
+
+      // Summarise drafts that still have unfilled blanks
+      const draftsWithBlanks = docs
+        .filter((d) => d.draft_text && placeholderFields(d.draft_text).length > 0)
+        .map((d) => ({
+          title: d.title,
+          blanks: placeholderFields(d.draft_text!).length,
+        }));
+
+      // Build the specific, concise welcome
+      const lines: string[] = [];
+      lines.push("Welcome back — your case file is open in front of me.\n");
+
+      if (deadlineAlert) {
+        lines.push(`${deadlineAlert}\n`);
+      }
+
+      if (nextAction) {
+        lines.push(`**Where we left off:** ${nextAction}`);
+      } else if (recap) {
+        lines.push(`**Last time:** ${recap}`);
+      }
+
+      if (draftsWithBlanks.length > 0) {
+        const draftSummary = draftsWithBlanks
+          .map((d) => `*${d.title}* (${d.blanks} blank${d.blanks === 1 ? "" : "s"} to fill)`)
+          .join(", ");
+        lines.push(`\nYou also have ${draftsWithBlanks.length === 1 ? "a draft" : "drafts"} with blanks still open: ${draftSummary}.`);
+      }
+
+      lines.push(
+        draftsWithBlanks.length > 0 || nextAction
+          ? "\nWant me to help with any of that, or is there something else on your mind?"
+          : "\nWhat would you like to do? We can talk anything through, or I can start drafting."
+      );
+
+      setMessages([{ role: "assistant", content: lines.join("\n") }]);
     })();
     return () => {
       cancelled = true;
@@ -393,7 +610,13 @@ function AcpChatInner() {
     }
     const id = caseFileIdRef.current;
     if (!id) {
-      alert("Send a message first, then attach documents so they can be added to your file.");
+      // No case file yet — queue the doc. It will be uploaded automatically as
+      // soon as the user sends their first message and a case file is created.
+      setQueuedDocFiles((prev) => [...prev, file]);
+      setDocUploads((prev) => [
+        ...prev,
+        { key: `${file.name}-queued-${Date.now()}`, fileName: file.name || "document", status: "uploading" },
+      ]);
       return;
     }
     const key = `${file.name}-${Date.now()}`;
@@ -447,7 +670,29 @@ function AcpChatInner() {
   async function sendMessage(e: FormEvent | null, overrideText?: string) {
     e?.preventDefault();
     const text = (overrideText ?? input).trim();
-    if ((!text && !pendingAttachment) || loading || showCounselModal) return;
+    if ((!text && !pendingAttachment) || showCounselModal) return;
+
+    // Sending while a turn is still generating moves that turn to the
+    // background: let go of its stream (the server keeps generating and
+    // persists everything), leave a placeholder where its reply belongs, and
+    // continue with the new message. The server serializes turns per case file
+    // and splices the finished reply into the model history; the poll above
+    // fills the placeholder when it completes.
+    let bgPlaceholderId: string | null = null;
+    if (loading) {
+      const prevJobId = currentJobIdRef.current;
+      // Header (with the job id) hasn't arrived yet — without it the turn
+      // can't be recovered, so hold the send for a beat instead of losing it.
+      if (!prevJobId) return;
+      abortRef.current?.abort();
+      bgPlaceholderId = `bg-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      setBgJobs((prev) => [
+        ...prev,
+        { jobId: prevJobId, pendingId: bgPlaceholderId, startedAt: Date.now() },
+      ]);
+      setStreamingText("");
+      setActiveTools([]);
+    }
 
     const attachment = pendingAttachment;
 
@@ -464,11 +709,20 @@ function AcpChatInner() {
         ? { imageUrl: attachment.previewUrl }
         : {}),
     };
-    const nextMessages = [...messages, userMsg];
+    const nextMessages: Msg[] = bgPlaceholderId
+      ? [...messages, { role: "assistant", content: "", pendingId: bgPlaceholderId }, userMsg]
+      : [...messages, userMsg];
     setMessages(nextMessages);
     setInput("");
     setLoading(true);
     setStreamingText("");
+    pinnedRef.current = true;
+    setShowJump(false);
+    // This turn's job id arrives in the response header frame.
+    currentJobIdRef.current = null;
+    const seq = ++sendSeqRef.current;
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
 
     // Hand the object URL off to the sent message so it stays visible in history.
     // Do NOT revoke it here (clearAttachment would) — the message bubble now owns it.
@@ -477,14 +731,19 @@ function AcpChatInner() {
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
     try {
-      // For API, use plain text content (not the display content with filename prefix)
-      const apiMessages = nextMessages.map((m, idx) => ({
-        role: m.role,
-        content: idx === nextMessages.length - 1 ? text : m.content,
-      }));
+      // For API, use plain text content (not the display content with filename
+      // prefix). Background placeholders are local-only — exclude them; the
+      // server splices the real previous reply into the model history itself.
+      const apiMessages = nextMessages
+        .filter((m) => !m.pendingId)
+        .map((m, idx, arr) => ({
+          role: m.role,
+          content: idx === arr.length - 1 ? text : m.content,
+        }));
 
       const res = await fetch("/api/chat-acp", {
         method: "POST",
+        signal: ctrl.signal,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: apiMessages,
@@ -520,7 +779,12 @@ function AcpChatInner() {
         if (firstChunk && chunk.startsWith("\x00")) {
           const end = chunk.indexOf("\x00", 1);
           if (end !== -1) {
-            const id = chunk.slice(1, end);
+            // Header frame: "<caseFileId>|<jobId>". The job id lets us
+            // re-attach to this turn via the status endpoint if we let go of
+            // the stream (user sent another message mid-generation).
+            const header = chunk.slice(1, end);
+            const [id, jobId] = header.split("|");
+            currentJobIdRef.current = jobId || null;
             if (id) {
               setCaseFileId(id);
               // Put the new file's id in the URL so a reload mid-session resumes
@@ -565,22 +829,30 @@ function AcpChatInner() {
       setStreamingText("");
       // The server persisted any ---DRAFT--- blocks (or opened an uploaded doc as a
       // draft via the tool); open the panel and refresh it.
-      if (mode === "freestyle" && (parseDrafts(full).length > 0 || openedUpload)) {
+      const newDrafts = parseDrafts(full);
+      if (mode === "freestyle" && (newDrafts.length > 0 || openedUpload)) {
         setDraftsPanelOpen(true);
         setDraftsRefresh((n) => n + 1);
+        // Show a notification banner so it's clear where the draft went.
+        if (newDrafts.length > 0) setDraftSavedTitle(newDrafts[0].title);
       }
       setPendingCounselContext(null);
       // Resolved doc uploads are now in the file context; keep only in-flight ones.
       setDocUploads((prev) => prev.filter((d) => d.status === "uploading"));
     } catch {
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: "I'm sorry — something went wrong. Please try again." },
-      ]);
-      setStreamingText("");
-      setActiveTools([]);
+      // Aborted on purpose (the turn moved to the background) — not an error.
+      if (!ctrl.signal.aborted) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: "I'm sorry — something went wrong. Please try again." },
+        ]);
+        setStreamingText("");
+        setActiveTools([]);
+      }
     } finally {
-      setLoading(false);
+      // Only the most recent send owns the loading flag — an older, aborted
+      // turn finishing up must not clear the newer turn's state.
+      if (sendSeqRef.current === seq) setLoading(false);
     }
   }
 
@@ -610,15 +882,19 @@ function AcpChatInner() {
           {mode === "freestyle" && caseFileId && !isQuickConsult && (
             <button
               type="button"
-              className="fc-upgrade-btn"
+              className={`fc-upgrade-btn fc-drafts-btn${draftCount > 0 && !draftsPanelOpen ? " fc-drafts-btn-has" : ""}`}
               style={{
-                background: draftsPanelOpen ? "var(--brand-gold)" : "rgba(12,25,41,0.06)",
-                color: draftsPanelOpen ? "#1a1206" : "var(--brand-navy)",
+                background: draftsPanelOpen ? "var(--brand-gold)" : undefined,
+                color: draftsPanelOpen ? "#1a1206" : undefined,
               }}
-              onClick={() => setDraftsPanelOpen((v) => !v)}
+              onClick={() => { setDraftsPanelOpen((v) => !v); setDraftSavedTitle(null); }}
               title="Show or hide your drafts"
             >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+              </svg>
               {draftsPanelOpen ? "Hide drafts" : "Drafts"}
+              {draftCount > 0 && <span className="fc-drafts-badge">{draftCount}</span>}
             </button>
           )}
           {isQuickConsult && hasUserMessages ? (
@@ -631,16 +907,14 @@ function AcpChatInner() {
             </button>
           ) : (
             <button
-              className="fc-upgrade-btn"
-              style={{ background: "rgba(12,25,41,0.06)", color: "var(--brand-navy)" }}
+              className="fc-upgrade-btn fc-case-home-btn"
               onClick={() => isQuickConsult && hasUserMessages ? setShowQcModal(true) : router.push(caseHomeHref)}
+              title={isQuickConsult ? "All cases" : "Go to your case homepage"}
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                <line x1="3" y1="9" x2="21" y2="9" />
-                <line x1="9" y1="21" x2="9" y2="9" />
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M19 12H5M12 19l-7-7 7-7" />
               </svg>
-              {isQuickConsult ? "All cases" : "Open your case"}
+              {isQuickConsult ? "All cases" : "Your case file"}
             </button>
           )}
           <AccountMenu onLight />
@@ -696,8 +970,8 @@ function AcpChatInner() {
       <div className="fc-workspace-main">
 
       {/* MESSAGES */}
-      <main className="fc-messages">
-        {messages.map((msg, i) => (
+      <main className="fc-messages" ref={messagesMainRef} onScroll={handleMessagesScroll}>
+        {messages.map((msg, i) => msg.pendingId ? null : (
           <div
             key={i}
             className={msg.role === "user" ? "fc-msg-row fc-msg-row-user" : "fc-msg-row fc-msg-row-ai"}
@@ -765,6 +1039,55 @@ function AcpChatInner() {
           </div>
         )}
 
+        {/* Background turn progress card — a long generation keeps running
+            server-side; the user can keep chatting or leave this page. */}
+        {bgJobs.length > 0 && (
+          <div className="fc-msg-row fc-msg-row-ai">
+            <div className="fc-avatar">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              </svg>
+            </div>
+            <div className="fc-bubble fc-bubble-ai" role="status">
+              <p><strong>Still working on that in the background…</strong></p>
+              <p>
+                Long drafts can take a few minutes. You can keep chatting or leave this
+                page — anything I draft is saved to your <strong>Drafts</strong> automatically,
+                and the reply will appear here when it&apos;s ready.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {showJump && (loading || bgJobs.length > 0) && (
+          <button
+            type="button"
+            onClick={jumpToLatest}
+            aria-label="Jump to latest messages"
+            style={{
+              position: "sticky",
+              bottom: 8,
+              alignSelf: "center",
+              zIndex: 5,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "6px 14px",
+              borderRadius: 999,
+              border: "1px solid rgba(0,0,0,0.12)",
+              background: "#fff",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.14)",
+              fontSize: 13,
+              cursor: "pointer",
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M12 5v14M19 12l-7 7-7-7" />
+            </svg>
+            Jump to latest
+          </button>
+        )}
+
         <div ref={messagesEndRef} />
       </main>
 
@@ -775,6 +1098,32 @@ function AcpChatInner() {
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
+        {/* "Draft saved" notification — appears after AI produces a draft, clears when
+            the user opens the panel or dismisses it manually. */}
+        {draftSavedTitle && !draftsPanelOpen && (
+          <div className="fc-draft-notify">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+            </svg>
+            <span className="fc-draft-notify-text">
+              Draft saved: <strong>{draftSavedTitle}</strong>
+            </span>
+            <button
+              type="button"
+              className="fc-draft-notify-open"
+              onClick={() => { setDraftsPanelOpen(true); setDraftSavedTitle(null); }}
+            >
+              Open Drafts →
+            </button>
+            <button
+              type="button"
+              className="fc-draft-notify-dismiss"
+              onClick={() => setDraftSavedTitle(null)}
+              aria-label="Dismiss"
+            >×</button>
+          </div>
+        )}
+
         {/* Document uploads (freestyle) — added to the file + analyzed, not sent inline */}
         {docUploads.length > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
@@ -845,26 +1194,47 @@ function AcpChatInner() {
           </div>
         )}
 
+        {/* Hidden file input — triggered by the paperclip button */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,text/plain,text/markdown,text/csv,application/rtf,text/rtf"
+          style={{ display: "none" }}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) attachFile(file);
+            e.target.value = "";
+          }}
+        />
         <form className="fc-input-form" onSubmit={sendMessage}>
+          <button
+            type="button"
+            className="fc-attach-btn"
+            onClick={() => fileInputRef.current?.click()}
+            aria-label="Attach file"
+            title="Attach image, PDF, or document"
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+            </svg>
+          </button>
           <textarea
             ref={textareaRef}
             className="fc-textarea"
             placeholder={
               dragOver
-                ? mode === "freestyle" ? "Drop a file here…" : "Drop screenshot here…"
+                ? "Drop file here…"
                 : mode === "freestyle"
-                  ? "Ask anything, think it through, or ask me to draft… attach a document to work from"
-                  : "Share the details of your situation… or paste a screenshot"
+                  ? "Ask anything, or attach a document to work from…"
+                  : "Share details of your situation… or paste a screenshot"
             }
             value={input}
             onChange={(e) => { setInput(e.target.value); autoResize(); }}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
             rows={1}
-            disabled={loading}
           />
           <VoiceInputButton
-            disabled={loading}
             onTranscript={(t) => {
               setInput((v) => (v.trim() ? `${v.trim()} ${t}` : t));
               requestAnimationFrame(autoResize);
@@ -873,7 +1243,7 @@ function AcpChatInner() {
           <button
             type="submit"
             className="fc-send-btn"
-            disabled={loading || (!input.trim() && !pendingAttachment)}
+            disabled={!input.trim() && !pendingAttachment}
             aria-label="Send"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -885,9 +1255,7 @@ function AcpChatInner() {
         <p className="fc-input-hint">
           Enter to send · Shift+Enter for new line
           <span className="fc-input-hint-sep">·</span>
-          {mode === "freestyle"
-            ? "Paste or drag images, PDFs, or Word docs"
-            : "Paste or drag a screenshot to attach"}
+          Attach images, PDFs, or Word docs
         </p>
         <VoiceUnsupportedNote />
       </div>
