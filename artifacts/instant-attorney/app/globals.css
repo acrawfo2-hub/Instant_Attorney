@@ -1357,6 +1357,20 @@ body {
 }
 .fc-upgrade-btn:hover { background: var(--brand-gold-lt); }
 
+/* "Your case file" — prominent nav button that returns the user to their case homepage */
+.fc-case-home-btn {
+  background: var(--brand-navy) !important;
+  color: #fff !important;
+  font-weight: 600 !important;
+  border: 1.5px solid var(--brand-navy) !important;
+  box-shadow: 0 1px 4px rgba(12, 25, 41, 0.18);
+  gap: 6px !important;
+}
+.fc-case-home-btn:hover {
+  background: #1e3a5f !important;
+  color: #fff !important;
+}
+
 /* Disclaimer */
 .fc-disclaimer {
   display: flex;
@@ -10390,6 +10404,27 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
   border-top: 1.5px solid rgba(154, 118, 54, 0.3);
 }
 .cdt-band-drafts .cdt-band-label { color: var(--chat-gold-ink, #9a7636); }
+
+/* "With your attorney" — pending-review band, teal tint so it reads as active/in-flight */
+.cdt-band-review {
+  background: rgba(30, 120, 155, 0.07);
+  border-top: 1.5px solid rgba(30, 120, 155, 0.28);
+}
+.cdt-band-review .cdt-band-label { color: #1e789b; }
+.cdt-count-review { background: rgba(30, 120, 155, 0.13); color: #1e789b; }
+
+/* "Send for review" action inside a workspace-draft row on the file */
+.cdt-review-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 14px; border-radius: 7px;
+  font-size: 12.5px; font-weight: 700; font-family: inherit; cursor: pointer;
+  white-space: nowrap;
+  color: #fff; background: var(--brand-navy);
+  border: 1.5px solid var(--brand-navy);
+  transition: background 0.15s, opacity 0.15s;
+}
+.cdt-review-btn:hover:not(:disabled) { background: #1e3a5f; border-color: #1e3a5f; }
+.cdt-review-btn:disabled { opacity: 0.45; cursor: default; }
 
 /* "Open draft →" primary action link in the file view */
 .cdt-open-draft {

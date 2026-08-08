@@ -253,6 +253,9 @@ export default function CaseDocumentsTable({
   // Assistant-drafted / hand-started drafts still being worked (not yet sent to
   // the attorney — promoted ones show under "Drafts & documents" via `documents`).
   const pendingWorkspaceDrafts = workspaceDrafts.filter((d) => !d.promoted_document_id);
+  // Docs pending attorney review get their own prominent band so they're never buried.
+  const reviewDocs = documents.filter((d) => d.status === "pending_review");
+  const otherDocs = documents.filter((d) => d.status !== "pending_review");
   const total = forms.length + attachments.length + documents.length + pendingWorkspaceDrafts.length;
 
   return (
@@ -490,15 +493,65 @@ export default function CaseDocumentsTable({
             </>
           )}
 
+          {/* ── WITH YOUR ATTORNEY (pending review) ── */}
+          {reviewDocs.length > 0 && (
+            <>
+              <div className="cdt-band cdt-band-review">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ flexShrink: 0 }}>
+                  <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                </svg>
+                <span className="cdt-band-label">With your attorney</span>
+                <span className="cdt-band-count cdt-count-review">{reviewDocs.length}</span>
+                <span className="cdt-band-hint">submitted for review · awaiting response within 48 hrs</span>
+              </div>
+              {reviewDocs.map((doc) => {
+                const key = `doc:${doc.id}`;
+                const children = childDocuments.filter((c) => c.parent_document_id === doc.id);
+                const secondDraft = children.find((c) => c.doc_type === "second_draft");
+                return (
+                  <Row
+                    key={key}
+                    expandable
+                    expanded={expanded.has(key)}
+                    onToggle={() => toggle(key)}
+                    icon={<FileIcon />}
+                    name={doc.title}
+                    meta={docTypeLabel(doc.doc_type)}
+                    pill={<Pill kind="review" label="In review" />}
+                    date={fmtDate(doc.created_at)}
+                    action={
+                      isAttorney
+                        ? <Link className="cdt-ghost" href={`/attorney/review/${doc.id}`}>Review →</Link>
+                        : doc.draft_text ? <a className="cdt-ghost" href={`/api/documents/${doc.id}/download`}>Download</a>
+                        : <span className="cdt-muted">—</span>
+                    }
+                  >
+                    {doc.submitted_at ? (
+                      <div className="cdt-detail-status"><ReviewSlaClock submittedAt={doc.submitted_at} compact /></div>
+                    ) : null}
+                    <div className="cdt-detail-links">
+                      {doc.draft_text && (
+                        <a href={`/api/documents/${doc.id}/download`}>Download submitted draft (.docx)</a>
+                      )}
+                      {secondDraft?.draft_text && (
+                        <a href={`/api/documents/${secondDraft.id}/download`}>Download revised draft (.docx)</a>
+                      )}
+                    </div>
+                  </Row>
+                );
+              })}
+            </>
+          )}
+
           {/* ── DRAFTS & DOCUMENTS ── */}
-          {documents.length > 0 && (
+          {otherDocs.length > 0 && (
             <>
               <div className="cdt-band">
                 <span className="cdt-band-label">Drafts &amp; documents</span>
-                <span className="cdt-band-count cdt-count-drafts">{documents.length}</span>
+                <span className="cdt-band-count cdt-count-drafts">{otherDocs.length}</span>
                 <span className="cdt-band-hint">created with your assistant · kept &amp; searchable</span>
               </div>
-              {documents.map((doc) => {
+              {otherDocs.map((doc) => {
                 const key = `doc:${doc.id}`;
                 const children = childDocuments.filter((c) => c.parent_document_id === doc.id);
                 const secondDraft = children.find((c) => c.doc_type === "second_draft");

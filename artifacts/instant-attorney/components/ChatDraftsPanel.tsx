@@ -276,7 +276,10 @@ export default function ChatDraftsPanel({
 
           <div className="fc-draft-promote-row">
             {active.promoted_document_id ? (
-              <span className="fc-draft-promoted">✓ Sent to your attorney for review — you&apos;ll find it under your documents.</span>
+              <span className="fc-draft-promoted">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ verticalAlign: "middle", marginRight: 4 }}><polyline points="20 6 9 17 4 12"/></svg>
+                Sent to your attorney for review — you&apos;ll find it under &ldquo;With your attorney&rdquo; on your case file.
+              </span>
             ) : (
               <>
                 <button
@@ -284,10 +287,22 @@ export default function ChatDraftsPanel({
                   className="fc-draft-promote-btn fc-draft-promote-btn-block"
                   onClick={() => promote(active.id)}
                   disabled={promoting || !active.content.trim()}
+                  title={!active.content.trim() ? "Add content before sending for review" : "Submit this draft to your attorney"}
                 >
-                  {promoting ? "Sending…" : "Send to my attorney for review →"}
+                  {promoting ? (
+                    "Sending…"
+                  ) : (
+                    <>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ verticalAlign: "middle", marginRight: 5 }}><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                      Send to my attorney for review
+                    </>
+                  )}
                 </button>
-                <span className="fc-draft-promote-hint">Andrew Crawford, Esq. reviews it and returns it within 48 hours.</span>
+                <span className="fc-draft-promote-hint">
+                  {!active.content.trim()
+                    ? "Finish drafting before sending — ask your assistant to write it, or type directly above."
+                    : "Andrew Crawford, Esq. reviews it and returns it within 48 hours."}
+                </span>
               </>
             )}
             {notice && <span className="fc-draft-notice">{notice}</span>}
