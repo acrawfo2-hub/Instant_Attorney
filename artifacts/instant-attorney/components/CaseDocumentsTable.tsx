@@ -7,6 +7,7 @@ import type { Attachment, Document, FactItem, ClientWorkspaceDraft } from "@/lib
 import { docTypeLabel, isDocumentOutOfDate } from "@/lib/types";
 import { findBlanks } from "@/lib/freestyle-drafts";
 import DocumentInfoNeeded from "@/components/DocumentInfoNeeded";
+import WorkspaceDraftInfoNeeded from "@/components/WorkspaceDraftInfoNeeded";
 import DocumentExecutionPanel from "@/components/DocumentExecutionPanel";
 import RegenerateDocButton from "@/components/RegenerateDocButton";
 import CancelDocButton from "@/components/CancelDocButton";
@@ -145,6 +146,9 @@ export default function CaseDocumentsTable({
   const [scanContextLabel, setScanContextLabel] = useState<string | null>(null);
   const [promotingId, setPromotingId] = useState<string | null>(null);
   const [draftNotice, setDraftNotice] = useState("");
+  // Local content overrides for workspace drafts filled inline — avoids a full
+  // network reload just to rerender the snippet after blanks are filled.
+  const [draftContentOverrides, setDraftContentOverrides] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
@@ -337,8 +341,11 @@ export default function CaseDocumentsTable({
               {draftNotice && <div className="cdt-draft-notice">{draftNotice}</div>}
               {pendingWorkspaceDrafts.map((d) => {
                 const key = `wsdraft:${d.id}`;
-                const blanks = d.content ? findBlanks(d.content) : [];
-                const emptyDraft = !d.content.trim();
+                // Use locally-applied content if the user filled blanks inline;
+                // otherwise fall back to what came from the server.
+                const content = draftContentOverrides[d.id] ?? d.content;
+                const blanks = content ? findBlanks(content) : [];
+                const emptyDraft = !content.trim();
                 return (
                   <Row
                     key={key}
@@ -348,7 +355,11 @@ export default function CaseDocumentsTable({
                     icon={<DraftIcon />}
                     name={d.title}
                     meta={d.source === "assistant" ? "Drafted with your assistant" : "Your draft"}
-                    pill={<Pill kind="draft" label="Draft" />}
+                    pill={
+                      blanks.length > 0
+                        ? <Pill kind="draft" label={`Draft · ${blanks.length} blank${blanks.length === 1 ? "" : "s"}`} />
+                        : <Pill kind="draft" label="Draft" />
+                    }
                     date={fmtDate(d.updated_at)}
                     action={
                       isAttorney ? (
@@ -371,28 +382,30 @@ export default function CaseDocumentsTable({
                       )
                     }
                   >
-                    {/* Expandable preview: show the first ~400 chars with highlighted blanks */}
+                    {/* Expandable preview: highlighted blanks + inline fill-in form */}
                     <div className="cdt-detail-draft-preview">
-                      {blanks.length > 0 && (
-                        <div className="cdt-detail-blanks">
-                          <strong>{blanks.length} blank{blanks.length === 1 ? "" : "s"}</strong> still to fill in
-                          {" — "}
-                          <Link href={`/chat?caseFileId=${caseFileId}&draft=${d.id}`} className="cdt-detail-open-link">
-                            open the draft to complete it →
-                          </Link>
-                        </div>
-                      )}
-                      {d.content && (
+                      {content && (
                         <p className="cdt-detail-draft-snippet">
-                          {d.content.split(/(\[\[[^\]]+\]\])/g).slice(0, 20).map((part, i) =>
+                          {content.split(/(\[\[[^\]]+\]\])/g).slice(0, 20).map((part, i) =>
                             /^\[\[[^\]]+\]\]$/.test(part)
                               ? <mark key={i} className="cdt-draft-blank-mark">{part.slice(2, -2)}</mark>
                               : <span key={i}>{part.slice(0, 300)}</span>
                           )}
-                          {d.content.length > 300 && <span className="cdt-muted"> …</span>}
+                          {content.length > 300 && <span className="cdt-muted"> …</span>}
                         </p>
                       )}
                     </div>
+                    {/* Inline blank-fill form — only for clients, only when blanks remain */}
+                    {!isAttorney && content && (
+                      <WorkspaceDraftInfoNeeded
+                        draftId={d.id}
+                        draftText={content}
+                        draftTitle={d.title}
+                        onSaved={(newContent) =>
+                          setDraftContentOverrides((prev) => ({ ...prev, [d.id]: newContent }))
+                        }
+                      />
+                    )}
                     <div className="cdt-detail-links">
                       <a href={`/api/workspace/drafts/${d.id}/download`}>Download draft</a>
                     </div>
