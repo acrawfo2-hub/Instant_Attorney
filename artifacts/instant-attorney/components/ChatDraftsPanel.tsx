@@ -33,6 +33,8 @@ export default function ChatDraftsPanel({
   const [saving, setSaving] = useState(false);
   const [promoting, setPromoting] = useState(false);
   const [notice, setNotice] = useState("");
+  // preview = rendered view with highlighted [[placeholders]]; edit = raw textarea
+  const [viewMode, setViewMode] = useState<"preview" | "edit">("preview");
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
   const draftsRef = useRef<ClientWorkspaceDraft[]>([]);
@@ -199,24 +201,62 @@ export default function ChatDraftsPanel({
               placeholder="Draft title"
             />
             <div className="fs-draft-editor-actions">
+              {/* Edit / Preview toggle */}
+              <button
+                type="button"
+                className={`fc-draft-mode-btn${viewMode === "preview" ? " fc-draft-mode-btn-active" : ""}`}
+                onClick={() => setViewMode(viewMode === "preview" ? "edit" : "preview")}
+                title={viewMode === "preview" ? "Switch to edit mode" : "Switch to preview (highlights blanks)"}
+              >
+                {viewMode === "preview" ? "Edit" : "Preview"}
+              </button>
               <span className="fs-draft-save-state">{saving ? "Saving…" : dirty ? "Unsaved" : "Saved"}</span>
-              <a className="fs-draft-dl" href={`/api/workspace/drafts/${active.id}/download`} title="Download as Markdown">Download</a>
+              <a className="fs-draft-dl" href={`/api/workspace/drafts/${active.id}/download`} title="Download as Word document">Download</a>
               <button type="button" className="fs-draft-del" onClick={() => remove(active.id)} title="Delete draft">Delete</button>
             </div>
           </div>
-          <textarea
-            ref={bodyRef}
-            className="fs-draft-body"
-            value={active.content}
-            onChange={(e) => edit({ content: e.target.value })}
-            onBlur={() => dirty && activeId && save(activeId)}
-            placeholder="Draft content…"
-            spellCheck
-          />
-          {blanks.length > 0 && (
+
+          {viewMode === "preview" ? (
+            /* Rendered preview — [[placeholder]] tokens appear as yellow highlighted chips */
+            <div className="fc-draft-preview fs-draft-body" onClick={() => setViewMode("edit")}>
+              {active.content.trim() ? (
+                active.content.split(/(\[\[[^\]]+\]\])/g).map((part, i) => {
+                  if (/^\[\[[^\]]+\]\]$/.test(part)) {
+                    return (
+                      <mark key={i} className="fc-draft-blank-mark" title="Click Edit to fill this in">
+                        {part.slice(2, -2)}
+                      </mark>
+                    );
+                  }
+                  return <span key={i} style={{ whiteSpace: "pre-wrap" }}>{part}</span>;
+                })
+              ) : (
+                <span className="fc-draft-preview-empty">Nothing drafted yet — ask your assistant to write a document, or switch to Edit and start typing.</span>
+              )}
+              {blanks.length > 0 && (
+                <div className="fc-draft-preview-hint">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  {blanks.length} highlighted blank{blanks.length === 1 ? "" : "s"} — tap Edit to fill them in
+                </div>
+              )}
+            </div>
+          ) : (
+            <textarea
+              ref={bodyRef}
+              className="fs-draft-body"
+              value={active.content}
+              onChange={(e) => edit({ content: e.target.value })}
+              onBlur={() => dirty && activeId && save(activeId)}
+              placeholder="Draft content…"
+              spellCheck
+            />
+          )}
+
+          {/* Blanks strip — only in edit mode so clicking a chip jumps the textarea */}
+          {viewMode === "edit" && blanks.length > 0 && (
             <div className="fc-draft-blanks">
               <span className="fc-draft-blanks-label">
-                {blanks.length} blank{blanks.length === 1 ? "" : "s"} to fill
+                {blanks.length} blank{blanks.length === 1 ? "" : "s"} to fill in
               </span>
               <div className="fc-draft-blanks-chips">
                 {blanks.map((b) => (
@@ -233,6 +273,7 @@ export default function ChatDraftsPanel({
               </div>
             </div>
           )}
+
           <div className="fc-draft-promote-row">
             {active.promoted_document_id ? (
               <span className="fc-draft-promoted">✓ Sent to your attorney for review — you&apos;ll find it under your documents.</span>

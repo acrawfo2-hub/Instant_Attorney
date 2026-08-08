@@ -326,10 +326,10 @@ export default function CaseDocumentsTable({
               into the conversation to keep editing. */}
           {pendingWorkspaceDrafts.length > 0 && (
             <>
-              <div className="cdt-band">
-                <span className="cdt-band-label">Working drafts</span>
+              <div className="cdt-band cdt-band-drafts">
+                <span className="cdt-band-label">✏️ Working drafts</span>
                 <span className="cdt-band-count cdt-count-drafts">{pendingWorkspaceDrafts.length}</span>
-                <span className="cdt-band-hint">in progress with your assistant · send to your attorney when ready</span>
+                <span className="cdt-band-hint">drafted with your assistant — read, edit, or send for attorney review</span>
               </div>
               {draftNotice && <div className="cdt-draft-notice">{draftNotice}</div>}
               {pendingWorkspaceDrafts.map((d) => {
@@ -339,7 +339,7 @@ export default function CaseDocumentsTable({
                 return (
                   <Row
                     key={key}
-                    expandable={blanks.length > 0}
+                    expandable
                     expanded={expanded.has(key)}
                     onToggle={() => toggle(key)}
                     icon={<DraftIcon />}
@@ -361,16 +361,35 @@ export default function CaseDocumentsTable({
                           >
                             {promotingId === d.id ? "Sending…" : "Send for review"}
                           </button>
-                          <Link className="cdt-ghost" href={`/chat?caseFileId=${caseFileId}&draft=${d.id}`}>Open</Link>
+                          <Link className="cdt-open-draft" href={`/chat?caseFileId=${caseFileId}&draft=${d.id}`}>
+                            Open draft →
+                          </Link>
                         </span>
                       )
                     }
                   >
-                    {blanks.length > 0 && (
-                      <div className="cdt-detail-blanks">
-                        {blanks.length} blank{blanks.length === 1 ? "" : "s"} still to fill in — open the draft to complete it.
-                      </div>
-                    )}
+                    {/* Expandable preview: show the first ~400 chars with highlighted blanks */}
+                    <div className="cdt-detail-draft-preview">
+                      {blanks.length > 0 && (
+                        <div className="cdt-detail-blanks">
+                          <strong>{blanks.length} blank{blanks.length === 1 ? "" : "s"}</strong> still to fill in
+                          {" — "}
+                          <Link href={`/chat?caseFileId=${caseFileId}&draft=${d.id}`} className="cdt-detail-open-link">
+                            open the draft to complete it →
+                          </Link>
+                        </div>
+                      )}
+                      {d.content && (
+                        <p className="cdt-detail-draft-snippet">
+                          {d.content.split(/(\[\[[^\]]+\]\])/g).slice(0, 20).map((part, i) =>
+                            /^\[\[[^\]]+\]\]$/.test(part)
+                              ? <mark key={i} className="cdt-draft-blank-mark">{part.slice(2, -2)}</mark>
+                              : <span key={i}>{part.slice(0, 300)}</span>
+                          )}
+                          {d.content.length > 300 && <span className="cdt-muted"> …</span>}
+                        </p>
+                      )}
+                    </div>
                     <div className="cdt-detail-links">
                       <a href={`/api/workspace/drafts/${d.id}/download`}>Download draft</a>
                     </div>

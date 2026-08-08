@@ -195,6 +195,11 @@ function AcpChatInner() {
   // as caseFileId becomes available.
   const [queuedDocFiles, setQueuedDocFiles] = useState<File[]>([]);
   const [dragOver, setDragOver] = useState(false);
+  // When the AI saves a new draft, show a dismissible banner so users know where it went.
+  const [draftSavedTitle, setDraftSavedTitle] = useState<string | null>(null);
+  // Count badge on the Drafts button — loaded once caseFileId is known, refreshed
+  // each time draftsRefresh bumps.
+  const [draftCount, setDraftCount] = useState(0);
   const [showQcModal, setShowQcModal] = useState(false);
   const [showCounselModal, setShowCounselModal] = useState(false);
   const [pendingCounselContext, setPendingCounselContext] = useState<ExistingCounselFormValue | null>(null);
@@ -219,6 +224,15 @@ function AcpChatInner() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamingText]);
+
+  // Keep the draft count badge on the Drafts button current.
+  useEffect(() => {
+    if (!caseFileId) return;
+    fetch(`/api/workspace/drafts?caseFileId=${caseFileId}`)
+      .then((r) => r.ok ? r.json() : { drafts: [] })
+      .then((d) => setDraftCount((d.drafts ?? []).length))
+      .catch(() => {});
+  }, [caseFileId, draftsRefresh]);
 
   // When caseFileId becomes available (first message sent), upload any docs the
   // user had already attached before the conversation started.
@@ -599,9 +613,12 @@ function AcpChatInner() {
       setStreamingText("");
       // The server persisted any ---DRAFT--- blocks (or opened an uploaded doc as a
       // draft via the tool); open the panel and refresh it.
-      if (mode === "freestyle" && (parseDrafts(full).length > 0 || openedUpload)) {
+      const newDrafts = parseDrafts(full);
+      if (mode === "freestyle" && (newDrafts.length > 0 || openedUpload)) {
         setDraftsPanelOpen(true);
         setDraftsRefresh((n) => n + 1);
+        // Show a notification banner so it's clear where the draft went.
+        if (newDrafts.length > 0) setDraftSavedTitle(newDrafts[0].title);
       }
       setPendingCounselContext(null);
       // Resolved doc uploads are now in the file context; keep only in-flight ones.
@@ -644,15 +661,19 @@ function AcpChatInner() {
           {mode === "freestyle" && caseFileId && !isQuickConsult && (
             <button
               type="button"
-              className="fc-upgrade-btn"
+              className={`fc-upgrade-btn fc-drafts-btn${draftCount > 0 && !draftsPanelOpen ? " fc-drafts-btn-has" : ""}`}
               style={{
-                background: draftsPanelOpen ? "var(--brand-gold)" : "rgba(12,25,41,0.06)",
-                color: draftsPanelOpen ? "#1a1206" : "var(--brand-navy)",
+                background: draftsPanelOpen ? "var(--brand-gold)" : undefined,
+                color: draftsPanelOpen ? "#1a1206" : undefined,
               }}
-              onClick={() => setDraftsPanelOpen((v) => !v)}
+              onClick={() => { setDraftsPanelOpen((v) => !v); setDraftSavedTitle(null); }}
               title="Show or hide your drafts"
             >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+              </svg>
               {draftsPanelOpen ? "Hide drafts" : "Drafts"}
+              {draftCount > 0 && <span className="fc-drafts-badge">{draftCount}</span>}
             </button>
           )}
           {isQuickConsult && hasUserMessages ? (
@@ -809,6 +830,32 @@ function AcpChatInner() {
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
+        {/* "Draft saved" notification — appears after AI produces a draft, clears when
+            the user opens the panel or dismisses it manually. */}
+        {draftSavedTitle && !draftsPanelOpen && (
+          <div className="fc-draft-notify">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+            </svg>
+            <span className="fc-draft-notify-text">
+              Draft saved: <strong>{draftSavedTitle}</strong>
+            </span>
+            <button
+              type="button"
+              className="fc-draft-notify-open"
+              onClick={() => { setDraftsPanelOpen(true); setDraftSavedTitle(null); }}
+            >
+              Open Drafts →
+            </button>
+            <button
+              type="button"
+              className="fc-draft-notify-dismiss"
+              onClick={() => setDraftSavedTitle(null)}
+              aria-label="Dismiss"
+            >×</button>
+          </div>
+        )}
+
         {/* Document uploads (freestyle) — added to the file + analyzed, not sent inline */}
         {docUploads.length > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>

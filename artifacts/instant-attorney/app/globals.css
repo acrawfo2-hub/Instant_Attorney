@@ -4347,6 +4347,128 @@ mark.atty-placeholder {
   border-top: 1px solid var(--brand-border);
 }
 
+/* ── Draft "saved" notification banner in the chat input area ── */
+.fc-draft-notify {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 740px;
+  margin: 0 auto 8px;
+  width: 100%;
+  padding: 9px 13px;
+  border-radius: 10px;
+  background: rgba(154, 118, 54, 0.10);
+  border: 1px solid rgba(154, 118, 54, 0.32);
+  animation: fc-notify-in 0.2s ease;
+}
+@keyframes fc-notify-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.fc-draft-notify svg { flex-shrink: 0; color: var(--chat-gold-ink, #9a7636); }
+.fc-draft-notify-text { flex: 1; font-size: 13px; color: var(--brand-text-dk); }
+.fc-draft-notify-open {
+  flex-shrink: 0;
+  background: var(--brand-gold);
+  color: #1a1206;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 11px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+.fc-draft-notify-open:hover { background: var(--brand-gold-lt); }
+.fc-draft-notify-dismiss {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--brand-text-lt);
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+}
+/* ── Drafts button: subtle state when drafts exist and panel is closed ── */
+.fc-drafts-btn { gap: 6px !important; }
+.fc-drafts-btn-has {
+  background: rgba(154, 118, 54, 0.12) !important;
+  color: var(--brand-navy) !important;
+  border: 1px solid rgba(154, 118, 54, 0.4);
+}
+.fc-drafts-btn-has:hover { background: rgba(154, 118, 54, 0.2) !important; }
+.fc-drafts-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--brand-gold);
+  color: #1a1206;
+  font-size: 10.5px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+/* ── Draft panel: preview mode ── */
+.fc-draft-preview {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 0.85rem 1rem;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--brand-text-dk);
+  cursor: text;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border: 0.5px solid var(--brand-border);
+  border-radius: 6px;
+  margin: 0 1rem 0;
+  background: var(--chat-surface, #fff);
+  min-height: 120px;
+}
+.fc-draft-preview-empty { color: var(--brand-text-lt); font-style: italic; }
+.fc-draft-preview-hint {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 12px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  background: rgba(183, 121, 31, 0.07);
+  border: 1px solid rgba(183, 121, 31, 0.22);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #b7791f;
+}
+.fc-draft-blank-mark {
+  background: rgba(255, 200, 40, 0.35);
+  border: 1px solid rgba(200, 150, 20, 0.45);
+  border-radius: 4px;
+  padding: 0 3px;
+  color: #7a5000;
+  font-weight: 600;
+  font-style: normal;
+}
+/* In the dark draft panel (light version) */
+.fc-draft-pane .fc-draft-preview { background: var(--chat-surface); color: var(--brand-text-dk); }
+.fc-draft-mode-btn {
+  padding: 3px 9px;
+  border-radius: 5px;
+  border: 1px solid var(--brand-border);
+  background: transparent;
+  color: var(--brand-text-md);
+  font-size: 11.5px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.fc-draft-mode-btn:hover { background: rgba(154, 118, 54, 0.08); border-color: rgba(154, 118, 54, 0.4); }
+.fc-draft-mode-btn-active { background: rgba(154, 118, 54, 0.12); border-color: rgba(154, 118, 54, 0.4); color: var(--brand-navy); }
+
 /* Chat input attachment styles */
 .fc-input-area-dragover {
   background: rgba(200,169,110,0.10);
@@ -10261,6 +10383,44 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
 .cdt-split button + button { border-left: 1px solid rgba(255, 255, 255, 0.3); }
 .cdt-split button:hover { filter: brightness(1.06); }
 .cdt-split button:disabled { opacity: 0.55; cursor: default; }
+
+/* Working-drafts band — gold-tinted so it stands out as the first thing to read */
+.cdt-band-drafts {
+  background: rgba(154, 118, 54, 0.07);
+  border-top: 1.5px solid rgba(154, 118, 54, 0.3);
+}
+.cdt-band-drafts .cdt-band-label { color: var(--chat-gold-ink, #9a7636); }
+
+/* "Open draft →" primary action link in the file view */
+.cdt-open-draft {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 14px; border-radius: 7px;
+  font-size: 12.5px; font-weight: 700; font-family: inherit; cursor: pointer;
+  white-space: nowrap; text-decoration: none;
+  color: var(--brand-navy); background: rgba(154, 118, 54, 0.12);
+  border: 1px solid rgba(154, 118, 54, 0.35);
+  transition: background 0.15s, border-color 0.15s;
+}
+.cdt-open-draft:hover { background: rgba(154, 118, 54, 0.2); border-color: rgba(154, 118, 54, 0.6); color: var(--brand-navy); }
+
+/* Inline blank highlight in the file-view draft snippet */
+.cdt-draft-blank-mark {
+  background: rgba(255, 200, 40, 0.3);
+  border: 1px solid rgba(200, 150, 20, 0.4);
+  border-radius: 3px;
+  padding: 0 2px;
+  color: #7a5000;
+  font-weight: 600;
+  font-style: normal;
+}
+.cdt-detail-draft-preview { display: flex; flex-direction: column; gap: 6px; }
+.cdt-detail-draft-snippet {
+  font-size: 12.5px; line-height: 1.6; color: var(--brand-text-md);
+  max-height: 80px; overflow: hidden;
+  white-space: pre-wrap; word-break: break-word;
+}
+.cdt-detail-open-link { color: var(--chat-gold-ink, #9a7636); font-weight: 700; text-decoration: none; }
+.cdt-detail-open-link:hover { text-decoration: underline; }
 
 /* Working-drafts actions — a prominent one-click "Send for review" (primary gold)
    next to a secondary "Open" link. */
