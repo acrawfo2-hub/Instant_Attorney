@@ -146,6 +146,8 @@ export default function CaseDocumentsTable({
   const [scanContextLabel, setScanContextLabel] = useState<string | null>(null);
   const [promotingId, setPromotingId] = useState<string | null>(null);
   const [draftNotice, setDraftNotice] = useState("");
+  const [draftInProgress, setDraftInProgress] = useState(false);
+  const draftPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Local content overrides for workspace drafts filled inline — avoids a full
   // network reload just to rerender the snippet after blanks are filled.
   const [draftContentOverrides, setDraftContentOverrides] = useState<Record<string, string>>({});
@@ -179,6 +181,45 @@ export default function CaseDocumentsTable({
     const timer = setTimeout(load, 4000);
     return () => clearTimeout(timer);
   }, [attachments, load]);
+
+  // Poll the background chat-turn status so we can surface a "draft in progress"
+  // indicator while the assistant generates a document and the user is away from chat.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function poll() {
+      try {
+        const res = await fetch(`/api/chat-acp/status?caseFileId=${caseFileId}`);
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (cancelled) return;
+        if (data.running) {
+          setDraftInProgress(true);
+          // Schedule next poll
+          draftPollRef.current = setTimeout(poll, 5000);
+        } else {
+          const wasRunning = draftInProgress;
+          setDraftInProgress(false);
+          if (wasRunning || data.done) {
+            // Job just finished — refresh docs list
+            await load();
+            router.refresh();
+          }
+        }
+      } catch {
+        // Network hiccup — retry quietly
+        if (!cancelled) draftPollRef.current = setTimeout(poll, 8000);
+      }
+    }
+
+    poll();
+
+    return () => {
+      cancelled = true;
+      if (draftPollRef.current) clearTimeout(draftPollRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [caseFileId]);
 
   function toggle(key: string) {
     setExpanded((prev) => {
@@ -278,6 +319,15 @@ export default function CaseDocumentsTable({
           </button>
         )}
       </div>
+
+      {/* Draft-in-progress indicator — appears while a background chat turn is
+          generating a document, disappears (and refreshes the list) when done. */}
+      {draftInProgress && (
+        <div className="cdt-draft-progress" role="status" aria-live="polite">
+          <span className="cdt-draft-progress-dot" aria-hidden="true" />
+          <span className="cdt-draft-progress-text">A draft is being written — check back in a couple of minutes.</span>
+        </div>
+      )}
 
       <input ref={fileInputRef} type="file" accept="image/*,.pdf,.doc,.docx,.txt,.csv,.rtf" style={{ display: "none" }} onChange={handleFileInput} />
 

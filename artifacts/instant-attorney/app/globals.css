@@ -5742,6 +5742,7 @@ mark.atty-placeholder {
   border-radius: 20px;
 }
 .brainstorm-compose { display: flex; flex-direction: column; gap: 0.5rem; }
+.brainstorm-draft-progress { margin: 0; }
 
 /* ── File view mode toggle (Living File / Brainstorm) ────────────────────── */
 .lf-view-tabs {
@@ -10262,6 +10263,31 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
   color: var(--brand-text-dk);
 }
 .cdt-sub { margin-top: 3px; font-size: 12.5px; color: var(--brand-text-lt); line-height: 1.45; }
+.cdt-draft-progress {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 1.3rem 0.75rem;
+  padding: 9px 13px;
+  background: #f0f6ff;
+  border: 0.5px solid #c5d9f5;
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: #2563b0;
+}
+.cdt-draft-progress-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #3b82f6;
+  animation: cdt-pulse 1.6s ease-in-out infinite;
+}
+@keyframes cdt-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.75); }
+}
+.cdt-draft-progress-text { line-height: 1.4; }
 .cdt-add {
   flex: 0 0 auto;
   display: inline-flex;
