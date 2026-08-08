@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { hasApplicableUpdate } from "@/lib/brainstorm-detect";
 import type { CaseBrainstormMessage } from "@/lib/types";
 
@@ -26,7 +26,43 @@ export default function CaseBrainstormChat({ caseFileId, initialMessages }: Prop
   const [sending, setSending] = useState(false);
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [draftInProgress, setDraftInProgress] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const draftPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Poll the background chat-turn status so we can surface a "draft in progress"
+  // chip above the composer while the assistant generates a document.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function poll() {
+      try {
+        const res = await fetch(`/api/chat-acp/status?caseFileId=${caseFileId}`);
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (cancelled) return;
+        if (data.running) {
+          setDraftInProgress(true);
+          draftPollRef.current = setTimeout(poll, 5000);
+        } else {
+          setDraftInProgress(false);
+          // Job just finished — refresh messages so any assistant reply is shown.
+          if (data.done) await refreshMessages();
+        }
+      } catch {
+        // Network hiccup — retry quietly.
+        if (!cancelled) draftPollRef.current = setTimeout(poll, 8000);
+      }
+    }
+
+    poll();
+
+    return () => {
+      cancelled = true;
+      if (draftPollRef.current) clearTimeout(draftPollRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [caseFileId]);
 
   async function refreshMessages() {
     const res = await fetch(`/api/attorney/case-files/${caseFileId}/brainstorm`);
@@ -139,6 +175,13 @@ export default function CaseBrainstormChat({ caseFileId, initialMessages }: Prop
       </div>
 
       {error && <div className="lf-session-error">{error}</div>}
+
+      {draftInProgress && (
+        <div className="cdt-draft-progress brainstorm-draft-progress" role="status" aria-live="polite">
+          <span className="cdt-draft-progress-dot" aria-hidden="true" />
+          <span className="cdt-draft-progress-text">Drafting your document…</span>
+        </div>
+      )}
 
       <div className="brainstorm-compose">
         <textarea
