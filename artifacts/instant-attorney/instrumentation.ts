@@ -14,7 +14,12 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
+  // Counted as well as logged so /admin/health can show that the guard fired,
+  // rather than the evidence living only in a log nobody is reading.
+  const { recordCrashEvent } = await import("./lib/crash-counter");
+
   process.on("unhandledRejection", (reason) => {
+    recordCrashEvent("unhandledRejection", reason);
     console.error(
       "[instrumentation] Unhandled promise rejection — kept server alive:",
       reason
@@ -22,6 +27,7 @@ export async function register() {
   });
 
   process.on("uncaughtException", (err) => {
+    recordCrashEvent("uncaughtException", err);
     console.error(
       "[instrumentation] Uncaught exception — kept server alive:",
       err

@@ -40,6 +40,16 @@ const MODEL_PRICING_USD_PER_M: Record<string, { input: number; output: number }>
 
 const DEFAULT_MODEL_PRICING = MODEL_PRICING_USD_PER_M["claude-sonnet-4-6"];
 
+/** Models with an explicit pricing entry. Anything else silently bills at Sonnet's rate. */
+export function pricedModels(): string[] {
+  return Object.keys(MODEL_PRICING_USD_PER_M);
+}
+
+/** Does this model have real pricing, or would its cost fall back to Sonnet's? */
+export function hasModelPricing(model: string | null | undefined): boolean {
+  return !!model && model in MODEL_PRICING_USD_PER_M;
+}
+
 /** Amortized monthly storage cost per GB (Supabase overage ~$0.021/GB/mo). */
 function storageUsdPerGbMonth(): number {
   const raw = process.env.USAGE_STORAGE_USD_PER_GB_MONTH;

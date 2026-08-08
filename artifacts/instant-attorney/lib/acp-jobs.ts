@@ -160,3 +160,37 @@ export function finishAcpJob(job: AcpJob, opts: { finalText: string; truncated: 
 export function isAcpJobRunning(job: AcpJob): boolean {
   return !job.done && Date.now() - job.startedAt <= STALE_RUNNING_MS;
 }
+
+/** How long a job may run before the admin health check calls it stuck. */
+export const ACP_JOB_STUCK_MS = 5 * 60 * 1000;
+
+export interface AcpJobSnapshot {
+  id: string;
+  caseFileId: string;
+  userId: string;
+  ageMs: number;
+  done: boolean;
+  error: string | null;
+  /** Unfinished and running longer than a real turn plausibly takes. */
+  stuck: boolean;
+}
+
+/**
+ * Every job currently in the registry, for the admin health check.
+ *
+ * Read-only and allocation-light: this runs on every Health page load. Because
+ * the registry is in-process, a server restart empties it — that reports as
+ * "nothing running", which is accurate, not a gap to paper over.
+ */
+export function listAcpJobs(): AcpJobSnapshot[] {
+  const now = Date.now();
+  return [...registry.byId.values()].map((job) => ({
+    id: job.id,
+    caseFileId: job.caseFileId,
+    userId: job.userId,
+    ageMs: now - job.startedAt,
+    done: job.done,
+    error: job.error,
+    stuck: !job.done && now - job.startedAt > ACP_JOB_STUCK_MS,
+  }));
+}

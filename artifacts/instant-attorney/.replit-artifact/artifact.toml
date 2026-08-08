@@ -35,6 +35,14 @@ paths = [
   "/api/bankruptcy",
   "/api/personal-injury",
   "/api/roadmap",
+  # Added after lib/admin/api-surface.test.ts caught them missing: all three
+  # have routes under app/api/ but were absent here, so the proxy handed them
+  # to the Express api-server. /api/workspace is the orchestrator's draft side
+  # panel and /api/assess-matter backs MatterStandingCard — both are called by
+  # the client on normal pages.
+  "/api/workspace",
+  "/api/assess-matter",
+  "/api/dropbox-sign",
   "/consult",
 ]
 localPort = 21203

@@ -70,3 +70,43 @@ the credential-rotation tool until an admin revoke is verified live.
 is intentionally **not** a foreign key to `profiles`: the break-glass path exists
 for the case where profiles is broken, and an audit insert that fails in exactly
 that situation is worse than useless.
+
+`supabase/schema-stage48-schema-verifier.sql` adds `admin_schema_verify()`, the
+RPC behind the `database.schema` health check. **When you add a migration stage,
+add its objects to the arrays in that file and re-run it** — otherwise the board
+reports a stale definition of "current".
+
+## Health checks: catalog + runners, bound by id
+
+Adding a check = one `CHECK_CATALOG` entry in `lib/admin/checks/catalog.ts` plus
+one `RUNNERS` entry in `runners.ts`. **Never edit the Health page** — it renders
+whatever the catalog contains.
+
+The split exists because node:test cannot resolve `@/` anywhere in a test's
+import graph: `catalog.ts` and `types.ts` are import-free and therefore testable,
+while `runners.ts` talks to Supabase and the network. `catalog.test.ts` enforces
+unique namespaced ids, group/id agreement, memo paths that resolve, and a 1:1
+binding between catalog and runners (read from `runners.ts` as source, since it
+cannot be imported).
+
+Runner rules: never throw (a thrown error reads as "the check is broken"), assert
+a real invariant rather than that the network works, and always populate `fix`.
+
+## Route shadowing is checked twice
+
+`lib/admin/api-surface.ts` lists the `/api/*` prefixes this app owns.
+
+* `api-surface.test.ts` — build time. Asserts the list equals the directories
+  under `app/api/` and that every one appears in `artifact.toml`. **This is what
+  catches a new API route nobody added to the TOML.** It found `/api/workspace`,
+  `/api/assess-matter` and `/api/dropbox-sign` missing on its first run.
+* `routing.api-shadow` check — deploy time. HEADs `<prefix>/__shadow-probe` and
+  flags `X-Powered-By: Express`. Next answers `X-Powered-By: Next.js`, so the
+  discriminator is clean. Only a real deployment can prove this.
+
+Under `next dev` the probes often exceed their timeout because routes compile on
+demand — that reports as a warning with an explanation, not a false red. Against
+a production build, 12 parallel probes take ~320ms.
+
+**Do not name any admin route `/api/health*`** — that path belongs to the Express
+api-server. The board lives at `/api/admin/health`.

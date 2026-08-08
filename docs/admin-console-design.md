@@ -1,6 +1,6 @@
 # Design Note: The Admin Console — Detect, Repair, Endure
 
-**Status:** Phases 0 and 1 shipped; phases 2–4 proposed. See §5 for what is built.
+**Status:** Phases 0, 1 and 2 shipped; phases 3–4 proposed. See §5 for what is built.
 **Author:** Instant Attorney engineering
 **Related:** `app/admin/page.tsx` (today's Token Limit Monitor), `lib/admin-auth.ts`,
 `lib/testers.ts`, `scripts/ensure-tester.mjs`, `supabase/schema-stage46-auth-access-repair.sql`,
@@ -223,7 +223,7 @@ Ordered by (incidents retired) ÷ (effort), not by visual payoff.
 |---|---|---|
 | **0** | Admin shell + nav; break-glass auth; `admin_audit_log`; refuse `BYPASS_AUTH` in prod | **Shipped** |
 | **1** | **People**: account 360, verdict line, the repairs | **Shipped** |
-| **2** | **Health**: check registry + the ten probes | Proposed |
+| **2** | **Health**: check registry + the ten probes | **Shipped** |
 | **3** | **Repairs**: `schema_migrations` ledger, DB tester allowlist, cron + job actions | Proposed |
 | **4** | **Usage & Audit**: cost-per-feature, audit search | Partly shipped — the Token Limit Monitor moved to `/admin/usage` and the audit trail is on the Overview |
 
@@ -263,6 +263,58 @@ misleading `0`.
 **Before this is useful in production:** apply
 `supabase/schema-stage47-admin-console.sql` and set `ADMIN_EMAILS`. Repairs work
 without the migration, but run unaudited — and the UI says so on every action.
+
+### What phase 2 built
+
+| Piece | Where |
+|---|---|
+| Check contract + status algebra | `lib/admin/checks/types.ts` |
+| Catalog — the ten checks, metadata only | `lib/admin/checks/catalog.ts` |
+| Runners, bound to catalog ids | `lib/admin/checks/runners.ts` |
+| Registry: timeouts, error isolation, unbound-entry reporting | `lib/admin/checks/index.ts` |
+| Owned `/api/*` prefixes | `lib/admin/api-surface.ts` |
+| Schema verifier as an RPC | `supabase/schema-stage48-schema-verifier.sql` |
+| Crash-guard counters | `lib/crash-counter.ts`, wired in `instrumentation.ts` |
+| API | `app/api/admin/health/route.ts` |
+| UI | `app/admin/health/page.tsx`, `components/admin/HealthBoard.tsx` |
+
+**Schema drift is checked over RPC, not by head-selects.** `admin_schema_verify()`
+folds the expectations from `schema-verify.sql` and `schema-verify-stage38-45.sql`
+into one callable function — 36 tables, 32 columns, 4 indexes, 5 RLS flags, 3
+check constraints, the signup trigger, and the "every auth user has a profile"
+data invariant. A per-table head-select was rejected because
+`.agents/memory/instant-attorney-supabase-migrations.md` records that it returns
+false OKs, which is worse than no check at all.
+
+**Route shadowing is checked twice, at different times.** `api-surface.test.ts`
+asserts the prefix list equals the directories under `app/api/` *and* is covered
+by `artifact.toml` — build-time drift. The `routing.api-shadow` probe HEADs a
+non-existent path under each prefix against the live origin and flags anything
+answering `X-Powered-By: Express` — deploy-time reality, the only thing that
+actually proves it. Verified against a production build: Next answers
+`X-Powered-By: Next.js`, so the discriminator is clean, and 12 parallel probes
+complete in ~320ms. Under `next dev` the probes can exceed their timeout because
+routes compile on demand; the check says so rather than reporting a false red.
+
+**The test caught a live bug on its first run.** `/api/workspace`,
+`/api/assess-matter` and `/api/dropbox-sign` had routes under `app/api/` but were
+absent from `artifact.toml`, so the proxy handed them to Express.
+`/api/workspace` is the orchestrator's draft side panel and `/api/assess-matter`
+backs `MatterStandingCard` — both are fetched by the client on normal pages. All
+three were added to the `paths` array.
+
+**Registry invariants are enforced by test, not convention.** `catalog.test.ts`
+asserts unique namespaced ids, that each id matches its declared group, that every
+`memo` path resolves to a real file, that every catalog entry has a runner and
+every runner a catalog entry, and that the three invisible-failure checks stay in
+the catalog. Adding a failure mode is a catalog entry plus a runner; the Health
+page renders whatever the catalog contains and is never edited.
+
+**Not yet done from §3.2:** there are no **Fix** buttons on the board. Every check
+reports what to do in words; none of them act. That is deliberate for now — the
+schema and routing fixes are file edits and redeploys, not runtime operations, so
+the honest surface is instructions. Phase 3's migration ledger is where repairs
+become actionable.
 
 ---
 
