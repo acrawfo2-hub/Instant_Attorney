@@ -521,6 +521,8 @@ export default function CaseDocumentsTable({
                 const key = `doc:${doc.id}`;
                 const children = childDocuments.filter((c) => c.parent_document_id === doc.id);
                 const secondDraft = children.find((c) => c.doc_type === "second_draft");
+                const fillTarget = secondDraft?.draft_text ? secondDraft : (doc.draft_text ? doc : null);
+                const blanks = fillTarget?.draft_text ? findBlanks(fillTarget.draft_text) : [];
                 return (
                   <Row
                     key={key}
@@ -542,6 +544,11 @@ export default function CaseDocumentsTable({
                     {doc.submitted_at ? (
                       <div className="cdt-detail-status"><ReviewSlaClock submittedAt={doc.submitted_at} compact /></div>
                     ) : null}
+
+                    {blanks.length > 0 && (
+                      <div className="cdt-detail-blanks">{blanks.length} blank{blanks.length === 1 ? "" : "s"} still to fill in below.</div>
+                    )}
+
                     <div className="cdt-detail-links">
                       {doc.draft_text && (
                         <a href={`/api/documents/${doc.id}/download`}>Download submitted draft (.docx)</a>
@@ -550,6 +557,11 @@ export default function CaseDocumentsTable({
                         <a href={`/api/documents/${secondDraft.id}/download`}>Download revised draft (.docx)</a>
                       )}
                     </div>
+
+                    {/* Fill-in blanks — client, review docs that still have [[blanks]]. */}
+                    {!isAttorney && fillTarget?.draft_text && (
+                      <DocumentInfoNeeded documentId={fillTarget.id} draftText={fillTarget.draft_text} documentTitle={doc.title} />
+                    )}
                   </Row>
                 );
               })}
