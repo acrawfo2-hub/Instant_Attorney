@@ -2,7 +2,11 @@
 
 **Status:** proposed, not yet started
 **Audience:** Replit Agent (implementation + QA), Andrew Crawford (product decisions)
-**Source:** codebase audit, 2026-08-08, against `main` @ `d970ec7`
+**Source:** codebase audit, 2026-08-08, against `main` @ `d970ec7`; refreshed
+against `f4cc98c` (draft-in-progress indicators)
+
+> **Line numbers drift.** Anchor on the quoted symbol or string, not the `:NNN`.
+> The `f4cc98c` indicator work already shifted `CaseDocumentsTable` by ~50 lines.
 
 ---
 
@@ -205,11 +209,13 @@ action. Prefer the second — one obvious next step beats two competing ones.
 (`lib/matter-assessment.ts:38-50`) strips hrefs before the model sees them, so
 `assess_matter` never shows the orchestrator a wizard URL. The leak is UI-only.
 
-### 2.2 `components/CaseDocumentsTable.tsx:598`
+### 2.2 `components/CaseDocumentsTable.tsx` — the `cdt-ghost` "Continue →" link
 
 A `documents` row in `draft` status renders "Continue →" into
-`/wizard/{doc_type}`. Route it into the orchestrator with the document opened in
-the drafts panel instead.
+`/wizard/{doc_type}` (`:648` as of `f4cc98c`). Route it into the orchestrator
+with the document opened in the drafts panel instead — the `cdt-open-draft` link
+a few hundred lines above (`:428`) already does exactly this for workspace
+drafts (`/chat?caseFileId=…&draft=…`). Reuse that shape.
 
 ### 2.3 The six area tool pages
 
@@ -241,10 +247,56 @@ top-of-funnel work; only their exit is wrong.
   the orchestrator with that document in the panel.
 - Attorney view is unchanged — Mission Control still renders and still works
   (`ClientFileView.tsx:269` gates it to `isAttorney`).
+- Draft-in-progress indicator: start a document in chat, navigate to the case
+  file page — the banner appears, then clears and the drafts list refreshes when
+  the turn completes. Then start a turn from a second tab **while already
+  sitting on the case file page** — this is the case defect 2.4.2 currently
+  misses, and the regression test for that fix.
 - `/wizard/demand_letter` still loads for a signed-in user (it is not being
   removed in this phase; `e2e/auth-redirects.spec.ts:12` asserts its auth gate).
 
 ---
+
+### 2.4 Follow-up on the draft-in-progress indicators (`f4cc98c`, `a3caa5b`)
+
+Two "a draft is being written" indicators landed after this plan was drafted:
+one in `CaseDocumentsTable` (case file page) and one in `CaseBrainstormChat`
+(attorney file page). Both poll `/api/chat-acp/status?caseFileId=…`.
+
+**The direction is right** — both treat the orchestrator as the thing that
+produces drafts, which is exactly where this migration is going. Three defects
+to fold into this phase rather than fix separately:
+
+1. **The `CaseBrainstormChat` chip can never render.** `CaseBrainstormChat` is
+   mounted only at `app/attorney/file/[caseFileId]/page.tsx:157` — the
+   supervising attorney's view of a *client's* file. The status endpoint
+   ownership-checks `job.userId !== userId` and returns
+   `{running:false, done:false}` on mismatch. The job belongs to the client; the
+   viewer is the attorney. It always short-circuits.
+   Beyond the ownership check it is also the wrong pipeline: that panel is the
+   attorney's private sounding board (`/api/attorney/case-files/[id]/brainstorm`),
+   not chat-acp, so a chip reflecting the client's consumer turn would be
+   confusing even if it did render. **Recommendation: remove it.**
+2. **The poll loop is one-shot.** In both components, the `else` branch (not
+   running) sets state and returns *without rescheduling*, so the loop dies on
+   the first non-running response. The indicator can only ever appear for a turn
+   that was already running at mount. The primary path (start a turn in chat →
+   navigate to the case file) works, because the job is running at mount; a turn
+   that starts later is never picked up. Reschedule in both branches, with a
+   longer idle interval.
+3. **`wasRunning` is a stale closure.** In `CaseDocumentsTable`,
+   `const wasRunning = draftInProgress;` captures the value from effect creation
+   (always `false`, deps are `[caseFileId]` with exhaustive-deps disabled). The
+   condition reduces to `data.done`, which happens to be correct — so this is
+   dead code that reads as logic. Drop it, or move the flag to a ref.
+
+Minor, no action required: on mount with a *finished* job still in the registry
+(15-min TTL, `lib/acp-jobs.ts`), `CaseDocumentsTable` fires one spurious
+`load()` + `router.refresh()` per page load until the job is swept.
+
+**Note for Phase 3:** these indicators only know about orchestrator turns, so a
+wizard-generated draft gets no indicator. One more asymmetry between the two
+draft systems, and one more argument for converging them.
 
 ## Phase 3 — Converge the two draft systems
 

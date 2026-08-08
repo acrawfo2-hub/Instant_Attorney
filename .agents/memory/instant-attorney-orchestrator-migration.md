@@ -40,7 +40,10 @@ sends `mode: "freestyle"`.
 - `components/CaseHub.tsx:23-24` renders task titles as links to `t.href`, which
   traces `buildMatterTasks` → `computeMissionControl` → `computeNextStep` →
   `/wizard/<engine>`. The top task on the consumer file is a wizard link.
-- `components/CaseDocumentsTable.tsx:598` — "Continue →" on a `draft` document.
+- `components/CaseDocumentsTable.tsx` — the `cdt-ghost` "Continue →" link on a
+  `draft` document (`:648` as of `f4cc98c`; line numbers drift, anchor on the
+  class name). The `cdt-open-draft` link above it already routes to
+  `/chat?caseFileId=…&draft=…` — reuse that shape.
 - Six area tool pages (`/debt/rights`, `/personal-injury/rights`,
   `/tax/guidance`, `/employment/claim-check`, `/employment/noncompete`,
   `/defamation/assess`) build a `wizardHref` CTA when a `caseFileId` is present.
@@ -49,6 +52,24 @@ Already correct — do not "fix": `formatMatterTasks`
 (`lib/matter-assessment.ts:38-50`) strips hrefs before the model sees them, so
 `assess_matter` never shows the orchestrator a wizard URL. The leak is UI-only.
 Mission Control is already attorney-gated (`ClientFileView.tsx:269`).
+
+## Draft-in-progress indicators (`f4cc98c`, `a3caa5b`) — right idea, three defects
+
+Both poll `/api/chat-acp/status?caseFileId=…`. Right direction (they treat the
+orchestrator as the source of drafts), but:
+
+- **The `CaseBrainstormChat` chip can never render.** That component mounts only
+  on the *attorney's* view of a *client's* file
+  (`app/attorney/file/[caseFileId]/page.tsx:157`), and the status endpoint
+  ownership-checks `job.userId !== userId` → always `{running:false}`. It is also
+  the wrong pipeline (that panel is `/api/attorney/case-files/[id]/brainstorm`,
+  not chat-acp). Remove it.
+- **The poll loop is one-shot.** The not-running branch returns without
+  rescheduling, so it only ever catches a turn already running at mount.
+- **`wasRunning` in `CaseDocumentsTable` is a stale closure** — captured at
+  effect creation, always `false`; the condition really reduces to `data.done`.
+
+Tracked as §2.4 of `docs/orchestrator-migration-plan.md`.
 
 ## Confirmed dead code (zero importers, verified by import analysis)
 
