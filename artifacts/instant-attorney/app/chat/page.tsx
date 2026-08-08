@@ -13,6 +13,7 @@ import ChatDraftsPanel from "@/components/ChatDraftsPanel";
 import { phase2ExistingCounselNotice } from "@/lib/existing-counsel";
 import { parseDrafts, stripDraftsForDisplay } from "@/lib/freestyle-drafts";
 import { stripToolMarkers, activeToolNames } from "@/lib/tool-markers";
+import { placeholderFields } from "@/lib/wizard-parsing";
 import ToolRunChips from "@/components/ToolRunChips";
 import type { CounselEngagementGoal } from "@/lib/types";
 
@@ -317,7 +318,8 @@ function AcpChatInner() {
   // Reopening an existing file (?caseFileId=…) does NOT replay the whole prior
   // transcript — that made the chat feel like a long, confusing thread to catch up
   // on. Instead we open a fresh conversation with a short "welcome back" that names
-  // where we left off (the distilled session recap). The orchestrator still sees
+  // the concrete next step from next_action (written by the Living File extractor),
+  // then lists any drafts that still have blanks to fill. The orchestrator still sees
   // the full file server-side via buildFileContext, and the complete message
   // history remains in the file/DB — it's just not dumped into the thread here.
   useEffect(() => {
@@ -326,18 +328,61 @@ function AcpChatInner() {
     let cancelled = false;
     (async () => {
       const supabase = createClient();
-      const { data: cf } = await supabase
-        .from("case_files")
-        .select("chat_session_summary")
-        .eq("id", urlCaseFileId)
-        .maybeSingle();
+
+      // Fetch case-file metadata and pending drafts in parallel
+      const [cfRes, docsRes] = await Promise.all([
+        supabase
+          .from("case_files")
+          .select("chat_session_summary, next_action")
+          .eq("id", urlCaseFileId)
+          .maybeSingle(),
+        supabase
+          .from("documents")
+          .select("title, draft_text, status")
+          .eq("case_file_id", urlCaseFileId)
+          .in("status", ["draft", "pending_review"]),
+      ]);
+
       if (cancelled) return;
-      const recap = (cf?.chat_session_summary as string | null)?.trim() || null;
-      const welcome =
-        "Welcome back — your case file is open in front of me, so there's no need to catch me up.\n\n" +
-        (recap ? `Last time: ${recap}\n\n` : "") +
-        "What would you like to do next? We can talk anything through, or I can draft the next document you need.";
-      setMessages([{ role: "assistant", content: welcome }]);
+
+      const cf = cfRes.data as { chat_session_summary: string | null; next_action: string | null } | null;
+      const docs = (docsRes.data ?? []) as { title: string; draft_text: string | null; status: string }[];
+
+      const recap = cf?.chat_session_summary?.trim() || null;
+      const nextAction = cf?.next_action?.trim() || null;
+
+      // Summarise drafts that still have unfilled blanks
+      const draftsWithBlanks = docs
+        .filter((d) => d.draft_text && placeholderFields(d.draft_text).length > 0)
+        .map((d) => ({
+          title: d.title,
+          blanks: placeholderFields(d.draft_text!).length,
+        }));
+
+      // Build the specific, concise welcome
+      const lines: string[] = [];
+      lines.push("Welcome back — your case file is open in front of me.\n");
+
+      if (nextAction) {
+        lines.push(`**Where we left off:** ${nextAction}`);
+      } else if (recap) {
+        lines.push(`**Last time:** ${recap}`);
+      }
+
+      if (draftsWithBlanks.length > 0) {
+        const draftSummary = draftsWithBlanks
+          .map((d) => `*${d.title}* (${d.blanks} blank${d.blanks === 1 ? "" : "s"} to fill)`)
+          .join(", ");
+        lines.push(`\nYou also have ${draftsWithBlanks.length === 1 ? "a draft" : "drafts"} with blanks still open: ${draftSummary}.`);
+      }
+
+      lines.push(
+        draftsWithBlanks.length > 0 || nextAction
+          ? "\nWant me to help with any of that, or is there something else on your mind?"
+          : "\nWhat would you like to do? We can talk anything through, or I can start drafting."
+      );
+
+      setMessages([{ role: "assistant", content: lines.join("\n") }]);
     })();
     return () => {
       cancelled = true;
