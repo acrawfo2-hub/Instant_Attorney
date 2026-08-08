@@ -416,7 +416,21 @@ export async function POST(req: NextRequest) {
         }
       } catch (err) {
         console.error("[chat-acp] generation error:", err);
-        runError = err instanceof Error ? err.message : "The model run failed.";
+        // Anthropic 400 "Could not process image" — bad/corrupt/too-small image.
+        // Emit as a friendly assistant message rather than a hard error so the
+        // user sees actionable text instead of "something went wrong".
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const isImageError = /could not process image/i.test(errMsg) ||
+          (typeof err === "object" && err !== null && "status" in err && (err as { status: number }).status === 400 &&
+           /image/i.test(errMsg));
+        if (isImageError && !fullResponse) {
+          fullResponse =
+            "I wasn't able to read that image — it may be too small, corrupted, or in an unsupported format. " +
+            "Please try a different image (PNG or JPEG, at least a few KB) or describe what's in it and I'll work from your description.";
+          emitAcpChunk(job, fullResponse);
+        } else {
+          runError = errMsg;
+        }
       } finally {
         try {
         // The user-message insert was kicked off before the stream to keep it

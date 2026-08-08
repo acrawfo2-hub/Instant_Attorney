@@ -259,7 +259,14 @@ function AcpChatInner() {
   function jumpToLatest() {
     pinnedRef.current = true;
     setShowJump(false);
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Scroll the container directly (instant) so the scroll event that fires
+    // during animation cannot flip pinnedRef back to false before we arrive.
+    const el = messagesMainRef.current;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+    } else {
+      messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
+    }
   }
 
   // Resume a still-running background turn on page load: reopening the chat
@@ -1059,7 +1066,7 @@ function AcpChatInner() {
           </div>
         )}
 
-        {showJump && (loading || bgJobs.length > 0) && (
+        {showJump && (
           <button
             type="button"
             onClick={jumpToLatest}
