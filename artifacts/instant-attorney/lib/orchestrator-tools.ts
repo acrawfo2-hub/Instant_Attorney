@@ -17,6 +17,8 @@ import { parseWhatIfResponse } from "./what-if.ts";
 import { maxOutputTokensFor } from "./token-limits.ts";
 import { recordAiFromMessage } from "./usage-tracker.ts";
 import { loadAttachmentText } from "./attachment-processor.ts";
+import { runStrengthCheck } from "./strength-check.ts";
+import { formatStrengthCheckForModel } from "./strength-check-types.ts";
 import { createServiceClient } from "./supabase/server.ts";
 import type { CaseFile, FactItem } from "./types.ts";
 
@@ -531,6 +533,52 @@ const TOOLS: Record<string, ToolDef> = {
     },
   },
 
+  stress_test_position: {
+    def: {
+      name: "stress_test_position",
+      description:
+        "Run (or read) the adversarial Strength Check: how opposing counsel would attack THIS client's position — strongest points, weakest points, likely counterarguments, and the evidence that closes each gap. Same engine as the 'How strong is my position?' card on the case file, so file and chat never disagree. Use when the user asks how strong their case is, how the other side would attack it, or before a draft goes out. Set refresh=true only if the user wants a fresh run (it costs a full analysis); otherwise a stored recent check is returned.",
+      input_schema: {
+        type: "object",
+        properties: {
+          refresh: {
+            type: "boolean",
+            description: "Force a fresh analysis even if one is stored. Confirm with the user first — it takes a minute or two.",
+          },
+        },
+        required: [],
+      },
+    },
+    run: async (input, ctx) => {
+      const refresh = boolOf(input.refresh) === true;
+      if (!refresh) {
+        const { data: cf } = await ctx.db
+          .from("case_files")
+          .select("legal_strategy")
+          .eq("id", ctx.caseFileId)
+          .maybeSingle();
+        const stored = (cf?.legal_strategy as CaseFile["legal_strategy"])?.strength_check;
+        if (stored) {
+          return {
+            forModel:
+              `${formatStrengthCheckForModel(stored)}\n\n` +
+              "This is the stored check from the case file. If the facts have changed since then, offer to re-run it (refresh=true) — after confirming, since it takes a minute or two.",
+            raw: stored,
+          };
+        }
+      }
+      // Fresh run — identical engine as the case-file card; result is persisted
+      // on legal_strategy so the card (and the attorney) see the same analysis.
+      const check = await runStrengthCheck(ctx.db, { caseFileId: ctx.caseFileId, userId: ctx.userId });
+      return {
+        forModel:
+          `${formatStrengthCheckForModel(check)}\n\n` +
+          "Walk the client through this conversationally — lead with the bottom line, then the most dangerous attack and the one piece of evidence that matters most. For evidence items the client agrees to gather, add them to the checklist with request_document. It's also saved on their case file.",
+        raw: check,
+      };
+    },
+  },
+
   // ── Write tools (Phase 4) — these change the client's file. The prompt requires
   // the model to CONFIRM with the user before calling them; never speculative. ──
   record_fact: {
@@ -881,7 +929,7 @@ const TOOLS: Record<string, ToolDef> = {
 // Tools that mutate the client's record (or, for run_what_if, persist a client-
 // side What-If session). The attorney associate (work-product, not the client
 // channel) gets the read-only set only.
-const WRITE_TOOL_NAMES = new Set(["record_fact", "request_document", "resolve_document_request", "add_government_form", "run_what_if", "open_uploaded_document"]);
+const WRITE_TOOL_NAMES = new Set(["record_fact", "request_document", "resolve_document_request", "add_government_form", "run_what_if", "open_uploaded_document", "stress_test_position"]);
 
 /** All tool definitions — the consumer orchestrator, which may write to its own file. */
 export const ORCHESTRATOR_TOOLS: Anthropic.Tool[] = Object.values(TOOLS).map((t) => t.def);

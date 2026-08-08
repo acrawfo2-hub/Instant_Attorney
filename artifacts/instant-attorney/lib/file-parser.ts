@@ -400,6 +400,9 @@ async function parseLegalStrategy(
     lead_rationale: (documentPlan[0]?.rationale ?? leadRationale) || undefined,
     lead_key_override: leadKeyOverride,
     lead_override: priorStrategy?.lead_override ?? null,
+    // Not produced by the extractor — carry the stored Strength Check forward so
+    // rewriting the strategy block never wipes it.
+    strength_check: priorStrategy?.strength_check,
   };
 
   await db
