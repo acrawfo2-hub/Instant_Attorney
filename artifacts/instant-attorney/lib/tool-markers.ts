@@ -23,6 +23,9 @@ export const TOOL_LABELS: Record<string, string> = {
   resolve_document_request: "Updating your checklist",
   add_government_form: "Adding an official form",
   open_uploaded_document: "Opening your document to edit",
+  // Emitted as a keep-alive while a new message waits for the previous turn
+  // (e.g. a long draft still generating in the background) to finish.
+  previous_turn: "Finishing the previous reply",
 };
 
 /** Remove tool markers (including a trailing partial one still streaming) for display. */

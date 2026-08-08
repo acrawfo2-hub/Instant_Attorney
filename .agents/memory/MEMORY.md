@@ -34,4 +34,5 @@
 - [Deadline docketing engine](instant-attorney-docket.md) — deadlines computed from "Key date · <event> · YYYY-MM-DD" facts; Texas rules gated on jurisdiction; new rules must declare scope.
 - [Inline blank-fill placement](instant-attorney-blank-fill-placement.md) — DocumentInfoNeeded must be in BOTH the reviewDocs and otherDocs sections of CaseDocumentsTable or it silently disappears for submitted docs.
 - [Strength Check storage](instant-attorney-strength-check.md) — lives in legal_strategy JSONB: carry key across extractor rewrites, write via guarded compare-and-retry, never swallow save errors.
+- [Background chat turns](instant-attorney-background-turns.md) — chat-acp turns run as detached in-process jobs; finishAcpJob must be unbypassable; client anchors bg replies via placeholder pendingId, never indexes.
 - [Consult credits for Phase 2 add-on](instant-attorney-consult-credits.md) — subscriptions.consult_credits (integer, DB migration required) tracks paid consult add-ons for phase2 users; webhook/confirm must not overwrite plan when existing=phase2.

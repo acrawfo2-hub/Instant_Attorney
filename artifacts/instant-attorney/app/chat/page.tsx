@@ -22,6 +22,10 @@ type Msg = Pick<IntakeMessage, "role" | "content"> & {
   // Local-only: object URL for a screenshot the user attached to this turn, so the
   // image stays visible in the chat history instead of collapsing to a [filename] tag.
   imageUrl?: string;
+  // Local-only: placeholder for a turn still generating in the background. It
+  // renders as nothing and is replaced in place when the reply arrives, so the
+  // reply lands BEFORE any messages the user sent afterwards.
+  pendingId?: string;
 };
 
 interface PendingAttachment {
@@ -214,6 +218,21 @@ function AcpChatInner() {
   const [draftFocus, setDraftFocus] = useState<{ id: string | null; title: string | null; nonce: number }>(
     { id: urlFocusDraftId, title: null, nonce: urlFocusDraftId ? 1 : 0 },
   );
+  // Background turns: a long generation (e.g. a document draft) keeps running
+  // server-side after the client lets go of its stream. Each entry is polled
+  // via /api/chat-acp/status until the finished text can be placed into the
+  // transcript. pendingId anchors the reply to a placeholder message (stable
+  // even as more messages arrive); null means append at the end.
+  const [bgJobs, setBgJobs] = useState<Array<{ jobId: string; pendingId: string | null; startedAt: number }>>([]);
+  const currentJobIdRef = useRef<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const sendSeqRef = useRef(0);
+  // Scroll pinning: only auto-follow new output while the user is at the
+  // bottom of the transcript. Scrolling up stops the auto-scroll (so long
+  // generations can be read through) until they jump back down.
+  const messagesMainRef = useRef<HTMLElement>(null);
+  const pinnedRef = useRef(true);
+  const [showJump, setShowJump] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputAreaRef = useRef<HTMLDivElement>(null);
@@ -224,8 +243,103 @@ function AcpChatInner() {
   const caseHomeHref = caseFileId ? `/dashboard/${caseFileId}` : "/dashboard";
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (pinnedRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages, streamingText]);
+
+  function handleMessagesScroll() {
+    const el = messagesMainRef.current;
+    if (!el) return;
+    const pinned = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    pinnedRef.current = pinned;
+    setShowJump(!pinned);
+  }
+
+  function jumpToLatest() {
+    pinnedRef.current = true;
+    setShowJump(false);
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }
+
+  // Resume a still-running background turn on page load: reopening the chat
+  // while a long draft generates shows the progress card again instead of
+  // silently dropping the run.
+  useEffect(() => {
+    if (!urlCaseFileId) return;
+    let cancelled = false;
+    fetch(`/api/chat-acp/status?caseFileId=${urlCaseFileId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { running?: boolean; jobId?: string; startedAt?: number } | null) => {
+        if (cancelled || !d?.running || !d.jobId) return;
+        const jobId = d.jobId;
+        setBgJobs((prev) =>
+          prev.some((j) => j.jobId === jobId)
+            ? prev
+            : [...prev, { jobId, pendingId: null, startedAt: d.startedAt ?? Date.now() }]
+        );
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [urlCaseFileId]);
+
+  // Poll background turns until they finish, then place the reply into the
+  // transcript and surface any drafts it produced.
+  useEffect(() => {
+    if (bgJobs.length === 0) return;
+    let cancelled = false;
+
+    const resolveJob = (job: (typeof bgJobs)[number], data: { finalText?: string | null; truncated?: boolean }) => {
+      setBgJobs((prev) => prev.filter((j) => j !== job));
+      if (data.truncated) setChatTruncated(true);
+      const raw = typeof data.finalText === "string" ? data.finalText : "";
+      const text = stripToolMarkers(raw).trim();
+      setMessages((prev) => {
+        // Replace the turn's placeholder in place (stable anchor even after
+        // later messages arrived); fall back to appending.
+        if (job.pendingId) {
+          const idx = prev.findIndex((m) => m.pendingId === job.pendingId);
+          if (idx !== -1) {
+            const next = [...prev];
+            if (text) next[idx] = { role: "assistant", content: text };
+            else next.splice(idx, 1);
+            return next;
+          }
+        }
+        return text ? [...prev, { role: "assistant", content: text }] : prev;
+      });
+      if (text) {
+        const newDrafts = parseDrafts(raw);
+        const openedUpload = /\x02TOOL:open_uploaded_document:done\x02/.test(raw);
+        if (newDrafts.length > 0 || openedUpload) {
+          setDraftsPanelOpen(true);
+          setDraftsRefresh((n) => n + 1);
+          if (newDrafts.length > 0) setDraftSavedTitle(newDrafts[0].title);
+        }
+      } else {
+        // Job unknown (e.g. server restarted) or empty — refresh drafts in
+        // case results were persisted before it went away.
+        setDraftsRefresh((n) => n + 1);
+      }
+    };
+
+    const tick = async () => {
+      for (const job of bgJobs) {
+        try {
+          const res = await fetch(`/api/chat-acp/status?jobId=${encodeURIComponent(job.jobId)}`);
+          if (!res.ok) continue;
+          const data = await res.json() as { running?: boolean; finalText?: string | null; truncated?: boolean };
+          if (cancelled) return;
+          if (data.running) continue;
+          resolveJob(job, data);
+        } catch { /* transient network error — retry on next tick */ }
+      }
+    };
+
+    const t = setInterval(tick, 4000);
+    tick();
+    return () => { cancelled = true; clearInterval(t); };
+  }, [bgJobs]);
 
   // Keep the draft count badge on the Drafts button current.
   useEffect(() => {
@@ -556,7 +670,29 @@ function AcpChatInner() {
   async function sendMessage(e: FormEvent | null, overrideText?: string) {
     e?.preventDefault();
     const text = (overrideText ?? input).trim();
-    if ((!text && !pendingAttachment) || loading || showCounselModal) return;
+    if ((!text && !pendingAttachment) || showCounselModal) return;
+
+    // Sending while a turn is still generating moves that turn to the
+    // background: let go of its stream (the server keeps generating and
+    // persists everything), leave a placeholder where its reply belongs, and
+    // continue with the new message. The server serializes turns per case file
+    // and splices the finished reply into the model history; the poll above
+    // fills the placeholder when it completes.
+    let bgPlaceholderId: string | null = null;
+    if (loading) {
+      const prevJobId = currentJobIdRef.current;
+      // Header (with the job id) hasn't arrived yet — without it the turn
+      // can't be recovered, so hold the send for a beat instead of losing it.
+      if (!prevJobId) return;
+      abortRef.current?.abort();
+      bgPlaceholderId = `bg-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      setBgJobs((prev) => [
+        ...prev,
+        { jobId: prevJobId, pendingId: bgPlaceholderId, startedAt: Date.now() },
+      ]);
+      setStreamingText("");
+      setActiveTools([]);
+    }
 
     const attachment = pendingAttachment;
 
@@ -573,11 +709,20 @@ function AcpChatInner() {
         ? { imageUrl: attachment.previewUrl }
         : {}),
     };
-    const nextMessages = [...messages, userMsg];
+    const nextMessages: Msg[] = bgPlaceholderId
+      ? [...messages, { role: "assistant", content: "", pendingId: bgPlaceholderId }, userMsg]
+      : [...messages, userMsg];
     setMessages(nextMessages);
     setInput("");
     setLoading(true);
     setStreamingText("");
+    pinnedRef.current = true;
+    setShowJump(false);
+    // This turn's job id arrives in the response header frame.
+    currentJobIdRef.current = null;
+    const seq = ++sendSeqRef.current;
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
 
     // Hand the object URL off to the sent message so it stays visible in history.
     // Do NOT revoke it here (clearAttachment would) — the message bubble now owns it.
@@ -586,14 +731,19 @@ function AcpChatInner() {
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
     try {
-      // For API, use plain text content (not the display content with filename prefix)
-      const apiMessages = nextMessages.map((m, idx) => ({
-        role: m.role,
-        content: idx === nextMessages.length - 1 ? text : m.content,
-      }));
+      // For API, use plain text content (not the display content with filename
+      // prefix). Background placeholders are local-only — exclude them; the
+      // server splices the real previous reply into the model history itself.
+      const apiMessages = nextMessages
+        .filter((m) => !m.pendingId)
+        .map((m, idx, arr) => ({
+          role: m.role,
+          content: idx === arr.length - 1 ? text : m.content,
+        }));
 
       const res = await fetch("/api/chat-acp", {
         method: "POST",
+        signal: ctrl.signal,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: apiMessages,
@@ -629,7 +779,12 @@ function AcpChatInner() {
         if (firstChunk && chunk.startsWith("\x00")) {
           const end = chunk.indexOf("\x00", 1);
           if (end !== -1) {
-            const id = chunk.slice(1, end);
+            // Header frame: "<caseFileId>|<jobId>". The job id lets us
+            // re-attach to this turn via the status endpoint if we let go of
+            // the stream (user sent another message mid-generation).
+            const header = chunk.slice(1, end);
+            const [id, jobId] = header.split("|");
+            currentJobIdRef.current = jobId || null;
             if (id) {
               setCaseFileId(id);
               // Put the new file's id in the URL so a reload mid-session resumes
@@ -685,14 +840,19 @@ function AcpChatInner() {
       // Resolved doc uploads are now in the file context; keep only in-flight ones.
       setDocUploads((prev) => prev.filter((d) => d.status === "uploading"));
     } catch {
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: "I'm sorry — something went wrong. Please try again." },
-      ]);
-      setStreamingText("");
-      setActiveTools([]);
+      // Aborted on purpose (the turn moved to the background) — not an error.
+      if (!ctrl.signal.aborted) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: "I'm sorry — something went wrong. Please try again." },
+        ]);
+        setStreamingText("");
+        setActiveTools([]);
+      }
     } finally {
-      setLoading(false);
+      // Only the most recent send owns the loading flag — an older, aborted
+      // turn finishing up must not clear the newer turn's state.
+      if (sendSeqRef.current === seq) setLoading(false);
     }
   }
 
@@ -810,8 +970,8 @@ function AcpChatInner() {
       <div className="fc-workspace-main">
 
       {/* MESSAGES */}
-      <main className="fc-messages">
-        {messages.map((msg, i) => (
+      <main className="fc-messages" ref={messagesMainRef} onScroll={handleMessagesScroll}>
+        {messages.map((msg, i) => msg.pendingId ? null : (
           <div
             key={i}
             className={msg.role === "user" ? "fc-msg-row fc-msg-row-user" : "fc-msg-row fc-msg-row-ai"}
@@ -877,6 +1037,55 @@ function AcpChatInner() {
               {activeTools.length > 0 ? <ToolRunChips tools={activeTools} /> : <><span /><span /><span /></>}
             </div>
           </div>
+        )}
+
+        {/* Background turn progress card — a long generation keeps running
+            server-side; the user can keep chatting or leave this page. */}
+        {bgJobs.length > 0 && (
+          <div className="fc-msg-row fc-msg-row-ai">
+            <div className="fc-avatar">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              </svg>
+            </div>
+            <div className="fc-bubble fc-bubble-ai" role="status">
+              <p><strong>Still working on that in the background…</strong></p>
+              <p>
+                Long drafts can take a few minutes. You can keep chatting or leave this
+                page — anything I draft is saved to your <strong>Drafts</strong> automatically,
+                and the reply will appear here when it&apos;s ready.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {showJump && (loading || bgJobs.length > 0) && (
+          <button
+            type="button"
+            onClick={jumpToLatest}
+            aria-label="Jump to latest messages"
+            style={{
+              position: "sticky",
+              bottom: 8,
+              alignSelf: "center",
+              zIndex: 5,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "6px 14px",
+              borderRadius: 999,
+              border: "1px solid rgba(0,0,0,0.12)",
+              background: "#fff",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.14)",
+              fontSize: 13,
+              cursor: "pointer",
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M12 5v14M19 12l-7 7-7-7" />
+            </svg>
+            Jump to latest
+          </button>
         )}
 
         <div ref={messagesEndRef} />
@@ -1002,7 +1211,6 @@ function AcpChatInner() {
             type="button"
             className="fc-attach-btn"
             onClick={() => fileInputRef.current?.click()}
-            disabled={loading}
             aria-label="Attach file"
             title="Attach image, PDF, or document"
           >
@@ -1025,10 +1233,8 @@ function AcpChatInner() {
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
             rows={1}
-            disabled={loading}
           />
           <VoiceInputButton
-            disabled={loading}
             onTranscript={(t) => {
               setInput((v) => (v.trim() ? `${v.trim()} ${t}` : t));
               requestAnimationFrame(autoResize);
@@ -1037,7 +1243,7 @@ function AcpChatInner() {
           <button
             type="submit"
             className="fc-send-btn"
-            disabled={loading || (!input.trim() && !pendingAttachment)}
+            disabled={!input.trim() && !pendingAttachment}
             aria-label="Send"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
