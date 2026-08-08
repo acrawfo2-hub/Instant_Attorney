@@ -1,12 +1,21 @@
 -- Instant Attorney — Schema verification, stages 38–45
 --
 -- WHY THIS FILE EXISTS
--- `schema-verify.sql` stops at stage 37. Every object the ORCHESTRATOR depends
--- on was added after that (stages 39, 40, 42, 43) and was therefore
--- unverifiable: if the live database were missing `client_workspace_drafts`,
--- side-panel drafts would fail silently (PGRST205) mid-conversation, and a
--- missing `orchestrator_tool_calls` would drop every tool-call audit row on the
--- floor without surfacing an error to the client.
+-- `schema-verify.sql` historically stopped at stage 37. Every object the
+-- ORCHESTRATOR depends on was added after that (stages 39, 40, 42, 43) and was
+-- therefore unverifiable: if the live database were missing
+-- `client_workspace_drafts`, side-panel drafts would fail silently (PGRST205)
+-- mid-conversation, and a missing `orchestrator_tool_calls` would drop every
+-- tool-call audit row on the floor without surfacing an error to the client.
+--
+-- RELATIONSHIP TO schema-verify.sql
+-- PR #88 independently extended `schema-verify.sql` to cover some of the same
+-- ground, so five checks now appear in both files (orchestrator_tool_calls,
+-- case_files.chat_session_summary, document_review_runs, document_improvements,
+-- document_qa_citations). Duplication is harmless — both are read-only — and the
+-- files are NOT redundant: only this one covers the stage 38/39/40 objects
+-- (including `client_workspace_drafts`, the orchestrator-critical one), the RLS
+-- flags, and the indexes. Run both; consolidate later if it becomes annoying.
 --
 -- HOW TO RUN
 -- Supabase → SQL Editor → paste and Run, AFTER schema-verify.sql.
