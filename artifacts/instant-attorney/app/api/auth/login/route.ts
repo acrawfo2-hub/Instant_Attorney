@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { ensureTesterSubscription } from "@/lib/testers";
+import {
+  confirmTesterEmail,
+  ensureTesterSubscription,
+  isEmailNotConfirmedError,
+  isTesterEmail,
+} from "@/lib/testers";
 
 export async function POST(request: NextRequest) {
   const { email, password } = await request.json();
@@ -10,10 +15,28 @@ export async function POST(request: NextRequest) {
   }
 
   const supabase = await createClient();
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  let { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+  // A QA tester whose confirmation email never landed would otherwise be
+  // locked out with no self-serve recovery. Confirm the address server-side
+  // (allowlist-only) and retry the sign-in once.
+  if (error && isEmailNotConfirmedError(error) && isTesterEmail(email)) {
+    if (await confirmTesterEmail(email)) {
+      ({ data, error } = await supabase.auth.signInWithPassword({ email, password }));
+    }
+  }
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 401 });
+    // The raw Supabase strings ("Invalid login credentials", "Email not
+    // confirmed") leave the user with no idea what to do next. Say what the
+    // next action is, and tell the client when to offer a resend.
+    const needsConfirmation = isEmailNotConfirmedError(error);
+    const message = needsConfirmation
+      ? "Your email address hasn't been confirmed yet. Check your inbox for the confirmation link, or send yourself a new one below."
+      : /invalid login credentials/i.test(error.message)
+        ? "That email and password don't match an account. Double-check them, or reset your password."
+        : error.message;
+    return NextResponse.json({ error: message, needsConfirmation }, { status: 401 });
   }
 
   // Role-aware home: the reviewing attorney (Andrew Crawford) belongs on his

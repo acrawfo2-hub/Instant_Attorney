@@ -18,10 +18,38 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // Set when the server reports the account exists but was never confirmed —
+  // the one failure a user can fix themselves without leaving this page.
+  const [needsConfirmation, setNeedsConfirmation] = useState(false);
+  const [resendNotice, setResendNotice] = useState("");
+  const [resending, setResending] = useState(false);
+
+  async function handleResend() {
+    setResending(true);
+    setResendNotice("");
+    try {
+      const res = await fetch("/api/auth/resend-confirmation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      setResendNotice(data.message ?? "Check your inbox.");
+      if (data.confirmed) {
+        setError("");
+        setNeedsConfirmation(false);
+      }
+    } catch {
+      setResendNotice("Could not send right now — try again in a moment.");
+    }
+    setResending(false);
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
+    setResendNotice("");
+    setNeedsConfirmation(false);
     setLoading(true);
 
     let redirectTo = explicitRedirect ?? "/dashboard";
@@ -34,6 +62,7 @@ function LoginForm() {
       const data = await res.json();
       if (!res.ok) {
         setError(data.error ?? "Sign in failed");
+        setNeedsConfirmation(!!data.needsConfirmation);
         setLoading(false);
         return;
       }
@@ -105,12 +134,31 @@ function LoginForm() {
 
           {error && <p className="auth-error">{error}</p>}
 
+          {needsConfirmation && (
+            <button
+              type="button"
+              className="auth-text-link"
+              onClick={handleResend}
+              disabled={resending || !email}
+            >
+              {resending ? "Sending…" : "Resend the confirmation email"}
+            </button>
+          )}
+
+          {resendNotice && <p className="auth-sub" style={{ margin: 0 }}>{resendNotice}</p>}
+
           <button type="submit" className="auth-btn" disabled={loading}>
             {loading ? "Signing in…" : "Sign In"}
           </button>
         </form>
 
         <p className="auth-footer-link">
+          <button className="auth-text-link" onClick={() => router.push("/forgot-password")}>
+            Forgot your password?
+          </button>
+        </p>
+
+        <p className="auth-footer-link" style={{ marginTop: "0.5rem" }}>
           Don&apos;t have an account?{" "}
           <button className="auth-text-link" onClick={() => router.push(isAttorneyLogin ? "/register?as=attorney" : "/register")}>
             Create one &rarr;

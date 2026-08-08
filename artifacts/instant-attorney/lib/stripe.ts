@@ -4,9 +4,14 @@ let _stripe: Stripe | null = null;
 
 export function getStripe(): Stripe {
   if (!_stripe) {
-    _stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-      apiVersion: "2026-06-24.dahlia",
-    });
+    // apiVersion is deliberately omitted. Stripe's types pin it to a single
+    // literal per SDK release, so hardcoding one breaks `next build` the
+    // moment the dependency moves (^22.2.0 resolved to 22.3.2 in
+    // package-lock.json but 22.4.0 on a fresh install — different literals).
+    // Omitted, stripe-node falls back to DEFAULT_API_VERSION, which is the
+    // exact version the installed SDK ships with — same wire behavior, no
+    // version coupling.
+    _stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
   }
   return _stripe;
 }

@@ -31,7 +31,7 @@
 - [node:test path-alias limitation](instant-attorney-node-test-path-alias.md) — lib tests + their imports must use relative paths; any `@/lib` import in the graph fails to load (mission-control.test.ts is a known pre-existing failure).
 - [Dependency vuln fixes](dependency-vuln-fixes.md) — transitive vulns fixed via pnpm-workspace overrides; instant-attorney is npm so needs its own overrides; next pins exact postcss.
 - [Doc staleness & Regenerate](instant-attorney-doc-staleness.md) — documents.facts_synced_at vs max(fact updated_at) flags out-of-date drafts; stamp LAST, degrade gracefully if column missing, client-only, preserve status.
-- [QA tester allowlist](instant-attorney-tester-allowlist.md) — lib/testers.ts auto-grants bypass subs on login/gates; add testers by email there, never per-route checks.
+- [QA tester allowlist](instant-attorney-tester-allowlist.md) — lib/testers.ts auto-grants bypass subs AND auto-confirms email on login/gates; add testers by email there, never per-route checks; `scripts/ensure-tester.mjs` is the ops escape hatch.
 - [Deadline docketing engine](instant-attorney-docket.md) — deadlines computed from "Key date · <event> · YYYY-MM-DD" facts; Texas rules gated on jurisdiction; new rules must declare scope.
 - [Inline blank-fill placement](instant-attorney-blank-fill-placement.md) — DocumentInfoNeeded must be in BOTH the reviewDocs and otherDocs sections of CaseDocumentsTable or it silently disappears for submitted docs.
 - [Strength Check storage](instant-attorney-strength-check.md) — lives in legal_strategy JSONB: carry key across extractor rewrites, write via guarded compare-and-retry, never swallow save errors.
