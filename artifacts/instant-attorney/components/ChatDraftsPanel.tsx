@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { ClientWorkspaceDraft } from "@/lib/types";
 import { findBlanks, type DraftBlank } from "@/lib/freestyle-drafts";
+import { runPromoteWithSaveGuard } from "@/lib/draft-promote-guard";
 
 // Consumer freestyle drafts panel — the docked right side of the split screen.
 // Mirrors the attorney workspace panel: draft tabs, an editable title + body with
@@ -36,6 +37,9 @@ export default function ChatDraftsPanel({
   // preview = rendered view with highlighted [[placeholders]]; edit = raw textarea
   const [viewMode, setViewMode] = useState<"preview" | "edit">("preview");
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Tracks the promise of any currently in-flight save so promote() can await
+  // it even if dirty has already been cleared by the time promote is called.
+  const savePromiseRef = useRef<Promise<boolean> | null>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
   const draftsRef = useRef<ClientWorkspaceDraft[]>([]);
   useEffect(() => { draftsRef.current = drafts; }, [drafts]);
@@ -99,22 +103,28 @@ export default function ChatDraftsPanel({
     load();
   }, [focusNonce, focusId, focusTitle, load]);
 
-  const save = useCallback(async (id: string, opts: { silent?: boolean } = {}) => {
+  const save = useCallback(async (id: string, opts: { silent?: boolean } = {}): Promise<boolean> => {
     const toSave = draftsRef.current.find((d) => d.id === id);
-    if (!toSave) return;
+    if (!toSave) return true; // nothing to save — treat as success
     if (!opts.silent) setSaving(true);
+    let ok = false;
     try {
       const res = await fetch(`/api/workspace/drafts/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: toSave.title, content: toSave.content }),
       });
-      if (res.ok) setDirty(false);
+      ok = res.ok;
+      if (ok) setDirty(false);
     } catch {
       /* keep dirty; retry on next edit or blur */
     } finally {
       if (!opts.silent) setSaving(false);
+      // Clear the in-flight ref once this save settles so future promotes
+      // don't await a long-gone promise.
+      if (savePromiseRef.current !== null) savePromiseRef.current = null;
     }
+    return ok;
   }, []);
 
   function edit(patch: Partial<Pick<ClientWorkspaceDraft, "title" | "content">>) {
@@ -123,7 +133,11 @@ export default function ChatDraftsPanel({
     setDirty(true);
     if (saveTimer.current) clearTimeout(saveTimer.current);
     const id = activeId;
-    saveTimer.current = setTimeout(() => save(id), 900);
+    saveTimer.current = setTimeout(() => {
+      // Store the in-flight promise so promote() can await it if it fires
+      // before this save has settled.
+      savePromiseRef.current = save(id);
+    }, 900);
   }
 
   async function newDraft() {
@@ -152,23 +166,37 @@ export default function ChatDraftsPanel({
   }
 
   async function promote(id: string) {
-    if (dirty) await save(id, { silent: true });
     setPromoting(true);
     setNotice("");
-    try {
-      const res = await fetch(`/api/workspace/drafts/${id}/promote`, { method: "POST" });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        setNotice("Sent for attorney review — you'll find it under your documents.");
-        setDrafts((prev) => prev.map((d) => (d.id === id ? { ...d, promoted_document_id: data.documentId } : d)));
-      } else {
-        setNotice(data.error ?? "Could not send for review.");
-      }
-    } catch {
-      setNotice("Could not send for review.");
-    } finally {
-      setPromoting(false);
+
+    const saveError = await runPromoteWithSaveGuard({
+      // Hand the guard the current in-flight save promise (may be null).
+      inFlightSave: savePromiseRef.current,
+      // Read the live dirty flag *after* any in-flight save settles.
+      isDirty: () => dirtyRef.current,
+      // Fresh save if still dirty — store the promise so concurrent calls see it.
+      save: () => {
+        const p = save(id, { silent: true });
+        savePromiseRef.current = p;
+        return p;
+      },
+      promote: async () => {
+        const res = await fetch(`/api/workspace/drafts/${id}/promote`, { method: "POST" });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          setNotice("Sent for attorney review — you'll find it under your documents.");
+          setDrafts((prev) => prev.map((d) => (d.id === id ? { ...d, promoted_document_id: data.documentId } : d)));
+        } else {
+          setNotice(data.error ?? "Could not send for review.");
+        }
+      },
+    });
+
+    if (saveError) {
+      setNotice(saveError);
     }
+
+    setPromoting(false);
   }
 
   return (
@@ -246,7 +274,7 @@ export default function ChatDraftsPanel({
               className="fs-draft-body"
               value={active.content}
               onChange={(e) => edit({ content: e.target.value })}
-              onBlur={() => dirty && activeId && save(activeId)}
+              onBlur={() => { if (dirty && activeId) savePromiseRef.current = save(activeId); }}
               placeholder="Draft content…"
               spellCheck
             />
