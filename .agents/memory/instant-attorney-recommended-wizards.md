@@ -5,6 +5,12 @@ description: legal_strategy.recommended_wizards entries must be bare wizard-type
 
 # legal_strategy.recommended_wizards must be clean wizard-type tokens
 
+> **⚠️ Field is deprecated but still live.** `recommended_wizards` is superseded
+> by `document_plan` and both are retired in Phase 3 of
+> `docs/orchestrator-migration-plan.md`. Until then this rule still holds, and
+> read paths must keep tolerating historical rows. See
+> `instant-attorney-orchestrator-migration.md`.
+
 `case_files.legal_strategy.recommended_wizards` is consumed by multiple paths with
 **inconsistent** validation, so a malformed entry like
 `"draft_contract — ready to proceed"` or a non-wizard token like

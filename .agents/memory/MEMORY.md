@@ -1,3 +1,4 @@
+- [Wizard → orchestrator migration (IN FLIGHT)](instant-attorney-orchestrator-migration.md) — the product is the orchestrator; intake guardrails still contradict it in prompts.ts, some client links still exit to /wizard, 14 components are dead. Read before touching prompts or chat flow. Plan: docs/orchestrator-migration-plan.md.
 - [Screenshotting Vite previews](canvas-vite-preview-screenshots.md) — external_url shots of mockup-sandbox previews go blank/flaky; use app_preview instead.
 - [Bash background process reaping](replit-bash-background-process-reaping.md) — long detached bash jobs get SIGKILLed silently; run long one-shots as a managed workflow.
 - [AI model pricing coupling](instant-attorney-model-pricing.md) — every model used by a route must have a usage-tracker pricing entry or cost silently falls back to Sonnet's.
