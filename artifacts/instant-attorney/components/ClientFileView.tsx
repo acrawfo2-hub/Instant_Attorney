@@ -16,6 +16,7 @@ import {
 import type { RoadmapAiOverlay } from "@/lib/roadmap-types";
 import PostConsultCard from "@/components/PostConsultCard";
 import CaseHub from "@/components/CaseHub";
+import KeyDeadlines from "@/components/KeyDeadlines";
 import CaseDocumentsTable from "@/components/CaseDocumentsTable";
 import AttorneyFreestyleChat from "@/components/AttorneyFreestyleChat";
 import { buildMatterTasks } from "@/lib/matter-tasks";
@@ -272,6 +273,11 @@ export default function ClientFileView({
           isAttorneyUser={isAttorneyUser}
         />
       )}
+
+      {/* Key deadlines — the deterministic docket, computed from dated facts.
+          Top placement: a live or passed deadline is the one thing the file must
+          never let the client (or attorney) scroll past. */}
+      <KeyDeadlines facts={facts} jurisdiction={caseFile.jurisdiction} />
 
       {/* The consumer file's single live block — consolidates the old recap card,
           the "what's next?" CTA, and the on-demand standing card into one

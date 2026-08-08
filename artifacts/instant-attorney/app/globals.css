@@ -10551,3 +10551,117 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
     border: 0;
   }
 }
+
+/* ── Key deadlines (docket) ─────────────────────────────────────────────── */
+.lf-docket {
+  border: 1px solid #e3e0d8;
+  border-radius: 12px;
+  padding: 20px 22px;
+  background: #fff;
+}
+.lf-docket-pressing {
+  border-color: #e8b6ab;
+  box-shadow: 0 0 0 3px rgba(196, 90, 62, 0.08);
+}
+.lf-docket-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.lf-docket-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1c2b3a;
+  margin: 0;
+}
+.lf-docket-sub {
+  font-size: 0.78rem;
+  color: #8a8578;
+}
+.lf-docket-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.lf-docket-item {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid #eceae3;
+  background: #fbfaf7;
+}
+.lf-docket-item.lf-docket-expired {
+  border-color: #d99287;
+  background: #fdf2ef;
+}
+.lf-docket-item.lf-docket-critical {
+  border-color: #e4b98a;
+  background: #fdf7ee;
+}
+.lf-docket-item.lf-docket-warning {
+  border-color: #e3d6a5;
+  background: #fdfbf0;
+}
+.lf-docket-when {
+  flex: 0 0 130px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.lf-docket-date {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #1c2b3a;
+}
+.lf-docket-count {
+  display: inline-block;
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  width: fit-content;
+}
+.lf-docket-count-expired { background: #c45a3e; color: #fff; }
+.lf-docket-count-critical { background: #b97324; color: #fff; }
+.lf-docket-count-warning { background: #a08c2d; color: #fff; }
+.lf-docket-count-normal { background: #e8e5dc; color: #5b564a; }
+.lf-docket-body { flex: 1; min-width: 0; }
+.lf-docket-label {
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: #1c2b3a;
+}
+.lf-docket-explain {
+  font-size: 0.82rem;
+  color: #5b564a;
+  margin-top: 3px;
+  line-height: 1.45;
+}
+.lf-docket-basis {
+  font-size: 0.74rem;
+  color: #8a8578;
+  margin-top: 5px;
+}
+.lf-docket-caveat {
+  margin: 12px 0 0;
+  font-size: 0.75rem;
+  color: #8a8578;
+  line-height: 1.5;
+  border-top: 1px dashed #e3e0d8;
+  padding-top: 10px;
+}
+@media (max-width: 560px) {
+  .lf-docket-item { flex-direction: column; gap: 8px; }
+  .lf-docket-when { flex-direction: row; align-items: center; gap: 10px; flex-basis: auto; }
+}

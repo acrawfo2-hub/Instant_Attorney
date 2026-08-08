@@ -31,4 +31,5 @@
 - [Dependency vuln fixes](dependency-vuln-fixes.md) — transitive vulns fixed via pnpm-workspace overrides; instant-attorney is npm so needs its own overrides; next pins exact postcss.
 - [Doc staleness & Regenerate](instant-attorney-doc-staleness.md) — documents.facts_synced_at vs max(fact updated_at) flags out-of-date drafts; stamp LAST, degrade gracefully if column missing, client-only, preserve status.
 - [QA tester allowlist](instant-attorney-tester-allowlist.md) — lib/testers.ts auto-grants bypass subs on login/gates; add testers by email there, never per-route checks.
+- [Deadline docketing engine](instant-attorney-docket.md) — deadlines computed from "Key date · <event> · YYYY-MM-DD" facts; Texas rules gated on jurisdiction; new rules must declare scope.
 - [Consult credits for Phase 2 add-on](instant-attorney-consult-credits.md) — subscriptions.consult_credits (integer, DB migration required) tracks paid consult add-ons for phase2 users; webhook/confirm must not overwrite plan when existing=phase2.

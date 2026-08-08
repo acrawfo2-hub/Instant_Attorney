@@ -14,6 +14,7 @@ import { phase2ExistingCounselNotice } from "@/lib/existing-counsel";
 import { parseDrafts, stripDraftsForDisplay } from "@/lib/freestyle-drafts";
 import { stripToolMarkers, activeToolNames } from "@/lib/tool-markers";
 import { placeholderFields } from "@/lib/wizard-parsing";
+import { computeDocket, describePressingDeadline } from "@/lib/docket";
 import ToolRunChips from "@/components/ToolRunChips";
 import type { CounselEngagementGoal } from "@/lib/types";
 
@@ -329,11 +330,12 @@ function AcpChatInner() {
     (async () => {
       const supabase = createClient();
 
-      // Fetch case-file metadata and pending drafts in parallel
-      const [cfRes, docsRes] = await Promise.all([
+      // Fetch case-file metadata, pending drafts, and facts (for the computed
+      // docket) in parallel
+      const [cfRes, docsRes, factsRes] = await Promise.all([
         supabase
           .from("case_files")
-          .select("chat_session_summary, next_action")
+          .select("chat_session_summary, next_action, jurisdiction")
           .eq("id", urlCaseFileId)
           .maybeSingle(),
         supabase
@@ -341,15 +343,25 @@ function AcpChatInner() {
           .select("title, draft_text, status")
           .eq("case_file_id", urlCaseFileId)
           .in("status", ["draft", "pending_review"]),
+        supabase
+          .from("fact_items")
+          .select("id, description, status, kind")
+          .eq("case_file_id", urlCaseFileId),
       ]);
 
       if (cancelled) return;
 
-      const cf = cfRes.data as { chat_session_summary: string | null; next_action: string | null } | null;
+      const cf = cfRes.data as { chat_session_summary: string | null; next_action: string | null; jurisdiction: string | null } | null;
       const docs = (docsRes.data ?? []) as { title: string; draft_text: string | null; status: string }[];
 
       const recap = cf?.chat_session_summary?.trim() || null;
       const nextAction = cf?.next_action?.trim() || null;
+
+      // An imminent or passed deadline outranks everything — name it first.
+      const factRows = (factsRes.data ?? []) as { id: string; description: string; status: string; kind?: string }[];
+      const deadlineAlert = describePressingDeadline(
+        computeDocket(factRows, new Date(), cf?.jurisdiction ?? null)
+      );
 
       // Summarise drafts that still have unfilled blanks
       const draftsWithBlanks = docs
@@ -362,6 +374,10 @@ function AcpChatInner() {
       // Build the specific, concise welcome
       const lines: string[] = [];
       lines.push("Welcome back — your case file is open in front of me.\n");
+
+      if (deadlineAlert) {
+        lines.push(`${deadlineAlert}\n`);
+      }
 
       if (nextAction) {
         lines.push(`**Where we left off:** ${nextAction}`);
