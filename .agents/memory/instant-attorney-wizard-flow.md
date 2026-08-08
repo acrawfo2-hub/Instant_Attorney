@@ -5,6 +5,12 @@ description: Why answering wizard questions auto-sends to the attorney, and the 
 
 # Document wizard is biased toward pushing the doc forward
 
+> **⚠️ Describes a surface being retired.** The product moved to the
+> orchestrator model; the wizard is scheduled for removal in Phase 5 of
+> `docs/orchestrator-migration-plan.md`. Still accurate for the wizard as it
+> exists today — do not use it as a reason to keep or extend the wizard. See
+> `instant-attorney-orchestrator-migration.md`.
+
 **Decision:** Answering a round of checklist questions in the client wizard
 **updates the draft AND auto-sends it to the attorney** (status → `pending_review`),
 leaving unanswered fields as highlighted `[[placeholders]]`. Clients are not

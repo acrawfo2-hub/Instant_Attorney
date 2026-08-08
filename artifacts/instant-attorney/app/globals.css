@@ -5742,7 +5742,6 @@ mark.atty-placeholder {
   border-radius: 20px;
 }
 .brainstorm-compose { display: flex; flex-direction: column; gap: 0.5rem; }
-.brainstorm-draft-progress { margin: 0; }
 
 /* ── File view mode toggle (Living File / Brainstorm) ────────────────────── */
 .lf-view-tabs {

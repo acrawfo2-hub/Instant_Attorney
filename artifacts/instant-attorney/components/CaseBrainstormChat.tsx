@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState } from "react";
 import { hasApplicableUpdate } from "@/lib/brainstorm-detect";
 import type { CaseBrainstormMessage } from "@/lib/types";
 
@@ -26,43 +26,21 @@ export default function CaseBrainstormChat({ caseFileId, initialMessages }: Prop
   const [sending, setSending] = useState(false);
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [draftInProgress, setDraftInProgress] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const draftPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Poll the background chat-turn status so we can surface a "draft in progress"
-  // chip above the composer while the assistant generates a document.
-  useEffect(() => {
-    let cancelled = false;
-
-    async function poll() {
-      try {
-        const res = await fetch(`/api/chat-acp/status?caseFileId=${caseFileId}`);
-        if (!res.ok || cancelled) return;
-        const data = await res.json();
-        if (cancelled) return;
-        if (data.running) {
-          setDraftInProgress(true);
-          draftPollRef.current = setTimeout(poll, 5000);
-        } else {
-          setDraftInProgress(false);
-          // Job just finished — refresh messages so any assistant reply is shown.
-          if (data.done) await refreshMessages();
-        }
-      } catch {
-        // Network hiccup — retry quietly.
-        if (!cancelled) draftPollRef.current = setTimeout(poll, 8000);
-      }
-    }
-
-    poll();
-
-    return () => {
-      cancelled = true;
-      if (draftPollRef.current) clearTimeout(draftPollRef.current);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [caseFileId]);
+  // NOTE: there was briefly a "drafting your document…" chip here that polled
+  // /api/chat-acp/status. It could never render, and it was the wrong signal
+  // anyway:
+  //   • This panel is the ATTORNEY's private brainstorm channel
+  //     (/api/attorney/case-files/[id]/brainstorm), not the client's chat-acp
+  //     orchestrator, so a chat-acp job says nothing about work happening here.
+  //   • /api/chat-acp/status ownership-checks `job.userId !== userId` and this
+  //     component only ever mounts on the attorney's view of a CLIENT's file
+  //     (app/attorney/file/[caseFileId]/page.tsx), so the job belongs to the
+  //     client and the viewer is the attorney — it always returned
+  //     { running: false }.
+  // The equivalent indicator on the client's own case file page
+  // (CaseDocumentsTable) is the one that is real. Don't re-add this.
 
   async function refreshMessages() {
     const res = await fetch(`/api/attorney/case-files/${caseFileId}/brainstorm`);
@@ -175,13 +153,6 @@ export default function CaseBrainstormChat({ caseFileId, initialMessages }: Prop
       </div>
 
       {error && <div className="lf-session-error">{error}</div>}
-
-      {draftInProgress && (
-        <div className="cdt-draft-progress brainstorm-draft-progress" role="status" aria-live="polite">
-          <span className="cdt-draft-progress-dot" aria-hidden="true" />
-          <span className="cdt-draft-progress-text">Drafting your document…</span>
-        </div>
-      )}
 
       <div className="brainstorm-compose">
         <textarea

@@ -5,6 +5,8 @@
 | **Test checklist** | [qa-test-checklist.csv](./qa-test-checklist.csv) | Spreadsheet-ready QA matrix — import into Google Sheets or Excel |
 | **Staging setup** | [staging-test-account-setup.md](./staging-test-account-setup.md) | How to provision test accounts and env for manual + automated QA |
 | **Playwright tests** | `artifacts/instant-attorney/e2e/` | Browser + API P0 tests for auth redirects, login, and document submit |
+| **Orchestrator migration QA** | [../orchestrator-migration-plan.md](../orchestrator-migration-plan.md) | Per-phase QA gates for the wizard→orchestrator cleanup. Phase 1 is **manual only** — prompt regressions don't show up in unit tests |
+| **Supabase schema check** | `artifacts/instant-attorney/supabase/schema-verify.sql` + `schema-verify-stage38-45.sql` | Run both in the Supabase SQL editor. The second covers every orchestrator-era object; the first stops at stage 37 |
 
 ## Quick start
 
