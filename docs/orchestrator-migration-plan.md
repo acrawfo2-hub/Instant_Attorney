@@ -257,42 +257,40 @@ top-of-funnel work; only their exit is wrong.
 
 ---
 
-### 2.4 Follow-up on the draft-in-progress indicators (`f4cc98c`, `a3caa5b`)
+### 2.4 Draft-in-progress indicators (`f4cc98c`, `a3caa5b`) — ✅ DONE
 
 Two "a draft is being written" indicators landed after this plan was drafted:
 one in `CaseDocumentsTable` (case file page) and one in `CaseBrainstormChat`
-(attorney file page). Both poll `/api/chat-acp/status?caseFileId=…`.
+(attorney file page). Both polled `/api/chat-acp/status?caseFileId=…`.
 
-**The direction is right** — both treat the orchestrator as the thing that
-produces drafts, which is exactly where this migration is going. Three defects
-to fold into this phase rather than fix separately:
+The direction was right — both treat the orchestrator as the thing that produces
+drafts, which is where this migration is going. Three defects, now fixed:
 
-1. **The `CaseBrainstormChat` chip can never render.** `CaseBrainstormChat` is
-   mounted only at `app/attorney/file/[caseFileId]/page.tsx:157` — the
+1. **The `CaseBrainstormChat` chip could never render — removed.** That
+   component mounts only at `app/attorney/file/[caseFileId]/page.tsx:157`, the
    supervising attorney's view of a *client's* file. The status endpoint
    ownership-checks `job.userId !== userId` and returns
-   `{running:false, done:false}` on mismatch. The job belongs to the client; the
-   viewer is the attorney. It always short-circuits.
-   Beyond the ownership check it is also the wrong pipeline: that panel is the
-   attorney's private sounding board (`/api/attorney/case-files/[id]/brainstorm`),
-   not chat-acp, so a chip reflecting the client's consumer turn would be
-   confusing even if it did render. **Recommendation: remove it.**
-2. **The poll loop is one-shot.** In both components, the `else` branch (not
-   running) sets state and returns *without rescheduling*, so the loop dies on
-   the first non-running response. The indicator can only ever appear for a turn
-   that was already running at mount. The primary path (start a turn in chat →
-   navigate to the case file) works, because the job is running at mount; a turn
-   that starts later is never picked up. Reschedule in both branches, with a
-   longer idle interval.
-3. **`wasRunning` is a stale closure.** In `CaseDocumentsTable`,
-   `const wasRunning = draftInProgress;` captures the value from effect creation
-   (always `false`, deps are `[caseFileId]` with exhaustive-deps disabled). The
-   condition reduces to `data.done`, which happens to be correct — so this is
-   dead code that reads as logic. Drop it, or move the flag to a ref.
+   `{running:false, done:false}` on mismatch; the job belongs to the client and
+   the viewer is the attorney, so it always short-circuited. It was also the
+   wrong signal — that panel is the attorney's private sounding board
+   (`/api/attorney/case-files/[id]/brainstorm`), not chat-acp. A comment in the
+   component records why, so it doesn't get re-added.
+2. **The poll loop was one-shot — now runs for the life of the page.** The
+   not-running branch returned without rescheduling, so only a turn already
+   running at mount was ever noticed. Both branches now rearm
+   (`DRAFT_POLL_ACTIVE_MS` 5s while generating, `DRAFT_POLL_IDLE_MS` 20s idle),
+   so a turn started later from another tab is picked up.
+3. **`wasRunning` was a stale closure — replaced.** It captured
+   `draftInProgress` at effect creation (always `false`), so the condition
+   silently reduced to `data.done`. Now an effect-scoped box tracking the real
+   running → finished *edge*.
 
-Minor, no action required: on mount with a *finished* job still in the registry
-(15-min TTL, `lib/acp-jobs.ts`), `CaseDocumentsTable` fires one spurious
-`load()` + `router.refresh()` per page load until the job is swept.
+Also handled while in there: keying the refresh off the edge rather than
+`data.done` removes the spurious `load()` + `router.refresh()` that fired on
+every mount while a finished job lingered in the registry (15-min TTL,
+`lib/acp-jobs.ts`); polling pauses on a hidden tab and catches up on
+`visibilitychange`, so a backgrounded page doesn't poll indefinitely but still
+refreshes correctly when the user returns.
 
 **Note for Phase 3:** these indicators only know about orchestrator turns, so a
 wizard-generated draft gets no indicator. One more asymmetry between the two

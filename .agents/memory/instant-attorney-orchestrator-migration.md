@@ -53,23 +53,29 @@ Already correct — do not "fix": `formatMatterTasks`
 `assess_matter` never shows the orchestrator a wizard URL. The leak is UI-only.
 Mission Control is already attorney-gated (`ClientFileView.tsx:269`).
 
-## Draft-in-progress indicators (`f4cc98c`, `a3caa5b`) — right idea, three defects
+## Draft-in-progress indicator — only the client-side one is real
 
-Both poll `/api/chat-acp/status?caseFileId=…`. Right direction (they treat the
-orchestrator as the source of drafts), but:
+`/api/chat-acp/status` ownership-checks `job.userId !== userId`. A chat-acp job
+belongs to the **client**, so any attorney-facing surface polling it for a
+client's file always gets `{running:false}`. That is why the
+`CaseBrainstormChat` chip (`f4cc98c`) could never render and was removed — that
+panel is also the wrong pipeline (`/api/attorney/case-files/[id]/brainstorm`,
+not chat-acp). A comment in the component records this; **don't re-add it.**
 
-- **The `CaseBrainstormChat` chip can never render.** That component mounts only
-  on the *attorney's* view of a *client's* file
-  (`app/attorney/file/[caseFileId]/page.tsx:157`), and the status endpoint
-  ownership-checks `job.userId !== userId` → always `{running:false}`. It is also
-  the wrong pipeline (that panel is `/api/attorney/case-files/[id]/brainstorm`,
-  not chat-acp). Remove it.
-- **The poll loop is one-shot.** The not-running branch returns without
-  rescheduling, so it only ever catches a turn already running at mount.
-- **`wasRunning` in `CaseDocumentsTable` is a stale closure** — captured at
-  effect creation, always `false`; the condition really reduces to `data.done`.
+The live indicator is in `CaseDocumentsTable` on the client's case file page.
+Rules for touching it:
 
-Tracked as §2.4 of `docs/orchestrator-migration-plan.md`.
+- **Rearm in every branch.** The original returned without rescheduling when not
+  running, so only a turn already running at mount was ever seen. It must keep
+  polling to catch a turn started later from the chat page in another tab.
+- **Refresh on the running → finished EDGE, not `data.done`.** Finished jobs sit
+  in the registry for 15 min (`lib/acp-jobs.ts`), so `data.done` re-fires
+  `load()` + `router.refresh()` on every mount for nothing.
+- **Track that edge in an effect-scoped box, not component state.** The effect
+  runs once per `caseFileId` (exhaustive-deps disabled), so a captured state
+  value is pinned to its mount-time `false` and the edge never fires.
+
+Tracked as §2.4 of `docs/orchestrator-migration-plan.md` (done).
 
 ## Confirmed dead code (zero importers, verified by import analysis)
 

@@ -23,6 +23,13 @@ import ScanToPdfModal from "@/components/ScanToPdfModal";
 const LARGE_FILE_BYTES = 5 * 1024 * 1024;
 const FINALIZED = new Set(["approved", "delivered"]);
 
+// Draft-in-progress poll cadence. Tight while a turn is actually generating so
+// the banner clears promptly; slow while idle, because the loop must keep
+// running to notice a turn that STARTS after this page mounted (the user can
+// kick one off from chat in another tab).
+const DRAFT_POLL_ACTIVE_MS = 5000;
+const DRAFT_POLL_IDLE_MS = 20000;
+
 // Government form detected in chat, enriched by /api/gov-forms with registry
 // detail + completion progress (same shape GovFormInstruments consumed).
 interface GovForm {
@@ -183,41 +190,94 @@ export default function CaseDocumentsTable({
   }, [attachments, load]);
 
   // Poll the background chat-turn status so we can surface a "draft in progress"
-  // indicator while the assistant generates a document and the user is away from chat.
+  // indicator while the assistant generates a document and the user is away from
+  // chat. The loop NEVER stops on its own: a turn can start at any time from the
+  // chat page in another tab, so an idle response reschedules rather than
+  // returning (an early version returned, which meant only a turn already
+  // running at mount was ever noticed).
   useEffect(() => {
     let cancelled = false;
+    // Last observed running state, held in a plain effect-scoped box rather than
+    // read off `draftInProgress`. The effect deliberately runs once per
+    // caseFileId, so a captured state value would be pinned to its mount-time
+    // value (always false) and the running -> finished transition below would
+    // never fire.
+    const wasRunning = { current: false };
+    // Set while the tab is backgrounded and we stop looking. On return we can no
+    // longer tell whether a turn came and went, so we revalidate once.
+    let missedWhileHidden = false;
+
+    const rearm = (ms: number) => {
+      if (!cancelled) draftPollRef.current = setTimeout(poll, ms);
+    };
 
     async function poll() {
+      // A hidden tab can't show the banner, so skip the request and check again
+      // later. `wasRunning` is deliberately left intact across the hidden
+      // stretch, so a turn that finishes in the background is still recognised
+      // as a completion when the tab comes back.
+      if (typeof document !== "undefined" && document.hidden) {
+        missedWhileHidden = true;
+        rearm(DRAFT_POLL_IDLE_MS);
+        return;
+      }
       try {
         const res = await fetch(`/api/chat-acp/status?caseFileId=${caseFileId}`);
-        if (!res.ok || cancelled) return;
+        if (cancelled) return;
+        if (!res.ok) {
+          rearm(DRAFT_POLL_IDLE_MS);
+          return;
+        }
         const data = await res.json();
         if (cancelled) return;
+
         if (data.running) {
+          wasRunning.current = true;
+          // We're watching live again; the completion edge below will catch it.
+          missedWhileHidden = false;
           setDraftInProgress(true);
-          // Schedule next poll
-          draftPollRef.current = setTimeout(poll, 5000);
-        } else {
-          const wasRunning = draftInProgress;
-          setDraftInProgress(false);
-          if (wasRunning || data.done) {
-            // Job just finished — refresh docs list
-            await load();
-            router.refresh();
-          }
+          rearm(DRAFT_POLL_ACTIVE_MS);
+          return;
         }
+
+        setDraftInProgress(false);
+        // Refresh on the running -> finished EDGE, or after a blind stretch in
+        // the background. Keying off data.done instead would re-fire on every
+        // mount while a finished job is still in the registry (15-min TTL, see
+        // lib/acp-jobs.ts) and refresh for nothing.
+        if (wasRunning.current || missedWhileHidden) {
+          wasRunning.current = false;
+          missedWhileHidden = false;
+          await load();
+          if (!cancelled) router.refresh();
+        }
+        rearm(DRAFT_POLL_IDLE_MS);
       } catch {
-        // Network hiccup — retry quietly
-        if (!cancelled) draftPollRef.current = setTimeout(poll, 8000);
+        // Network hiccup — retry quietly.
+        rearm(DRAFT_POLL_IDLE_MS);
       }
     }
+
+    // Coming back to the tab: catch up now rather than waiting out the idle
+    // interval. `missedWhileHidden` makes that poll revalidate, which covers the
+    // case the completion edge alone can't see — a turn that both started AND
+    // finished while the tab was hidden, so `wasRunning` never flipped.
+    const onVisibilityChange = () => {
+      if (cancelled || document.hidden) return;
+      if (draftPollRef.current) clearTimeout(draftPollRef.current);
+      void poll();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
 
     poll();
 
     return () => {
       cancelled = true;
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       if (draftPollRef.current) clearTimeout(draftPollRef.current);
     };
+    // `load` and `router` are stable for a given caseFileId; re-running this
+    // effect on their identity would restart the poll loop and lose wasRunning.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caseFileId]);
 
