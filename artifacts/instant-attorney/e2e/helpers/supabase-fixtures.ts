@@ -146,11 +146,31 @@ export async function provisionClientWithDraft(): Promise<ProvisionedClient> {
   };
 }
 
+/**
+ * Add a side-panel draft (client_workspace_drafts) to a provisioned case file.
+ * Separate from provisionClientWithDraft because most specs don't need one and
+ * the "open this draft from the chat" path is the only one that does.
+ */
+export async function createWorkspaceDraft(
+  client: Pick<ProvisionedClient, "userId" | "caseFileId">,
+  draft: { title: string; content: string },
+): Promise<{ id: string; title: string; content: string }> {
+  const rows = (await restInsert("client_workspace_drafts", {
+    case_file_id: client.caseFileId,
+    user_id: client.userId,
+    title: draft.title,
+    content: draft.content,
+    source: "assistant",
+  })) as { id: string }[];
+  return { id: rows[0].id, ...draft };
+}
+
 /** Best-effort cleanup after a provisioned client test. */
 export async function cleanupProvisionedClient(
   client: Pick<ProvisionedClient, "userId" | "caseFileId">
 ): Promise<void> {
   if (client.caseFileId) {
+    await restDelete("client_workspace_drafts", `case_file_id=eq.${client.caseFileId}`);
     await restDelete("documents", `case_file_id=eq.${client.caseFileId}`);
     await restDelete("case_files", `id=eq.${client.caseFileId}`);
   }
