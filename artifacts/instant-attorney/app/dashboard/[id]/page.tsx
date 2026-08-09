@@ -175,7 +175,7 @@ export default async function FileDetailPage({
   // kept in the codebase (still used by the attorney/legacy surfaces).
   const headerCta = {
     href: `/chat?caseFileId=${caseFile.id}&mode=freestyle`,
-    label: "Ask your assistant",
+    label: "Legal chat",
   };
 
   return (

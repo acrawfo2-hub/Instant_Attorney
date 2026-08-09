@@ -11086,3 +11086,161 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
     text-decoration: none;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CHAT STANDING RAIL — "where we stand", pinned above the transcript.
+
+   Clients say the standing read is the most useful thing in the chat and then
+   lose it: one long answer buries it above the scroll. So it lives OUTSIDE the
+   scroll container and every row carries the way to finish it right here.
+
+   Collapsed by default to a single line — the chat is for talking, and a status
+   block that opens itself every visit is just a second wall of text.
+   ══════════════════════════════════════════════════════════════════════════ */
+.csr {
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--chat-line, rgba(26, 22, 18, 0.1));
+  background: var(--chat-surface, #fff);
+}
+.csr-pressing { background: #fef6f5; border-bottom-color: #f4cdc8; }
+
+.csr-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 16px;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: var(--brand-text-dk);
+}
+.csr-head:hover { background: rgba(26, 22, 18, 0.03); }
+.csr-head:focus-visible { outline: 2px solid var(--brand-navy); outline-offset: -2px; }
+.csr-head-k {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--brand-text-xlt);
+}
+.csr-head-line {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.csr-pressing .csr-head-line { color: #9f2820; }
+.csr-head-count {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(154, 118, 54, 0.16);
+  color: #8a6d34;
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.csr-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  /* The rail must never become the wall of text it replaced. */
+  max-height: 44vh;
+  overflow-y: auto;
+  padding: 4px 16px 14px;
+  border-top: 1px solid var(--chat-line, rgba(26, 22, 18, 0.08));
+}
+.csr-recap {
+  margin: 0;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: var(--chat-ground, #f7f4ef);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--brand-text-md);
+}
+.csr-recap-k {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--brand-text-xlt);
+}
+.csr-section-k {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--brand-text-lt);
+}
+.csr-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.csr-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+}
+.csr-item:hover { background: var(--chat-ground, #f7f4ef); border-color: var(--brand-cream-dk); }
+.csr-item-blocked { opacity: 0.72; }
+.csr-dot { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; background: var(--brand-gold); }
+.csr-dot-expired, .csr-dot-critical { background: #c0392b; }
+.csr-dot-warning { background: #b7791f; }
+.csr-item-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--brand-text-dk);
+}
+.csr-item-meta { font-size: 11.5px; color: var(--brand-text-lt); }
+.csr-item-meta-need { color: #b7791f; font-weight: 600; }
+.csr-item-btn {
+  flex: 0 0 auto;
+  padding: 5px 11px;
+  border-radius: 7px;
+  border: 1px solid rgba(154, 118, 54, 0.35);
+  background: rgba(154, 118, 54, 0.1);
+  color: var(--brand-navy);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.csr-item-btn:hover { background: rgba(154, 118, 54, 0.2); border-color: rgba(154, 118, 54, 0.6); }
+
+/* Panel states that used to render as an empty panel — see lib/draft-focus.ts. */
+.fc-draft-loaderr { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.fc-draft-retry {
+  padding: 6px 14px;
+  border-radius: 7px;
+  border: 1px solid rgba(154, 118, 54, 0.35);
+  background: rgba(154, 118, 54, 0.1);
+  color: var(--brand-navy);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.fc-draft-retry:hover { background: rgba(154, 118, 54, 0.2); }

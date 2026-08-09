@@ -378,7 +378,7 @@ export default function ClientFileView({
             <div className="lf-instruments">
               <div className="lf-strategy-sub">
                 Suggested Instruments
-                {!isAttorney && <span className="lf-plain-caption lf-plain-caption-sub">Documents we can create — ask your assistant to start one</span>}
+                {!isAttorney && <span className="lf-plain-caption lf-plain-caption-sub">Documents we can create — ask for one in your legal chat</span>}
               </div>
               <ul className="lf-list">
                 {strategy.instruments.map((inst, i) => (

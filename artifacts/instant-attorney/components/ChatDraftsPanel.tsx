@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { ClientWorkspaceDraft } from "@/lib/types";
 import { findBlanks, type DraftBlank } from "@/lib/freestyle-drafts";
 import { runPromoteWithSaveGuard } from "@/lib/draft-promote-guard";
+import { resolveDraftFocus, missingDraftNotice } from "@/lib/draft-focus";
 
 // Consumer freestyle drafts panel — the docked right side of the split screen.
 // Mirrors the attorney workspace panel: draft tabs, an editable title + body with
@@ -29,6 +30,10 @@ export default function ChatDraftsPanel({
   onClose: () => void;
 }) {
   const [drafts, setDrafts] = useState<ClientWorkspaceDraft[]>([]);
+  // Load state is explicit because "still loading", "the request failed", and
+  // "you have no drafts" used to render as the same empty panel — which is what
+  // a client clicking Open draft and seeing nothing was actually looking at.
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -41,6 +46,7 @@ export default function ChatDraftsPanel({
   // it even if dirty has already been cleared by the time promote is called.
   const savePromiseRef = useRef<Promise<boolean> | null>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const paneRef = useRef<HTMLDivElement>(null);
   const draftsRef = useRef<ClientWorkspaceDraft[]>([]);
   useEffect(() => { draftsRef.current = drafts; }, [drafts]);
   // Mirrored so a refresh-driven reload can avoid clobbering an unsaved edit.
@@ -70,9 +76,24 @@ export default function ChatDraftsPanel({
   }
 
   const load = useCallback(async () => {
-    const res = await fetch(`/api/workspace/drafts?caseFileId=${caseFileId}`);
-    if (!res.ok) return;
-    const data = await res.json();
+    let res: Response;
+    try {
+      res = await fetch(`/api/workspace/drafts?caseFileId=${caseFileId}`);
+    } catch {
+      // Never leave the panel looking empty on a network failure — an empty
+      // panel reads as "you have no drafts", which is a lie the client acts on.
+      setLoadState((s) => (s === "ready" ? s : "error"));
+      return;
+    }
+    if (!res.ok) {
+      setLoadState((s) => (s === "ready" ? s : "error"));
+      return;
+    }
+    const data = await res.json().catch(() => null);
+    if (!data) {
+      setLoadState((s) => (s === "ready" ? s : "error"));
+      return;
+    }
     const list = (data.drafts ?? []) as ClientWorkspaceDraft[];
     // Don't overwrite an unsaved local edit of the active draft (e.g. a
     // refreshKey bump from a just-produced draft while the user is typing).
@@ -80,16 +101,20 @@ export default function ChatDraftsPanel({
       ? draftsRef.current.find((d) => d.id === activeIdRef.current)
       : undefined;
     setDrafts(localActive ? list.map((d) => (d.id === localActive.id ? localActive : d)) : list);
+    setLoadState("ready");
 
     // Honor a pending "jump to this draft" request (from a chip click / deep link).
     const focus = pendingFocusRef.current;
-    const focusMatch = focus
-      ? list.find((d) => (focus.id && d.id === focus.id) || (focus.title && d.title === focus.title))
-      : undefined;
-    if (focusMatch) pendingFocusRef.current = null;
-    setActiveId((cur) =>
-      focusMatch ? focusMatch.id : cur && list.some((d) => d.id === cur) ? cur : list[0]?.id ?? null,
-    );
+    const outcome = resolveDraftFocus(list, activeIdRef.current, focus);
+    if (outcome.kind !== "none") pendingFocusRef.current = null;
+    setActiveId(outcome.activeId);
+    // Say so rather than quietly opening a different document — on a legal file
+    // showing document B when the client asked for document A is not cosmetic.
+    if (outcome.kind === "missing") {
+      setNotice(missingDraftNotice(outcome.requested, list.length > 0));
+    } else if (outcome.kind === "focused") {
+      setNotice("");
+    }
   }, [caseFileId]);
 
   // Reload on mount and whenever the parent bumps refreshKey (a new draft arrived).
@@ -101,6 +126,13 @@ export default function ChatDraftsPanel({
     if (!focusNonce) return;
     pendingFocusRef.current = { id: focusId, title: focusTitle };
     load();
+    // Below 820px the panel stacks UNDER the chat instead of docking beside it,
+    // so "Open draft" could open a panel that was never on screen. Bring it into
+    // view on every focus request, not just the first.
+    const el = paneRef.current;
+    if (el && window.matchMedia("(max-width: 820px)").matches) {
+      requestAnimationFrame(() => el.scrollIntoView({ behavior: "smooth", block: "nearest" }));
+    }
   }, [focusNonce, focusId, focusTitle, load]);
 
   const save = useCallback(async (id: string, opts: { silent?: boolean } = {}): Promise<boolean> => {
@@ -200,7 +232,7 @@ export default function ChatDraftsPanel({
   }
 
   return (
-    <div className="fc-draft-pane fs-draft-pane">
+    <div className="fc-draft-pane fs-draft-pane" ref={paneRef}>
       <div className="fs-draft-tabs">
         <div className="fs-draft-tabs-scroll">
           {drafts.map((d) => (
@@ -336,9 +368,19 @@ export default function ChatDraftsPanel({
             {notice && <span className="fc-draft-notice">{notice}</span>}
           </div>
         </div>
+      ) : loadState === "loading" ? (
+        <div className="fs-draft-empty" role="status">Opening your document…</div>
+      ) : loadState === "error" ? (
+        <div className="fs-draft-empty fc-draft-loaderr" role="alert">
+          <p>Your documents couldn&apos;t be loaded just now. Nothing has been lost.</p>
+          <button type="button" className="fc-draft-retry" onClick={() => { setLoadState("loading"); load(); }}>
+            Try again
+          </button>
+        </div>
       ) : (
         <div className="fs-draft-empty">
-          Drafts you create here appear in this panel. Ask for a letter, agreement, or document to get started, or start one with ＋.
+          {notice ? <p className="fc-draft-notice">{notice}</p> : null}
+          <p>Drafts you create here appear in this panel. Ask for a letter, agreement, or document to get started, or start one with ＋.</p>
         </div>
       )}
     </div>

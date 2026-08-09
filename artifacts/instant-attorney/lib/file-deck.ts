@@ -11,7 +11,7 @@ import type {
 import { docTypeLabel } from "./types.ts";
 import { findBlanks } from "./freestyle-drafts.ts";
 import { computeDocket, type DocketEntry } from "./docket.ts";
-import type { MatterTasksResult } from "./matter-tasks.ts";
+import type { MatterTasksResult, MatterTask, MatterUrgency } from "./matter-tasks.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The client file's "deck" — the whole matter distilled into the handful of
@@ -86,9 +86,34 @@ export interface PressingDeadline {
   ask: string;
 }
 
+/** How the client completes an action item without leaving the conversation. */
+export type DeckActionKind =
+  /** Ask the assistant to do it — the composer opens pre-typed. */
+  | "chat"
+  /** Open a specific draft in the side panel. */
+  | "draft"
+  /** Attach a document right here. */
+  | "upload";
+
+export interface DeckAction {
+  id: string;
+  /** What the client is being asked to do, in their words. */
+  label: string;
+  kind: DeckActionKind;
+  /** The sentence sent to the assistant for `chat` (and as a fallback elsewhere). */
+  ask: string;
+  /** Set when `kind` is "draft". */
+  draftId?: string;
+  urgency: MatterUrgency;
+  /** True once nothing is left for the client to do on this item. */
+  blocked: boolean;
+}
+
 export interface FileDeck {
   pressing: PressingDeadline | null;
   nextStep: NextStep | null;
+  /** Every open item, each carrying the way to complete it from the chat. */
+  actions: DeckAction[];
   drafts: DraftShortcut[];
   /** How many drafts/documents exist beyond the ones `drafts` shows. */
   moreDrafts: number;
@@ -361,6 +386,73 @@ function buildTiles(input: FileDeckInput, docket: DocketEntry[]): FileTile[] {
   ];
 }
 
+// ── Action items ─────────────────────────────────────────────────────────────
+//
+// Every open item, each paired with the way to finish it WITHOUT leaving the
+// conversation. That pairing is the point: a status list a client can read but
+// not act on just relocates the work. Three affordances cover the real cases —
+// open the document, attach the file, or ask the assistant — and anything we
+// can't map falls back to asking, which always works because the orchestrator
+// can do anything the file needs.
+
+/** How many action items the rail shows before it becomes a list to scroll. */
+const ACTION_LIMIT = 6;
+
+function actionForTask(task: MatterTask, drafts: DraftShortcut[]): DeckAction {
+  const label = tidy(task.title);
+  const base: DeckAction = {
+    id: task.id,
+    label,
+    kind: "chat",
+    ask: `${label} — can you help me with this now?`,
+    urgency: task.urgency,
+    blocked: task.status === "blocked",
+  };
+
+  // "Fill in the 3 blanks in your Original Answer" should open that document,
+  // not start a conversation about it. Match on the draft's title appearing in
+  // the task text — Mission Control phrases these from the document's own name.
+  const draft = drafts.find(
+    (d) => d.href.includes("draft=") && label.toLowerCase().includes(d.title.toLowerCase()),
+  );
+  if (draft) {
+    const draftId = draft.href.split("draft=")[1];
+    if (draftId) {
+      return {
+        ...base,
+        kind: "draft",
+        draftId,
+        ask: `Help me finish “${draft.title}” — walk me through what's still missing.`,
+      };
+    }
+  }
+
+  // Upload requests are satisfied by attaching a file, which the chat can do.
+  if (task.id.startsWith("upload:") || /\bupload\b|\bsend (me|us) (a copy|the)\b/i.test(label)) {
+    return { ...base, kind: "upload" };
+  }
+
+  return base;
+}
+
+function buildActions(tasks: MatterTasksResult, drafts: DraftShortcut[]): DeckAction[] {
+  // Doable work first, then what's waiting — a blocked item still gets a row so
+  // the client can see it isn't forgotten, and can ask why it's stuck.
+  const ordered = [...tasks.doableNow, ...tasks.blocked].slice(0, ACTION_LIMIT);
+  const seen = new Set<string>();
+  const out: DeckAction[] = [];
+  for (const task of ordered) {
+    const action = actionForTask(task, drafts);
+    // Mission Control's hero duplicates whichever action it promoted, so the
+    // same work can arrive twice under different ids.
+    const key = action.label.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(action);
+  }
+  return out;
+}
+
 // ── Conversation starters ────────────────────────────────────────────────────
 //
 // The complaint behind these: "Ask assistant was seen as hidden." A button alone
@@ -441,6 +533,7 @@ export function buildFileDeck(input: FileDeckInput): FileDeck {
   return {
     pressing,
     nextStep,
+    actions: buildActions(input.tasks, drafts),
     drafts,
     moreDrafts: more,
     tiles: buildTiles(input, docket),

@@ -72,7 +72,7 @@ export default function CaseHub({
           <h2 className="lf-hub-title">Where things stand</h2>
           <p className="lf-hub-live">
             <span className="lf-hub-livedot" aria-hidden />
-            Kept current as you talk with your assistant
+            Kept current as you talk in your legal chat
           </p>
         </div>
       </div>
@@ -93,17 +93,17 @@ export default function CaseHub({
           {deck.nextStep
             ? deck.nextStep.title
             : total === 0
-              ? "Tell your assistant what's going on — it'll build your file from there"
+              ? "Tell us what's going on in your legal chat — it'll build your file from there"
               : "You're caught up. Anything you want to look at or ask about?"}
         </p>
         {deck.nextStep?.detail && <p className="lf-next-detail">{deck.nextStep.detail}</p>}
 
         <Link href={deck.nextStep ? askHref(deck.nextStep.ask) : chatHref} className="lf-next-cta">
-          Continue with your assistant
+          Continue legal chat
           <ArrowIcon />
         </Link>
         <p className="lf-next-cta-sub">
-          Your assistant knows every fact, date, and document on this file. It answers, explains, and
+          Your legal chat knows every fact, date, and document on this file. It answers, explains, and
           drafts — and everything you agree on updates this page.
         </p>
 

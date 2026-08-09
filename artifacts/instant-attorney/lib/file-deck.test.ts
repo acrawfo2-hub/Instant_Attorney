@@ -246,6 +246,61 @@ test("nextStep: mirrors the top-ranked doable-now task and carries an ask for it
   assert.ok(d.nextStep!.ask.includes(d.nextStep!.title));
 });
 
+// ── Action items, completable from the chat ──────────────────────────────────
+
+test("actions: every open item carries a way to finish it, and none is left unactionable", () => {
+  const d = deck({
+    requestedAttachments: [reqAtt({ id: "rA", description: "Pay stubs" })],
+    facts: [fact({ id: "g1", status: "gap", description: "Date of the incident" })],
+  });
+  assert.ok(d.actions.length > 0);
+  assert.ok(d.actions.every((a) => a.ask.trim().length > 0), "an item with no ask cannot be completed");
+  assert.ok(d.actions.every((a) => ["chat", "draft", "upload"].includes(a.kind)));
+  assert.ok(d.actions.every((a) => a.label === a.label.trim() && !a.label.endsWith(".")));
+});
+
+test("actions: an upload request is satisfied by attaching, not by chatting about it", () => {
+  const d = deck({ requestedAttachments: [reqAtt({ id: "rA", description: "Pay stubs" })] });
+  const upload = d.actions.find((a) => a.id.startsWith("upload:"));
+  assert.ok(upload, "the requested upload should surface as an action");
+  assert.equal(upload!.kind, "upload");
+});
+
+test("actions: an item naming a draft opens that draft rather than starting a conversation", () => {
+  const drafts = [wsDraft({ id: "wA", title: "Original Answer", content: "Filed in [[County]]." })];
+  const cf = caseFile();
+  const tasks = buildMatterTasks({ caseFile: cf, facts: [], documents: [], mode: "client" });
+  // A task phrased around the document's own name — how Mission Control words these.
+  tasks.doableNow.unshift({
+    id: "custom:answer",
+    title: "Fill in the blanks in your Original Answer",
+    status: "doable_now",
+    urgency: "warning",
+    impact: "high",
+  });
+  const d = deck({ caseFile: cf, tasks, workspaceDrafts: drafts });
+  const action = d.actions.find((a) => a.id === "custom:answer");
+  assert.equal(action?.kind, "draft");
+  assert.equal(action?.draftId, "wA");
+});
+
+test("actions: blocked work is listed too, so it reads as tracked rather than forgotten", () => {
+  const d = deck({
+    govForms: [govForm({ id: "gPending", status: "needed", source: "dynamic", lookup_status: "pending" })],
+  });
+  assert.ok(d.actions.some((a) => a.blocked), "a blocked task should still get a row");
+});
+
+test("actions: the same work promoted as a hero is not listed twice", () => {
+  const cf = caseFile();
+  const tasks = buildMatterTasks({ caseFile: cf, facts: [], documents: [], mode: "client" });
+  const dupe = { id: "hero", title: "Upload your pay stubs", status: "doable_now", urgency: "warning", impact: "high" } as const;
+  tasks.doableNow.unshift({ ...dupe }, { ...dupe, id: "upload:r1" });
+  const d = deck({ caseFile: cf, tasks });
+  const matching = d.actions.filter((a) => a.label === "Upload your pay stubs");
+  assert.equal(matching.length, 1);
+});
+
 // ── Conversation openers ─────────────────────────────────────────────────────
 
 test("starters: at most three, unique, and specific to what's on this file", () => {
