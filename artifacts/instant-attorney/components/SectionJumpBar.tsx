@@ -22,8 +22,12 @@ type SectionId = (typeof ALL_SECTIONS)[number]["id"];
 
 export default function SectionJumpBar({
   sections,
+  chatHref,
 }: {
   sections: SectionId[];
+  /** Link to the case-specific chat. When provided a gold "Continue in chat →"
+   *  pill is rendered at the far right of the nav. */
+  chatHref?: string;
 }) {
   const [active, setActive] = useState<SectionId | null>(null);
   const [sticky, setSticky] = useState(false);
@@ -82,6 +86,14 @@ export default function SectionJumpBar({
           {label}
         </a>
       ))}
+      {chatHref && (
+        <a
+          href={chatHref}
+          className="lf-section-nav-pill lf-section-nav-pill-chat"
+        >
+          Continue in chat →
+        </a>
+      )}
     </nav>
   );
 }

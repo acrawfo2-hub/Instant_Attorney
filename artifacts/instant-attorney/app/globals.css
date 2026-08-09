@@ -11056,34 +11056,48 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
 .lf-tile-calm .lf-tile-icon { background: rgba(46, 125, 91, 0.12); color: #2e7d5b; }
 .lf-tile-calm .lf-tile-status { color: #4a7a63; }
 
-/* ── Sticky way back into the conversation, phones only ──────────────────── */
-.lf-askbar { display: none; }
-@media (max-width: 720px) {
+/* ── Sticky "Continue legal chat" bar — mobile and desktop ───────────────── */
+/* On mobile it bleeds edge-to-edge; on desktop it's contained within the
+   max-width content column and the button is centered at a readable width.  */
+.lf-askbar {
+  position: sticky;
+  bottom: 0;
+  z-index: 40;
+  grid-column: 1 / -1;
+  margin: 0 -1.5rem -2rem;
+  padding: 0.7rem 1.5rem calc(0.7rem + env(safe-area-inset-bottom));
+  background: rgba(247, 244, 239, 0.96);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid var(--brand-cream-dk);
+  box-shadow: 0 -4px 16px rgba(12, 25, 41, 0.06);
+}
+.lf-askbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: 100%;
+  padding: 14px 18px;
+  border-radius: 10px;
+  background: var(--brand-navy);
+  color: var(--brand-cream-heading);
+  font-size: 15px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background 0.15s;
+}
+.lf-askbar-btn:hover { background: var(--brand-navy-md); }
+@media (min-width: 721px) {
   .lf-askbar {
-    display: block;
-    position: sticky;
-    bottom: 0;
-    z-index: 40;
-    grid-column: 1 / -1;
-    margin: 0 -1.5rem -2rem;
-    padding: 0.7rem 1.5rem calc(0.7rem + env(safe-area-inset-bottom));
-    background: rgba(247, 244, 239, 0.94);
-    backdrop-filter: blur(8px);
-    border-top: 1px solid var(--brand-cream-dk);
+    margin: 0 -2rem -2.5rem;
+    padding: 0.65rem 2rem calc(0.65rem + env(safe-area-inset-bottom));
   }
   .lf-askbar-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 9px;
-    width: 100%;
-    padding: 14px 18px;
-    border-radius: 10px;
-    background: var(--brand-navy);
-    color: var(--brand-cream-heading);
-    font-size: 15px;
-    font-weight: 700;
-    text-decoration: none;
+    max-width: 300px;
+    margin: 0 auto;
+    padding: 11px 18px;
+    font-size: 14px;
+    border-radius: 8px;
   }
 }
 
@@ -11303,6 +11317,19 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
 .lf-section-nav-pill-active:hover {
   background: var(--brand-navy);
   color: var(--brand-cream, #f7f3ee);
+}
+/* Gold "Continue in chat →" pill — anchored to the right via margin-left:auto */
+.lf-section-nav-pill-chat {
+  margin-left: auto;
+  background: var(--brand-gold);
+  color: var(--brand-navy);
+  border-color: var(--brand-gold);
+  font-weight: 600;
+}
+.lf-section-nav-pill-chat:hover {
+  background: var(--brand-gold-lt);
+  border-color: var(--brand-gold-lt);
+  color: var(--brand-navy);
 }
 
 /* ─── Collapsible Text (Case Summary) ───────────────────────────────────── */

@@ -464,6 +464,7 @@ export default function ClientFileView({
             "strength",
             "help",
           ]}
+          chatHref={chatHref}
         />
 
         {documentsTable}
