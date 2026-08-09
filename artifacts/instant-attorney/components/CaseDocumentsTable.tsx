@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Attachment, Document, FactItem, ClientWorkspaceDraft } from "@/lib/types";
@@ -182,6 +182,12 @@ export default function CaseDocumentsTable({
   // Local content overrides for workspace drafts filled inline — avoids a full
   // network reload just to rerender the snippet after blanks are filled.
   const [draftContentOverrides, setDraftContentOverrides] = useState<Record<string, string>>({});
+  // Blanks-callout dismissal — persisted in sessionStorage so it reappears on a
+  // new visit but stays gone for the rest of the current session once dismissed.
+  const [calloutDismissed, setCalloutDismissed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return sessionStorage.getItem(`blanks-callout-dismissed-${caseFileId}`) === "1";
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
@@ -387,6 +393,47 @@ export default function CaseDocumentsTable({
   const otherDocs = documents.filter((d) => d.status !== "pending_review");
   const total = forms.length + attachments.length + documents.length + pendingWorkspaceDrafts.length;
 
+  // Compute which items still have unfilled blanks — drives the attention callout.
+  // Uses the same blank-finding logic as the rows themselves so the count is
+  // always in sync: when the last blank is filled the callout vanishes on its own.
+  const itemsWithBlanks = useMemo(() => {
+    if (isAttorney) return [];
+    const items: { key: string; name: string; anchorId: string }[] = [];
+
+    // Workspace drafts
+    for (const d of pendingWorkspaceDrafts) {
+      const content = draftContentOverrides[d.id] ?? d.content;
+      const blanks = content ? findBlanks(content) : [];
+      if (blanks.length > 0) {
+        items.push({ key: `wsdraft:${d.id}`, name: d.title, anchorId: `wsdraft-${d.id}` });
+      }
+    }
+
+    // Submitted / review docs
+    for (const doc of reviewDocs) {
+      const children = childDocuments.filter((c) => c.parent_document_id === doc.id);
+      const secondDraft = children.find((c) => c.doc_type === "second_draft");
+      const fillTarget = secondDraft?.draft_text ? secondDraft : (doc.draft_text ? doc : null);
+      const blanks = fillTarget?.draft_text ? findBlanks(fillTarget.draft_text) : [];
+      if (blanks.length > 0) {
+        items.push({ key: `doc:${doc.id}`, name: doc.title, anchorId: `doc-${doc.id}` });
+      }
+    }
+
+    // Other drafted documents
+    for (const doc of otherDocs) {
+      const children = childDocuments.filter((c) => c.parent_document_id === doc.id);
+      const secondDraft = children.find((c) => c.doc_type === "second_draft");
+      const fillTarget = secondDraft?.draft_text ? secondDraft : (doc.draft_text ? doc : null);
+      const blanks = fillTarget?.draft_text ? findBlanks(fillTarget.draft_text) : [];
+      if (blanks.length > 0) {
+        items.push({ key: `doc:${doc.id}`, name: doc.title, anchorId: `doc-${doc.id}` });
+      }
+    }
+
+    return items;
+  }, [isAttorney, pendingWorkspaceDrafts, draftContentOverrides, reviewDocs, otherDocs, childDocuments]);
+
   return (
     <section className="cdt lf-anchor" id="documents">
       <div className="cdt-head">
@@ -410,6 +457,60 @@ export default function CaseDocumentsTable({
         <div className="cdt-draft-progress" role="status" aria-live="polite">
           <span className="cdt-draft-progress-dot" aria-hidden="true" />
           <span className="cdt-draft-progress-text">A draft is being written — check back in a couple of minutes.</span>
+        </div>
+      )}
+
+      {/* Blanks attention callout — shown to clients only, when ≥ 1 document or
+          workspace draft still has unfilled [[blanks]]. Disappears automatically
+          when the blank count drops to zero, or immediately on dismiss (which
+          persists for the rest of the browser session via sessionStorage).      */}
+      {!isAttorney && !calloutDismissed && itemsWithBlanks.length > 0 && (
+        <div className="cdt-blanks-callout" role="alert" aria-live="polite">
+          <div className="cdt-blanks-callout-header">
+            <span className="cdt-blanks-callout-icon" aria-hidden="true">✏️</span>
+            <span className="cdt-blanks-callout-title">
+              {itemsWithBlanks.length === 1
+                ? "1 document still needs your input"
+                : `${itemsWithBlanks.length} documents still need your input`}
+            </span>
+            <button
+              type="button"
+              className="cdt-blanks-callout-dismiss"
+              aria-label="Dismiss"
+              onClick={() => {
+                sessionStorage.setItem(`blanks-callout-dismissed-${caseFileId}`, "1");
+                setCalloutDismissed(true);
+              }}
+            >
+              ×
+            </button>
+          </div>
+          <ul className="cdt-blanks-callout-list">
+            {itemsWithBlanks.map((item) => (
+              <li key={item.key}>
+                <a
+                  className="cdt-blanks-callout-link"
+                  href={`#${item.anchorId}`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    // Ensure the row is expanded, then scroll to it.
+                    setExpanded((prev) => {
+                      const next = new Set(prev);
+                      next.add(item.key);
+                      return next;
+                    });
+                    requestAnimationFrame(() => {
+                      const el = document.getElementById(item.anchorId);
+                      el?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    });
+                  }}
+                >
+                  {item.name}
+                  <span className="cdt-blanks-callout-arrow" aria-hidden="true"> →</span>
+                </a>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
@@ -483,6 +584,7 @@ export default function CaseDocumentsTable({
                 return (
                   <Row
                     key={key}
+                    anchorId={`wsdraft-${d.id}`}
                     expandable
                     expanded={expanded.has(key)}
                     onToggle={() => toggle(key)}

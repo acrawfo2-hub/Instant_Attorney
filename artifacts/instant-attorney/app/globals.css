@@ -10287,6 +10287,77 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
   50% { opacity: 0.45; transform: scale(0.75); }
 }
 .cdt-draft-progress-text { line-height: 1.4; }
+
+/* ── Blanks attention callout ──────────────────────────────────────────────
+   Appears at the top of the Documents section when ≥ 1 doc/workspace draft
+   has unfilled [[blanks]]. Client-only; disappears when blanks are all filled
+   or when the user dismisses it (sessionStorage, per case file).             */
+.cdt-blanks-callout {
+  margin: 0 1.3rem 0.85rem;
+  padding: 10px 14px 12px;
+  background: #fffbf0;
+  border: 1px solid rgba(200, 169, 110, 0.45);
+  border-left: 3px solid var(--brand-gold);
+  border-radius: 8px;
+}
+.cdt-blanks-callout-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cdt-blanks-callout-icon {
+  flex: 0 0 auto;
+  font-size: 14px;
+  line-height: 1;
+}
+.cdt-blanks-callout-title {
+  flex: 1 1 auto;
+  font-size: 13px;
+  font-weight: 600;
+  color: #7a5c1e;
+  line-height: 1.35;
+}
+.cdt-blanks-callout-dismiss {
+  flex: 0 0 auto;
+  background: none;
+  border: none;
+  padding: 0 2px;
+  font-size: 18px;
+  line-height: 1;
+  color: rgba(122, 92, 30, 0.55);
+  cursor: pointer;
+  font-family: inherit;
+  transition: color 0.15s;
+}
+.cdt-blanks-callout-dismiss:hover { color: #7a5c1e; }
+.cdt-blanks-callout-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.cdt-blanks-callout-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 12.5px;
+  color: #8a6430;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: rgba(138, 100, 48, 0.4);
+  transition: color 0.15s, text-decoration-color 0.15s;
+}
+.cdt-blanks-callout-link:hover {
+  color: #5c3d10;
+  text-decoration-color: #8a6430;
+}
+.cdt-blanks-callout-arrow {
+  text-decoration: none;
+  display: inline-block;
+}
+
 .cdt-add {
   flex: 0 0 auto;
   display: inline-flex;
