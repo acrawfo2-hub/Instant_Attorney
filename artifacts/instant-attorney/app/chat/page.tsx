@@ -10,6 +10,7 @@ import type { ExistingCounselFormValue } from "@/components/ExistingCounselForm"
 import VoiceInputButton, { VoiceUnsupportedNote } from "@/components/VoiceInputButton";
 import AccountMenu from "@/components/AccountMenu";
 import ChatDraftsPanel from "@/components/ChatDraftsPanel";
+import ChatStandingRail from "@/components/ChatStandingRail";
 import { phase2ExistingCounselNotice } from "@/lib/existing-counsel";
 import { parseDrafts, stripDraftsForDisplay } from "@/lib/freestyle-drafts";
 import { stripToolMarkers, activeToolNames } from "@/lib/tool-markers";
@@ -175,6 +176,10 @@ function AcpChatInner() {
   const urlCaseFileId = searchParams.get("caseFileId");
   const urlFocusDraftId = searchParams.get("draft");
   const isQuickConsult = searchParams.get("type") === "quick_consult";
+  // `?ask=` seeds the composer from the file's next-step button and starter
+  // chips. Deliberately NOT auto-sent: the client should see the question, be
+  // able to change it, and press send herself — the file suggests, she asks.
+  const urlAsk = searchParams.get("ask");
 
   const [messages, setMessages] = useState<Msg[]>([INITIAL_MESSAGE]);
   // One conversation, no mode toggle: the assistant is the orchestrator and paces
@@ -182,7 +187,7 @@ function AcpChatInner() {
   // It always runs in the tools-enabled "freestyle" behavior.
   const mode: ChatMode = "freestyle";
   const [caseFileId, setCaseFileId] = useState<string | null>(urlCaseFileId);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(urlAsk ?? "");
   const [loading, setLoading] = useState(false);
   const [streamingText, setStreamingText] = useState("");
   const [chatTruncated, setChatTruncated] = useState(false);
@@ -241,6 +246,19 @@ function AcpChatInner() {
   const caseFileIdRef = useRef<string | null>(caseFileId);
   const hasUserMessages = messages.some((m) => m.role === "user");
   const caseHomeHref = caseFileId ? `/dashboard/${caseFileId}` : "/dashboard";
+
+  // Arriving from a file button with `?ask=`: put the cursor in the composer,
+  // sized to the seeded text, so the only thing left to do is press send.
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!urlAsk || !el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 160) + "px";
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+    // Mount-only: re-running would yank focus back mid-conversation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (pinnedRef.current) {
@@ -380,6 +398,21 @@ function AcpChatInner() {
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caseFileId]);
+
+  // Put a suggested question in the composer and focus it. Never auto-sends: the
+  // client reads and edits before it costs her a turn.
+  const askInComposer = useCallback((text: string) => {
+    setInput(text);
+    const el = textareaRef.current;
+    if (!el) return;
+    requestAnimationFrame(() => {
+      el.style.height = "auto";
+      el.style.height = Math.min(el.scrollHeight, 160) + "px";
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+      el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  }, []);
 
   // Open the drafts panel and jump it to a specific draft (by title or id). Wired
   // to the in-chat draft chips and to a ?draft= deep link from the case file.
@@ -975,6 +1008,18 @@ function AcpChatInner() {
       {/* FREESTYLE WORKSPACE SPLIT — chat column on the left, drafts docked right */}
       <div className={`fc-workspace-row${mode === "freestyle" && draftsPanelOpen ? " fc-workspace-row-split" : ""}`}>
       <div className="fc-workspace-main">
+
+      {/* WHERE WE STAND — pinned outside the transcript's scroll container, so a
+          long answer can never bury it, with every open item actionable here. */}
+      {mode === "freestyle" && caseFileId && !isQuickConsult && (
+        <ChatStandingRail
+          caseFileId={caseFileId}
+          refreshKey={messages.length + draftsRefresh}
+          onAsk={askInComposer}
+          onOpenDraft={(id) => openDraft({ id })}
+          onAttach={() => fileInputRef.current?.click()}
+        />
+      )}
 
       {/* MESSAGES */}
       <main className="fc-messages" ref={messagesMainRef} onScroll={handleMessagesScroll}>

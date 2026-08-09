@@ -10729,3 +10729,518 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
 .lf-strength-add:hover:not(:disabled) { background: #e0e7ff; }
 .lf-strength-add:disabled { cursor: default; opacity: 0.85; }
 .lf-strength-caveat { font-size: 0.75rem; color: var(--muted, #6b7280); margin: 0; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   THE FILE DECK — the client Living File as buttons, not a wall of text.
+
+   The client complaint this answers: the file was a wall of prose, the
+   assistant read as hidden, and drafts already written had to be hunted for.
+   So the page above the fold is now exactly four things — the one date that
+   could hurt, one next step with the biggest button on the page, the drafts
+   themselves, and six fixed tiles that are the map of everything else.
+
+   Ground rules for anything added here:
+   · one primary action per screen — the continue-the-conversation button wins
+   · a tile's tone may color it, but must never hide or reorder it
+   · every status line is computed (lib/file-deck.ts), never decorative
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Anchored sections sit under the sticky file header when scrolled to. */
+.lf-anchor { scroll-margin-top: 84px; }
+
+/* ── Top-of-file alarm — only ever one, only when a date is pressing ─────── */
+.lf-alert {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.85rem 1.1rem;
+  border-radius: var(--brand-r-lg);
+  border: 1px solid transparent;
+}
+.lf-alert-expired,
+.lf-alert-critical {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #8b1f16;
+}
+.lf-alert-warning {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #92400e;
+}
+.lf-alert-icon { flex: 0 0 auto; width: 20px; height: 20px; }
+.lf-alert-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.lf-alert-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+.lf-alert-msg { font-size: 14px; line-height: 1.4; }
+.lf-alert-cta {
+  flex: 0 0 auto;
+  padding: 8px 15px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+/* Both properties are set per tone. `background: currentColor` would resolve
+   against this element's OWN color and paint the button its own text color. */
+.lf-alert-expired .lf-alert-cta,
+.lf-alert-critical .lf-alert-cta { background: #9f2820; color: #fff4f2; }
+.lf-alert-warning .lf-alert-cta { background: #8a5410; color: #fffaef; }
+.lf-alert-cta:hover { filter: brightness(1.15); }
+@media (max-width: 620px) {
+  .lf-alert { flex-wrap: wrap; }
+  .lf-alert-cta { width: 100%; text-align: center; }
+}
+
+/* ── The next step, and the one button that matters ──────────────────────── */
+.lf-next {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 1.15rem 1.25rem 1.25rem;
+  border-radius: var(--brand-r-lg);
+  background: linear-gradient(180deg, #fbf9f5 0%, var(--brand-cream) 100%);
+  border: 1px solid var(--brand-cream-dk);
+  border-left: 3px solid var(--brand-gold);
+}
+.lf-next-critical, .lf-next-expired { border-left-color: #c0392b; }
+.lf-next-warning { border-left-color: #b7791f; }
+.lf-next-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--brand-text-lt);
+}
+.lf-next-title {
+  margin: 0;
+  font-family: var(--font-playfair, "Playfair Display"), serif;
+  font-size: 20px;
+  line-height: 1.3;
+  color: var(--brand-text-dk);
+}
+@media (min-width: 720px) { .lf-next-title { font-size: 22px; } }
+.lf-next-detail {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--brand-text-md);
+  /* Reasons can be several sentences of statute prose. Two lines here, the
+     whole thing in the section the tile points at. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.lf-next-cta {
+  margin-top: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  align-self: flex-start;
+  padding: 15px 30px;
+  border-radius: 10px;
+  background: var(--brand-navy);
+  color: var(--brand-cream-heading);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+  box-shadow: 0 2px 0 0 rgba(12, 25, 41, 0.25), 0 6px 18px -6px rgba(12, 25, 41, 0.5);
+  transition: background 0.14s ease, transform 0.12s ease, box-shadow 0.14s ease;
+}
+.lf-next-cta:hover {
+  background: #16293f;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 0 0 rgba(12, 25, 41, 0.25), 0 10px 22px -8px rgba(12, 25, 41, 0.55);
+}
+.lf-next-cta:active { transform: translateY(0); }
+@media (max-width: 620px) { .lf-next-cta { align-self: stretch; } }
+.lf-next-cta-sub {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--brand-text-lt);
+  max-width: 56ch;
+}
+.lf-next-starters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 0.35rem;
+}
+.lf-next-starters-k {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--brand-text-xlt);
+}
+.lf-next-starters-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.lf-starter {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--brand-cream-dk);
+  background: var(--brand-white);
+  color: var(--brand-navy);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: border-color 0.14s ease, background 0.14s ease;
+}
+.lf-starter:hover { border-color: var(--brand-gold); background: #fffdf8; }
+
+/* ── Drafts already written — the thing she should never hunt for ────────── */
+.lf-hub-drafts { display: flex; flex-direction: column; gap: 0.6rem; }
+.lf-hub-count-drafts { background: rgba(200, 169, 110, 0.22); color: #8a6d34; }
+.lf-hub-seeall {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--brand-navy);
+  text-decoration: none;
+}
+.lf-hub-seeall:hover { text-decoration: underline; }
+.lf-draftlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.lf-draft {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 13px;
+  border-radius: var(--brand-r-md);
+  border: 1px solid var(--brand-cream-dk);
+  background: var(--brand-white);
+  text-decoration: none;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease, transform 0.12s ease;
+}
+.lf-draft:hover {
+  border-color: var(--brand-gold);
+  box-shadow: 0 4px 14px -8px rgba(12, 25, 41, 0.4);
+  transform: translateY(-1px);
+}
+.lf-draft-icon { flex: 0 0 auto; width: 19px; height: 19px; color: var(--brand-text-lt); }
+.lf-draft-icon svg { width: 100%; height: 100%; }
+.lf-draft-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.lf-draft-title {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--brand-text-dk);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lf-draft-meta { font-size: 12.5px; color: var(--brand-text-lt); }
+.lf-draft-meta-need { color: #b7791f; font-weight: 600; }
+.lf-draft-open {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--brand-navy);
+}
+.lf-draft-open svg { width: 15px; height: 15px; }
+@media (max-width: 520px) {
+  .lf-draft-open { font-size: 0; gap: 0; }
+  .lf-draft-open svg { width: 17px; height: 17px; }
+}
+
+/* ── The tally line that replaced two stacked lists ──────────────────────── */
+.lf-hub-tally {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 13px;
+}
+.lf-hub-tally-wait { color: #b7791f; }
+.lf-hub-tally-done { color: #2e7d5b; font-weight: 600; }
+
+/* ── The map: six tiles, always the same six ─────────────────────────────── */
+.lf-tiles {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}
+@media (max-width: 900px) { .lf-tiles { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 520px) { .lf-tiles { grid-template-columns: 1fr; } }
+.lf-tile {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 14px 14px;
+  min-height: 74px;
+  border-radius: var(--brand-r-lg);
+  border: 1px solid var(--brand-border);
+  background: var(--brand-white);
+  text-decoration: none;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease, transform 0.12s ease;
+}
+.lf-tile:hover {
+  border-color: var(--brand-navy);
+  box-shadow: 0 6px 18px -10px rgba(12, 25, 41, 0.55);
+  transform: translateY(-2px);
+}
+.lf-tile:focus-visible { outline: 2px solid var(--brand-navy); outline-offset: 2px; }
+.lf-tile-icon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--brand-cream);
+  color: var(--brand-text-md);
+}
+.lf-tile-icon svg { width: 18px; height: 18px; }
+.lf-tile-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.lf-tile-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--brand-text-dk);
+  line-height: 1.2;
+}
+.lf-tile-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--brand-cream-dk);
+  color: var(--brand-text-md);
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.lf-tile-status {
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--brand-text-lt);
+  /* Two lines max: a tile is a signpost, not a paragraph. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.lf-tile-chev { flex: 0 0 auto; width: 15px; height: 15px; color: var(--brand-text-xlt); }
+
+/* Tone colors the tile; it never changes the tile's place in the grid. */
+.lf-tile-urgent { border-color: #fecaca; background: #fef6f5; }
+.lf-tile-urgent .lf-tile-icon { background: #fee2e2; color: #b91c1c; }
+.lf-tile-urgent .lf-tile-count { background: #fecaca; color: #8b1f16; }
+.lf-tile-urgent .lf-tile-status { color: #a4302a; }
+.lf-tile-attention { border-color: #fde68a; background: #fffdf5; }
+.lf-tile-attention .lf-tile-icon { background: #fef3c7; color: #a16207; }
+.lf-tile-attention .lf-tile-count { background: #fde68a; color: #854d0e; }
+.lf-tile-attention .lf-tile-status { color: #92702a; }
+.lf-tile-calm .lf-tile-icon { background: rgba(46, 125, 91, 0.12); color: #2e7d5b; }
+.lf-tile-calm .lf-tile-status { color: #4a7a63; }
+
+/* ── Sticky way back into the conversation, phones only ──────────────────── */
+.lf-askbar { display: none; }
+@media (max-width: 720px) {
+  .lf-askbar {
+    display: block;
+    position: sticky;
+    bottom: 0;
+    z-index: 40;
+    grid-column: 1 / -1;
+    margin: 0 -1.5rem -2rem;
+    padding: 0.7rem 1.5rem calc(0.7rem + env(safe-area-inset-bottom));
+    background: rgba(247, 244, 239, 0.94);
+    backdrop-filter: blur(8px);
+    border-top: 1px solid var(--brand-cream-dk);
+  }
+  .lf-askbar-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    width: 100%;
+    padding: 14px 18px;
+    border-radius: 10px;
+    background: var(--brand-navy);
+    color: var(--brand-cream-heading);
+    font-size: 15px;
+    font-weight: 700;
+    text-decoration: none;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CHAT STANDING RAIL — "where we stand", pinned above the transcript.
+
+   Clients say the standing read is the most useful thing in the chat and then
+   lose it: one long answer buries it above the scroll. So it lives OUTSIDE the
+   scroll container and every row carries the way to finish it right here.
+
+   Collapsed by default to a single line — the chat is for talking, and a status
+   block that opens itself every visit is just a second wall of text.
+   ══════════════════════════════════════════════════════════════════════════ */
+.csr {
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--chat-line, rgba(26, 22, 18, 0.1));
+  background: var(--chat-surface, #fff);
+}
+.csr-pressing { background: #fef6f5; border-bottom-color: #f4cdc8; }
+
+.csr-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 16px;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: var(--brand-text-dk);
+}
+.csr-head:hover { background: rgba(26, 22, 18, 0.03); }
+.csr-head:focus-visible { outline: 2px solid var(--brand-navy); outline-offset: -2px; }
+.csr-head-k {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--brand-text-xlt);
+}
+.csr-head-line {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.csr-pressing .csr-head-line { color: #9f2820; }
+.csr-head-count {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(154, 118, 54, 0.16);
+  color: #8a6d34;
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.csr-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  /* The rail must never become the wall of text it replaced. */
+  max-height: 44vh;
+  overflow-y: auto;
+  padding: 4px 16px 14px;
+  border-top: 1px solid var(--chat-line, rgba(26, 22, 18, 0.08));
+}
+.csr-recap {
+  margin: 0;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: var(--chat-ground, #f7f4ef);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--brand-text-md);
+}
+.csr-recap-k {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--brand-text-xlt);
+}
+.csr-section-k {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--brand-text-lt);
+}
+.csr-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.csr-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+}
+.csr-item:hover { background: var(--chat-ground, #f7f4ef); border-color: var(--brand-cream-dk); }
+.csr-item-blocked { opacity: 0.72; }
+.csr-dot { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; background: var(--brand-gold); }
+.csr-dot-expired, .csr-dot-critical { background: #c0392b; }
+.csr-dot-warning { background: #b7791f; }
+.csr-item-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--brand-text-dk);
+}
+.csr-item-meta { font-size: 11.5px; color: var(--brand-text-lt); }
+.csr-item-meta-need { color: #b7791f; font-weight: 600; }
+.csr-item-btn {
+  flex: 0 0 auto;
+  padding: 5px 11px;
+  border-radius: 7px;
+  border: 1px solid rgba(154, 118, 54, 0.35);
+  background: rgba(154, 118, 54, 0.1);
+  color: var(--brand-navy);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.csr-item-btn:hover { background: rgba(154, 118, 54, 0.2); border-color: rgba(154, 118, 54, 0.6); }
+
+/* Panel states that used to render as an empty panel — see lib/draft-focus.ts. */
+.fc-draft-loaderr { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.fc-draft-retry {
+  padding: 6px 14px;
+  border-radius: 7px;
+  border: 1px solid rgba(154, 118, 54, 0.35);
+  background: rgba(154, 118, 54, 0.1);
+  color: var(--brand-navy);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.fc-draft-retry:hover { background: rgba(154, 118, 54, 0.2); }

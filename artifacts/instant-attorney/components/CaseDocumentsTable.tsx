@@ -93,8 +93,10 @@ function Pill({ kind, label }: { kind: string; label: string }) {
 
 // Shared one-line row shell + optional expand panel.
 function Row({
-  expandable, expanded, onToggle, icon, name, meta, flag, pill, date, action, children,
+  anchorId, expandable, expanded, onToggle, icon, name, meta, flag, pill, date, action, children,
 }: {
+  /** DOM id so the deck above can link straight at this row (`#doc-<id>`). */
+  anchorId?: string;
   expandable: boolean;
   expanded: boolean;
   onToggle: () => void;
@@ -108,7 +110,7 @@ function Row({
   children?: React.ReactNode;
 }) {
   return (
-    <div className={`cdt-row${expanded ? " cdt-open" : ""}${expandable ? " cdt-row-exp" : ""}`}>
+    <div id={anchorId} className={`cdt-row lf-anchor${expanded ? " cdt-open" : ""}${expandable ? " cdt-row-exp" : ""}`}>
       <div className="cdt-main" onClick={expandable ? onToggle : undefined} role={expandable ? "button" : undefined}>
         <span className={`cdt-chev${expandable ? "" : " cdt-chev-blank"}`}><Chevron /></span>
         <span className="cdt-ricon">{icon}</span>
@@ -132,15 +134,20 @@ export default function CaseDocumentsTable({
   childDocuments,
   facts,
   isAttorney,
+  initialWorkspaceDrafts = [],
 }: {
   caseFileId: string;
   documents: Document[];
   childDocuments: Document[];
   facts: FactItem[];
   isAttorney: boolean;
+  /** Server-rendered drafts, so the section paints complete on first frame
+   *  instead of flashing "nothing yet" until the client fetch lands. The
+   *  fetch still runs and takes over — this is the starting value, not a cache. */
+  initialWorkspaceDrafts?: ClientWorkspaceDraft[];
 }) {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [workspaceDrafts, setWorkspaceDrafts] = useState<ClientWorkspaceDraft[]>([]);
+  const [workspaceDrafts, setWorkspaceDrafts] = useState<ClientWorkspaceDraft[]>(initialWorkspaceDrafts);
   const [forms, setForms] = useState<GovForm[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [uploading, setUploading] = useState(false);
@@ -364,7 +371,7 @@ export default function CaseDocumentsTable({
   const total = forms.length + attachments.length + documents.length + pendingWorkspaceDrafts.length;
 
   return (
-    <section className="cdt">
+    <section className="cdt lf-anchor" id="documents">
       <div className="cdt-head">
         <div>
           <h2 className="cdt-title">Documents &amp; attachments</h2>
@@ -636,6 +643,7 @@ export default function CaseDocumentsTable({
                 return (
                   <Row
                     key={key}
+                    anchorId={`doc-${doc.id}`}
                     expandable
                     expanded={expanded.has(key)}
                     onToggle={() => toggle(key)}
@@ -712,6 +720,7 @@ export default function CaseDocumentsTable({
                 return (
                   <Row
                     key={key}
+                    anchorId={`doc-${doc.id}`}
                     expandable
                     expanded={expanded.has(key)}
                     onToggle={() => toggle(key)}

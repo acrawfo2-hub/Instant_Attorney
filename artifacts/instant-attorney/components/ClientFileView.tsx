@@ -16,20 +16,36 @@ import {
 import type { RoadmapAiOverlay } from "@/lib/roadmap-types";
 import PostConsultCard from "@/components/PostConsultCard";
 import CaseHub from "@/components/CaseHub";
+import FileTiles from "@/components/FileTiles";
+import FileSection from "@/components/FileSection";
+import FileAlertStrip from "@/components/FileAlertStrip";
+import AskAssistantBar from "@/components/AskAssistantBar";
 import KeyDeadlines from "@/components/KeyDeadlines";
 import StrengthCheckCard from "@/components/StrengthCheckCard";
 import CaseDocumentsTable from "@/components/CaseDocumentsTable";
 import AttorneyFreestyleChat from "@/components/AttorneyFreestyleChat";
 import { buildMatterTasks } from "@/lib/matter-tasks";
-import type { CaseFile, FactItem, Document, Profile, ConsultRequest, ConsultWrapUp, RequestedAttachment, GovFormInstrument, Attachment } from "@/lib/types";
+import { buildFileDeck } from "@/lib/file-deck";
+import type { CaseFile, FactItem, Document, Profile, ConsultRequest, ConsultWrapUp, RequestedAttachment, GovFormInstrument, Attachment, ClientWorkspaceDraft } from "@/lib/types";
 import { docTypeLabel, personDisplayName, coerceWizardType } from "@/lib/types";
 import { FIRM_CONTACT_EMAIL } from "@/lib/firm";
 
-// The consumer Living File no longer PRESCRIBES the next step with a computed
-// roadmap, Mission Control action board, or per-matter tool cards. "What do I do
-// next?" now happens by talking to the orchestrator, which knows every fact and
-// can run the same calculators as tools in-conversation. The file is a reference —
-// overview + facts + documents. (The attorney view still shows Mission Control.)
+// The consumer Living File is a DECK, not a document. The complaint it answers:
+// the page hit the client with a wall of text and buried both the assistant and
+// her own finished drafts inside it.
+//
+// The shape now, in the order a good lawyer walks a client through a matter:
+//
+//   1. the one date that could hurt          (only when there is one)
+//   2. where things stand + ONE next step    (with the biggest button on the page)
+//   3. the drafts already written            (one tap, never hunted for)
+//   4. six tiles — the map of the file       (same six, same order, live counts)
+//   5. documents                             (the working surface)
+//   6. everything else, behind its own tile  (dates, details, facts, people)
+//
+// Nothing was deleted: every card that used to be stacked on the page still
+// renders, inside whichever section its tile names. The attorney view keeps its
+// own layout (Mission Control + the full reference stack) below.
 
 // ── Matter badge ─────────────────────────────────────────────────────────────
 
@@ -49,6 +65,7 @@ interface ClientFileViewProps {
   requestedAttachments?: RequestedAttachment[];
   attachments?: Attachment[];
   govForms?: GovFormInstrument[];
+  workspaceDrafts?: ClientWorkspaceDraft[];
   mode: "client" | "attorney";
   isAttorneyUser?: boolean;
   clientProfile?: Profile;
@@ -67,6 +84,7 @@ export default function ClientFileView({
   requestedAttachments = [],
   attachments = [],
   govForms = [],
+  workspaceDrafts = [],
   mode,
   isAttorneyUser = false,
   clientProfile,
@@ -120,6 +138,7 @@ export default function ClientFileView({
     .filter((grp) => grp.items.length > 0);
   const strategy = caseFile.legal_strategy ?? null;
   const isAttorney = mode === "attorney";
+  const chatHref = `/chat?caseFileId=${caseFile.id}`;
 
   // The consumer file's single live block. Computed server-side from the
   // deterministic task view (Mission Control + finalized records), so "Where
@@ -134,6 +153,23 @@ export default function ClientFileView({
         govForms,
         attachments,
         mode: "client",
+      })
+    : null;
+
+  // Everything the client-side layout renders above the fold, distilled from the
+  // same rows the sections below display in full. Pure — see lib/file-deck.ts.
+  const deck = matterTasks
+    ? buildFileDeck({
+        caseFile,
+        facts,
+        tasks: matterTasks,
+        documents,
+        childDocuments,
+        workspaceDrafts,
+        attachments,
+        requestedAttachments,
+        govForms,
+        consultRequest,
       })
     : null;
 
@@ -174,176 +210,105 @@ export default function ClientFileView({
     hasConsultSub,
   });
 
-  return (
-    <div className="lf-grid">
-      {/* Local Counsel Prep badge — non-Texas matters */}
-      {!isAttorney && (() => {
-        const raw = caseFile.jurisdiction?.trim() || null;
-        if (!raw || /unconfirmed/i.test(raw)) return null;
-        const code = jurisdictionFromCaseFileText(raw);
-        // Texas → full depth (no prep banner). Anything else confirmed → Prep.
-        if (isFullDepthState(code) || /^texas$|^tx$/i.test(raw)) return null;
-        const showPrep = code ? isPrepMode(code) : true;
-        if (!showPrep) return null;
-        return (
-          <div className="lf-card lf-card-full lf-prep-banner" role="status">
-            <div className="lf-prep-banner-inner">
-              <div className="lf-prep-banner-text">
-                <span className="lf-prep-badge">{prepModeBadgeLabel(code ?? raw)}</span>
-                <span className="lf-prep-desc">
-                  {jurisdictionNotice(code ?? raw) ??
-                    "You are in Local Counsel Prep mode — we help organize your file for a lawyer licensed in your state."}
-                </span>
-              </div>
-              <a
-                href={stateBarReferralUrl(code ?? raw)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="lf-consult-btn"
-              >
-                Find local counsel →
-              </a>
-            </div>
+  // ── Shared blocks ──────────────────────────────────────────────────────────
+  // Built once, placed differently by each layout. Kept as consts (not inlined)
+  // so the client deck can file them behind a tile without duplicating markup.
+
+  const prepBanner = !isAttorney && (() => {
+    const raw = caseFile.jurisdiction?.trim() || null;
+    if (!raw || /unconfirmed/i.test(raw)) return null;
+    const code = jurisdictionFromCaseFileText(raw);
+    // Texas → full depth (no prep banner). Anything else confirmed → Prep.
+    if (isFullDepthState(code) || /^texas$|^tx$/i.test(raw)) return null;
+    const showPrep = code ? isPrepMode(code) : true;
+    if (!showPrep) return null;
+    return (
+      <div className="lf-card lf-card-full lf-prep-banner" role="status">
+        <div className="lf-prep-banner-inner">
+          <div className="lf-prep-banner-text">
+            <span className="lf-prep-badge">{prepModeBadgeLabel(code ?? raw)}</span>
+            <span className="lf-prep-desc">
+              {jurisdictionNotice(code ?? raw) ??
+                "You are in Local Counsel Prep mode — we help organize your file for a lawyer licensed in your state."}
+            </span>
           </div>
-        );
-      })()}
-
-      {/* Consult status — client Crawford Law subscribers only. One compact,
-          data-driven strip instead of four near-identical full-width banners. */}
-      {!isAttorney && !isAttorneyUser && (() => {
-        const cr = consultRequest;
-        const fmt = (iso: string, weekday: "long" | "short", month: "long" | "short") =>
-          new Date(iso).toLocaleString("en-US", {
-            timeZone: "America/Chicago", weekday, month, day: "numeric",
-            hour: "numeric", minute: "2-digit", timeZoneName: "short",
-          });
-
-        let tone = "", label = "";
-        let message: React.ReactNode = null;
-        let action: { label: string; href: string } | null = null;
-
-        if (cr?.status === "confirmed" && cr.confirmed_time) {
-          tone = "green"; label = "Consult confirmed";
-          message = <><strong>{fmt(cr.confirmed_time, "long", "long")}</strong> · Andrew will call {cr.client_phone ?? "you"}</>;
-          action = { label: "Open consult page", href: `/consult/${cr.id}/session` };
-        } else if (cr?.status === "attorney_proposed" && cr.attorney_proposed_time) {
-          tone = "amber"; label = "New time proposed";
-          message = <>Andrew suggested <strong>{fmt(cr.attorney_proposed_time, "short", "short")}</strong></>;
-          action = { label: "Respond", href: "/dashboard#consult-status" };
-        } else if (cr?.status === "pending") {
-          tone = "blue"; label = "Awaiting confirmation";
-          message = "Your 3 preferred times are in — Andrew will confirm one shortly.";
-        } else if (strategy?.recommend_consult) {
-          tone = "gold"; label = "Consult recommended";
-          message = "Your attorney flagged this matter for a live strategy session.";
-          action = {
-            label: hasConsultSub ? "Schedule consult" : "Schedule consult · $49.99",
-            href: hasConsultSub ? "/consult/schedule" : "/register?upgrade=consult",
-          };
-        } else {
-          return null;
-        }
-
-        return (
-          <div className={`lf-consult-strip lf-consult-${tone}`} role="status">
-            <span className="lf-consult-dot" aria-hidden />
-            <div className="lf-consult-strip-body">
-              <span className="lf-consult-strip-label">{label}</span>
-              <span className="lf-consult-strip-msg">{message}</span>
-            </div>
-            {action && <Link href={action.href} className="lf-consult-strip-cta">{action.label} →</Link>}
-          </div>
-        );
-      })()}
-
-      {/* Post-consult action plan — client mode */}
-      {!isAttorney && completedConsultWrapUp && (
-        <PostConsultCard
-          wrapUp={completedConsultWrapUp}
-          submittedAt={completedConsultSubmittedAt}
-        />
-      )}
-
-      {/* Mission Control — attorney view only; the consumer decides next steps by
-          talking to the orchestrator (below) rather than a computed action board. */}
-      {isAttorney && (
-        <MissionControlBoard
-          board={missionBoard}
-          caseFileId={caseFile.id}
-          mode={mode}
-          isAttorneyUser={isAttorneyUser}
-        />
-      )}
-
-      {/* Key deadlines — the deterministic docket, computed from dated facts.
-          Top placement: a live or passed deadline is the one thing the file must
-          never let the client (or attorney) scroll past. */}
-      <KeyDeadlines facts={facts} jurisdiction={caseFile.jurisdiction} />
-
-      {/* The consumer file's single live block — consolidates the old recap card,
-          the "what's next?" CTA, and the on-demand standing card into one
-          server-computed "Where things stand" read of the matter, with the
-          assistant one tap away. */}
-      {!isAttorney && matterTasks && <CaseHub caseFile={caseFile} tasks={matterTasks} />}
-
-      {/* Strength Check — the adversarial stress test. Client runs it on demand;
-          the attorney sees the same stored result (what the client was told). */}
-      <StrengthCheckCard
-        caseFileId={caseFile.id}
-        check={caseFile.legal_strategy?.strength_check ?? null}
-        isAttorney={isAttorney}
-      />
-
-
-      {/* Attorney parity — the same "keep working with the orchestrator" entry the
-          client has, on the file. Opens the freestyle work-product workspace
-          (privileged, not shared) right here instead of a separate page. */}
-      {isAttorney && (
-        <div className="lf-card lf-card-full lf-atty-freestyle-entry">
-          <AttorneyFreestyleChat caseFileId={caseFile.id} />
+          <a
+            href={stateBarReferralUrl(code ?? raw)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="lf-consult-btn"
+          >
+            Find local counsel →
+          </a>
         </div>
-      )}
+      </div>
+    );
+  })();
 
-      {/* Attorney banner */}
-      {isAttorney && clientProfile && (
-        <div className="lf-card lf-card-full lf-atty-banner">
-          <div className="lf-atty-banner-inner">
-            <div>
-              <div className="lf-atty-banner-client">
-                {personDisplayName(clientProfile)}
-              </div>
-              {clientProfile.email && clientProfile.full_name && (
-                <div className="lf-atty-banner-email">{clientProfile.email}</div>
-              )}
-              {clientProfile.phone && (
-                <div className="lf-atty-banner-email">{clientProfile.phone}</div>
-              )}
-            </div>
-            <div className="lf-atty-banner-actions">
-              <button className="lf-atty-review-btn" disabled title="Coming soon">
-                Review File
-              </button>
-            </div>
-          </div>
+  // Consult status — client Crawford Law subscribers only. One compact,
+  // data-driven strip instead of four near-identical full-width banners.
+  const consultStrip = !isAttorney && !isAttorneyUser && (() => {
+    const cr = consultRequest;
+    const fmt = (iso: string, weekday: "long" | "short", month: "long" | "short") =>
+      new Date(iso).toLocaleString("en-US", {
+        timeZone: "America/Chicago", weekday, month, day: "numeric",
+        hour: "numeric", minute: "2-digit", timeZoneName: "short",
+      });
+
+    let tone = "", label = "";
+    let message: React.ReactNode = null;
+    let action: { label: string; href: string } | null = null;
+
+    if (cr?.status === "confirmed" && cr.confirmed_time) {
+      tone = "green"; label = "Consult confirmed";
+      message = <><strong>{fmt(cr.confirmed_time, "long", "long")}</strong> · Andrew will call {cr.client_phone ?? "you"}</>;
+      action = { label: "Open consult page", href: `/consult/${cr.id}/session` };
+    } else if (cr?.status === "attorney_proposed" && cr.attorney_proposed_time) {
+      tone = "amber"; label = "New time proposed";
+      message = <>Andrew suggested <strong>{fmt(cr.attorney_proposed_time, "short", "short")}</strong></>;
+      action = { label: "Respond", href: "/dashboard#consult-status" };
+    } else if (cr?.status === "pending") {
+      tone = "blue"; label = "Awaiting confirmation";
+      message = "Your 3 preferred times are in — Andrew will confirm one shortly.";
+    } else if (strategy?.recommend_consult) {
+      tone = "gold"; label = "Consult recommended";
+      message = "Your attorney flagged this matter for a live strategy session.";
+      action = {
+        label: hasConsultSub ? "Schedule consult" : "Schedule consult · $49.99",
+        href: hasConsultSub ? "/consult/schedule" : "/register?upgrade=consult",
+      };
+    } else {
+      return null;
+    }
+
+    return (
+      <div className={`lf-consult-strip lf-consult-${tone}`} role="status">
+        <span className="lf-consult-dot" aria-hidden />
+        <div className="lf-consult-strip-body">
+          <span className="lf-consult-strip-label">{label}</span>
+          <span className="lf-consult-strip-msg">{message}</span>
         </div>
-      )}
+        {action && <Link href={action.href} className="lf-consult-strip-cta">{action.label} →</Link>}
+      </div>
+    );
+  })();
 
-      <ExistingCounselCard
-        caseFileId={caseFile.id}
-        counselIntakeAt={caseFile.counsel_intake_at}
-        hasExistingCounsel={caseFile.has_existing_counsel}
-        existingCounselName={caseFile.existing_counsel_name}
-        counselEngagementGoal={caseFile.counsel_engagement_goal}
-        mode={isAttorney ? "attorney" : "client"}
-      />
+  const documentsTable = (
+    <CaseDocumentsTable
+      caseFileId={caseFile.id}
+      documents={documents}
+      childDocuments={childDocuments}
+      facts={facts}
+      isAttorney={isAttorney}
+      initialWorkspaceDrafts={workspaceDrafts}
+    />
+  );
 
-      <details className="lf-details-section">
-        <summary className="lf-details-summary">
-          <span className="lf-details-summary-main">About this matter</span>
-          <span className="lf-details-summary-hint">Summary, goals, and strategy — updates as you go</span>
-        </summary>
-        <div className="lf-details-body">
-      {/* Matter */}
+  // "About this matter" — the reference read of the case. Reference, not a to-do
+  // list: it belongs behind the Case details tile, never in front of the client
+  // on arrival.
+  const aboutBlocks = (
+    <>
       <div className="lf-card lf-card-sm">
         <div className="lf-card-label">
           Matter
@@ -360,7 +325,6 @@ export default function ClientFileView({
         </div>
       </div>
 
-      {/* Case Summary */}
       {caseFile.summary && (
         <div className="lf-card lf-card-full">
           <div className="lf-card-label">Case Summary</div>
@@ -368,7 +332,6 @@ export default function ClientFileView({
         </div>
       )}
 
-      {/* Goals */}
       <div className="lf-card lf-card-full">
         <div className="lf-card-label">
           {isAttorney ? "Client Goals" : "Your Goals"}
@@ -384,7 +347,6 @@ export default function ClientFileView({
         )}
       </div>
 
-      {/* Legal Strategy */}
       {strategy && (
         <div className="lf-card lf-card-full lf-card-strategy" id="legal-strategy">
           <div className="lf-card-label">
@@ -416,7 +378,7 @@ export default function ClientFileView({
             <div className="lf-instruments">
               <div className="lf-strategy-sub">
                 Suggested Instruments
-                {!isAttorney && <span className="lf-plain-caption lf-plain-caption-sub">Documents we can create — start from Mission Control above</span>}
+                {!isAttorney && <span className="lf-plain-caption lf-plain-caption-sub">Documents we can create — ask for one in your legal chat</span>}
               </div>
               <ul className="lf-list">
                 {strategy.instruments.map((inst, i) => (
@@ -427,16 +389,11 @@ export default function ClientFileView({
           )}
         </div>
       )}
+    </>
+  );
 
-        </div>
-      </details>
-
-      <details className="lf-details-section">
-        <summary className="lf-details-summary">
-          <span className="lf-details-summary-main">Facts &amp; gaps</span>
-          <span className="lf-details-summary-hint">Reference list — what&apos;s known, what&apos;s still open, and your what-if preferences</span>
-        </summary>
-        <div className="lf-details-body">
+  const factsBlocks = (
+    <>
       <FactsPanel
         confirmed={confirmed}
         gaps={realGaps}
@@ -465,42 +422,193 @@ export default function ClientFileView({
           </ul>
         </div>
       )}
-        </div>
-      </details>
+    </>
+  );
 
+  const attorneyAssessment = (
+    <div className="lf-card lf-card-full">
+      <div className="lf-card-label">Attorney Assessment</div>
+      {caseFile.attorney_assessment ? (
+        <p className="lf-assessment">{caseFile.attorney_assessment}</p>
+      ) : (
+        <p className="lf-empty-field">Crawford Law will add an assessment once your intake is complete.</p>
+      )}
+    </div>
+  );
 
-      {/* One concise table — suggested uploads, attachments on file, and drafted
-          documents — replaces the old separate Documents card + AttachmentPanel. */}
-      <CaseDocumentsTable
+  // ── Client layout — the deck ───────────────────────────────────────────────
+
+  if (!isAttorney && matterTasks && deck) {
+    return (
+      <div className="lf-grid">
+        {prepBanner}
+        {deck.pressing && <FileAlertStrip pressing={deck.pressing} chatHref={chatHref} />}
+        {consultStrip}
+
+        {completedConsultWrapUp && (
+          <PostConsultCard
+            wrapUp={completedConsultWrapUp}
+            submittedAt={completedConsultSubmittedAt}
+          />
+        )}
+
+        <CaseHub caseFile={caseFile} tasks={matterTasks} deck={deck} />
+
+        <FileTiles tiles={deck.tiles} />
+
+        {documentsTable}
+
+        {deck.docketCount > 0 && (
+          <FileSection
+            id="deadlines"
+            title="Key dates"
+            hint="Every deadline we can compute from the dates on your file, and what each one is based on"
+          >
+            <KeyDeadlines facts={facts} jurisdiction={caseFile.jurisdiction} />
+          </FileSection>
+        )}
+
+        <FileSection
+          id="case-details"
+          title="Your case details"
+          hint="What this matter is about, what you want out of it, and the strategy — updates as you go"
+        >
+          {aboutBlocks}
+        </FileSection>
+
+        <FileSection
+          id="facts"
+          title="Facts on file"
+          hint="What's confirmed, what's still open, and your what-if preferences"
+        >
+          {factsBlocks}
+        </FileSection>
+
+        <FileSection
+          id="strength"
+          title="How strong is my position?"
+          hint="An honest, adversarial read of your case — run it whenever the facts change"
+        >
+          <StrengthCheckCard
+            caseFileId={caseFile.id}
+            check={caseFile.legal_strategy?.strength_check ?? null}
+            isAttorney={false}
+          />
+        </FileSection>
+
+        <FileSection
+          id="help"
+          title="Talk to a person"
+          hint="Reach the firm, tell us about a lawyer you've already hired, and read your attorney's assessment"
+        >
+          <ExistingCounselCard
+            caseFileId={caseFile.id}
+            counselIntakeAt={caseFile.counsel_intake_at}
+            hasExistingCounsel={caseFile.has_existing_counsel}
+            existingCounselName={caseFile.existing_counsel_name}
+            counselEngagementGoal={caseFile.counsel_engagement_goal}
+            mode="client"
+          />
+
+          <div className="lf-card lf-card-full lf-contact-card">
+            <div className="lf-card-label">Questions?</div>
+            <p className="lf-contact-text">
+              Email us at{" "}
+              <a className="lf-contact-email" href={`mailto:${FIRM_CONTACT_EMAIL}`}>{FIRM_CONTACT_EMAIL}</a>{" "}
+              and we&apos;ll get back to you.
+            </p>
+          </div>
+
+          {attorneyAssessment}
+        </FileSection>
+
+        <AskAssistantBar href={chatHref} />
+      </div>
+    );
+  }
+
+  // ── Attorney layout — the full reference stack ─────────────────────────────
+
+  return (
+    <div className="lf-grid">
+      <MissionControlBoard
+        board={missionBoard}
         caseFileId={caseFile.id}
-        documents={documents}
-        childDocuments={childDocuments}
-        facts={facts}
-        isAttorney={isAttorney}
+        mode={mode}
+        isAttorneyUser={isAttorneyUser}
       />
 
-      {/* Questions? — clients reach the firm by email (replaces the in-file
-          messaging channel). */}
-      {!isAttorney && (
-        <div className="lf-card lf-card-full lf-contact-card">
-          <div className="lf-card-label">Questions?</div>
-          <p className="lf-contact-text">
-            Email us at{" "}
-            <a className="lf-contact-email" href={`mailto:${FIRM_CONTACT_EMAIL}`}>{FIRM_CONTACT_EMAIL}</a>{" "}
-            and we&apos;ll get back to you.
-          </p>
+      {/* Key deadlines — the deterministic docket, computed from dated facts.
+          Top placement: a live or passed deadline is the one thing the file must
+          never let the attorney scroll past. */}
+      <KeyDeadlines facts={facts} jurisdiction={caseFile.jurisdiction} />
+
+      {/* Strength Check — the adversarial stress test. The attorney sees the same
+          stored result the client was shown. */}
+      <StrengthCheckCard
+        caseFileId={caseFile.id}
+        check={caseFile.legal_strategy?.strength_check ?? null}
+        isAttorney
+      />
+
+      {/* Attorney parity — the same "keep working with the orchestrator" entry the
+          client has, on the file. Opens the freestyle work-product workspace
+          (privileged, not shared) right here instead of a separate page. */}
+      <div className="lf-card lf-card-full lf-atty-freestyle-entry">
+        <AttorneyFreestyleChat caseFileId={caseFile.id} />
+      </div>
+
+      {clientProfile && (
+        <div className="lf-card lf-card-full lf-atty-banner">
+          <div className="lf-atty-banner-inner">
+            <div>
+              <div className="lf-atty-banner-client">
+                {personDisplayName(clientProfile)}
+              </div>
+              {clientProfile.email && clientProfile.full_name && (
+                <div className="lf-atty-banner-email">{clientProfile.email}</div>
+              )}
+              {clientProfile.phone && (
+                <div className="lf-atty-banner-email">{clientProfile.phone}</div>
+              )}
+            </div>
+            <div className="lf-atty-banner-actions">
+              <button className="lf-atty-review-btn" disabled title="Coming soon">
+                Review File
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Attorney Assessment */}
-      <div className="lf-card lf-card-full">
-        <div className="lf-card-label">Attorney Assessment</div>
-        {caseFile.attorney_assessment ? (
-          <p className="lf-assessment">{caseFile.attorney_assessment}</p>
-        ) : (
-          <p className="lf-empty-field">Crawford Law will add an assessment once your intake is complete.</p>
-        )}
-      </div>
+      <ExistingCounselCard
+        caseFileId={caseFile.id}
+        counselIntakeAt={caseFile.counsel_intake_at}
+        hasExistingCounsel={caseFile.has_existing_counsel}
+        existingCounselName={caseFile.existing_counsel_name}
+        counselEngagementGoal={caseFile.counsel_engagement_goal}
+        mode="attorney"
+      />
+
+      <details className="lf-details-section">
+        <summary className="lf-details-summary">
+          <span className="lf-details-summary-main">About this matter</span>
+          <span className="lf-details-summary-hint">Summary, goals, and strategy — updates as you go</span>
+        </summary>
+        <div className="lf-details-body">{aboutBlocks}</div>
+      </details>
+
+      <details className="lf-details-section">
+        <summary className="lf-details-summary">
+          <span className="lf-details-summary-main">Facts &amp; gaps</span>
+          <span className="lf-details-summary-hint">Reference list — what&apos;s known, what&apos;s still open, and the client&apos;s what-if preferences</span>
+        </summary>
+        <div className="lf-details-body">{factsBlocks}</div>
+      </details>
+
+      {documentsTable}
+
+      {attorneyAssessment}
     </div>
   );
 }
