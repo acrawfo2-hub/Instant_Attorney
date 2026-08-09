@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { CaseFile, FactItem, BYPASS_USER_ID } from "@/lib/types";
-import type { Document, ConsultRequest, ConsultWrapUp, RequestedAttachment, GovFormInstrument, Attachment } from "@/lib/types";
+import type { Document, ConsultRequest, ConsultWrapUp, RequestedAttachment, GovFormInstrument, Attachment, ClientWorkspaceDraft } from "@/lib/types";
 import { normalizeWrapUp } from "@/lib/consult-wrap-up";
 import ClientFileView from "@/components/ClientFileView";
 import AccountMenu from "@/components/AccountMenu";
@@ -29,7 +29,7 @@ async function getData(caseFileId: string) {
     userId = user.id;
   }
 
-  const [{ data: caseFile }, { data: facts }, { data: documents }, { data: consultRow }, { data: completedConsultRow }, { data: subRow }, { data: requestedRows }, { data: formRows }, { data: attachmentRows }, { data: roadmapSnap }, { data: siblingRows }, { data: profileRow }] = await Promise.all([
+  const [{ data: caseFile }, { data: facts }, { data: documents }, { data: consultRow }, { data: completedConsultRow }, { data: subRow }, { data: requestedRows }, { data: formRows }, { data: attachmentRows }, { data: roadmapSnap }, { data: siblingRows }, { data: profileRow }, { data: draftRows }] = await Promise.all([
     db.from("case_files")
       .select("*")
       .eq("id", caseFileId)
@@ -96,6 +96,15 @@ async function getData(caseFileId: string) {
       .select("account_type")
       .eq("id", userId)
       .maybeSingle(),
+    // Side-panel drafts. Fetched here (not only client-side in the documents
+    // table) because the deck at the top of the file ranks and links them — a
+    // client should never have to hunt for work that's already written.
+    db
+      .from("client_workspace_drafts")
+      .select("*")
+      .eq("case_file_id", caseFileId)
+      .eq("user_id", userId)
+      .order("updated_at", { ascending: false }),
   ]);
 
   if (!BYPASS_AUTH && (!subRow || !["active", "trialing", "bypass"].includes(subRow?.status ?? ""))) {
@@ -140,6 +149,7 @@ async function getData(caseFileId: string) {
     govForms: (formRows ?? []) as GovFormInstrument[],
     attachments: (attachmentRows ?? []) as Attachment[],
     roadmapOverlay: parseRoadmapOverlay(roadmapSnap?.ai_overlay) as RoadmapAiOverlay,
+    workspaceDrafts: (draftRows ?? []) as ClientWorkspaceDraft[],
     openMatters,
     isAttorneyUser: profileRow?.account_type === "attorney_user",
   };
@@ -157,7 +167,7 @@ export default async function FileDetailPage({
   const result = await getData(id);
   if (!result) notFound();
 
-  const { caseFile, facts, documents, childDocuments, consultRequest, hasConsultSub, completedConsultWrapUp, completedConsultSubmittedAt, requestedAttachments, govForms, attachments, roadmapOverlay, openMatters, isAttorneyUser } = result;
+  const { caseFile, facts, documents, childDocuments, consultRequest, hasConsultSub, completedConsultWrapUp, completedConsultSubmittedAt, requestedAttachments, govForms, attachments, roadmapOverlay, workspaceDrafts, openMatters, isAttorneyUser } = result;
 
   // The header action now points to the orchestrator rather than a computed
   // next-step path — figuring out (and doing) what's next is a conversation with
@@ -216,6 +226,7 @@ export default async function FileDetailPage({
           requestedAttachments={requestedAttachments}
           attachments={attachments}
           govForms={govForms}
+          workspaceDrafts={workspaceDrafts}
           mode="client"
           isAttorneyUser={isAttorneyUser}
           consultRequest={consultRequest}

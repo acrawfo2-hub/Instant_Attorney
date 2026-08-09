@@ -175,6 +175,10 @@ function AcpChatInner() {
   const urlCaseFileId = searchParams.get("caseFileId");
   const urlFocusDraftId = searchParams.get("draft");
   const isQuickConsult = searchParams.get("type") === "quick_consult";
+  // `?ask=` seeds the composer from the file's next-step button and starter
+  // chips. Deliberately NOT auto-sent: the client should see the question, be
+  // able to change it, and press send herself — the file suggests, she asks.
+  const urlAsk = searchParams.get("ask");
 
   const [messages, setMessages] = useState<Msg[]>([INITIAL_MESSAGE]);
   // One conversation, no mode toggle: the assistant is the orchestrator and paces
@@ -182,7 +186,7 @@ function AcpChatInner() {
   // It always runs in the tools-enabled "freestyle" behavior.
   const mode: ChatMode = "freestyle";
   const [caseFileId, setCaseFileId] = useState<string | null>(urlCaseFileId);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(urlAsk ?? "");
   const [loading, setLoading] = useState(false);
   const [streamingText, setStreamingText] = useState("");
   const [chatTruncated, setChatTruncated] = useState(false);
@@ -241,6 +245,19 @@ function AcpChatInner() {
   const caseFileIdRef = useRef<string | null>(caseFileId);
   const hasUserMessages = messages.some((m) => m.role === "user");
   const caseHomeHref = caseFileId ? `/dashboard/${caseFileId}` : "/dashboard";
+
+  // Arriving from a file button with `?ask=`: put the cursor in the composer,
+  // sized to the seeded text, so the only thing left to do is press send.
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!urlAsk || !el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 160) + "px";
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+    // Mount-only: re-running would yank focus back mid-conversation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (pinnedRef.current) {
