@@ -149,7 +149,24 @@ export default function CaseDocumentsTable({
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [workspaceDrafts, setWorkspaceDrafts] = useState<ClientWorkspaceDraft[]>(initialWorkspaceDrafts);
   const [forms, setForms] = useState<GovForm[]>([]);
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // Pre-expand any row that already has unfilled blanks so the client never has
+  // to click to discover work waiting for them.
+  const [expanded, setExpanded] = useState<Set<string>>(() => {
+    const initial = new Set<string>();
+    for (const d of initialWorkspaceDrafts) {
+      if (d.content && findBlanks(d.content).length > 0) initial.add(`wsdraft:${d.id}`);
+    }
+    for (const doc of documents) {
+      const secondDraft = childDocuments.find(
+        (c) => c.parent_document_id === doc.id && c.doc_type === "second_draft",
+      );
+      const fillTarget = secondDraft?.draft_text ? secondDraft : (doc.draft_text ? doc : null);
+      if (fillTarget?.draft_text && findBlanks(fillTarget.draft_text).length > 0) {
+        initial.add(`doc:${doc.id}`);
+      }
+    }
+    return initial;
+  });
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [uploadError, setUploadError] = useState("");
@@ -704,7 +721,8 @@ export default function CaseDocumentsTable({
                 const blanks = fillTarget?.draft_text ? findBlanks(fillTarget.draft_text) : [];
 
                 const pill =
-                  doc.status === "draft" ? <Pill kind="draft" label="Draft" />
+                  doc.status === "draft"
+                    ? <Pill kind="draft" label={blanks.length > 0 ? `Draft · ${blanks.length} blank${blanks.length === 1 ? "" : "s"}` : "Draft"} />
                   : doc.status === "pending_review" ? <Pill kind="review" label="In review" />
                   : doc.status === "approved" ? <Pill kind="approved" label="Approved" />
                   : doc.status === "delivered" ? <Pill kind="approved" label="Delivered" />
@@ -757,8 +775,8 @@ export default function CaseDocumentsTable({
 
                     {outOfDate && <div className="cdt-detail-ctl"><RegenerateDocButton documentId={doc.id} subtle /></div>}
 
-                    {/* Fill-in blanks — client, non-draft docs that still have [[blanks]]. */}
-                    {!isAttorney && doc.status !== "draft" && fillTarget?.draft_text && (
+                    {/* Fill-in blanks — client, any doc with [[blanks]] regardless of draft/review status. */}
+                    {!isAttorney && fillTarget?.draft_text && (
                       <DocumentInfoNeeded documentId={fillTarget.id} draftText={fillTarget.draft_text} documentTitle={doc.title} />
                     )}
 
