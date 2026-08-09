@@ -24,6 +24,9 @@ import KeyDeadlines from "@/components/KeyDeadlines";
 import StrengthCheckCard from "@/components/StrengthCheckCard";
 import CaseDocumentsTable from "@/components/CaseDocumentsTable";
 import AttorneyFreestyleChat from "@/components/AttorneyFreestyleChat";
+import SectionJumpBar from "@/components/SectionJumpBar";
+import CollapsibleText from "@/components/CollapsibleText";
+import LegalStrategyCard from "@/components/LegalStrategyCard";
 import { buildMatterTasks } from "@/lib/matter-tasks";
 import { buildFileDeck } from "@/lib/file-deck";
 import type { CaseFile, FactItem, Document, Profile, ConsultRequest, ConsultWrapUp, RequestedAttachment, GovFormInstrument, Attachment, ClientWorkspaceDraft } from "@/lib/types";
@@ -328,7 +331,7 @@ export default function ClientFileView({
       {caseFile.summary && (
         <div className="lf-card lf-card-full">
           <div className="lf-card-label">Case Summary</div>
-          <p className="lf-summary">{caseFile.summary}</p>
+          <CollapsibleText text={caseFile.summary} />
         </div>
       )}
 
@@ -348,46 +351,42 @@ export default function ClientFileView({
       </div>
 
       {strategy && (
-        <div className="lf-card lf-card-full lf-card-strategy" id="legal-strategy">
-          <div className="lf-card-label">
-            Legal Strategy
-            {!isAttorney && <span className="lf-plain-caption">Your game plan, in plain terms</span>}
-          </div>
-          {strategy.summary && <p className="lf-strategy-summary">{strategy.summary}</p>}
-
-          <div className="lf-strategy-grid">
-            {strategy.strengths?.length > 0 && (
-              <div>
-                <div className="lf-strategy-sub">Strengths</div>
-                <ul className="lf-list lf-list-confirmed">
-                  {strategy.strengths.map((s, i) => <li key={i}>{s}</li>)}
-                </ul>
-              </div>
-            )}
-            {strategy.risks?.length > 0 && (
-              <div>
-                <div className="lf-strategy-sub">Risks</div>
-                <ul className="lf-list lf-list-gap">
-                  {strategy.risks.map((r, i) => <li key={i}>{r}</li>)}
-                </ul>
-              </div>
-            )}
-          </div>
-
-          {strategy.instruments?.length > 0 && (
-            <div className="lf-instruments">
-              <div className="lf-strategy-sub">
-                Suggested Instruments
-                {!isAttorney && <span className="lf-plain-caption lf-plain-caption-sub">Documents we can create — ask for one in your legal chat</span>}
-              </div>
-              <ul className="lf-list">
-                {strategy.instruments.map((inst, i) => (
-                  <li key={i}>{inst}</li>
-                ))}
-              </ul>
+        isAttorney ? (
+          // Attorney view keeps the original full-list layout.
+          <div className="lf-card lf-card-full lf-card-strategy" id="legal-strategy">
+            <div className="lf-card-label">Legal Strategy</div>
+            {strategy.summary && <p className="lf-strategy-summary">{strategy.summary}</p>}
+            <div className="lf-strategy-grid">
+              {strategy.strengths?.length > 0 && (
+                <div>
+                  <div className="lf-strategy-sub">Strengths</div>
+                  <ul className="lf-list lf-list-confirmed">
+                    {strategy.strengths.map((s, i) => <li key={i}>{s}</li>)}
+                  </ul>
+                </div>
+              )}
+              {strategy.risks?.length > 0 && (
+                <div>
+                  <div className="lf-strategy-sub">Risks</div>
+                  <ul className="lf-list lf-list-gap">
+                    {strategy.risks.map((r, i) => <li key={i}>{r}</li>)}
+                  </ul>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+            {strategy.instruments?.length > 0 && (
+              <div className="lf-instruments">
+                <div className="lf-strategy-sub">Suggested Instruments</div>
+                <ul className="lf-list">
+                  {strategy.instruments.map((inst, i) => <li key={i}>{inst}</li>)}
+                </ul>
+              </div>
+            )}
+          </div>
+        ) : (
+          // Client view: chips + collapsible groups to cut visual weight.
+          <LegalStrategyCard strategy={strategy} isAttorney={false} />
+        )
       )}
     </>
   );
@@ -455,6 +454,17 @@ export default function ClientFileView({
         <CaseHub caseFile={caseFile} tasks={matterTasks} deck={deck} />
 
         <FileTiles tiles={deck.tiles} />
+
+        <SectionJumpBar
+          sections={[
+            "documents",
+            ...(deck.docketCount > 0 ? (["deadlines"] as const) : []),
+            "case-details",
+            "facts",
+            "strength",
+            "help",
+          ]}
+        />
 
         {documentsTable}
 

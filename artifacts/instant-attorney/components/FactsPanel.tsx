@@ -4,10 +4,10 @@ import { useState } from "react";
 import type { FactItem } from "@/lib/types";
 import ProvabilityFactText from "@/components/ProvabilityFactText";
 
-// How many items each fact card shows before collapsing the rest. The full list
-// is always available — clicking the card just reveals it; nothing is ever
-// hidden permanently.
-const VISIBLE_LIMIT = 20;
+// Default visible-item cap for FactCard. Callers can override via the `limit`
+// prop. The full list is always available — clicking the card expands it; nothing
+// is hidden permanently.
+const DEFAULT_LIMIT = 20;
 
 interface PlaceholderGroup {
   /** Stable id of the document these blanks came from (React key). */
@@ -25,8 +25,8 @@ interface FactsPanelProps {
   isAttorney: boolean;
 }
 
-// One fact card. When it holds more than VISIBLE_LIMIT items the whole card
-// becomes a toggle: clicking (or Enter/Space) expands to the full list and back.
+// One fact card. When it holds more than `limit` items the whole card becomes a
+// toggle: clicking (or Enter/Space) expands to the full list and back.
 function FactCard({
   cardId,
   title,
@@ -36,6 +36,7 @@ function FactCard({
   countClass,
   listClass,
   idPrefix,
+  limit = DEFAULT_LIMIT,
 }: {
   cardId?: string;
   title: string;
@@ -45,10 +46,12 @@ function FactCard({
   countClass: string;
   listClass: string;
   idPrefix?: string;
+  /** Max items shown before a "Show all" toggle appears. Default 20. */
+  limit?: number;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const expandable = items.length > VISIBLE_LIMIT;
-  const shown = expanded ? items : items.slice(0, VISIBLE_LIMIT);
+  const expandable = items.length > limit;
+  const shown = expanded ? items : items.slice(0, limit);
   const hiddenCount = items.length - shown.length;
   const toggle = () => setExpanded((v) => !v);
 
@@ -112,6 +115,7 @@ export default function FactsPanel({ confirmed, gaps, placeholderGroups, isAttor
           items={confirmed}
           countClass="lf-count"
           listClass="lf-list lf-list-confirmed"
+          limit={5}
         />
         <FactCard
           cardId="fact-gaps"
