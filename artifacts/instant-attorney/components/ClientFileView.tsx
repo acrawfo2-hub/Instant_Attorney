@@ -31,22 +31,14 @@ import type { CaseFile, FactItem, Document, Profile, ConsultRequest, ConsultWrap
 import { docTypeLabel, personDisplayName, coerceWizardType } from "@/lib/types";
 import { FIRM_CONTACT_EMAIL } from "@/lib/firm";
 
-// The consumer Living File is a DECK, not a document. The complaint it answers:
-// the page hit the client with a wall of text and buried both the assistant and
-// her own finished drafts inside it.
+// Client case file — tab-based layout, one section visible at a time.
 //
-// The shape now, in the order a good lawyer walks a client through a matter:
+// Client branch (if !isAttorney) renders:
+//   – optional alert strips (deadline warning, consult callout, post-consult card)
+//   – CaseFileTabs — five tabs: Documents | Case Details | Facts | Strength | Help
+//   – AskAssistantBar — sticky "Continue legal chat" bar
 //
-//   1. the one date that could hurt          (only when there is one)
-//   2. where things stand + ONE next step    (with the biggest button on the page)
-//   3. the drafts already written            (one tap, never hunted for)
-//   4. six tiles — the map of the file       (same six, same order, live counts)
-//   5. documents                             (the working surface)
-//   6. everything else, behind its own tile  (dates, details, facts, people)
-//
-// Nothing was deleted: every card that used to be stacked on the page still
-// renders, inside whichever section its tile names. The attorney view keeps its
-// own layout (Mission Control + the full reference stack) below.
+// Attorney branch renders Mission Control + the full reference stack.
 
 // ── Matter badge ─────────────────────────────────────────────────────────────
 
