@@ -486,6 +486,7 @@ export default function ClientFileView({
 
         <CaseFileTabs
           chatHref={chatHref}
+          caseFileId={caseFile.id}
           documentsBadge={docsBadgeCount > 0 ? docsBadgeCount : null}
           documentsPanel={
             <>

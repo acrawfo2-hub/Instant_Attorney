@@ -1,9 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
-
-type TabId = "documents" | "case-details" | "facts" | "strength" | "help";
+import { type TabId, readStoredTab, writeStoredTab } from "@/lib/tab-storage";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "documents",    label: "Documents" },
@@ -15,6 +14,7 @@ const TABS: { id: TabId; label: string }[] = [
 
 export default function CaseFileTabs({
   chatHref,
+  caseFileId,
   documentsPanel,
   caseDetailsPanel,
   factsPanel,
@@ -23,6 +23,8 @@ export default function CaseFileTabs({
   documentsBadge,
 }: {
   chatHref: string;
+  /** Used to namespace the localStorage key so each case file remembers its own tab. */
+  caseFileId: string;
   documentsPanel: React.ReactNode;
   caseDetailsPanel: React.ReactNode;
   factsPanel: React.ReactNode;
@@ -32,7 +34,23 @@ export default function CaseFileTabs({
    *  the Documents pill when > 0. Pass null or 0 to show nothing. */
   documentsBadge?: number | null;
 }) {
+  // Default to "documents"; a useEffect restores the persisted tab after mount
+  // so the server-rendered HTML and the first client paint agree (no hydration
+  // mismatch), then the correct tab is selected before the user can interact.
   const [active, setActive] = useState<TabId>("documents");
+
+  useEffect(() => {
+    // Always reset — resolves to stored tab or the default "documents".
+    // Running unconditionally (not just when stored != null) prevents a previous
+    // case's active tab from bleeding into a newly-opened case that has no
+    // saved value yet.
+    setActive(readStoredTab(caseFileId) ?? "documents");
+  }, [caseFileId]);
+
+  function switchTab(id: TabId) {
+    setActive(id);
+    writeStoredTab(caseFileId, id);
+  }
 
   const panels: Record<TabId, React.ReactNode> = {
     "documents":    documentsPanel,
@@ -51,7 +69,7 @@ export default function CaseFileTabs({
               key={id}
               type="button"
               className={`lf-tab-pill${active === id ? " lf-tab-pill-active" : ""}`}
-              onClick={() => setActive(id)}
+              onClick={() => switchTab(id)}
               aria-selected={active === id}
               role="tab"
             >
