@@ -427,6 +427,27 @@ export default function ClientFileView({
 
   // ── Client layout — tab-based ─────────────────────────────────────────────
 
+  // Count items (workspace drafts + documents) that still have unfilled [[blanks]].
+  // This is the server-rendered initial value for the Documents tab badge;
+  // CaseDocumentsTable's own callout tracks the live count as blanks are filled
+  // inline (we can't mirror those client-side state updates from the server).
+  const docsBadgeCount = isAttorney ? 0 : (() => {
+    let n = 0;
+    // Non-promoted workspace drafts (promoted ones show under Drafts & documents)
+    for (const d of workspaceDrafts) {
+      if (!d.promoted_document_id && d.content && placeholderFields(d.content).length > 0) n++;
+    }
+    // All documents — prefer second-draft child over the original when both exist
+    for (const doc of documents) {
+      const secondDraft = childDocuments.find(
+        (c) => c.parent_document_id === doc.id && c.doc_type === "second_draft",
+      );
+      const target = secondDraft?.draft_text ? secondDraft : (doc.draft_text ? doc : null);
+      if (target?.draft_text && placeholderFields(target.draft_text).length > 0) n++;
+    }
+    return n;
+  })();
+
   if (!isAttorney && matterTasks && deck) {
     const helpPanel = (
       <>
@@ -465,6 +486,7 @@ export default function ClientFileView({
 
         <CaseFileTabs
           chatHref={chatHref}
+          documentsBadge={docsBadgeCount > 0 ? docsBadgeCount : null}
           documentsPanel={
             <>
               {documentsTable}
