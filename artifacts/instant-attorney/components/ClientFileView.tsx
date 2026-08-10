@@ -15,8 +15,6 @@ import {
 } from "@/lib/jurisdiction";
 import type { RoadmapAiOverlay } from "@/lib/roadmap-types";
 import PostConsultCard from "@/components/PostConsultCard";
-import CaseHub from "@/components/CaseHub";
-import FileTiles from "@/components/FileTiles";
 import FileSection from "@/components/FileSection";
 import FileAlertStrip from "@/components/FileAlertStrip";
 import AskAssistantBar from "@/components/AskAssistantBar";
@@ -24,7 +22,7 @@ import KeyDeadlines from "@/components/KeyDeadlines";
 import StrengthCheckCard from "@/components/StrengthCheckCard";
 import CaseDocumentsTable from "@/components/CaseDocumentsTable";
 import AttorneyFreestyleChat from "@/components/AttorneyFreestyleChat";
-import SectionJumpBar from "@/components/SectionJumpBar";
+import CaseFileTabs from "@/components/CaseFileTabs";
 import CollapsibleText from "@/components/CollapsibleText";
 import LegalStrategyCard from "@/components/LegalStrategyCard";
 import { buildMatterTasks } from "@/lib/matter-tasks";
@@ -435,9 +433,31 @@ export default function ClientFileView({
     </div>
   );
 
-  // ── Client layout — the deck ───────────────────────────────────────────────
+  // ── Client layout — tab-based ─────────────────────────────────────────────
 
   if (!isAttorney && matterTasks && deck) {
+    const helpPanel = (
+      <>
+        <ExistingCounselCard
+          caseFileId={caseFile.id}
+          counselIntakeAt={caseFile.counsel_intake_at}
+          hasExistingCounsel={caseFile.has_existing_counsel}
+          existingCounselName={caseFile.existing_counsel_name}
+          counselEngagementGoal={caseFile.counsel_engagement_goal}
+          mode="client"
+        />
+        <div className="lf-card lf-card-full lf-contact-card">
+          <div className="lf-card-label">Questions?</div>
+          <p className="lf-contact-text">
+            Email us at{" "}
+            <a className="lf-contact-email" href={`mailto:${FIRM_CONTACT_EMAIL}`}>{FIRM_CONTACT_EMAIL}</a>{" "}
+            and we&apos;ll get back to you.
+          </p>
+        </div>
+        {attorneyAssessment}
+      </>
+    );
+
     return (
       <div className="lf-grid">
         {prepBanner}
@@ -451,87 +471,27 @@ export default function ClientFileView({
           />
         )}
 
-        <CaseHub caseFile={caseFile} tasks={matterTasks} deck={deck} />
-
-        <FileTiles tiles={deck.tiles} />
-
-        <SectionJumpBar
-          sections={[
-            "documents",
-            ...(deck.docketCount > 0 ? (["deadlines"] as const) : []),
-            "case-details",
-            "facts",
-            "strength",
-            "help",
-          ]}
+        <CaseFileTabs
           chatHref={chatHref}
+          documentsPanel={
+            <>
+              {documentsTable}
+              {deck.docketCount > 0 && (
+                <KeyDeadlines facts={facts} jurisdiction={caseFile.jurisdiction} />
+              )}
+            </>
+          }
+          caseDetailsPanel={aboutBlocks}
+          factsPanel={factsBlocks}
+          strengthPanel={
+            <StrengthCheckCard
+              caseFileId={caseFile.id}
+              check={caseFile.legal_strategy?.strength_check ?? null}
+              isAttorney={false}
+            />
+          }
+          helpPanel={helpPanel}
         />
-
-        {documentsTable}
-
-        {deck.docketCount > 0 && (
-          <FileSection
-            id="deadlines"
-            title="Key dates"
-            hint="Every deadline we can compute from the dates on your file, and what each one is based on"
-          >
-            <KeyDeadlines facts={facts} jurisdiction={caseFile.jurisdiction} />
-          </FileSection>
-        )}
-
-        <FileSection
-          id="case-details"
-          title="Your case details"
-          hint="What this matter is about, what you want out of it, and the strategy — updates as you go"
-        >
-          {aboutBlocks}
-        </FileSection>
-
-        <FileSection
-          id="facts"
-          title="Facts on file"
-          hint="What's confirmed, what's still open, and your what-if preferences"
-        >
-          {factsBlocks}
-        </FileSection>
-
-        <FileSection
-          id="strength"
-          title="How strong is my position?"
-          hint="An honest, adversarial read of your case — run it whenever the facts change"
-        >
-          <StrengthCheckCard
-            caseFileId={caseFile.id}
-            check={caseFile.legal_strategy?.strength_check ?? null}
-            isAttorney={false}
-          />
-        </FileSection>
-
-        <FileSection
-          id="help"
-          title="Talk to a person"
-          hint="Reach the firm, tell us about a lawyer you've already hired, and read your attorney's assessment"
-        >
-          <ExistingCounselCard
-            caseFileId={caseFile.id}
-            counselIntakeAt={caseFile.counsel_intake_at}
-            hasExistingCounsel={caseFile.has_existing_counsel}
-            existingCounselName={caseFile.existing_counsel_name}
-            counselEngagementGoal={caseFile.counsel_engagement_goal}
-            mode="client"
-          />
-
-          <div className="lf-card lf-card-full lf-contact-card">
-            <div className="lf-card-label">Questions?</div>
-            <p className="lf-contact-text">
-              Email us at{" "}
-              <a className="lf-contact-email" href={`mailto:${FIRM_CONTACT_EMAIL}`}>{FIRM_CONTACT_EMAIL}</a>{" "}
-              and we&apos;ll get back to you.
-            </p>
-          </div>
-
-          {attorneyAssessment}
-        </FileSection>
 
         <AskAssistantBar href={chatHref} />
       </div>
