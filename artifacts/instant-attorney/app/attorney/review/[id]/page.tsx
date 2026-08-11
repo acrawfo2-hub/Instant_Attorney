@@ -6,6 +6,7 @@ import Link from "next/link";
 import type { Attachment, Document, DocumentComment, DocumentReviewRun, DocumentImprovement, DocumentQaCitation } from "@/lib/types";
 import { docTypeLabel, personDisplayName, citationBlocksApproval } from "@/lib/types";
 import AccountMenu from "@/components/AccountMenu";
+import AttorneyContextHeader from "@/components/AttorneyContextHeader";
 import { parseDrafterResponse } from "@/lib/wizard-parsing";
 
 interface ChatMessage {
@@ -509,6 +510,15 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
 
   return (
     <div className="atty-review-shell">
+      <AttorneyContextHeader currentArea="workbench" context={{
+        documentId: doc.id, documentTitle: doc.title, documentStatus: doc.status,
+        revision: secondDraft ? "Attorney revision" : "Client draft",
+        caseFileId: doc.case_files.id, clientId: doc.user_id,
+        clientName: personDisplayName(doc.profiles, "Client"),
+        matter: doc.case_files.matter_subtype?.replaceAll("_", " ") || doc.case_files.matter_type || "Matter",
+        dirty: clientNotes !== (doc.attorney_notes ?? "") || secondDraftPrompt !== (doc.attorney_second_draft_prompt ?? ""),
+        unresolvedQa: citations.some((citation) => citationBlocksApproval(citation) && !citation.waived),
+      }} />
       <header className="atty-review-header">
         <button className="atty-back" onClick={() => router.push("/attorney")}>← Dashboard</button>
         <div className="atty-review-title">
