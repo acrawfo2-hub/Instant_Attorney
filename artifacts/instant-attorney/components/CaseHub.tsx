@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { CaseFile } from "@/lib/types";
 import type { MatterTasksResult } from "@/lib/matter-tasks";
 import type { FileDeck } from "@/lib/file-deck";
+import type { ConsultAction } from "@/lib/consult-action";
 
 // Keep the landing page focused on orientation and one clear action. Supporting
 // work remains available in Drafted documents, Uploads, and the legal chat.
@@ -25,10 +26,12 @@ const ArrowIcon = () => (
 export default function CaseHub({
   caseFile,
   deck,
+  consultAction,
 }: {
   caseFile: CaseFile;
   tasks: MatterTasksResult;
   deck: FileDeck;
+  consultAction?: ConsultAction;
 }) {
   const chatHref = `/chat?caseFileId=${caseFile.id}`;
   const askHref = (ask: string) => `${chatHref}&ask=${encodeURIComponent(ask)}`;
@@ -79,6 +82,17 @@ export default function CaseHub({
           Updates you accept in chat refresh your case file.
         </p>
       </div>
+
+      {/* The one supporting action that isn't a document: reaching a person.
+          Everything else #95 stripped from this block lives in the tile map. */}
+      {consultAction && (
+        <div className="lf-hub-consult">
+          <span>Want to talk through this matter with an attorney?</span>
+          <Link href={consultAction.href} className="lf-hub-consult-action">
+            {consultAction.label} <span aria-hidden>→</span>
+          </Link>
+        </div>
+      )}
     </section>
   );
 }

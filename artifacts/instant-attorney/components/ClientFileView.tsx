@@ -28,6 +28,7 @@ import { buildFileDeck } from "@/lib/file-deck";
 import type { CaseFile, FactItem, Document, Profile, ConsultRequest, ConsultWrapUp, RequestedAttachment, GovFormInstrument, Attachment, ClientWorkspaceDraft } from "@/lib/types";
 import { docTypeLabel, personDisplayName, coerceWizardType } from "@/lib/types";
 import { FIRM_CONTACT_EMAIL } from "@/lib/firm";
+import { getConsultAction } from "@/lib/consult-action";
 
 // The consumer Living File is a DECK, not a document. The complaint it answers:
 // the page hit the client with a wall of text and buried both the assistant and
@@ -178,6 +179,7 @@ export default function ClientFileView({
     Boolean(consultRequest) &&
     consultRequest?.status !== "cancelled" &&
     consultRequest?.status !== "completed";
+  const consultAction = getConsultAction(consultRequest, hasConsultSub);
 
   // The client has "brought in a document" once at least one upload exists that
   // didn't fail to store. Document Review only makes sense against a real
@@ -529,7 +531,12 @@ export default function ClientFileView({
           <>
             {/* The map already rendered above; the overview adds the reading
                 behind it, not a second copy of the tiles. */}
-            <CaseHub caseFile={caseFile} tasks={matterTasks} deck={deck} />
+            <CaseHub
+              caseFile={caseFile}
+              tasks={matterTasks}
+              deck={deck}
+              consultAction={!isAttorneyUser ? consultAction : undefined}
+            />
             <ClientCaseMemo caseFile={caseFile} confirmedFacts={confirmed} deck={deck} chatHref={chatHref} />
           </>
         )}

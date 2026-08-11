@@ -11,6 +11,7 @@ import MatterSwitcher from "@/components/MatterSwitcher";
 import { parseRoadmapOverlay } from "@/lib/roadmap-snapshot";
 import type { RoadmapAiOverlay } from "@/lib/roadmap-types";
 import { toMatterSwitcherItem } from "@/lib/matter-switcher";
+import { getConsultAction } from "@/lib/consult-action";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
@@ -183,6 +184,7 @@ export default async function FileDetailPage({
     href: `/chat?caseFileId=${caseFile.id}&mode=freestyle`,
     label: "Legal chat",
   };
+  const consultAction = getConsultAction(consultRequest, hasConsultSub);
 
   return (
     <div className="lf-shell">
@@ -211,6 +213,11 @@ export default async function FileDetailPage({
           {!isAttorneyUser && (
             <Link href={`/dashboard/${caseFile.id}/financials`} className="lf-logout-btn" title="Assets, debts, and income worksheet">
               Money &amp; property
+            </Link>
+          )}
+          {!isAttorneyUser && (
+            <Link href={consultAction.href} className="lf-header-consult-btn">
+              {consultAction.label}
             </Link>
           )}
           <Link href={headerCta.href} className="lf-begin-btn">
