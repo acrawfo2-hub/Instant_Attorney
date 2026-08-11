@@ -44,7 +44,8 @@ export function pickFirstValidWizard(wizards: string[] | undefined): WizardType 
 }
 
 /** Reuse an in-progress or pre-warmed primary draft (never child documents).
- *  When a planKey is given it is the document's stable identity — match on it
+ *  When a planKey is given it is the document's stable identity — match on the
+ *  dedicated column (rather than mutable JSON metadata)
  *  so two documents sharing the general_document engine stay distinct. Without
  *  a planKey (legacy / typed engines) fall back to matching by doc_type. */
 export async function findReusableDocument(
@@ -64,7 +65,7 @@ export async function findReusableDocument(
     .limit(1);
 
   if (planKey) {
-    query = query.eq("content_json->>plan_key", planKey);
+    query = query.eq("instrument_key", planKey);
   } else {
     query = query.eq("doc_type", wizardType);
   }
@@ -98,7 +99,7 @@ export async function findPrimaryDocument(
     .limit(1);
 
   if (planKey) {
-    query = query.eq("content_json->>plan_key", planKey);
+    query = query.eq("instrument_key", planKey);
   } else {
     query = query.eq("doc_type", wizardType);
   }
@@ -390,4 +391,3 @@ export async function finalizeDocumentSubmission(
 
   return doc as Document;
 }
-

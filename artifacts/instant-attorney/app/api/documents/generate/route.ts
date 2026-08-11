@@ -8,7 +8,7 @@ import type { CaseFile, FactItem, Profile, WizardType } from "@/lib/types";
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
 export async function POST(req: NextRequest) {
-  const { caseFileId, wizardType, wizardData, title } = await req.json();
+  const { caseFileId, wizardType, wizardData, title, instrumentKey } = await req.json();
 
   if (!caseFileId || !wizardType || !wizardData) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -79,6 +79,10 @@ export async function POST(req: NextRequest) {
       case_file_id: caseFileId,
       user_id: userId,
       doc_type: wizardType,
+      instrument_key:
+        typeof instrumentKey === "string" && instrumentKey.trim()
+          ? instrumentKey.trim()
+          : null,
       title: docTitle,
       status: "draft",
       content_json: wizardData,

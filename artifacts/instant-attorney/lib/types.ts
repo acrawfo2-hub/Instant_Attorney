@@ -601,6 +601,8 @@ export interface Document {
   user_id: string;
   parent_document_id: string | null;
   doc_type: DocType;
+  /** Stable preset identity; unlike the title, this survives renames/regeneration. */
+  instrument_key: string | null;
   title: string;
   status: DocumentStatus;
   content_json: Record<string, unknown>;

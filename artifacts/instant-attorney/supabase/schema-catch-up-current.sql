@@ -277,3 +277,27 @@ from auth.users u
 left join public.profiles p on p.id = u.id
 left join public.subscriptions s on s.user_id = u.id
 where lower(u.email) in ('vicky.crawford12@gmail.com');
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Stage 47 — stable document instrument identity
+-- ═══════════════════════════════════════════════════════════════════════════
+alter table public.documents
+  add column if not exists instrument_key text;
+
+update public.documents
+set instrument_key = nullif(btrim(content_json->>'plan_key'), '')
+where instrument_key is null
+  and jsonb_typeof(content_json->'plan_key') = 'string';
+
+alter table public.documents
+  drop constraint if exists documents_instrument_key_not_blank;
+alter table public.documents
+  add constraint documents_instrument_key_not_blank
+  check (instrument_key is null or btrim(instrument_key) <> '');
+
+create index if not exists documents_instrument_key_lookup_idx
+  on public.documents (case_file_id, user_id, instrument_key, updated_at desc)
+  where instrument_key is not null and parent_document_id is null;
+
+comment on column public.documents.instrument_key is
+  'Stable instrument/preset identity. Titles and content_json may change without changing this key.';

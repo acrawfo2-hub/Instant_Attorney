@@ -297,6 +297,7 @@ export async function POST(req: NextRequest) {
         draft_text: draftText,
         status: nextStatus,
         updated_at: now,
+        ...(planKeyStr ? { instrument_key: planKeyStr } : {}),
       };
       const existingCj = (existingDoc.content_json as Record<string, unknown>) ?? {};
       if (truncated || (planKeyStr && existingCj.plan_key !== planKeyStr)) {
@@ -322,6 +323,7 @@ export async function POST(req: NextRequest) {
           case_file_id: caseFileId,
           user_id: userId,
           doc_type: wizardType,
+          instrument_key: planKeyStr ?? null,
           title: `${documentLabel} — ${new Date().toLocaleDateString()}`,
           content_json: {
             init_response: fullResponse,
