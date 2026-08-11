@@ -123,13 +123,18 @@ export default async function AttorneyDashboardPage() {
                       <ReviewClock submittedAt={doc.submitted_at ?? null} />
                     </td>
                     <td className="atty-td-flags">
+                      {typeof doc.content_json?.workspace_revision === "number" && doc.content_json.workspace_revision > 1 && (
+                        <span className="atty-flag atty-flag--consult" title="Client edited this document after submission">
+                          Revised v{doc.content_json.workspace_revision}
+                        </span>
+                      )}
                       {overdue && <span className="atty-flag atty-flag--overdue">Overdue</span>}
                       {consultRec && (
                         <span className="atty-flag atty-flag--consult" title="Living File recommends a consult">
                           Consult rec.
                         </span>
                       )}
-                      {!overdue && !consultRec && <span className="atty-td-muted">—</span>}
+                      {!overdue && !consultRec && !(typeof doc.content_json?.workspace_revision === "number" && doc.content_json.workspace_revision > 1) && <span className="atty-td-muted">—</span>}
                     </td>
                     <td>{personDisplayName(doc.profiles)}</td>
                     <td className="atty-td-doc">

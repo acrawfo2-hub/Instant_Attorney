@@ -147,7 +147,16 @@ export default function ChatDraftsPanel({
         body: JSON.stringify({ title: toSave.title, content: toSave.content }),
       });
       ok = res.ok;
-      if (ok) setDirty(false);
+      if (ok) {
+        const payload = await res.json().catch(() => null);
+        if (payload?.draft) {
+          setDrafts((prev) => prev.map((d) => d.id === id ? { ...d, ...payload.draft } : d));
+          if (payload.draft.revision_notice && payload.draft.revision_action !== "unpromoted") {
+            setNotice(payload.draft.revision_notice);
+          }
+        }
+        setDirty(false);
+      }
     } catch {
       /* keep dirty; retry on next edit or blur */
     } finally {
@@ -338,7 +347,11 @@ export default function ChatDraftsPanel({
             {active.promoted_document_id ? (
               <span className="fc-draft-promoted">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ verticalAlign: "middle", marginRight: 4 }}><polyline points="20 6 9 17 4 12"/></svg>
-                Sent to your attorney for review — you&apos;ll find it under &ldquo;With your attorney&rdquo; on your case file.
+                {active.revision_action === "create_revision"
+                  ? "Saved as a new revision; the approved version is unchanged. Another attorney review is pending."
+                  : active.revision_action === "revise_in_place"
+                    ? "Revision saved. The earlier review was superseded and another attorney review is pending."
+                    : "Sent to your attorney for review — you’ll find it under “With your attorney” on your case file."}
               </span>
             ) : (
               <>

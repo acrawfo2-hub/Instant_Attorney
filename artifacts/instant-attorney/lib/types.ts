@@ -593,6 +593,10 @@ export interface ClientWorkspaceDraft {
   promoted_document_id: string | null;
   created_at: string;
   updated_at: string;
+  /** Returned after a post-submission save so the editor can explain its disposition. */
+  revision_action?: "unpromoted" | "revise_in_place" | "create_revision";
+  attorney_review_pending?: boolean;
+  revision_notice?: string;
 }
 
 export interface Document {
