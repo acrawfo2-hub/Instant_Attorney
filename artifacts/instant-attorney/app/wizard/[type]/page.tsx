@@ -30,6 +30,12 @@ interface Message {
   content: string;
 }
 
+interface ValidationReport {
+  ready_for_attorney_review: boolean;
+  errors: Array<{ code: string; message: string }>;
+  warnings: Array<{ code: string; message: string }>;
+}
+
 // Append dictated text to whatever the client has already typed in a field, so
 // voice is purely additive (and they can still edit before sending).
 function appendDictation(existing: string | undefined, dictated: string): string {
@@ -116,6 +122,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   const [justUpdated, setJustUpdated] = useState(false);
   const [truncatedDraft, setTruncatedDraft] = useState(false);
   const [gapSyncWarning, setGapSyncWarning] = useState(false);
+  const [validationReport, setValidationReport] = useState<ValidationReport | null>(null);
 
   // Pre-draft "starter questions": surfaced immediately while the first draft is
   // generated live in the background, so the client can answer during the wait.
@@ -181,7 +188,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
       draft_text: string;
       status?: string;
       submitted_at?: string | null;
-      content_json?: { init_response?: string };
+      content_json?: { init_response?: string; validation_report?: ValidationReport };
     }
   ) {
     const fakeResponse = `---DRAFT READY---\n${doc.draft_text}\n---END DRAFT---\n\n${doc.content_json?.init_response ?? ""}`;
@@ -192,6 +199,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
     lastAssistantRef.current = fakeResponse;
     setDocumentId(doc.id);
     docIdRef.current = doc.id;
+    setValidationReport(doc.content_json?.validation_report ?? null);
     if (doc.status === "pending_review") {
       setSubmittedForReview(true);
       setSubmittedAt(doc.submitted_at ?? null);
@@ -478,7 +486,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
         throw new Error(body?.error || `Server error ${res.status}`);
       }
 
-      const data = await res.json() as { text: string; documentId: string | null; truncated?: boolean; gapSyncWarning?: boolean; alreadyFinalized?: boolean; status?: string | null };
+      const data = await res.json() as { text: string; documentId: string | null; truncated?: boolean; gapSyncWarning?: boolean; alreadyFinalized?: boolean; status?: string | null; validationReport?: ValidationReport | null };
       const fullText = data.text ?? "";
 
       if (data.documentId) {
@@ -487,6 +495,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
       }
       if (data.truncated) setTruncatedDraft(true);
       setGapSyncWarning(Boolean(data.gapSyncWarning));
+      setValidationReport(data.validationReport ?? null);
 
       // The server resolved us to an already-finalized / in-review primary document
       // instead of overwriting it. Reflect that state so the client sees their real
@@ -863,6 +872,14 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
 
         {/* Right: Questions & Status */}
         <div className="wiz-qa-pane">
+          {validationReport && validationReport.errors.length > 0 && (
+            <section className="doc-truncation-notice" role="alert" aria-label="Instrument validation errors">
+              <div>
+                <strong>Not ready for attorney review</strong>
+                <ul>{validationReport.errors.map((issue, index) => <li key={`${issue.code}-${index}`}>{issue.message}</li>)}</ul>
+              </div>
+            </section>
+          )}
           {submittedForReview ? (
             <div className="wiz-review-submitted">
               <div className="wiz-review-icon">✓</div>

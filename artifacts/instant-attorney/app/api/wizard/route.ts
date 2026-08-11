@@ -11,6 +11,7 @@ import { BYPASS_USER_ID, WIZARD_LABELS } from "@/lib/types";
 import type { WizardType, CaseFile, FactItem, Attachment, RequestedAttachment } from "@/lib/types";
 import { logTruncation } from "@/lib/truncation-logger";
 import { maxOutputTokensFor, limitSignalMetadata } from "@/lib/token-limits";
+import { resolveInstrumentProfile, validateInstrument } from "@/lib/instruments/validator";
 
 // Allow up to 5 minutes for this route — legal doc generation can be slow
 export const maxDuration = 300;
@@ -266,6 +267,19 @@ export async function POST(req: NextRequest) {
   const draftText = extractDraftText(fullResponse) ?? (fullResponse.trim() || null);
   let savedDocId: string | undefined = documentId as string | undefined;
 
+  // Readiness is a deterministic quality-gate decision, never a model-authored
+  // STATUS line. Citation-like authority references are retained as metadata;
+  // prose that merely says "authority" is deliberately not enough.
+  const authorityReferences = fullResponse.match(/(?:\b\d+\s+U\.S\.C\.\s*§+\s*[\w.-]+|\b(?:Tex\.|Texas)\s+(?:Gov't|Estates|Property|Trust)\s+Code\s*§+\s*[\w.-]+)/gi) ?? [];
+  const validationReport = draftText ? validateInstrument({
+    profile: resolveInstrumentProfile({ wizardType, instrument, planKey: planKeyStr }),
+    document: { text: draftText, authorityMetadata: authorityReferences.length ? { references: authorityReferences } : undefined },
+    livingFile: {
+      facts: facts.map((fact) => ({ description: fact.description, status: fact.status })),
+      jurisdiction: caseFile?.jurisdiction ?? null,
+    },
+  }) : null;
+
   if (draftText) {
     const now = new Date().toISOString();
 
@@ -297,15 +311,13 @@ export async function POST(req: NextRequest) {
         draft_text: draftText,
         status: nextStatus,
         updated_at: now,
-      };
-      const existingCj = (existingDoc.content_json as Record<string, unknown>) ?? {};
-      if (truncated || (planKeyStr && existingCj.plan_key !== planKeyStr)) {
-        update.content_json = {
-          ...existingCj,
+        content_json: {
+          ...((existingDoc.content_json as Record<string, unknown>) ?? {}),
+          validation_report: validationReport,
           ...(truncated ? { truncated: true } : {}),
           ...(planKeyStr ? { plan_key: planKeyStr } : {}),
-        };
-      }
+        },
+      };
       const { error: updateErr } = await writeDb
         .from("documents")
         .update(update)
@@ -328,6 +340,7 @@ export async function POST(req: NextRequest) {
             ...(truncated ? { truncated: true } : {}),
             ...(planKeyStr ? { plan_key: planKeyStr } : {}),
             ...(wizardType === "improve_draft" && baseAttachmentId ? { base_attachment_id: baseAttachmentId } : {}),
+            validation_report: validationReport,
           },
           draft_text: draftText,
           status: "draft",
@@ -390,5 +403,6 @@ export async function POST(req: NextRequest) {
     truncated,
     gapSyncWarning,
     knownFacts,
+    validationReport,
   });
 }

@@ -1,0 +1,10 @@
+[
+  {"name":"FOIA positive","kind":"foia","valid":true,"text":"Request. Records Requested. Delivery format. Contact details. Submitted to the FOIA officer. Requester signature."},
+  {"name":"FOIA negative","kind":"foia","valid":false,"text":"READY FOR ATTORNEY REVIEW [[agency]]"},
+  {"name":"Complaint positive","kind":"complaint","valid":true,"text":"Complainant and Parties. Factual Allegations. Claims. Prayer for Relief. Verification and declaration. Certificate of Service. Complainant signature."},
+  {"name":"Complaint negative","kind":"complaint","valid":false,"text":"Complaint. Facts: [[date]]. Plaintiff."},
+  {"name":"Will positive","kind":"will","valid":true,"text":"Last Will and Testament. Revocation. Disposition to beneficiaries. Executor. Residuary estate. Testator signature. Witness signature. Notary acknowledgment. Self-proving affidavit."},
+  {"name":"Will negative","kind":"will","valid":false,"text":"Will. Beneficiary [[name]]. Executor."},
+  {"name":"Trust positive","kind":"trust","valid":true,"text":"Trust Estate and Trust Property. Trustee. Beneficiaries. Distribution. Amendment and revocation. Settlor signature. Trustee signature. Notary acknowledgment. Governing law: Texas. Schedule A."},
+  {"name":"Trust negative","kind":"trust","valid":false,"text":"Trust. Trustee [[name]]. READY FOR ATTORNEY REVIEW"}
+]
