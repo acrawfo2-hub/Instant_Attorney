@@ -10278,6 +10278,13 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
   color: var(--brand-text-dk);
 }
 .cdt-sub { margin-top: 3px; font-size: 12.5px; color: var(--brand-text-lt); line-height: 1.45; }
+.cdt-updated {
+  display: inline-block;
+  margin-top: 5px;
+  color: var(--brand-success, #39735b);
+  font-size: 11.5px;
+  font-weight: 600;
+}
 .cdt-draft-progress {
   display: flex;
   align-items: center;
