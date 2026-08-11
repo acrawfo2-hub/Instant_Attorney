@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { FileTile, TileIcon } from "@/lib/file-deck";
 
-// The map of the file. Six buttons, always the same six in the same order, each
+// The map of the file. Eight stable buttons, each with its own focused target,
 // naming a thing a client came here to find and showing its live state. The
 // detail behind each one is still on the page — it just lives inside the tile's
 // section instead of being poured onto the page at once.
@@ -10,16 +10,38 @@ import type { FileTile, TileIcon } from "@/lib/file-deck";
 // shareable; FileSection listens for the hash and opens itself.
 
 const ICONS: Record<TileIcon, React.ReactNode> = {
-  documents: (
+  draft: (
     <>
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
       <polyline points="14 2 14 8 20 8" />
     </>
   ),
-  inbox: (
+  review: (
     <>
-      <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
-      <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+      <circle cx="12" cy="12" r="9" />
+      <polyline points="12 7 12 12 16 14" />
+    </>
+  ),
+  upload: (
+    <>
+      <path d="M12 16V4" />
+      <polyline points="7 9 12 4 17 9" />
+      <path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" />
+    </>
+  ),
+  facts: (
+    <>
+      <path d="M9 5h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H9" />
+      <path d="M5 3h4v18H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" />
+      <line x1="12" y1="9" x2="17" y2="9" />
+      <line x1="12" y1="13" x2="17" y2="13" />
+    </>
+  ),
+  opponent: (
+    <>
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+      <path d="m9 11 2 2 4-4" />
     </>
   ),
   calendar: (
@@ -28,14 +50,6 @@ const ICONS: Record<TileIcon, React.ReactNode> = {
       <line x1="16" y1="2" x2="16" y2="6" />
       <line x1="8" y1="2" x2="8" y2="6" />
       <line x1="3" y1="10" x2="21" y2="10" />
-    </>
-  ),
-  scales: (
-    <>
-      <path d="M12 3v18" />
-      <path d="M5 7h14" />
-      <path d="M8 7l-4 7a4 4 0 0 0 8 0z" />
-      <path d="M16 7l-4 7a4 4 0 0 0 8 0z" />
     </>
   ),
   wallet: (
