@@ -17,9 +17,9 @@ import type { RoadmapAiOverlay } from "@/lib/roadmap-types";
 import PostConsultCard from "@/components/PostConsultCard";
 import CaseHub from "@/components/CaseHub";
 import FileTiles from "@/components/FileTiles";
-import FileSection from "@/components/FileSection";
 import FileAlertStrip from "@/components/FileAlertStrip";
 import AskAssistantBar from "@/components/AskAssistantBar";
+import ClientCaseMemo from "@/components/ClientCaseMemo";
 import KeyDeadlines from "@/components/KeyDeadlines";
 import StrengthCheckCard from "@/components/StrengthCheckCard";
 import CaseDocumentsTable from "@/components/CaseDocumentsTable";
@@ -74,6 +74,7 @@ interface ClientFileViewProps {
   completedConsultWrapUp?: ConsultWrapUp | null;
   completedConsultSubmittedAt?: string | null;
   roadmapOverlay?: RoadmapAiOverlay;
+  clientDestination?: "documents" | "deadlines" | "case-details" | "facts" | "strength" | "help" | null;
 }
 
 export default function ClientFileView({
@@ -93,6 +94,7 @@ export default function ClientFileView({
   completedConsultWrapUp = null,
   completedConsultSubmittedAt = null,
   roadmapOverlay = {},
+  clientDestination = null,
 }: ClientFileViewProps) {
   // A fact is "hypothetical" if explicitly tagged (kind) OR it carries the
   // What-If Game's "What-if · " description prefix (keeps working pre-migration).
@@ -452,75 +454,59 @@ export default function ClientFileView({
           />
         )}
 
-        <CaseHub caseFile={caseFile} tasks={matterTasks} deck={deck} />
-
-        <FileTiles tiles={deck.tiles} />
-
-        {documentsTable}
-
-        {deck.docketCount > 0 && (
-          <FileSection
-            id="deadlines"
-            title="Key dates"
-            hint="Every deadline we can compute from the dates on your file, and what each one is based on"
-          >
-            <KeyDeadlines facts={facts} jurisdiction={caseFile.jurisdiction} />
-          </FileSection>
+        {clientDestination ? (
+          <>
+            <Link href={`/dashboard/${caseFile.id}`} className="lf-client-detail-back">← Back to case overview</Link>
+            <div className="lf-client-detail">
+              {clientDestination === "documents" && documentsTable}
+              {clientDestination === "deadlines" && (
+                <KeyDeadlines facts={facts} jurisdiction={caseFile.jurisdiction} />
+              )}
+              {clientDestination === "case-details" && (
+                <>
+                  {aboutBlocks}
+                  {factsBlocks}
+                  <StrengthCheckCard
+                    caseFileId={caseFile.id}
+                    check={caseFile.legal_strategy?.strength_check ?? null}
+                    isAttorney={false}
+                  />
+                </>
+              )}
+              {clientDestination === "facts" && factsBlocks}
+              {clientDestination === "strength" && (
+                <StrengthCheckCard
+                  caseFileId={caseFile.id}
+                  check={caseFile.legal_strategy?.strength_check ?? null}
+                  isAttorney={false}
+                />
+              )}
+              {clientDestination === "help" && (
+                <>
+                  <ExistingCounselCard
+                    caseFileId={caseFile.id}
+                    counselIntakeAt={caseFile.counsel_intake_at}
+                    hasExistingCounsel={caseFile.has_existing_counsel}
+                    existingCounselName={caseFile.existing_counsel_name}
+                    counselEngagementGoal={caseFile.counsel_engagement_goal}
+                    mode="client"
+                  />
+                  <div className="lf-card lf-card-full lf-contact-card">
+                    <div className="lf-card-label">Questions?</div>
+                    <p className="lf-contact-text">Email us at{" "}<a className="lf-contact-email" href={`mailto:${FIRM_CONTACT_EMAIL}`}>{FIRM_CONTACT_EMAIL}</a>.</p>
+                  </div>
+                  {attorneyAssessment}
+                </>
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            <CaseHub caseFile={caseFile} tasks={matterTasks} deck={deck} />
+            <ClientCaseMemo caseFile={caseFile} confirmedFacts={confirmed} deck={deck} chatHref={chatHref} />
+            <FileTiles tiles={deck.tiles} />
+          </>
         )}
-
-        <FileSection
-          id="case-details"
-          title="Your case details"
-          hint="What this matter is about, what you want out of it, and the strategy — updates as you go"
-        >
-          {aboutBlocks}
-        </FileSection>
-
-        <FileSection
-          id="facts"
-          title="Facts on file"
-          hint="What's confirmed, what's still open, and your what-if preferences"
-        >
-          {factsBlocks}
-        </FileSection>
-
-        <FileSection
-          id="strength"
-          title="How strong is my position?"
-          hint="An honest, adversarial read of your case — run it whenever the facts change"
-        >
-          <StrengthCheckCard
-            caseFileId={caseFile.id}
-            check={caseFile.legal_strategy?.strength_check ?? null}
-            isAttorney={false}
-          />
-        </FileSection>
-
-        <FileSection
-          id="help"
-          title="Talk to a person"
-          hint="Reach the firm, tell us about a lawyer you've already hired, and read your attorney's assessment"
-        >
-          <ExistingCounselCard
-            caseFileId={caseFile.id}
-            counselIntakeAt={caseFile.counsel_intake_at}
-            hasExistingCounsel={caseFile.has_existing_counsel}
-            existingCounselName={caseFile.existing_counsel_name}
-            counselEngagementGoal={caseFile.counsel_engagement_goal}
-            mode="client"
-          />
-
-          <div className="lf-card lf-card-full lf-contact-card">
-            <div className="lf-card-label">Questions?</div>
-            <p className="lf-contact-text">
-              Email us at{" "}
-              <a className="lf-contact-email" href={`mailto:${FIRM_CONTACT_EMAIL}`}>{FIRM_CONTACT_EMAIL}</a>{" "}
-              and we&apos;ll get back to you.
-            </p>
-          </div>
-
-          {attorneyAssessment}
-        </FileSection>
 
         <AskAssistantBar href={chatHref} />
       </div>
