@@ -10974,17 +10974,16 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
 .lf-tiles {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.75rem;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.5rem;
 }
-@media (max-width: 900px) { .lf-tiles { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 520px) { .lf-tiles { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .lf-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .lf-tile {
   display: flex;
   align-items: center;
-  gap: 11px;
-  padding: 14px 14px;
-  min-height: 74px;
+  gap: 8px;
+  padding: 10px;
+  min-height: 58px;
   border-radius: var(--brand-r-lg);
   border: 1px solid var(--brand-border);
   background: var(--brand-white);
@@ -11001,19 +11000,19 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
   flex: 0 0 auto;
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
   background: var(--brand-cream);
   color: var(--brand-text-md);
 }
-.lf-tile-icon svg { width: 18px; height: 18px; }
-.lf-tile-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.lf-tile-icon svg { width: 16px; height: 16px; }
+.lf-tile-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .lf-tile-label {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 14.5px;
+  font-size: 13.5px;
   font-weight: 700;
   color: var(--brand-text-dk);
   line-height: 1.2;
@@ -11033,16 +11032,41 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
   font-variant-numeric: tabular-nums;
 }
 .lf-tile-status {
-  font-size: 12.5px;
-  line-height: 1.35;
+  font-size: 11.5px;
+  line-height: 1.25;
   color: var(--brand-text-lt);
-  /* Two lines max: a tile is a signpost, not a paragraph. */
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   overflow: hidden;
 }
 .lf-tile-chev { flex: 0 0 auto; width: 15px; height: 15px; color: var(--brand-text-xlt); }
+
+/* Routine notices share one compact memo below the stable file map. */
+.lf-status-memo {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 0.5rem;
+}
+.lf-status-memo-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--brand-border);
+  border-radius: var(--brand-r-md);
+  background: var(--brand-white);
+  color: var(--brand-text-md);
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+.lf-status-memo-line strong { flex: 0 0 auto; color: var(--brand-text-dk); }
+.lf-status-memo-line span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lf-status-memo-line time { flex: 0 0 auto; margin-left: auto; color: var(--brand-text-lt); }
+@media (max-width: 600px) {
+  .lf-status-memo-line { align-items: flex-start; flex-wrap: wrap; }
+  .lf-status-memo-line span { flex-basis: 100%; }
+  .lf-status-memo-line time { margin-left: 0; }
+}
 
 /* Tone colors the tile; it never changes the tile's place in the grid. */
 .lf-tile-urgent { border-color: #fecaca; background: #fef6f5; }
