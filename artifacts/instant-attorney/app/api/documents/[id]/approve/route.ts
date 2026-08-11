@@ -32,6 +32,23 @@ export async function POST(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // Approval/request-changes is publication of review output. Bind it to the
+  // exact revision reviewed so an in-flight client answer wins the race.
+  const [{ data: sourceDoc }, { data: reviewRun }] = await Promise.all([
+    db.from("documents").select("revision_number").eq("id", id).is("parent_document_id", null).single(),
+    db.from("document_review_runs").select("id, status, source_revision").eq("document_id", id)
+      .order("created_at", { ascending: false }).limit(1).maybeSingle(),
+  ]);
+  if (reviewRun && (
+    reviewRun.status === "stale" ||
+    (reviewRun.source_revision ?? 1) !== (sourceDoc?.revision_number ?? 1)
+  )) {
+    return NextResponse.json(
+      { error: "The client submitted a newer revision. Review it before publishing a decision.", review_state: "stale" },
+      { status: 409 },
+    );
+  }
+
   const children = await getChildDocuments(db, id);
   const secondDraft = children.find((c) => c.doc_type === "second_draft");
 
@@ -76,6 +93,7 @@ export async function POST(
       updated_at: now,
     })
     .eq("id", id)
+    .eq("revision_number", sourceDoc?.revision_number ?? 1)
     .is("parent_document_id", null)
     .select("*, profiles!documents_user_id_fkey(*)")
     .single();

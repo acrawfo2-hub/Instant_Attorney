@@ -42,6 +42,7 @@ export async function startDocumentReview(
   caseFileId: string,
 ): Promise<DocumentReviewRun | null> {
   const db = createServiceClient();
+  const { data: source } = await db.from("documents").select("revision_number").eq("id", documentId).single();
   const { data: active } = await db
     .from("document_review_runs")
     .select("*")
@@ -59,6 +60,7 @@ export async function startDocumentReview(
       case_file_id: caseFileId,
       status: "queued",
       stage: "queued",
+      source_revision: source?.revision_number ?? 1,
     })
     .select("*")
     .single();
@@ -101,6 +103,18 @@ export async function runDocumentReview(runId: string): Promise<void> {
       .maybeSingle();
     const parentDoc = docRow as Document | null;
     if (!parentDoc) throw new Error("Document not found");
+    const sourceRevision = run.source_revision ?? 1;
+    if ((parentDoc.revision_number ?? 1) !== sourceRevision) {
+      await db.from("document_review_runs").update({ status: "stale", stage: "stale" }).eq("id", runId);
+      return;
+    }
+
+    // Check immediately before every publication boundary. A placeholder answer
+    // can arrive while either model call is in flight.
+    const stillCurrent = async () => {
+      const { data } = await db.from("documents").select("revision_number").eq("id", documentId).single();
+      return (data?.revision_number ?? 1) === sourceRevision;
+    };
 
     const [{ data: caseFileRow }, { data: factRows }, { data: attRows }] = await Promise.all([
       db.from("case_files").select("*").eq("id", parentDoc.case_file_id).single(),
@@ -184,6 +198,7 @@ export async function runDocumentReview(runId: string): Promise<void> {
 
     // Keep the existing review page's "Critical Review" doc populated by
     // rendering the improvements into the memo format it already reads.
+    if (!(await stillCurrent())) throw new Error("STALE_REVISION");
     await upsertCriticalReviewChild(
       db,
       parentDoc,
@@ -249,6 +264,7 @@ export async function runDocumentReview(runId: string): Promise<void> {
       .join("");
     const { draftText, changes } = parseSecondDraft(rawDraft);
     if (draftText.trim()) {
+      if (!(await stillCurrent())) throw new Error("STALE_REVISION");
       await upsertSecondDraftChild(db, parentDoc, draftText, changes);
     }
 
@@ -266,6 +282,7 @@ export async function runDocumentReview(runId: string): Promise<void> {
 
     // ── Done ────────────────────────────────────────────────────────────────
     const now = new Date().toISOString();
+    if (!(await stillCurrent())) throw new Error("STALE_REVISION");
     await db
       .from("document_review_runs")
       .update({
@@ -284,8 +301,9 @@ export async function runDocumentReview(runId: string): Promise<void> {
     const now = new Date().toISOString();
     await db
       .from("document_review_runs")
-      .update({ status: "failed", error: message, updated_at: now })
+      .update({ status: message === "STALE_REVISION" ? "stale" : "failed", error: message, updated_at: now })
       .eq("id", runId);
-    await db.from("documents").update({ review_status: null, updated_at: now }).eq("id", documentId);
+    await db.from("documents").update({ review_status: null, updated_at: now })
+      .eq("id", documentId).eq("revision_number", run.source_revision ?? 1);
   }
 }

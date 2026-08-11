@@ -625,6 +625,9 @@ export interface Document {
    * runs or before a draft has been (re)generated.
    */
   facts_synced_at?: string | null;
+  revision_number?: number;
+  approved_text?: string | null;
+  approved_revision?: number | null;
 }
 
 /**
@@ -821,7 +824,8 @@ export type ReviewRunStatus =
   | "running"
   | "awaiting_attorney"
   | "complete"
-  | "failed";
+  | "failed"
+  | "stale";
 
 export interface DocumentReviewRun {
   id: string;
@@ -835,6 +839,7 @@ export interface DocumentReviewRun {
   created_at: string;
   updated_at: string;
   completed_at: string | null;
+  source_revision?: number | null;
 }
 
 export type ImprovementKind =
