@@ -94,6 +94,14 @@ export async function runDocumentReview(runId: string): Promise<void> {
 
   const documentId = run.document_id;
 
+  // Client edits can supersede a run while a model stream is in flight. Check
+  // the persisted run row after each expensive call, before any generated text
+  // can be written back over the newly saved revision.
+  async function stillCurrent(): Promise<boolean> {
+    const { data } = await db.from("document_review_runs").select("status").eq("id", runId).maybeSingle();
+    return data?.status === "running";
+  }
+
   try {
     const { data: docRow } = await db
       .from("documents")
@@ -155,6 +163,8 @@ export async function runDocumentReview(runId: string): Promise<void> {
         ],
       })
       .finalMessage();
+
+    if (!(await stillCurrent())) return;
 
     inputTokens += improvementsResp.usage.input_tokens;
     outputTokens += improvementsResp.usage.output_tokens;
@@ -237,6 +247,8 @@ export async function runDocumentReview(runId: string): Promise<void> {
         ],
       })
       .finalMessage();
+
+    if (!(await stillCurrent())) return;
 
     inputTokens += draftResp.usage.input_tokens;
     outputTokens += draftResp.usage.output_tokens;
