@@ -157,10 +157,16 @@ async function getData(caseFileId: string) {
 
 export default async function FileDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ view?: string }>;
 }) {
   const { id } = await params;
+  const requestedView = (await searchParams).view;
+  const clientDestination = (["documents", "deadlines", "case-details", "facts", "strength", "help"] as const).find(
+    (view) => view === requestedView,
+  ) ?? null;
   const hdrs = await headers();
   const isBypass = hdrs.get("x-bypass-auth") === "true" || BYPASS_AUTH;
 
@@ -234,6 +240,7 @@ export default async function FileDetailPage({
           completedConsultWrapUp={completedConsultWrapUp}
           completedConsultSubmittedAt={completedConsultSubmittedAt}
           roadmapOverlay={roadmapOverlay}
+          clientDestination={clientDestination}
         />
       </main>
     </div>
