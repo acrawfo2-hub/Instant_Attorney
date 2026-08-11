@@ -11244,3 +11244,11 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
   cursor: pointer;
 }
 .fc-draft-retry:hover { background: rgba(154, 118, 54, 0.2); }
+/* Durable per-document generation cards (chat panel + case file). */
+.draft-job-list { display: grid; gap: 8px; padding: 10px; border-bottom: 1px solid rgba(148,163,184,.25); }
+.draft-job-card { display: grid; grid-template-columns: 1fr auto; gap: 3px 10px; padding: 10px; border: 1px solid rgba(148,163,184,.35); border-radius: 8px; }
+.draft-job-card span, .draft-job-card small { color: #94a3b8; }
+.draft-job-card small { grid-column: 1 / -1; }
+.draft-job-card button { grid-column: 2; grid-row: 2; font-size: 12px; }
+.draft-job-error, .draft-job-failed .cdt-draft-progress-text { color: #b91c1c !important; }
+.cdt-draft-jobs { display: grid; gap: 8px; }

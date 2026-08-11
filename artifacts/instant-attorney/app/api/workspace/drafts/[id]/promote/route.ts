@@ -56,6 +56,23 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     .single();
 
   if (insErr || !inserted) {
+    // A concurrent request may have inserted this exact promotion after our
+    // initial read but before this insert. The DB unique index makes it safe to
+    // recover that winner instead of creating a duplicate or returning a
+    // misleading failure.
+    const { data: winner } = await serviceDb.from("documents").select("id")
+      .eq("user_id", ctx.userId)
+      .contains("content_json", { workspace_draft_id: draft.id })
+      .maybeSingle();
+    if (winner?.id) {
+      const existingDoc = await finalizeDocumentSubmission(serviceDb, winner.id, ctx.userId);
+      if (existingDoc) {
+        await serviceDb.from("client_workspace_drafts")
+          .update({ promoted_document_id: existingDoc.id, updated_at: now })
+          .eq("id", draft.id).eq("user_id", ctx.userId);
+        return NextResponse.json({ documentId: existingDoc.id, status: existingDoc.status, reused: true });
+      }
+    }
     console.error("[workspace/drafts/promote] insert error:", insErr);
     return NextResponse.json({ error: "Could not create the document" }, { status: 500 });
   }
