@@ -291,10 +291,10 @@ export default function BillingMeter() {
           style={{ marginTop: 2 }}
         />
         <span>
-          <strong>Never interrupt a document I'm working on.</strong>
+          <strong>Never interrupt a document I&apos;m working on.</strong>
           <span style={{ display: "block", fontWeight: 400, opacity: 0.85, marginTop: 1 }}>
             If a top-up is pending or your card needs attention, let documents already in progress
-            finish (up to {usd(data.graceBufferUsd)} of usage). You're billed for it on your next
+            finish (up to {usd(data.graceBufferUsd)} of usage). You&apos;re billed for it on your next
             top-up — nothing is waived.
           </span>
         </span>

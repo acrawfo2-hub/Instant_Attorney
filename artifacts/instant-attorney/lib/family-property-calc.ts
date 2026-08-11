@@ -147,7 +147,7 @@ export function dividePropertyEstate(input: PropertyDivisionInput): PropertyDivi
     // A separate item with no owner can't be assigned — the community
     // presumption applies, so treat it as community.
     let characterization = raw.characterization;
-    let owner = raw.owner;
+    const owner = raw.owner;
     if (characterization === "separate" && owner !== "a" && owner !== "b") {
       characterization = "community";
       presumedCount++;

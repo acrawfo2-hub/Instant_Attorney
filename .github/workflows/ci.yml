@@ -17,6 +17,18 @@ jobs:
     defaults:
       run:
         working-directory: artifacts/instant-attorney
+    # next.config.ts calls requireEnv() on these at config load, so `lint` and
+    # `build` abort before doing any work unless they are set. They are
+    # NEXT_PUBLIC_ (already public in the browser bundle), so they are repo
+    # *variables*, not secrets.
+    #
+    # The fallbacks keep CI self-sufficient: neither step connects to Supabase,
+    # they only need the values to exist and be well-formed. Set the repo
+    # variables under Settings → Secrets and variables → Actions → Variables to
+    # have CI build against the same values as production.
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co' }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_placeholder' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -45,6 +57,15 @@ jobs:
 
       - name: Unit tests
         run: npm test
+
+      - name: Lint
+        run: npm run lint
+
+      # Catches what typecheck cannot: bad route/segment config, server vs.
+      # client component violations, and anything that only fails once Next
+      # compiles the app for real.
+      - name: Build
+        run: npm run build
 
   smoke:
     name: Smoke e2e (deployed app)
