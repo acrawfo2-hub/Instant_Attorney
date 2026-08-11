@@ -29,6 +29,7 @@ const FINALIZED = new Set(["approved", "delivered"]);
 // kick one off from chat in another tab).
 const DRAFT_POLL_ACTIVE_MS = 5000;
 const DRAFT_POLL_IDLE_MS = 20000;
+const REVISION_POLL_MS = 15000;
 
 // Government form detected in chat, enriched by /api/gov-forms with registry
 // detail + completion progress (same shape GovFormInstruments consumed).
@@ -161,6 +162,7 @@ export default function CaseDocumentsTable({
   const [promotingId, setPromotingId] = useState<string | null>(null);
   const [draftNotice, setDraftNotice] = useState("");
   const [draftInProgress, setDraftInProgress] = useState(false);
+  const [updatedJustNow, setUpdatedJustNow] = useState(false);
   const draftPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Local content overrides for workspace drafts filled inline — avoids a full
   // network reload just to rerender the snippet after blanks are filled.
@@ -189,6 +191,63 @@ export default function CaseDocumentsTable({
   }, [caseFileId]);
 
   useEffect(() => { load(); }, [load]);
+
+  // The revision endpoint covers every source that can change the Living File,
+  // including another tab and background attachment/review workers. Poll only
+  // while visible; an immediate visibility poll provides catch-up/reconnect.
+  // router.refresh preserves this client component's state, including expanded
+  // rows and any uncontrolled/local form edits in its descendants.
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let lastRevision: string | null = null;
+    let noticeTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const schedule = () => {
+      if (!cancelled && !document.hidden) timer = setTimeout(check, REVISION_POLL_MS);
+    };
+    async function check() {
+      if (cancelled || document.hidden) return;
+      try {
+        const res = await fetch(`/api/case-files/revision?caseFileId=${caseFileId}`, { cache: "no-store" });
+        if (res.ok) {
+          const { revision } = await res.json() as { revision?: string };
+          if (revision && lastRevision && revision !== lastRevision) {
+            lastRevision = revision;
+            await load();
+            if (!cancelled) {
+              router.refresh();
+              setUpdatedJustNow(true);
+              if (noticeTimer) clearTimeout(noticeTimer);
+              noticeTimer = setTimeout(() => setUpdatedJustNow(false), 8000);
+            }
+          } else if (revision) {
+            lastRevision = revision;
+          }
+        }
+      } catch {
+        // The next scheduled request is the recovery path after disconnection.
+      } finally {
+        schedule();
+      }
+    }
+    const onVisibility = () => {
+      if (document.hidden) {
+        if (timer) clearTimeout(timer);
+      } else {
+        if (timer) clearTimeout(timer);
+        void check();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    void check();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      if (noticeTimer) clearTimeout(noticeTimer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [caseFileId, load, router]);
 
   useEffect(() => {
     if (!attachments.some((a) => a.status === "processing")) return;
@@ -256,7 +315,8 @@ export default function CaseDocumentsTable({
           wasRunning.current = false;
           missedWhileHidden = false;
           await load();
-          if (!cancelled) router.refresh();
+          // The revision watcher performs the RSC refresh only if persisted file
+          // data actually changed. This local fetch clears the progress UI now.
         }
         rearm(DRAFT_POLL_IDLE_MS);
       } catch {
@@ -379,6 +439,7 @@ export default function CaseDocumentsTable({
           <p className="cdt-sub">
             {isAttorney ? "Everything on this client's file" : "Everything on your file"} — what&apos;s needed, what&apos;s in, and what you&apos;ve drafted.
           </p>
+          {updatedJustNow && <span className="cdt-updated" role="status">Updated just now</span>}
         </div>
         {!isAttorney && (
           <button type="button" className="cdt-add" onClick={() => { setAdding((v) => !v); setPendingFile(null); setUploadError(""); }}>
