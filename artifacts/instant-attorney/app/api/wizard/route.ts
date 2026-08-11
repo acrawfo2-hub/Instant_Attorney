@@ -18,6 +18,8 @@ import { resolveInstrumentProfile, validateInstrument } from "@/lib/instruments/
 // which collided with #115's drafting-spec profiles. Different concepts —
 // #115 says what to draft, this says which pinned authority backs it.
 import { formatInstrumentAuthorityBlock, resolveInstrumentAuthority } from "@/lib/instruments/authority";
+import { getDocumentGenerationSpec, specForPrompt } from "@/lib/document-generation-spec";
+import { parseStructuredSections, stripStructuredSections } from "@/lib/document-refinement";
 
 // Allow up to 5 minutes for this route — legal doc generation can be slow
 export const maxDuration = 300;
@@ -239,7 +241,7 @@ export async function POST(req: NextRequest) {
         },
         {
           type: "text" as const,
-          text: `Document being drafted: ${documentLabel}\n\n${fieldHints}`,
+          text: `Document being drafted: ${documentLabel}\n\n${fieldHints}\n\n${specForPrompt(wizardType as WizardType)}`,
           cache_control: { type: "ephemeral" as const },
         },
         {
@@ -320,6 +322,22 @@ export async function POST(req: NextRequest) {
       outputTokens: message.usage.output_tokens,
     });
   }
+
+  // #101's section metadata. Parsed for storage only — deliberately NOT used to
+  // derive draftText: #101 fell back to the raw response when the DRAFT READY
+  // markers were missing, which is precisely the behaviour #111 removed. A
+  // markerless response is recovery material, not a renderable draft.
+  const generationSpec = getDocumentGenerationSpec(wizardType as WizardType);
+  let structuredSections = [] as ReturnType<typeof parseStructuredSections>;
+  try {
+    structuredSections = parseStructuredSections(fullResponse, generationSpec);
+  } catch (sectionErr) {
+    console.error("[wizard] structured section parse error:", sectionErr);
+  }
+  // Client-facing text only: strip the section markup so the user does not see
+  // raw markers. draftText is still derived from fullResponse below, so this
+  // cannot affect whether a generation counts as complete.
+  const renderedResponse = stripStructuredSections(fullResponse);
 
   // Raw output is always retained for recovery/debugging, but never promoted to
   // renderable draft_text unless the complete draft block was parsed.
@@ -449,6 +467,21 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       );
     }
+
+    if (structuredSections.length) {
+      const { error: sectionErr } = await writeDb.from("document_sections").upsert(
+        structuredSections.map((section) => ({
+          document_id: savedDocId,
+          section_id: section.id,
+          section_kind: section.kind,
+          rendered_text: section.text,
+          fact_keys: section.factKeys,
+          updated_at: now,
+        })),
+        { onConflict: "document_id,section_id" },
+      );
+      if (sectionErr) console.error("[wizard] section persistence error:", sectionErr.message);
+    }
   }
 
   if (truncated && savedDocId) {
@@ -482,8 +515,9 @@ export async function POST(req: NextRequest) {
     .map((f) => f.description);
 
   return NextResponse.json({
-    text: fullResponse,
+    text: renderedResponse,
     documentId: savedDocId ?? null,
+    sections: structuredSections,
     truncated,
     generationIncomplete,
     gapSyncWarning,
