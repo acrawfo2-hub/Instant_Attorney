@@ -29,6 +29,7 @@ import type { CaseFile, FactItem, Document, Profile, ConsultRequest, ConsultWrap
 import { docTypeLabel, personDisplayName, coerceWizardType } from "@/lib/types";
 import { FIRM_CONTACT_EMAIL } from "@/lib/firm";
 import { getConsultAction } from "@/lib/consult-action";
+import type { ClientDestination } from "@/lib/client-destinations";
 
 // The consumer Living File is a DECK, not a document. The complaint it answers:
 // the page hit the client with a wall of text and buried both the assistant and
@@ -76,7 +77,7 @@ interface ClientFileViewProps {
   completedConsultWrapUp?: ConsultWrapUp | null;
   completedConsultSubmittedAt?: string | null;
   roadmapOverlay?: RoadmapAiOverlay;
-  clientDestination?: "documents" | "deadlines" | "case-details" | "facts" | "strength" | "help" | null;
+  clientDestination?: ClientDestination | null;
 }
 
 export default function ClientFileView({

@@ -64,6 +64,12 @@ export default function ClientCaseMemo({ caseFile, confirmedFacts, deck, chatHre
           ) : (
             <p className="lf-empty-field">Your case summary will appear as your intake is organized.</p>
           )}
+          {/* The memo shows the first few sentences; the matter, goals, and the
+              full strategy live behind this link. It is the only way into the
+              case-details view now that the tile map no longer names it. */}
+          <Link href={`/dashboard/${caseFile.id}?view=case-details`} className="lf-client-memo-link">
+            See full summary, goals &amp; strategy →
+          </Link>
         </section>
 
         <section className="lf-client-memo-section">

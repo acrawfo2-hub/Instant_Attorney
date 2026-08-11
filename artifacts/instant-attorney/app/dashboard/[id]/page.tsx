@@ -12,6 +12,7 @@ import { parseRoadmapOverlay } from "@/lib/roadmap-snapshot";
 import type { RoadmapAiOverlay } from "@/lib/roadmap-types";
 import { toMatterSwitcherItem } from "@/lib/matter-switcher";
 import { getConsultAction } from "@/lib/consult-action";
+import { parseClientDestination } from "@/lib/client-destinations";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
@@ -164,10 +165,7 @@ export default async function FileDetailPage({
   searchParams: Promise<{ view?: string }>;
 }) {
   const { id } = await params;
-  const requestedView = (await searchParams).view;
-  const clientDestination = (["documents", "deadlines", "case-details", "facts", "strength", "help"] as const).find(
-    (view) => view === requestedView,
-  ) ?? null;
+  const clientDestination = parseClientDestination((await searchParams).view);
   const hdrs = await headers();
   const isBypass = hdrs.get("x-bypass-auth") === "true" || BYPASS_AUTH;
 
