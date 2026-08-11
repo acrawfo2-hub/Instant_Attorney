@@ -36,16 +36,18 @@ import { getConsultAction } from "@/lib/consult-action";
 //
 // The shape now, in the order a good lawyer walks a client through a matter:
 //
-//   1. the one date that could hurt          (only when there is one)
-//   2. where things stand + ONE next step    (with the biggest button on the page)
-//   3. the drafts already written            (one tap, never hunted for)
-//   4. six tiles — the map of the file       (same six, same order, live counts)
-//   5. documents                             (the working surface)
-//   6. everything else, behind its own tile  (dates, details, facts, people)
+//   1. a deadline already missed             (only when there is one)
+//   2. eight tiles — the map of the file     (same eight, same order, live counts)
+//   3. one status memo                       (routine notices, compacted to a line each)
+//   4. where things stand + ONE next step    (with the biggest button on the page)
+//   5. the case memo                         (standing, facts, risks, what's next)
 //
-// Nothing was deleted: every card that used to be stacked on the page still
-// renders, inside whichever section its tile names. The attorney view keeps its
-// own layout (Mission Control + the full reference stack) below.
+// The map sits above everything but a missed deadline, so its position is
+// learned once and never moves. Nothing was deleted: the detail each tile names
+// now renders as its own routed view (?view=documents, facts, strength, …)
+// rather than stacked on the landing page, which is what made it a wall of text.
+// The attorney view keeps its own layout (Mission Control + the full reference
+// stack) below.
 
 // ── Matter badge ─────────────────────────────────────────────────────────────
 

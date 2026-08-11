@@ -3,11 +3,13 @@ import type { FileTile, TileIcon } from "@/lib/file-deck";
 
 // The map of the file. Eight stable buttons, each with its own focused target,
 // naming a thing a client came here to find and showing its live state. The
-// detail behind each one is still on the page — it just lives inside the tile's
-// section instead of being poured onto the page at once.
+// detail behind each one is still on the file — it just lives behind its own
+// destination instead of being poured onto the landing page at once.
 //
-// In-page targets are plain anchors so they work with JS disabled and are
-// shareable; FileSection listens for the hash and opens itself.
+// Each tile is a real link to a routed view (/dashboard/[id]?view=…), so a
+// destination is shareable, survives a reload, and works with JS disabled. The
+// three document tiles add a hash (?view=documents#uploads) to land on their
+// band within the documents table.
 
 const ICONS: Record<TileIcon, React.ReactNode> = {
   draft: (
