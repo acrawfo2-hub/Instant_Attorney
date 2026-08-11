@@ -106,50 +106,45 @@ function deck(over: Partial<Parameters<typeof buildFileDeck>[0]> = {}) {
   });
 }
 
-// ── The six tiles ────────────────────────────────────────────────────────────
+// ── The eight stable destinations ──────────────────────────────────────────
 
-test("tiles: always the same six, in the same order, each with a status line", () => {
+test("tiles: always expose the same dedicated destinations in the same order", () => {
   const empty = deck();
   assert.deepEqual(
     empty.tiles.map((t) => t.id),
-    ["documents", "needs-info", "deadlines", "case-details", "financials", "help"],
+    ["drafted", "attorney-review", "uploads", "facts", "other-side", "financials", "deadlines", "attorney"],
   );
   assert.ok(empty.tiles.every((t) => t.status.trim().length > 0), "no tile may render a blank status");
+  assert.equal(new Set(empty.tiles.map((t) => t.href)).size, empty.tiles.length);
 
-  // A busy file changes counts/status/tone but never the map.
+  // Every tile resolves to a real destination the router can serve. A bare
+  // "#anchor" would be a dead link now that the detail lives behind ?view=.
+  assert.ok(
+    empty.tiles.every((t) => t.href.startsWith("/dashboard/cf1")),
+    "a tile must route, not point at an anchor that is no longer on the page",
+  );
+
   const busy = deck({
     documents: [doc({ id: "dA", status: "pending_review" })],
-    workspaceDrafts: [wsDraft({ id: "wA", content: "Pay [[Amount]] by [[Date]]." })],
+    workspaceDrafts: [wsDraft({ id: "wA" })],
     requestedAttachments: [reqAtt({ id: "rA" })],
   });
   assert.deepEqual(busy.tiles.map((t) => t.id), empty.tiles.map((t) => t.id));
 });
 
-test("tiles: 'Needs your info' totals blanks + wanted uploads + open forms", () => {
+test("tiles: document work, review, and uploads have separate counts", () => {
   const d = deck({
-    workspaceDrafts: [wsDraft({ id: "wA", content: "Pay [[Amount]] by [[Date]]." })],
-    documents: [doc({ id: "dA", status: "draft", draft_text: "Signed by [[Client Name]]." })],
+    workspaceDrafts: [wsDraft({ id: "wA" })],
+    documents: [doc({ id: "dA", status: "draft" }), doc({ id: "dB", status: "pending_review" })],
     requestedAttachments: [
       reqAtt({ id: "rA", status: "requested" }),
-      reqAtt({ id: "rB", status: "uploaded" }), // already provided — not owed
-    ],
-    govForms: [
-      govForm({ id: "gA", status: "needed" }),
-      govForm({ id: "gB", status: "completed" }), // done — not owed
+      reqAtt({ id: "rB", status: "uploaded" }),
     ],
   });
-  const tile = d.tiles.find((t) => t.id === "needs-info")!;
-  // 2 draft blanks + 1 document blank + 1 upload + 1 form.
-  assert.equal(tile.count, 5);
-  assert.equal(tile.tone, "attention");
-  assert.match(tile.status, /3 blanks to fill/);
-});
-
-test("tiles: nothing owed reads as reassurance, not as an empty count", () => {
-  const tile = deck().tiles.find((t) => t.id === "needs-info")!;
-  assert.equal(tile.count, null);
-  assert.equal(tile.tone, "calm");
-  assert.match(tile.status, /all caught up/i);
+  assert.equal(d.tiles.find((t) => t.id === "drafted")?.count, 2);
+  assert.equal(d.tiles.find((t) => t.id === "attorney-review")?.count, 1);
+  assert.equal(d.tiles.find((t) => t.id === "uploads")?.count, 2);
+  assert.match(d.tiles.find((t) => t.id === "uploads")!.status, /1 still needed/);
 });
 
 test("tiles: a live deadline drives the Key dates tile's status and tone", () => {
@@ -162,17 +157,27 @@ test("tiles: a live deadline drives the Key dates tile's status and tone", () =>
   assert.ok(tile.tone === "urgent" || tile.tone === "attention");
 });
 
-test("tiles: the consult state a client is in shows on the 'Talk to a person' tile", () => {
-  const confirmed = deck({
+test("tiles: facts, strength check, and consult state drive distinct counts", () => {
+  const d = deck({
+    facts: [fact({ status: "confirmed" }), fact({ id: "f2", status: "confirmed" })],
+    caseFile: caseFile({
+      legal_strategy: {
+        strength_check: { counterarguments: [{ attack: "No notice" }] },
+      } as CaseFile["legal_strategy"],
+    }),
     consultRequest: { status: "confirmed" } as unknown as ConsultRequest,
-  }).tiles.find((t) => t.id === "help")!;
-  assert.match(confirmed.status, /confirmed/i);
-  assert.equal(confirmed.tone, "calm");
+  });
+  assert.equal(d.tiles.find((t) => t.id === "facts")?.count, 2);
+  assert.equal(d.tiles.find((t) => t.id === "other-side")?.count, 1);
+  const attorney = d.tiles.find((t) => t.id === "attorney")!;
+  assert.equal(attorney.count, 1);
+  assert.match(attorney.status, /confirmed/i);
+  assert.equal(attorney.tone, "calm");
 
   const recommended = deck({
     caseFile: caseFile({ legal_strategy: { recommend_consult: true } as CaseFile["legal_strategy"] }),
-  }).tiles.find((t) => t.id === "help")!;
-  assert.match(recommended.status, /live call/i);
+  }).tiles.find((t) => t.id === "attorney")!;
+  assert.match(recommended.status, /recommended/i);
   assert.equal(recommended.tone, "attention");
 });
 
@@ -194,7 +199,7 @@ test("drafts: work needing her input outranks work that's merely readable or fil
   assert.match(d.drafts[0].meta, /1 blank to fill/);
   assert.match(d.drafts[0].href, /\/chat\?caseFileId=cf1&draft=wBlank/);
   assert.equal(d.drafts[2].meta, "With your attorney");
-  assert.equal(d.drafts[2].href, "#doc-dRev");
+  assert.equal(d.drafts[2].href, "/dashboard/cf1?view=documents#doc-dRev");
 });
 
 test("drafts: capped at three, with the remainder counted rather than dropped", () => {

@@ -14,12 +14,11 @@ import {
   stateBarReferralUrl,
 } from "@/lib/jurisdiction";
 import type { RoadmapAiOverlay } from "@/lib/roadmap-types";
-import PostConsultCard from "@/components/PostConsultCard";
 import CaseHub from "@/components/CaseHub";
 import FileTiles from "@/components/FileTiles";
-import FileSection from "@/components/FileSection";
 import FileAlertStrip from "@/components/FileAlertStrip";
 import AskAssistantBar from "@/components/AskAssistantBar";
+import ClientCaseMemo from "@/components/ClientCaseMemo";
 import KeyDeadlines from "@/components/KeyDeadlines";
 import StrengthCheckCard from "@/components/StrengthCheckCard";
 import CaseDocumentsTable from "@/components/CaseDocumentsTable";
@@ -29,6 +28,8 @@ import { buildFileDeck } from "@/lib/file-deck";
 import type { CaseFile, FactItem, Document, Profile, ConsultRequest, ConsultWrapUp, RequestedAttachment, GovFormInstrument, Attachment, ClientWorkspaceDraft } from "@/lib/types";
 import { docTypeLabel, personDisplayName, coerceWizardType } from "@/lib/types";
 import { FIRM_CONTACT_EMAIL } from "@/lib/firm";
+import { getConsultAction } from "@/lib/consult-action";
+import type { ClientDestination } from "@/lib/client-destinations";
 
 // The consumer Living File is a DECK, not a document. The complaint it answers:
 // the page hit the client with a wall of text and buried both the assistant and
@@ -36,16 +37,18 @@ import { FIRM_CONTACT_EMAIL } from "@/lib/firm";
 //
 // The shape now, in the order a good lawyer walks a client through a matter:
 //
-//   1. the one date that could hurt          (only when there is one)
-//   2. where things stand + ONE next step    (with the biggest button on the page)
-//   3. the drafts already written            (one tap, never hunted for)
-//   4. six tiles — the map of the file       (same six, same order, live counts)
-//   5. documents                             (the working surface)
-//   6. everything else, behind its own tile  (dates, details, facts, people)
+//   1. a deadline already missed             (only when there is one)
+//   2. eight tiles — the map of the file     (same eight, same order, live counts)
+//   3. one status memo                       (routine notices, compacted to a line each)
+//   4. where things stand + ONE next step    (with the biggest button on the page)
+//   5. the case memo                         (standing, facts, risks, what's next)
 //
-// Nothing was deleted: every card that used to be stacked on the page still
-// renders, inside whichever section its tile names. The attorney view keeps its
-// own layout (Mission Control + the full reference stack) below.
+// The map sits above everything but a missed deadline, so its position is
+// learned once and never moves. Nothing was deleted: the detail each tile names
+// now renders as its own routed view (?view=documents, facts, strength, …)
+// rather than stacked on the landing page, which is what made it a wall of text.
+// The attorney view keeps its own layout (Mission Control + the full reference
+// stack) below.
 
 // ── Matter badge ─────────────────────────────────────────────────────────────
 
@@ -74,6 +77,7 @@ interface ClientFileViewProps {
   completedConsultWrapUp?: ConsultWrapUp | null;
   completedConsultSubmittedAt?: string | null;
   roadmapOverlay?: RoadmapAiOverlay;
+  clientDestination?: ClientDestination | null;
 }
 
 export default function ClientFileView({
@@ -93,6 +97,7 @@ export default function ClientFileView({
   completedConsultWrapUp = null,
   completedConsultSubmittedAt = null,
   roadmapOverlay = {},
+  clientDestination = null,
 }: ClientFileViewProps) {
   // A fact is "hypothetical" if explicitly tagged (kind) OR it carries the
   // What-If Game's "What-if · " description prefix (keeps working pre-migration).
@@ -177,6 +182,7 @@ export default function ClientFileView({
     Boolean(consultRequest) &&
     consultRequest?.status !== "cancelled" &&
     consultRequest?.status !== "completed";
+  const consultAction = getConsultAction(consultRequest, hasConsultSub);
 
   // The client has "brought in a document" once at least one upload exists that
   // didn't fail to store. Document Review only makes sense against a real
@@ -439,88 +445,104 @@ export default function ClientFileView({
   // ── Client layout — the deck ───────────────────────────────────────────────
 
   if (!isAttorney && matterTasks && deck) {
+    const expiredDeadline = deck.pressing?.urgency === "expired" ? deck.pressing : null;
+    const routineDeadline = deck.pressing?.urgency !== "expired" ? deck.pressing : null;
+    const hasStatusMemo = Boolean(
+      routineDeadline || prepBanner || consultStrip || completedConsultWrapUp,
+    );
+
     return (
       <div className="lf-grid">
-        {prepBanner}
-        {deck.pressing && <FileAlertStrip pressing={deck.pressing} chatHref={chatHref} />}
-        {consultStrip}
-
-        {completedConsultWrapUp && (
-          <PostConsultCard
-            wrapUp={completedConsultWrapUp}
-            submittedAt={completedConsultSubmittedAt}
-          />
-        )}
-
-        <CaseHub caseFile={caseFile} tasks={matterTasks} deck={deck} />
-
+        {/* The file map is the stable first element. Only an already-missed
+            deadline is serious enough to interrupt that learned position. */}
+        {expiredDeadline && <FileAlertStrip pressing={expiredDeadline} chatHref={chatHref} />}
         <FileTiles tiles={deck.tiles} />
 
-        {documentsTable}
-
-        {deck.docketCount > 0 && (
-          <FileSection
-            id="deadlines"
-            title="Key dates"
-            hint="Every deadline we can compute from the dates on your file, and what each one is based on"
-          >
-            <KeyDeadlines facts={facts} jurisdiction={caseFile.jurisdiction} />
-          </FileSection>
+        {hasStatusMemo && (
+          <section className="lf-status-memo" aria-label="Current file status">
+            {routineDeadline && <FileAlertStrip pressing={routineDeadline} chatHref={chatHref} />}
+            {prepBanner}
+            {consultStrip}
+            {completedConsultWrapUp && (
+              <div className="lf-status-memo-line" role="status">
+                <strong>After your consult</strong>
+                <span>
+                  {completedConsultWrapUp.consultSummary ||
+                    completedConsultWrapUp.strategyOverview ||
+                    completedConsultWrapUp.expectedTimeline ||
+                    "Your consultation notes have been added to this file."}
+                </span>
+                {completedConsultSubmittedAt && (
+                  <time dateTime={completedConsultSubmittedAt}>
+                    {new Date(completedConsultSubmittedAt).toLocaleDateString("en-US", {
+                      month: "short", day: "numeric", year: "numeric",
+                    })}
+                  </time>
+                )}
+              </div>
+            )}
+          </section>
         )}
 
-        <FileSection
-          id="case-details"
-          title="Your case details"
-          hint="What this matter is about, what you want out of it, and the strategy — updates as you go"
-        >
-          {aboutBlocks}
-        </FileSection>
-
-        <FileSection
-          id="facts"
-          title="Facts on file"
-          hint="What's confirmed, what's still open, and your what-if preferences"
-        >
-          {factsBlocks}
-        </FileSection>
-
-        <FileSection
-          id="strength"
-          title="How strong is my position?"
-          hint="An honest, adversarial read of your case — run it whenever the facts change"
-        >
-          <StrengthCheckCard
-            caseFileId={caseFile.id}
-            check={caseFile.legal_strategy?.strength_check ?? null}
-            isAttorney={false}
-          />
-        </FileSection>
-
-        <FileSection
-          id="help"
-          title="Talk to a person"
-          hint="Reach the firm, tell us about a lawyer you've already hired, and read your attorney's assessment"
-        >
-          <ExistingCounselCard
-            caseFileId={caseFile.id}
-            counselIntakeAt={caseFile.counsel_intake_at}
-            hasExistingCounsel={caseFile.has_existing_counsel}
-            existingCounselName={caseFile.existing_counsel_name}
-            counselEngagementGoal={caseFile.counsel_engagement_goal}
-            mode="client"
-          />
-
-          <div className="lf-card lf-card-full lf-contact-card">
-            <div className="lf-card-label">Questions?</div>
-            <p className="lf-contact-text">
-              Email us at{" "}
-              <a className="lf-contact-email" href={`mailto:${FIRM_CONTACT_EMAIL}`}>{FIRM_CONTACT_EMAIL}</a>{" "}
-              and we&apos;ll get back to you.
-            </p>
-          </div>
-
-          {attorneyAssessment}
-        </FileSection>
+        {clientDestination ? (
+          <>
+            <Link href={`/dashboard/${caseFile.id}`} className="lf-client-detail-back">← Back to case overview</Link>
+            <div className="lf-client-detail">
+              {clientDestination === "documents" && documentsTable}
+              {clientDestination === "deadlines" && (
+                <KeyDeadlines facts={facts} jurisdiction={caseFile.jurisdiction} />
+              )}
+              {clientDestination === "case-details" && (
+                <>
+                  {aboutBlocks}
+                  {factsBlocks}
+                  <StrengthCheckCard
+                    caseFileId={caseFile.id}
+                    check={caseFile.legal_strategy?.strength_check ?? null}
+                    isAttorney={false}
+                  />
+                </>
+              )}
+              {clientDestination === "facts" && factsBlocks}
+              {clientDestination === "strength" && (
+                <StrengthCheckCard
+                  caseFileId={caseFile.id}
+                  check={caseFile.legal_strategy?.strength_check ?? null}
+                  isAttorney={false}
+                />
+              )}
+              {clientDestination === "help" && (
+                <>
+                  <ExistingCounselCard
+                    caseFileId={caseFile.id}
+                    counselIntakeAt={caseFile.counsel_intake_at}
+                    hasExistingCounsel={caseFile.has_existing_counsel}
+                    existingCounselName={caseFile.existing_counsel_name}
+                    counselEngagementGoal={caseFile.counsel_engagement_goal}
+                    mode="client"
+                  />
+                  <div className="lf-card lf-card-full lf-contact-card">
+                    <div className="lf-card-label">Questions?</div>
+                    <p className="lf-contact-text">Email us at{" "}<a className="lf-contact-email" href={`mailto:${FIRM_CONTACT_EMAIL}`}>{FIRM_CONTACT_EMAIL}</a>.</p>
+                  </div>
+                  {attorneyAssessment}
+                </>
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            {/* The map already rendered above; the overview adds the reading
+                behind it, not a second copy of the tiles. */}
+            <CaseHub
+              caseFile={caseFile}
+              tasks={matterTasks}
+              deck={deck}
+              consultAction={!isAttorneyUser ? consultAction : undefined}
+            />
+            <ClientCaseMemo caseFile={caseFile} confirmedFacts={confirmed} deck={deck} chatHref={chatHref} />
+          </>
+        )}
 
         <AskAssistantBar href={chatHref} />
       </div>

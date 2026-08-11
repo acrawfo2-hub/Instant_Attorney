@@ -372,6 +372,7 @@ export default function CaseDocumentsTable({
 
   return (
     <section className="cdt lf-anchor" id="documents">
+      <span id="uploads" className="lf-anchor" aria-hidden="true" />
       <div className="cdt-head">
         <div>
           <h2 className="cdt-title">Documents &amp; attachments</h2>
@@ -440,6 +441,8 @@ export default function CaseDocumentsTable({
         </div>
       )}
 
+      <span id="drafted-documents" className="lf-anchor" aria-hidden="true" />
+      {total === 0 && <span id="attorney-review" className="lf-anchor" aria-hidden="true" />}
       {total === 0 ? (
         <p className="cdt-empty">Nothing on the file yet. Attachments you upload and documents you draft with your assistant will appear here.</p>
       ) : (
@@ -624,6 +627,7 @@ export default function CaseDocumentsTable({
           )}
 
           {/* ── WITH YOUR ATTORNEY (pending review) ── */}
+          <span id="attorney-review" className="lf-anchor" aria-hidden="true" />
           {reviewDocs.length > 0 && (
             <>
               <div className="cdt-band cdt-band-review">

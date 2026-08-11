@@ -2193,6 +2193,22 @@ body {
   white-space: nowrap;
 }
 .lf-begin-btn:hover { background: var(--brand-gold-lt); }
+.lf-header-consult-btn {
+  color: var(--brand-cream-heading);
+  border: 1px solid rgba(232, 226, 217, 0.42);
+  border-radius: 6px;
+  padding: 0.45rem 0.8rem;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: border-color 0.2s, background 0.2s;
+}
+.lf-header-consult-btn:hover {
+  border-color: var(--brand-gold);
+  background: rgba(200, 169, 110, 0.12);
+}
 .lf-begin-btn-lg {
   padding: 0.8rem 2rem;
   font-size: 15px;
@@ -10969,22 +10985,43 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
 }
 .lf-hub-tally-wait { color: #b7791f; }
 .lf-hub-tally-done { color: #2e7d5b; font-weight: 600; }
+.lf-hub-consult {
+  border-top: 1px solid var(--brand-border);
+  padding-top: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--brand-text-lt);
+  font-size: 13px;
+}
+.lf-hub-consult-action {
+  color: var(--brand-navy);
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.lf-hub-consult-action:hover { text-decoration: underline; }
+@media (max-width: 620px) {
+  .lf-hub-consult { align-items: flex-start; flex-direction: column; gap: 0.5rem; }
+}
 
-/* ── The map: six tiles, always the same six ─────────────────────────────── */
+/* ── The map: eight tiles, always the same eight ─────────────────────────── */
 .lf-tiles {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.75rem;
+  /* Four across, so the eight destinations sit as two even rows rather than
+     a six-and-two remainder that moves the last tiles out of learned places. */
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
 }
-@media (max-width: 900px) { .lf-tiles { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 520px) { .lf-tiles { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .lf-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .lf-tile {
   display: flex;
   align-items: center;
-  gap: 11px;
-  padding: 14px 14px;
-  min-height: 74px;
+  gap: 8px;
+  padding: 10px;
+  min-height: 58px;
   border-radius: var(--brand-r-lg);
   border: 1px solid var(--brand-border);
   background: var(--brand-white);
@@ -11001,19 +11038,19 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
   flex: 0 0 auto;
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
   background: var(--brand-cream);
   color: var(--brand-text-md);
 }
-.lf-tile-icon svg { width: 18px; height: 18px; }
-.lf-tile-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.lf-tile-icon svg { width: 16px; height: 16px; }
+.lf-tile-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .lf-tile-label {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 14.5px;
+  font-size: 13.5px;
   font-weight: 700;
   color: var(--brand-text-dk);
   line-height: 1.2;
@@ -11033,16 +11070,41 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
   font-variant-numeric: tabular-nums;
 }
 .lf-tile-status {
-  font-size: 12.5px;
-  line-height: 1.35;
+  font-size: 11.5px;
+  line-height: 1.25;
   color: var(--brand-text-lt);
-  /* Two lines max: a tile is a signpost, not a paragraph. */
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   overflow: hidden;
 }
 .lf-tile-chev { flex: 0 0 auto; width: 15px; height: 15px; color: var(--brand-text-xlt); }
+
+/* Routine notices share one compact memo below the stable file map. */
+.lf-status-memo {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 0.5rem;
+}
+.lf-status-memo-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--brand-border);
+  border-radius: var(--brand-r-md);
+  background: var(--brand-white);
+  color: var(--brand-text-md);
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+.lf-status-memo-line strong { flex: 0 0 auto; color: var(--brand-text-dk); }
+.lf-status-memo-line span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lf-status-memo-line time { flex: 0 0 auto; margin-left: auto; color: var(--brand-text-lt); }
+@media (max-width: 600px) {
+  .lf-status-memo-line { align-items: flex-start; flex-wrap: wrap; }
+  .lf-status-memo-line span { flex-basis: 100%; }
+  .lf-status-memo-line time { margin-left: 0; }
+}
 
 /* Tone colors the tile; it never changes the tile's place in the grid. */
 .lf-tile-urgent { border-color: #fecaca; background: #fef6f5; }
@@ -11244,3 +11306,31 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
   cursor: pointer;
 }
 .fc-draft-retry:hover { background: rgba(154, 118, 54, 0.2); }
+
+/* Focused client memo: a bounded overview; full records live behind file tiles. */
+.lf-client-memo { grid-column: 1 / -1; border: 1px solid var(--brand-border); border-radius: var(--brand-r-lg); background: var(--brand-surface); overflow: hidden; }
+.lf-client-memo-head { padding: 1.25rem 1.4rem; border-bottom: 1px solid var(--brand-border); }
+.lf-client-memo-kicker { margin: 0 0 .25rem; color: var(--brand-gold-dk); font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.lf-client-memo-head h2 { margin: 0; color: var(--brand-navy); font-family: var(--font-cormorant, Georgia, serif); font-size: 1.65rem; }
+.lf-client-memo-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.lf-client-memo-section { min-width: 0; padding: 1.25rem 1.4rem; border-bottom: 1px solid var(--brand-border); }
+.lf-client-memo-section:nth-child(odd) { border-right: 1px solid var(--brand-border); }
+.lf-client-memo-section:nth-last-child(-n+2) { border-bottom: 0; }
+.lf-client-memo-section h3 { margin: 0 0 .65rem; color: var(--brand-navy); font-size: .86rem; }
+.lf-client-memo-section p, .lf-client-memo-section ul { margin: 0; color: var(--brand-text); font-size: .9rem; line-height: 1.65; }
+.lf-client-memo-section ul { padding-left: 1.15rem; }
+.lf-client-memo-section li + li { margin-top: .35rem; }
+.lf-client-memo-link { display: inline-block; margin-top: .8rem; color: var(--brand-gold-dk); font-size: .8rem; font-weight: 650; }
+.lf-client-memo-primary { display: flex; flex-direction: column; gap: .2rem; padding: .85rem 1rem; border-radius: 8px; background: var(--brand-navy); color: white; font-size: .88rem; font-weight: 650; }
+.lf-client-memo-primary small { color: rgba(255,255,255,.72); font-weight: 400; line-height: 1.4; }
+.lf-client-memo-secondary { display: flex; flex-direction: column; gap: .45rem; margin-top: .7rem; }
+.lf-client-memo-secondary a { color: var(--brand-gold-dk); font-size: .82rem; font-weight: 600; }
+.lf-client-detail-back { grid-column: 1 / -1; color: var(--brand-gold-dk); font-size: .84rem; font-weight: 650; }
+.lf-client-detail { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--lf-gap); }
+.lf-client-detail > .lf-card-full, .lf-client-detail > .lf-facts-panel, .lf-client-detail > .lf-documents { grid-column: 1 / -1; }
+@media (max-width: 700px) {
+  .lf-client-memo-grid { grid-template-columns: 1fr; }
+  .lf-client-memo-section, .lf-client-memo-section:nth-child(odd), .lf-client-memo-section:nth-last-child(-n+2) { border-right: 0; border-bottom: 1px solid var(--brand-border); }
+  .lf-client-memo-section:last-child { border-bottom: 0; }
+  .lf-client-detail { grid-template-columns: 1fr; }
+}

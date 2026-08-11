@@ -11,6 +11,8 @@ import MatterSwitcher from "@/components/MatterSwitcher";
 import { parseRoadmapOverlay } from "@/lib/roadmap-snapshot";
 import type { RoadmapAiOverlay } from "@/lib/roadmap-types";
 import { toMatterSwitcherItem } from "@/lib/matter-switcher";
+import { getConsultAction } from "@/lib/consult-action";
+import { parseClientDestination } from "@/lib/client-destinations";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
@@ -157,10 +159,13 @@ async function getData(caseFileId: string) {
 
 export default async function FileDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ view?: string }>;
 }) {
   const { id } = await params;
+  const clientDestination = parseClientDestination((await searchParams).view);
   const hdrs = await headers();
   const isBypass = hdrs.get("x-bypass-auth") === "true" || BYPASS_AUTH;
 
@@ -177,6 +182,7 @@ export default async function FileDetailPage({
     href: `/chat?caseFileId=${caseFile.id}&mode=freestyle`,
     label: "Legal chat",
   };
+  const consultAction = getConsultAction(consultRequest, hasConsultSub);
 
   return (
     <div className="lf-shell">
@@ -207,6 +213,11 @@ export default async function FileDetailPage({
               Money &amp; property
             </Link>
           )}
+          {!isAttorneyUser && (
+            <Link href={consultAction.href} className="lf-header-consult-btn">
+              {consultAction.label}
+            </Link>
+          )}
           <Link href={headerCta.href} className="lf-begin-btn">
             {headerCta.label}
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -234,6 +245,7 @@ export default async function FileDetailPage({
           completedConsultWrapUp={completedConsultWrapUp}
           completedConsultSubmittedAt={completedConsultSubmittedAt}
           roadmapOverlay={roadmapOverlay}
+          clientDestination={clientDestination}
         />
       </main>
     </div>
