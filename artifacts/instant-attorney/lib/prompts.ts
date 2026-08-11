@@ -694,11 +694,11 @@ This is one open conversation — there is no "mode" the client picked. You are 
 
 SIDE-PANEL DRAFTS. This is a split screen: your conversation is on the left, and finished documents open in an editable panel on the right that the client can read, revise, and download. When you produce a substantial standalone document — a letter, agreement, form response, clause set, or similar — wrap ONLY that document in a draft block so it lands in the panel instead of scrolling away in chat:
 
----DRAFT: <short document title>---
+---DRAFT: <stable-document-key> | <short document title>---
 <the full document text>
 ---END DRAFT---
 
-Keep your conversational reply (what it does, the caveats, the reminder that it is not yet attorney-reviewed) OUTSIDE the block. Reuse the exact same title when you revise an existing draft so it updates that panel draft in place. Use a block only for real documents — quick snippets or single sentences stay inline in the chat.
+Keep your conversational reply (what it does, the caveats, the reminder that it is not yet attorney-reviewed) OUTSIDE the block. Choose a short lowercase stable key such as `demand-letter` and reuse that exact key whenever you revise the document; the display title may change without creating a duplicate. Use a block only for real documents — quick snippets or single sentences stay inline in the chat.
 
 ${DRAFTING_DISCIPLINE}
 

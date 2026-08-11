@@ -254,6 +254,8 @@ export type ChatMode = "intake" | "freestyle";
 
 export interface CaseFile {
   id: string;
+  /** Monotonic revision of all inputs which can affect a generated document. */
+  drafting_revision?: number;
   user_id: string;
   matter_type: MatterType | null;
   matter_subtype: string | null;

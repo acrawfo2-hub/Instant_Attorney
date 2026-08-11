@@ -12,6 +12,7 @@ import { triggerPendingLookups } from "@/lib/gov-form-lookup";
 import { generateCaseTitle } from "@/lib/title-generator";
 import { toAnthropicBlock, processAttachment } from "@/lib/attachment-processor";
 import { parseDrafts } from "@/lib/freestyle-drafts";
+import { logicalDocumentKey, normalizeGenerationInputs } from "@/lib/document-generation";
 import { stripToolMarkers } from "@/lib/tool-markers";
 import { createAcpJob, getAcpJob, getPredecessorChain, emitAcpChunk, finishAcpJob } from "@/lib/acp-jobs";
 import { recordAiFromMessage, recordStorageUpload } from "@/lib/usage-tracker";
@@ -312,7 +313,23 @@ export async function POST(req: NextRequest) {
   // queues it behind any still-unfinished turn for this case; waiting on the
   // immediate predecessor is transitive (that predecessor waits on ITS
   // predecessor before it starts), so turns execute strictly in order.
-  const job = createAcpJob(resolvedCaseFileId, userId);
+  const generationInputs = normalizeGenerationInputs(facts, attachments);
+  const inputRevision = caseFile?.drafting_revision ?? 0;
+  const job = createAcpJob(resolvedCaseFileId, userId, {
+    revision: inputRevision,
+    ...generationInputs,
+  });
+  // Durable job provenance complements the in-process streaming registry. The
+  // id is shared so an accepted draft can point back to the exact model run.
+  await db.from("document_generation_jobs").insert({
+    id: job.id,
+    case_file_id: resolvedCaseFileId,
+    user_id: userId,
+    input_revision: inputRevision,
+    fact_keys: generationInputs.factKeys,
+    attachment_versions: generationInputs.attachmentVersions,
+    status: "running",
+  });
   const waitForPrev = job.predecessorId ? getAcpJob(job.predecessorId) : null;
   // Never wait forever on a predecessor — if it somehow never finishes (crash
   // before finish, swept as stale), proceed without its reply.
@@ -454,33 +471,32 @@ export async function POST(req: NextRequest) {
           if (mode === "freestyle") {
             for (const draft of parseDrafts(fullResponse)) {
               try {
-                const { data: existing } = await db
-                  .from("client_workspace_drafts")
-                  .select("id")
-                  .eq("case_file_id", resolvedCaseFileId)
-                  .eq("user_id", userId)
-                  .eq("title", draft.title)
-                  .order("updated_at", { ascending: false })
-                  .limit(1)
-                  .maybeSingle();
-                if (existing?.id) {
-                  await db.from("client_workspace_drafts")
-                    .update({ content: draft.content, source: "assistant", updated_at: new Date().toISOString() })
-                    .eq("id", existing.id);
-                } else {
-                  await db.from("client_workspace_drafts").insert({
-                    case_file_id: resolvedCaseFileId,
-                    user_id: userId,
-                    title: draft.title,
-                    content: draft.content,
-                    source: "assistant",
-                  });
-                }
+                const identity = logicalDocumentKey(draft.title);
+                const missingFactKeys = [...draft.content.matchAll(/\[\[([^\]]+)\]\]/g)]
+                  .map((match) => match[1].trim().toLowerCase().replace(/[^a-z0-9]+/g, "_")).filter(Boolean);
+                const { error } = await db.rpc("accept_client_workspace_draft_generation", {
+                  p_case_file_id: resolvedCaseFileId,
+                  p_user_id: userId,
+                  p_logical_document_key: identity.key,
+                  p_title: identity.title,
+                  p_content: draft.content,
+                  p_job_id: job.id,
+                  p_input_revision: job.inputRevision,
+                  p_fact_keys: job.factKeys,
+                  p_attachment_versions: job.attachmentVersions,
+                  p_missing_fact_keys: [...new Set(missingFactKeys)].sort(),
+                });
+                if (error) throw error;
               } catch (err) {
                 console.error("[chat-acp] persist draft error:", err);
               }
             }
           }
+
+          await db.from("document_generation_jobs")
+            .update({ status: "completed", completed_at: new Date().toISOString() })
+            .eq("id", job.id)
+            .eq("status", "running");
 
           // Parse and update file if response contains structured blocks
           const hasLivingFile = fullResponse.includes("---LIVING FILE---");

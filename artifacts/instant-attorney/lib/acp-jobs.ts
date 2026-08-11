@@ -19,6 +19,10 @@ export interface AcpJob {
   id: string;
   caseFileId: string;
   userId: string;
+  /** Living File revision and canonical sources captured before generation. */
+  inputRevision: number;
+  factKeys: string[];
+  attachmentVersions: Array<{ id: string; version: string }>;
   /** The job this turn queued behind (still-unfinished tail at creation time). */
   predecessorId: string | null;
   startedAt: number;
@@ -71,7 +75,11 @@ function sweep() {
   }
 }
 
-export function createAcpJob(caseFileId: string, userId: string): AcpJob {
+export function createAcpJob(
+  caseFileId: string,
+  userId: string,
+  input: { revision?: number; factKeys?: string[]; attachmentVersions?: Array<{ id: string; version: string }> } = {},
+): AcpJob {
   sweep();
   // Queue behind the current tail when it hasn't finished yet — turns for one
   // case file execute strictly in order (each waits for its predecessor, so
@@ -84,6 +92,9 @@ export function createAcpJob(caseFileId: string, userId: string): AcpJob {
     id: randomUUID(),
     caseFileId,
     userId,
+    inputRevision: input.revision ?? 0,
+    factKeys: input.factKeys ?? [],
+    attachmentVersions: input.attachmentVersions ?? [],
     predecessorId,
     startedAt: Date.now(),
     text: "",
