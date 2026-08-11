@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { CaseFile } from "@/lib/types";
 import type { MatterTasksResult, MatterTask } from "@/lib/matter-tasks";
 import type { FileDeck } from "@/lib/file-deck";
+import type { ConsultAction } from "@/lib/consult-action";
 
 // The consumer file's one live block, and the only thing above the fold that
 // asks the client to do something. It answers, in a lawyer's order:
@@ -52,10 +53,12 @@ export default function CaseHub({
   caseFile,
   tasks,
   deck,
+  consultAction,
 }: {
   caseFile: CaseFile;
   tasks: MatterTasksResult;
   deck: FileDeck;
+  consultAction?: ConsultAction;
 }) {
   const chatHref = `/chat?caseFileId=${caseFile.id}`;
   const askHref = (ask: string) => `${chatHref}&ask=${encodeURIComponent(ask)}`;
@@ -186,6 +189,15 @@ export default function CaseHub({
             <span className="lf-hub-tally-done">✓ {tasks.counts.done} already handled</span>
           )}
         </p>
+      )}
+
+      {consultAction && (
+        <div className="lf-hub-consult">
+          <span>Want to talk through this matter with an attorney?</span>
+          <Link href={consultAction.href} className="lf-hub-consult-action">
+            {consultAction.label} <span aria-hidden>→</span>
+          </Link>
+        </div>
       )}
     </section>
   );
