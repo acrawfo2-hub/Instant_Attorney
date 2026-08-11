@@ -14,7 +14,6 @@ import {
   stateBarReferralUrl,
 } from "@/lib/jurisdiction";
 import type { RoadmapAiOverlay } from "@/lib/roadmap-types";
-import PostConsultCard from "@/components/PostConsultCard";
 import CaseHub from "@/components/CaseHub";
 import FileTiles from "@/components/FileTiles";
 import FileAlertStrip from "@/components/FileAlertStrip";
@@ -441,17 +440,43 @@ export default function ClientFileView({
   // ── Client layout — the deck ───────────────────────────────────────────────
 
   if (!isAttorney && matterTasks && deck) {
+    const expiredDeadline = deck.pressing?.urgency === "expired" ? deck.pressing : null;
+    const routineDeadline = deck.pressing?.urgency !== "expired" ? deck.pressing : null;
+    const hasStatusMemo = Boolean(
+      routineDeadline || prepBanner || consultStrip || completedConsultWrapUp,
+    );
+
     return (
       <div className="lf-grid">
-        {prepBanner}
-        {deck.pressing && <FileAlertStrip pressing={deck.pressing} chatHref={chatHref} />}
-        {consultStrip}
+        {/* The file map is the stable first element. Only an already-missed
+            deadline is serious enough to interrupt that learned position. */}
+        {expiredDeadline && <FileAlertStrip pressing={expiredDeadline} chatHref={chatHref} />}
+        <FileTiles tiles={deck.tiles} />
 
-        {completedConsultWrapUp && (
-          <PostConsultCard
-            wrapUp={completedConsultWrapUp}
-            submittedAt={completedConsultSubmittedAt}
-          />
+        {hasStatusMemo && (
+          <section className="lf-status-memo" aria-label="Current file status">
+            {routineDeadline && <FileAlertStrip pressing={routineDeadline} chatHref={chatHref} />}
+            {prepBanner}
+            {consultStrip}
+            {completedConsultWrapUp && (
+              <div className="lf-status-memo-line" role="status">
+                <strong>After your consult</strong>
+                <span>
+                  {completedConsultWrapUp.consultSummary ||
+                    completedConsultWrapUp.strategyOverview ||
+                    completedConsultWrapUp.expectedTimeline ||
+                    "Your consultation notes have been added to this file."}
+                </span>
+                {completedConsultSubmittedAt && (
+                  <time dateTime={completedConsultSubmittedAt}>
+                    {new Date(completedConsultSubmittedAt).toLocaleDateString("en-US", {
+                      month: "short", day: "numeric", year: "numeric",
+                    })}
+                  </time>
+                )}
+              </div>
+            )}
+          </section>
         )}
 
         {clientDestination ? (
@@ -502,9 +527,10 @@ export default function ClientFileView({
           </>
         ) : (
           <>
+            {/* The map already rendered above; the overview adds the reading
+                behind it, not a second copy of the tiles. */}
             <CaseHub caseFile={caseFile} tasks={matterTasks} deck={deck} />
             <ClientCaseMemo caseFile={caseFile} confirmedFacts={confirmed} deck={deck} chatHref={chatHref} />
-            <FileTiles tiles={deck.tiles} />
           </>
         )}
 
