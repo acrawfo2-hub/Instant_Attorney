@@ -11,6 +11,7 @@ import { BYPASS_USER_ID, WIZARD_LABELS } from "@/lib/types";
 import type { WizardType, CaseFile, FactItem, Attachment, RequestedAttachment } from "@/lib/types";
 import { logTruncation } from "@/lib/truncation-logger";
 import { maxOutputTokensFor, limitSignalMetadata } from "@/lib/token-limits";
+import { buildJurisdictionBlock, classifyInstrumentRisk, hasRequiredForum } from "@/lib/document-risk";
 
 // Allow up to 5 minutes for this route — legal doc generation can be slow
 export const maxDuration = 300;
@@ -23,7 +24,7 @@ export async function POST(req: NextRequest) {
   if (!body || typeof body !== "object") {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
-  const { messages, caseFileId, wizardType, documentId, instrument, planKey, baseAttachmentId, isInit } = body;
+  const { messages, caseFileId, wizardType, documentId, instrument, planKey, baseAttachmentId, isInit, governingForum } = body;
   const planKeyStr = typeof planKey === "string" && planKey.trim() ? planKey.trim() : undefined;
 
   if (!Array.isArray(messages) || messages.length === 0) {
@@ -122,10 +123,28 @@ export async function POST(req: NextRequest) {
       db.from("profiles").select("account_type").eq("id", userId).maybeSingle(),
     ]);
 
-  const caseFile = caseFileRow as CaseFile | null;
+  let caseFile = caseFileRow as CaseFile | null;
   const facts = (factRows ?? []) as FactItem[];
   const attachments = (attachmentRows ?? []) as Attachment[];
   const requestedAttachments = (requestedRows ?? []) as RequestedAttachment[];
+  const suppliedForum = typeof governingForum === "string" ? governingForum.trim() : "";
+  if (suppliedForum && caseFile) {
+    const { error: forumUpdateError } = await writeDb
+      .from("case_files")
+      .update({ jurisdiction: suppliedForum, updated_at: new Date().toISOString() })
+      .eq("id", caseFileId)
+      .eq("user_id", userId);
+    if (forumUpdateError) {
+      return NextResponse.json({ error: "We couldn't save that jurisdiction or forum. Please try again." }, { status: 500 });
+    }
+    caseFile = { ...caseFile, jurisdiction: suppliedForum };
+  }
+
+  const riskProfile = classifyInstrumentRisk(wizardType as WizardType, instrument || WIZARD_LABELS[wizardType as WizardType]);
+  const confirmedFactText = facts.filter((fact) => fact.status === "confirmed").map((fact) => fact.description);
+  if (riskProfile.risk === "high" && !hasRequiredForum(riskProfile, caseFile?.jurisdiction, confirmedFactText)) {
+    return NextResponse.json({ blocking: buildJurisdictionBlock(riskProfile) }, { status: 409 });
+  }
   const fileContext = caseFile ? buildFileContext(caseFile, facts, attachments, requestedAttachments) : "";
   const fieldHints = WIZARD_FIELD_HINTS[wizardType as WizardType];
   // Attorney-users get a targeted-edit follow-up behavior instead of a full
@@ -228,6 +247,20 @@ export async function POST(req: NextRequest) {
     .filter((b) => b.type === "text")
     .map((b) => (b as Anthropic.TextBlock).text)
     .join("");
+
+  // Defense in depth: recognize the drafter's structured gate if context was
+  // ambiguous in a way the deterministic preflight could not identify.
+  const modelBlock = fullResponse.trim().match(/^\{"blocking":([\s\S]+)\}$/);
+  if (modelBlock) {
+    try {
+      const parsedBlock = JSON.parse(fullResponse) as { blocking?: { code?: string } };
+      if (parsedBlock.blocking?.code === "MISSING_GOVERNING_FORUM") {
+        return NextResponse.json(parsedBlock, { status: 409 });
+      }
+    } catch {
+      // Not valid structured output; process it as an ordinary model response.
+    }
+  }
 
   // Record usage (fire-and-forget, don't block the response)
   recordAiFromMessage(db, message, {
