@@ -115,6 +115,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   const [extraNote, setExtraNote] = useState("");
   const [justUpdated, setJustUpdated] = useState(false);
   const [truncatedDraft, setTruncatedDraft] = useState(false);
+  const [generationIncomplete, setGenerationIncomplete] = useState(false);
   const [gapSyncWarning, setGapSyncWarning] = useState(false);
 
   // Pre-draft "starter questions": surfaced immediately while the first draft is
@@ -181,9 +182,17 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
       draft_text: string;
       status?: string;
       submitted_at?: string | null;
-      content_json?: { init_response?: string };
+      content_json?: { init_response?: string; raw_generation_response?: string; generation_incomplete?: boolean };
     }
   ) {
+    if (doc.content_json?.generation_incomplete) {
+      setDocumentId(doc.id);
+      docIdRef.current = doc.id;
+      setGenerationIncomplete(true);
+      setMessages([]);
+      setParsed(null);
+      return;
+    }
     const fakeResponse = `---DRAFT READY---\n${doc.draft_text}\n---END DRAFT---\n\n${doc.content_json?.init_response ?? ""}`;
     const p = parseDrafterResponse(fakeResponse);
     if (!p.draftText) p.draftText = doc.draft_text;
@@ -206,7 +215,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
         const res = await fetch(`/api/documents/${resumeDocId}`);
         if (res.ok) {
           const doc = await res.json();
-          if (doc.draft_text) {
+          if (doc.draft_text || doc.content_json?.generation_incomplete) {
             loadExistingDraft(doc);
             return;
           }
@@ -225,7 +234,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
         );
         if (res.ok) {
           const doc = await res.json();
-          if (doc.draft_text) {
+          if (doc.draft_text || doc.content_json?.generation_incomplete) {
             loadExistingDraft(doc);
             return;
           }
@@ -478,7 +487,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
         throw new Error(body?.error || `Server error ${res.status}`);
       }
 
-      const data = await res.json() as { text: string; documentId: string | null; truncated?: boolean; gapSyncWarning?: boolean; alreadyFinalized?: boolean; status?: string | null };
+      const data = await res.json() as { text: string; documentId: string | null; truncated?: boolean; generationIncomplete?: boolean; gapSyncWarning?: boolean; alreadyFinalized?: boolean; status?: string | null };
       const fullText = data.text ?? "";
 
       if (data.documentId) {
@@ -486,6 +495,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
         docIdRef.current = data.documentId;
       }
       if (data.truncated) setTruncatedDraft(true);
+      setGenerationIncomplete(Boolean(data.generationIncomplete));
       setGapSyncWarning(Boolean(data.gapSyncWarning));
 
       // The server resolved us to an already-finalized / in-review primary document
@@ -502,12 +512,13 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
       });
       lastAssistantRef.current = fullText;
 
-      // If Claude returned something but without proper markers, use the whole response as draft
       let p = parseDrafterResponse(fullText);
-      if (!p.draftText && fullText.trim()) {
-        p = { ...p, draftText: fullText.trim() };
+      if (data.generationIncomplete) {
+        setParsed(null);
+        return false;
       }
-      // Absolute fallback — guarantee a draft AND the questions needed to finish it
+      // A complete response that unexpectedly parses without text still gets a
+      // local template; incomplete/raw recovery output is never rendered here.
       if (!p.draftText) {
         const template = buildFallbackTemplate(label, wizardType);
         const derived = deriveQuestionsFromTemplate(template);
@@ -625,7 +636,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   }
 
   async function handleDownload() {
-    if (!documentId || downloading) return;
+    if (!documentId || downloading || generationIncomplete) return;
     setDownloading(true);
     try {
       const res = await fetch(`/api/documents/${documentId}/download`);
@@ -645,7 +656,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   }
 
   async function submitToAttorney() {
-    if (submitting) return;
+    if (submitting || generationIncomplete) return;
     const id = docIdRef.current || documentId;
     if (!id) {
       setError("Your draft was saved but we couldn't send it just yet. Please click “Send to Attorney” again in a moment.");
@@ -798,7 +809,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
         </div>
         <div className="wiz-header-actions">
           {documentId && (
-            <button className="wiz-dl-btn" onClick={handleDownload} disabled={downloading}>
+            <button className="wiz-dl-btn" onClick={handleDownload} disabled={downloading || generationIncomplete}>
               {downloading ? "…" : "Download .docx"}
             </button>
           )}
@@ -813,7 +824,16 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
             {streaming && <span className="wiz-doc-updating">Updating…</span>}
           </div>
 
-          {error && !currentDraft ? (
+          {generationIncomplete && !streaming ? (
+            <div className="wiz-doc-loading" role="alert">
+              <div className="wiz-gen-error-icon">⚠</div>
+              <p className="wiz-gen-error-msg">The draft response ended before a complete document was received.</p>
+              <p className="wiz-gen-error-reassure">The raw response was saved for recovery, but it cannot be reviewed, signed, or downloaded as a document.</p>
+              <button className="wiz-retry-btn" onClick={() => runDrafter([], true)}>
+                Retry complete draft →
+              </button>
+            </div>
+          ) : error && !currentDraft ? (
             <div className="wiz-doc-loading">
               <div className="wiz-gen-error-icon">⚠</div>
               <p className="wiz-gen-error-msg">{error}</p>
@@ -1227,7 +1247,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
                     <button
                       className="wiz-submit-btn"
                       onClick={hasAnyInput ? handleSubmitAnswers : submitToAttorney}
-                      disabled={submitting || streaming || !documentId}
+                      disabled={submitting || streaming || !documentId || generationIncomplete}
                     >
                       {submitting
                         ? "Sending…"

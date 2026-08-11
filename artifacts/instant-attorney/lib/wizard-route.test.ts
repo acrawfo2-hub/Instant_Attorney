@@ -332,6 +332,7 @@ test("update failure returns HTTP 500 (no stranded draft)", async () => {
 // ── 4. Truncated response sets the flag and skips the file parser ──────────────
 test("truncated response sets truncated flag, records it, and skips the Living-File parser", async () => {
   anthropicMessage = okMessage({ stop_reason: "max_tokens" });
+  extractedDraft = null;
   // A truncated response leaves an incomplete FILE UPDATE block (no closing
   // marker), so isCompleteFileUpdate is false → parser must be skipped.
   isComplete = false;
@@ -354,8 +355,75 @@ test("truncated response sets truncated flag, records it, and skips the Living-F
 
   const cj = insertedPayload!.content_json as Record<string, unknown>;
   assert.equal(cj.truncated, true, "truncation must be recorded in content_json");
+  assert.equal(cj.generation_state, "generation_incomplete");
+  assert.equal(insertedPayload!.draft_text, null, "raw recovery output must not become draft_text");
 
   assert.equal(parseSpy.mock.callCount(), 0, "file parser must NOT run on a truncated/incomplete block");
+});
+
+test("missing draft markers are saved only as recovery content", async () => {
+  anthropicMessage = okMessage({ content: [{ type: "text", text: "useful but markerless recovery text" }] });
+  extractedDraft = null;
+  dbConfig = baseConfig({ documents: { insert: () => ({ data: { id: "recovery-doc" }, error: null }) } });
+
+  const res = await POST(makeReq(validBody()));
+  const body = await res.json();
+  const payload = lastDocCall("insert")!.payload as Record<string, unknown>;
+  const cj = payload.content_json as Record<string, unknown>;
+  assert.equal(body.generationIncomplete, true);
+  assert.equal(payload.draft_text, null);
+  assert.equal(cj.raw_generation_response, "useful but markerless recovery text");
+  assert.equal(cj.generation_incomplete_reason, "missing_draft_block");
+});
+
+test("truncation before the end marker never creates renderable draft text", async () => {
+  anthropicMessage = okMessage({
+    content: [{ type: "text", text: "---DRAFT READY---\nunfinished pleading" }],
+    stop_reason: "max_tokens",
+  });
+  extractedDraft = null;
+  dbConfig = baseConfig({ documents: { insert: () => ({ data: { id: "partial-doc" }, error: null }) } });
+
+  await POST(makeReq(validBody()));
+  const payload = lastDocCall("insert")!.payload as Record<string, unknown>;
+  const cj = payload.content_json as Record<string, unknown>;
+  assert.equal(payload.draft_text, null);
+  assert.equal(cj.generation_incomplete_reason, "truncated_draft_block");
+});
+
+test("complete draft followed by truncated metadata remains renderable", async () => {
+  anthropicMessage = okMessage({
+    content: [{ type: "text", text: "---DRAFT READY---\nComplete draft\n---END DRAFT---\n---FILE UPDATE---\n{" }],
+    stop_reason: "max_tokens",
+  });
+  extractedDraft = "Complete draft";
+  dbConfig = baseConfig({ documents: { insert: () => ({ data: { id: "complete-doc" }, error: null }) } });
+
+  const res = await POST(makeReq(validBody()));
+  const body = await res.json();
+  const payload = lastDocCall("insert")!.payload as Record<string, unknown>;
+  assert.equal(body.generationIncomplete, false);
+  assert.equal(payload.draft_text, "Complete draft");
+  assert.equal((payload.content_json as Record<string, unknown>).generation_state, "complete");
+});
+
+test("successful retry promotes a complete block and clears incomplete state", async () => {
+  target = {
+    action: "update",
+    documentId: "recovery-doc",
+    existing: { status: "draft", content_json: { generation_incomplete: true, raw_generation_response: "partial" } },
+  };
+  extractedDraft = "Regenerated complete draft";
+  anthropicMessage = okMessage({ content: [{ type: "text", text: "---DRAFT READY---\nRegenerated complete draft\n---END DRAFT---" }] });
+  dbConfig = baseConfig({ documents: { update: () => ({ error: null }) } });
+
+  const res = await POST(makeReq(validBody({ documentId: "recovery-doc" })));
+  const body = await res.json();
+  const payload = lastDocCall("update")!.payload as Record<string, unknown>;
+  assert.equal(body.generationIncomplete, false);
+  assert.equal(payload.draft_text, "Regenerated complete draft");
+  assert.equal((payload.content_json as Record<string, unknown>).generation_incomplete, false);
+  assert.equal((payload.content_json as Record<string, unknown>).generation_state, "complete");
 });
 
 test("a complete FILE UPDATE block runs the Living-File parser", async () => {

@@ -30,6 +30,19 @@ export async function POST(
   // caller's). This is the same client bypass mode already uses.
   const db = createServiceClient();
 
+  const { data: candidate } = await db
+    .from("documents")
+    .select("content_json")
+    .eq("id", id)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if ((candidate?.content_json as Record<string, unknown> | null)?.generation_incomplete === true) {
+    return NextResponse.json(
+      { error: "Regenerate the complete draft before submitting it for review." },
+      { status: 409 }
+    );
+  }
+
   const doc = await finalizeDocumentSubmission(db, id, userId);
 
   if (!doc) {

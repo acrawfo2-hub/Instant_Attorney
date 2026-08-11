@@ -246,8 +246,20 @@ export async function POST(req: NextRequest) {
     },
   }).catch((e) => console.error("[wizard] usage record error:", e));
 
-  // Detect truncation before saving so the flag lands in content_json
+  // A response is renderable only when the entire draft block arrived. The
+  // model may finish the draft and then hit its token limit while writing the
+  // optional metadata; that is safe. Conversely, an end_turn without markers
+  // is not a draft and must remain recovery material only.
   const truncated = message.stop_reason === "max_tokens";
+  const extractedDraft = extractDraftText(fullResponse);
+  const hasDraftStart = fullResponse.includes("---DRAFT READY---");
+  const hasDraftEnd = fullResponse.includes("---END DRAFT---");
+  const generationIncomplete = !extractedDraft;
+  const incompleteReason = !hasDraftStart
+    ? "missing_draft_block"
+    : !hasDraftEnd
+      ? "truncated_draft_block"
+      : "empty_draft_block";
   if (truncated) {
     logTruncation({
       endpoint: "wizard",
@@ -258,15 +270,12 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Save the draft text to the documents table. Always persist *something* when
-  // the model returned any text: if it omitted the ---DRAFT READY--- markers (or
-  // truncated before them), fall back to the raw response so the client always
-  // gets a documentId back and can submit for attorney review. A markerless
-  // response must never strand a client with an on-screen draft they can't send.
-  const draftText = extractDraftText(fullResponse) ?? (fullResponse.trim() || null);
+  // Raw output is always retained for recovery/debugging, but never promoted to
+  // renderable draft_text unless the complete draft block was parsed.
+  const draftText = extractedDraft;
   let savedDocId: string | undefined = documentId as string | undefined;
 
-  if (draftText) {
+  if (draftText || fullResponse.trim()) {
     const now = new Date().toISOString();
 
     const target = await resolveWizardDocumentTarget(writeDb, {
@@ -294,18 +303,20 @@ export async function POST(req: NextRequest) {
       const nextStatus = curStatus && curStatus !== "pre_warmed" ? curStatus : "draft";
 
       const update: Record<string, unknown> = {
-        draft_text: draftText,
         status: nextStatus,
         updated_at: now,
-      };
-      const existingCj = (existingDoc.content_json as Record<string, unknown>) ?? {};
-      if (truncated || (planKeyStr && existingCj.plan_key !== planKeyStr)) {
-        update.content_json = {
-          ...existingCj,
-          ...(truncated ? { truncated: true } : {}),
+        content_json: {
+          ...((existingDoc.content_json as Record<string, unknown>) ?? {}),
+          generation_state: generationIncomplete ? "generation_incomplete" : "complete",
+          generation_incomplete: generationIncomplete,
+          raw_generation_response: fullResponse,
+          ...(generationIncomplete ? { generation_incomplete_reason: incompleteReason } : {}),
+          ...(truncated ? { truncated: true } : { truncated: false }),
           ...(planKeyStr ? { plan_key: planKeyStr } : {}),
-        };
-      }
+        },
+      };
+      // A failed retry must not overwrite the last known-good draft.
+      if (draftText) update.draft_text = draftText;
       const { error: updateErr } = await writeDb
         .from("documents")
         .update(update)
@@ -325,6 +336,10 @@ export async function POST(req: NextRequest) {
           title: `${documentLabel} — ${new Date().toLocaleDateString()}`,
           content_json: {
             init_response: fullResponse,
+            raw_generation_response: fullResponse,
+            generation_state: generationIncomplete ? "generation_incomplete" : "complete",
+            generation_incomplete: generationIncomplete,
+            ...(generationIncomplete ? { generation_incomplete_reason: incompleteReason } : {}),
             ...(truncated ? { truncated: true } : {}),
             ...(planKeyStr ? { plan_key: planKeyStr } : {}),
             ...(wizardType === "improve_draft" && baseAttachmentId ? { base_attachment_id: baseAttachmentId } : {}),
@@ -388,6 +403,7 @@ export async function POST(req: NextRequest) {
     text: fullResponse,
     documentId: savedDocId ?? null,
     truncated,
+    generationIncomplete,
     gapSyncWarning,
     knownFacts,
   });
