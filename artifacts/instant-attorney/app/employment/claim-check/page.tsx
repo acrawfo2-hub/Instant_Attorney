@@ -100,7 +100,7 @@ function ClaimCheck() {
               <option value="harassment">Harassment / hostile environment</option>
               <option value="denied_leave">Denied leave</option>
               <option value="denied_accommodation">Denied an accommodation</option>
-              <option value="unpaid">Not paid what I'm owed</option>
+              <option value="unpaid">Not paid what I&apos;m owed</option>
               <option value="other">Something else</option>
             </select>
           )}
