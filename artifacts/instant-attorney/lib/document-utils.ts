@@ -219,7 +219,9 @@ export function getCriticalReviewChild(children: Document[]): Document | null {
 }
 
 export function getSecondDraftChild(children: Document[]): Document | null {
-  return children.find((d) => d.doc_type === "second_draft") ?? null;
+  return children
+    .filter((d) => d.doc_type === "second_draft")
+    .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at))[0] ?? null;
 }
 
 /** Replace any existing critical-review child with a new standalone document row. */
@@ -390,4 +392,3 @@ export async function finalizeDocumentSubmission(
 
   return doc as Document;
 }
-

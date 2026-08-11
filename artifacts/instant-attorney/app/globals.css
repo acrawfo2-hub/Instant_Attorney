@@ -6457,6 +6457,47 @@ mark.atty-placeholder {
   grid-template-columns: 1fr 1fr;
   gap: 20px;
 }
+
+/* Attorney document workbench */
+.review-collapsible-column { min-width: 0; }
+.review-pane-toggle {
+  width: 100%; margin-bottom: 8px; padding: 6px 10px; border: 1px solid var(--brand-border);
+  border-radius: 7px; background: var(--brand-white); color: var(--brand-text-lt); cursor: pointer;
+  font: 600 12px var(--font-dm-sans), sans-serif; text-align: left;
+}
+.review-workbench-main { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+.review-workbench-pane { background: var(--brand-white); border: 1px solid var(--brand-border); border-radius: 12px; min-width: 0; overflow: hidden; }
+.review-pane-heading { display: flex; justify-content: space-between; gap: 12px; align-items: start; padding: 14px 16px; border-bottom: 1px solid var(--brand-border); }
+.review-pane-heading h2 { margin: 0; font-size: 15px; }
+.review-pane-heading p { margin: 3px 0 0; color: var(--brand-text-lt); font-size: 11px; }
+.review-context-pane section { padding: 12px 16px; border-bottom: 1px solid var(--brand-border); }
+.review-context-pane section:last-child { border-bottom: 0; }
+.review-context-pane h3 { margin: 0 0 6px; color: var(--brand-text-xlt); text-transform: uppercase; letter-spacing: .07em; font-size: 10px; }
+.review-context-pane p { margin: 3px 0; overflow-wrap: anywhere; font-size: 12px; }
+.review-context-pane a { color: var(--brand-navy); font-size: 12px; }
+.review-context-pane button, .review-partner-compose button, .review-proposals button { border: 0; border-radius: 6px; padding: 7px 10px; background: var(--brand-navy); color: white; cursor: pointer; font-weight: 700; }
+.review-document-textarea { display: block; width: 100%; min-height: 68vh; resize: vertical; padding: 28px 34px; border: 0; outline: 0; color: var(--brand-text-dk); background: #fff; font: 15px/1.65 Georgia, serif; }
+.review-save-state { flex-shrink: 0; min-height: 20px; font-size: 12px; font-weight: 700; color: var(--brand-text-lt); }
+.review-save-saving { color: #9a7636; } .review-save-saved { color: #2e7d5b; } .review-save-error { color: #b42318; }
+.review-editor-footnote { margin: 0; padding: 9px 16px; border-top: 1px solid var(--brand-border); color: var(--brand-text-xlt); font-size: 11px; }
+.review-proposals { padding: 12px; border-bottom: 1px solid var(--brand-border); background: #fffaf0; max-height: 340px; overflow: auto; }
+.review-proposals-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+.review-proposal { margin-top: 10px; padding: 10px; border: 1px solid #e7d7b6; border-radius: 8px; background: white; }
+.review-proposal p { margin: 0 0 6px; font-size: 12px; font-weight: 700; }
+.review-proposal button { margin: 8px 6px 0 0; padding: 5px 8px; font-size: 11px; }
+.review-change-set { display: grid; gap: 4px; font: 11px/1.4 ui-monospace, monospace; white-space: pre-wrap; }
+.review-change-set del, .review-change-set ins { padding: 6px; text-decoration: none; border-radius: 4px; }
+.review-change-set del { background: #fee2e2; } .review-change-set ins { background: #dcfce7; }
+.review-partner-pane { position: sticky; top: 12px; }
+.review-partner-messages { max-height: 48vh; min-height: 180px; overflow: auto; padding: 12px; }
+.review-partner-message { margin-bottom: 10px; padding: 9px; border-radius: 8px; background: var(--brand-cream); font-size: 12px; }
+.review-partner-message strong { font-size: 10px; text-transform: uppercase; color: var(--brand-text-xlt); }
+.review-partner-message p { margin: 4px 0 0; white-space: pre-wrap; }
+.review-partner-user { margin-left: 18px; background: #eef2ff; }
+.review-partner-compose { padding: 12px; border-top: 1px solid var(--brand-border); }
+.review-partner-compose textarea { width: 100%; resize: vertical; padding: 9px; border: 1px solid var(--brand-border); border-radius: 7px; font: inherit; }
+.review-partner-compose button { width: 100%; margin-top: 7px; }
+@media (max-width: 1100px) { .review-workbench-main { grid-template-columns: 1fr; } .review-partner-pane { position: static; } }
 @media (max-width: 1100px) {
   .atty-two-doc-grid { grid-template-columns: 1fr; }
 }
