@@ -12,6 +12,7 @@ import type { WizardType, CaseFile, FactItem, Attachment, RequestedAttachment } 
 import { logTruncation } from "@/lib/truncation-logger";
 import { maxOutputTokensFor, limitSignalMetadata } from "@/lib/token-limits";
 import { buildJurisdictionBlock, classifyInstrumentRisk, hasRequiredForum } from "@/lib/document-risk";
+import { resolveInstrumentProfile, validateInstrument } from "@/lib/instruments/validator";
 
 // Allow up to 5 minutes for this route — legal doc generation can be slow
 export const maxDuration = 300;
@@ -315,6 +316,23 @@ export async function POST(req: NextRequest) {
   const draftText = extractedDraft;
   let savedDocId: string | undefined = documentId as string | undefined;
 
+  // Readiness is a deterministic quality-gate decision, never a model-authored
+  // STATUS line. Citation-like authority references are retained as metadata;
+  // prose that merely says "authority" is deliberately not enough.
+  const authorityReferences = fullResponse.match(/(?:\b\d+\s+U\.S\.C\.\s*§+\s*[\w.-]+|\b(?:Tex\.|Texas)\s+(?:Gov't|Estates|Property|Trust)\s+Code\s*§+\s*[\w.-]+)/gi) ?? [];
+  const validationReport = draftText ? validateInstrument({
+    profile: resolveInstrumentProfile({ wizardType, instrument, planKey: planKeyStr }),
+    document: { text: draftText, authorityMetadata: authorityReferences.length ? { references: authorityReferences } : undefined },
+    livingFile: {
+      facts: facts.map((fact) => ({ description: fact.description, status: fact.status })),
+      jurisdiction: caseFile?.jurisdiction ?? null,
+    },
+  }) : null;
+
+  // Kept #111's wider condition rather than #112's `if (draftText)`: an
+  // incomplete generation can return prose with no extractable draft, and that
+  // run still has to persist its generation_state so the retry path can see it.
+  // validateInstrument is already null-guarded on draftText above.
   if (draftText || fullResponse.trim()) {
     const now = new Date().toISOString();
 
@@ -361,6 +379,7 @@ export async function POST(req: NextRequest) {
           ...(truncated ? { truncated: true } : { truncated: false }),
           ...(planKeyStr ? { plan_key: planKeyStr } : {}),
           ...(instrumentKeyStr ? { instrument_key: instrumentKeyStr } : {}),
+          validation_report: validationReport,
         },
       };
       // A failed retry must not overwrite the last known-good draft.
@@ -393,6 +412,7 @@ export async function POST(req: NextRequest) {
             ...(planKeyStr ? { plan_key: planKeyStr } : {}),
             ...(instrumentKeyStr ? { instrument_key: instrumentKeyStr } : {}),
             ...(wizardType === "improve_draft" && baseAttachmentId ? { base_attachment_id: baseAttachmentId } : {}),
+            validation_report: validationReport,
           },
           draft_text: draftText,
           status: "draft",
@@ -456,5 +476,6 @@ export async function POST(req: NextRequest) {
     generationIncomplete,
     gapSyncWarning,
     knownFacts,
+    validationReport,
   });
 }

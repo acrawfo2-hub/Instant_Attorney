@@ -44,6 +44,11 @@ interface DocumentDetail {
   child_documents?: Document[];
 }
 
+interface PersistedValidationReport {
+  ready_for_attorney_review: boolean;
+  errors: Array<{ code: string; message: string }>;
+}
+
 // Reads the NDJSON stream from the second-draft endpoint, ignoring heartbeat
 // lines, and returns the final outcome object (result / fitness_reject / error).
 async function readFinalNdjson(
@@ -716,6 +721,15 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
                   </span>
                 </div>
               )}
+              {(() => {
+                const report = doc.content_json?.validation_report as PersistedValidationReport | undefined;
+                return report?.errors?.length ? (
+                  <div className="doc-truncation-notice" role="alert">
+                    <span className="doc-truncation-icon">!</span>
+                    <div><strong>Unresolved instrument validation errors</strong><ul>{report.errors.map((issue, index) => <li key={`${issue.code}-${index}`}>{issue.message}</li>)}</ul></div>
+                  </div>
+                ) : null;
+              })()}
               {doc.draft_text ? (
                 <div className="atty-review-draft">{renderDocumentText(doc.draft_text)}</div>
               ) : (
