@@ -2,7 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { buildDrafterSystemPrompt, WIZARD_FIELD_HINTS, buildFileContext } from "@/lib/prompts";
-import { parseAndUpdateFile, extractDraftText, syncDraftGapsToLivingFile, isCompleteFileUpdate } from "@/lib/file-parser";
+import { parseAndUpdateFile, extractDraftText, isCompleteFileUpdate } from "@/lib/file-parser";
+import { saveDocumentRevision } from "@/lib/document-persistence";
 import { resolveWizardDocumentTarget, stampFactsSynced } from "@/lib/document-utils";
 import { loadAttachmentAsContentBlocks } from "@/lib/attachment-processor";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
@@ -367,13 +368,16 @@ export async function POST(req: NextRequest) {
   }
 
   let gapSyncWarning = false;
-  if (draftText) {
-    try {
-      await syncDraftGapsToLivingFile(writeDb, caseFileId, userId, draftText);
-    } catch (gapErr) {
-      gapSyncWarning = true;
-      console.error("[wizard] gap sync error:", gapErr);
-    }
+  if (draftText && savedDocId) {
+    const result = await saveDocumentRevision(writeDb, {
+      caseFileId, userId, draftText,
+      persist: async () => {
+        const { error } = await writeDb.from("documents").update({ draft_text: draftText }).eq("id", savedDocId!);
+        if (error) throw error;
+        return savedDocId!;
+      },
+    });
+    gapSyncWarning = result.syncPending;
   }
 
   if (savedDocId) {

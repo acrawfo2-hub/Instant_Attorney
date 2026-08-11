@@ -9,6 +9,7 @@ import { BYPASS_USER_ID } from "@/lib/types";
 import type { Document, CaseFile, FactItem, Attachment } from "@/lib/types";
 import { logTruncation } from "@/lib/truncation-logger";
 import { maxOutputTokensForDoc, limitSignalMetadata } from "@/lib/token-limits";
+import { saveDocumentRevision } from "@/lib/document-persistence";
 
 // Legal doc edits can be slow on a long document — same ceiling as the wizard route.
 export const maxDuration = 300;
@@ -210,6 +211,15 @@ export async function POST(
     updated_at: new Date().toISOString(),
   }).eq("id", parent.id);
 
+  const revision = await saveDocumentRevision(serviceDb, {
+    caseFileId: parent.case_file_id, userId: parent.user_id, draftText,
+    persist: async () => {
+      const { error } = await serviceDb.from("documents").update({ draft_text: draftText }).eq("id", childId);
+      if (error) throw error;
+      return childId;
+    },
+  });
+
   recordAiFromMessage(db, message, {
     userId: parent.user_id,
     actorId: userId,
@@ -230,5 +240,6 @@ export async function POST(
     documentId: childId,
     text: fullResponse,
     truncated,
+    livingFileSyncPending: revision.syncPending,
   });
 }

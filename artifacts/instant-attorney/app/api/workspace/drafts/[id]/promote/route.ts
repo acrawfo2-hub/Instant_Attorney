@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { getClientContext } from "@/lib/client-workspace-auth";
 import { finalizeDocumentSubmission } from "@/lib/document-utils";
 import type { ClientWorkspaceDraft } from "@/lib/types";
+import { saveDocumentRevision } from "@/lib/document-persistence";
 
 // Promote a freestyle workspace draft into the documents pipeline and submit it
 // for the 48-hour attorney review. Idempotent: a draft already linked to a
@@ -40,9 +41,11 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   }
 
   const now = new Date().toISOString();
-  const { data: inserted, error: insErr } = await serviceDb
-    .from("documents")
-    .insert({
+  let insertedId: string;
+  const revision = await saveDocumentRevision(serviceDb, {
+    caseFileId: draft.case_file_id, userId: ctx.userId, draftText: draft.content,
+    persist: async (revisionId) => {
+      const { data: inserted, error: insErr } = await serviceDb.from("documents").insert({
       case_file_id: draft.case_file_id,
       user_id: ctx.userId,
       doc_type: "general_document",
@@ -51,16 +54,16 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       content_json: { source: "freestyle_workspace", workspace_draft_id: draft.id },
       status: "draft",
       updated_at: now,
-    })
-    .select("id")
-    .single();
+      current_revision_id: revisionId,
+    }).select("id").single();
+      if (insErr || !inserted) throw insErr ?? new Error("Could not create document");
+      return inserted.id;
+    },
+  }).catch((error) => { console.error("[workspace/drafts/promote] insert error:", error); return null; });
+  if (!revision) return NextResponse.json({ error: "Could not create the document" }, { status: 500 });
+  insertedId = revision.documentId;
 
-  if (insErr || !inserted) {
-    console.error("[workspace/drafts/promote] insert error:", insErr);
-    return NextResponse.json({ error: "Could not create the document" }, { status: 500 });
-  }
-
-  const doc = await finalizeDocumentSubmission(serviceDb, inserted.id, ctx.userId);
+  const doc = await finalizeDocumentSubmission(serviceDb, insertedId, ctx.userId);
   if (!doc) {
     // Attorney-user accounts have no review queue; keep the draft as the doc's home.
     return NextResponse.json({ error: "This account cannot submit documents for review." }, { status: 400 });
@@ -72,5 +75,5 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     .eq("id", draft.id)
     .eq("user_id", ctx.userId);
 
-  return NextResponse.json({ documentId: doc.id, status: doc.status });
+  return NextResponse.json({ documentId: doc.id, status: doc.status, livingFileSyncPending: revision.syncPending });
 }

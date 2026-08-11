@@ -11,7 +11,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { DRAFTER_SYSTEM_PROMPT, WIZARD_FIELD_HINTS, buildFileContext } from "@/lib/prompts";
-import { parseAndUpdateFile, extractDraftText, syncDraftGapsToLivingFile, isCompleteFileUpdate } from "@/lib/file-parser";
+import { parseAndUpdateFile, extractDraftText, isCompleteFileUpdate } from "@/lib/file-parser";
+import { saveDocumentRevision } from "@/lib/document-persistence";
 import { stampFactsSynced, isValidWizardType } from "@/lib/document-utils";
 import { loadAttachmentAsContentBlocks } from "@/lib/attachment-processor";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
@@ -321,11 +322,14 @@ export async function POST(
       console.error("[documents/regenerate] file parser error:", parseErr);
     }
   }
-  try {
-    await syncDraftGapsToLivingFile(writeDb, caseFileId, userId, draftText);
-  } catch (gapErr) {
-    console.error("[documents/regenerate] gap sync error:", gapErr);
-  }
+  const revision = await saveDocumentRevision(writeDb, {
+    caseFileId, userId, draftText,
+    persist: async () => {
+      const { error } = await writeDb.from("documents").update({ draft_text: draftText }).eq("id", documentId);
+      if (error) throw error;
+      return documentId;
+    },
+  });
 
   // Stamp LAST (after the Living File writes above) so facts_synced_at sits
   // at/after any fact change this regeneration caused — clearing the "out of
@@ -338,5 +342,6 @@ export async function POST(
     documentId,
     status: doc.status,
     truncated,
+    livingFileSyncPending: revision.syncPending,
   });
 }

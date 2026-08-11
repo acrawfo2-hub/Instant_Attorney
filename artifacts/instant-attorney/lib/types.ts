@@ -625,6 +625,10 @@ export interface Document {
    * runs or before a draft has been (re)generated.
    */
   facts_synced_at?: string | null;
+  current_revision_id?: string | null;
+  living_file_sync_status?: "pending" | "synced" | "failed";
+  living_file_sync_error?: string | null;
+  living_file_synced_at?: string | null;
 }
 
 /**

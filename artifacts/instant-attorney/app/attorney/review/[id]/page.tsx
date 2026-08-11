@@ -7,6 +7,7 @@ import type { Attachment, Document, DocumentComment, DocumentReviewRun, Document
 import { docTypeLabel, personDisplayName, citationBlocksApproval } from "@/lib/types";
 import AccountMenu from "@/components/AccountMenu";
 import { parseDrafterResponse } from "@/lib/wizard-parsing";
+import LivingFileSyncWarning from "@/components/LivingFileSyncWarning";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -42,6 +43,7 @@ interface DocumentDetail {
     phone: string | null;
   };
   child_documents?: Document[];
+  living_file_sync_status?: "pending" | "synced" | "failed";
 }
 
 // Reads the NDJSON stream from the second-draft endpoint, ignoring heartbeat
@@ -509,6 +511,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
 
   return (
     <div className="atty-review-shell">
+      {doc.living_file_sync_status && doc.living_file_sync_status !== "synced" && <LivingFileSyncWarning documentId={doc.id} />}
       <header className="atty-review-header">
         <button className="atty-back" onClick={() => router.push("/attorney")}>← Dashboard</button>
         <div className="atty-review-title">
