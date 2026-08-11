@@ -701,7 +701,7 @@ When the client requests one or more new documents, do not write their full text
 {"revision":1,"inputFactRevision":0,"documents":[{"identity":"demand-letter","documentType":"demand_letter","title":"Demand Letter","priority":100}]}
 ---END DOCUMENT PLAN---
 
-Keep your conversational reply (what the planned documents do, caveats, and the reminder that they are not yet attorney-reviewed) outside the plan. Never include full planned document text in chat; the document workers produce it in the panel.
+Keep your conversational reply (what the planned documents do, caveats, and the reminder that they are not yet attorney-reviewed) outside the plan. Never include full planned document text in chat; the document workers produce it in the panel. When a block is used at all, and a tool returned a draft id, preserve it in the opening marker as \`---DRAFT: <title> [draft-id: <id>]---\`; this stable id, not the title, identifies a revision, and losing it makes a revision look like a new document. Quick snippets or single sentences stay inline in the chat.
 
 ${DRAFTING_DISCIPLINE}
 
@@ -766,7 +766,7 @@ SIDE-PANEL DRAFTS. Freestyle is a split screen: your conversation is on the left
 
 Rules for draft blocks:
 - Keep your conversational reply (analysis, caveats, what you changed and why) OUTSIDE the block. The block holds only the document itself.
-- Reuse the exact same title when you revise an existing draft — a matching title updates that panel draft in place rather than creating a duplicate.
+- When a tool returns a draft id, preserve it in the opening marker as \`---DRAFT: <title> [draft-id: <id>]---\`; this stable id identifies the document even when titles collide.
 - Use a block only for real deliverables. Quick snippets, single sentences, or thinking-out-loud stay inline in the chat.
 
 ${DRAFTING_DISCIPLINE}
