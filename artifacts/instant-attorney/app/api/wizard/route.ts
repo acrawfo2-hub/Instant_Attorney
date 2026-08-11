@@ -13,6 +13,11 @@ import { logTruncation } from "@/lib/truncation-logger";
 import { maxOutputTokensFor, limitSignalMetadata } from "@/lib/token-limits";
 import { buildJurisdictionBlock, classifyInstrumentRisk, hasRequiredForum } from "@/lib/document-risk";
 import { resolveInstrumentProfile, validateInstrument } from "@/lib/instruments/validator";
+// #116's authority provenance, consolidated under lib/instruments/. Renamed on
+// the way in: it also exported `resolveInstrumentProfile`/`InstrumentProfile`,
+// which collided with #115's drafting-spec profiles. Different concepts —
+// #115 says what to draft, this says which pinned authority backs it.
+import { formatInstrumentAuthorityBlock, resolveInstrumentAuthority } from "@/lib/instruments/authority";
 
 // Allow up to 5 minutes for this route — legal doc generation can be slow
 export const maxDuration = 300;
@@ -159,9 +164,14 @@ export async function POST(req: NextRequest) {
   // regeneration on every turn — same prompt, different "on follow-up" rule.
   const drafterPersona = profileRow?.account_type === "attorney_user" ? "attorney" as const : "client" as const;
 
-  const documentLabel = (wizardType === "general_document" && instrument)
-    ? instrument
+  const documentLabel = typeof instrument === "string" && instrument.trim()
+    ? instrument.trim()
     : WIZARD_LABELS[wizardType as WizardType];
+  // Resolve against pinned profiles before any model call. Unknown instruments
+  // deliberately produce a blocking authority block rather than inviting the
+  // model to infer legal requirements from its training data.
+  const instrumentResolution = resolveInstrumentAuthority(documentLabel);
+  const instrumentAuthorityBlock = formatInstrumentAuthorityBlock(instrumentResolution);
 
   // "Improve My Draft" feeds the client's own uploaded document verbatim into
   // the initial call, instead of drafting from the Living File alone. Only the
@@ -225,7 +235,7 @@ export async function POST(req: NextRequest) {
       system: [
         {
           type: "text" as const,
-          text: buildDrafterSystemPrompt(drafterPersona),
+          text: buildDrafterSystemPrompt(drafterPersona, instrumentAuthorityBlock),
         },
         {
           type: "text" as const,

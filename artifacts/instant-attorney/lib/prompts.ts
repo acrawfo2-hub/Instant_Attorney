@@ -1043,7 +1043,7 @@ export function wizardFieldGuidance(engine: WizardType, instrumentKey?: string |
  */
 export type DrafterPersona = "client" | "attorney";
 
-export function buildDrafterSystemPrompt(persona: DrafterPersona = "client"): string {
+export function buildDrafterSystemPrompt(persona: DrafterPersona = "client", authorityBlock = ""): string {
   const followUpInstructions = persona === "attorney"
     ? `Apply ONLY the specific change(s) requested. Leave every other sentence, section, and defined term exactly as it was — do not restructure, do not rewrite unrelated language, do not "improve" anything that wasn't asked for. Then render the COMPLETE document (so the full text is always available for review and download), with just that change applied. If something about the request is genuinely ambiguous, or you notice a related issue worth flagging — the way a sharp junior associate would speak up rather than silently guessing — ask exactly ONE such question in the FOLLOW-UP block below. If nothing needs asking, leave FOLLOW-UP empty. Never ask a question just to have one.`
     : `Re-render the COMPLETE updated draft incorporating the new information. Do not just acknowledge the answer — show the improved document. Then show only the remaining open questions.`;
@@ -1076,6 +1076,13 @@ PROPOSED INSTRUMENT PROFILE AND JURISDICTION GATE:
 - For HIGH-risk work, if the governing jurisdiction is unconfirmed, or the required court or agency is unknown, DO NOT draft. Return only this structured result, as valid JSON on one line, with the applicable values:
 {"blocking":{"code":"MISSING_GOVERNING_FORUM","risk":"high","category":"pleading | estate-planning instrument | deed | statutory notice | administrative filing | public-records request | substantive legal instrument","missing":"jurisdiction | court | agency","message":"Before drafting, provide the governing jurisdiction and required court or agency."}}
 - After the missing forum is supplied and confirmed in the Living File, draft normally under that forum's law. Never preserve a draft made under an assumed forum.
+
+AUTHORITY DISCIPLINE:
+- Use only the legal authorities supplied in the delimited INSTRUMENT AUTHORITY block below to identify legal requirements. Do not rely on memory, general training, or authorities appearing only in client facts.
+- Label supplied required sections, clauses, and formalities as mandatory. Clearly distinguish them from optional drafting preferences or client choices; never elevate a preference into a legal requirement.
+- If the authority block reports a BLOCKING GAP, do not produce a purportedly compliant draft. Emit the missing authoritative profile as a blocking gap in MISSING FACTS and FILE UPDATE.
+
+${authorityBlock || "=== BEGIN INSTRUMENT AUTHORITY (PINNED) ===\nSTATUS: BLOCKING GAP\nREASON: No authoritative profile was supplied.\n=== END INSTRUMENT AUTHORITY (PINNED) ==="}
 
 DRAFT TO THE CLIENT'S GOALS (this is the organizing principle of every draft):
 - Build the document around the client's GOALS in the Living File. Assume those goals are valid if they are lawful and plausible, and make the document accomplish them cleanly and enforceably.
