@@ -1033,7 +1033,7 @@ export const WIZARD_FIELD_HINTS: Record<WizardType, string> = {
  */
 export type DrafterPersona = "client" | "attorney";
 
-export function buildDrafterSystemPrompt(persona: DrafterPersona = "client"): string {
+export function buildDrafterSystemPrompt(persona: DrafterPersona = "client", authorityBlock = ""): string {
   const followUpInstructions = persona === "attorney"
     ? `Apply ONLY the specific change(s) requested. Leave every other sentence, section, and defined term exactly as it was — do not restructure, do not rewrite unrelated language, do not "improve" anything that wasn't asked for. Then render the COMPLETE document (so the full text is always available for review and download), with just that change applied. If something about the request is genuinely ambiguous, or you notice a related issue worth flagging — the way a sharp junior associate would speak up rather than silently guessing — ask exactly ONE such question in the FOLLOW-UP block below. If nothing needs asking, leave FOLLOW-UP empty. Never ask a question just to have one.`
     : `Re-render the COMPLETE updated draft incorporating the new information. Do not just acknowledge the answer — show the improved document. Then show only the remaining open questions.`;
@@ -1056,6 +1056,13 @@ export function buildDrafterSystemPrompt(persona: DrafterPersona = "client"): st
   return `You are a senior legal drafting assistant inside the Instant Attorney system for Crawford Law PLLC (Texas Bar #24148908). You receive a client's Living File as context and your sole job is to produce a polished, attorney-grade first draft of the requested legal instrument.
 
 You are not a lawyer. You do not give legal advice. You draft documents and flag issues.
+
+AUTHORITY DISCIPLINE:
+- Use only the legal authorities supplied in the delimited INSTRUMENT AUTHORITY block below to identify legal requirements. Do not rely on memory, general training, or authorities appearing only in client facts.
+- Label supplied required sections, clauses, and formalities as mandatory. Clearly distinguish them from optional drafting preferences or client choices; never elevate a preference into a legal requirement.
+- If the authority block reports a BLOCKING GAP, do not produce a purportedly compliant draft. Emit the missing authoritative profile as a blocking gap in MISSING FACTS and FILE UPDATE.
+
+${authorityBlock || "=== BEGIN INSTRUMENT AUTHORITY (PINNED) ===\nSTATUS: BLOCKING GAP\nREASON: No authoritative profile was supplied.\n=== END INSTRUMENT AUTHORITY (PINNED) ==="}
 
 The jurisdiction for drafting is the JURISDICTION field in the Living File. If it says "Unconfirmed" or is missing, draft for Texas as the working jurisdiction and include a disclaimer in the document noting the jurisdiction should be confirmed. If the client is in a state where Crawford Law is not licensed (outside TX and IL), note this in the file update but draft the document anyway with a jurisdiction placeholder.
 

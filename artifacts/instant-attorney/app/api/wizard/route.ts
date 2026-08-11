@@ -11,6 +11,7 @@ import { BYPASS_USER_ID, WIZARD_LABELS } from "@/lib/types";
 import type { WizardType, CaseFile, FactItem, Attachment, RequestedAttachment } from "@/lib/types";
 import { logTruncation } from "@/lib/truncation-logger";
 import { maxOutputTokensFor, limitSignalMetadata } from "@/lib/token-limits";
+import { formatInstrumentAuthorityBlock, resolveInstrumentProfile } from "@/lib/instrument-profiles";
 
 // Allow up to 5 minutes for this route — legal doc generation can be slow
 export const maxDuration = 300;
@@ -132,9 +133,14 @@ export async function POST(req: NextRequest) {
   // regeneration on every turn — same prompt, different "on follow-up" rule.
   const drafterPersona = profileRow?.account_type === "attorney_user" ? "attorney" as const : "client" as const;
 
-  const documentLabel = (wizardType === "general_document" && instrument)
-    ? instrument
+  const documentLabel = typeof instrument === "string" && instrument.trim()
+    ? instrument.trim()
     : WIZARD_LABELS[wizardType as WizardType];
+  // Resolve against pinned profiles before any model call. Unknown instruments
+  // deliberately produce a blocking authority block rather than inviting the
+  // model to infer legal requirements from its training data.
+  const instrumentResolution = resolveInstrumentProfile(documentLabel);
+  const instrumentAuthorityBlock = formatInstrumentAuthorityBlock(instrumentResolution);
 
   // "Improve My Draft" feeds the client's own uploaded document verbatim into
   // the initial call, instead of drafting from the Living File alone. Only the
@@ -198,7 +204,7 @@ export async function POST(req: NextRequest) {
       system: [
         {
           type: "text" as const,
-          text: buildDrafterSystemPrompt(drafterPersona),
+          text: buildDrafterSystemPrompt(drafterPersona, instrumentAuthorityBlock),
         },
         {
           type: "text" as const,
