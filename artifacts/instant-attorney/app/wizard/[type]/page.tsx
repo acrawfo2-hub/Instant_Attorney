@@ -30,6 +30,13 @@ interface Message {
   content: string;
 }
 
+interface ForumBlock {
+  code: "MISSING_GOVERNING_FORUM";
+  category: string;
+  missing: "jurisdiction" | "court" | "agency";
+  message: string;
+}
+
 // Append dictated text to whatever the client has already typed in a field, so
 // voice is purely additive (and they can still edit before sending).
 function appendDictation(existing: string | undefined, dictated: string): string {
@@ -74,6 +81,8 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [forumBlock, setForumBlock] = useState<ForumBlock | null>(null);
+  const [governingForum, setGoverningForum] = useState("");
   // Attorney-users draft for their own clients and are the reviewing attorney
   // themselves — they never submit into Andrew Crawford's review queue.
   const [isAttorneyUser, setIsAttorneyUser] = useState(false);
@@ -469,12 +478,18 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
           instrument: instrumentParam || undefined,
           baseAttachmentId: wizardType === "improve_draft" ? (baseAttachmentIdRef.current || undefined) : undefined,
           isInit,
+          governingForum: governingForum.trim() || undefined,
         }),
         signal: abort.signal,
       });
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({ error: `Server error ${res.status}` }));
+        if (res.status === 409 && body?.blocking?.code === "MISSING_GOVERNING_FORUM") {
+          setForumBlock(body.blocking as ForumBlock);
+          setMessages(history);
+          return false;
+        }
         throw new Error(body?.error || `Server error ${res.status}`);
       }
 
@@ -487,6 +502,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
       }
       if (data.truncated) setTruncatedDraft(true);
       setGapSyncWarning(Boolean(data.gapSyncWarning));
+      setForumBlock(null);
 
       // The server resolved us to an already-finalized / in-review primary document
       // instead of overwriting it. Reflect that state so the client sees their real
@@ -545,6 +561,11 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
       setStreaming(false);
       inputRef.current?.focus();
     }
+  }
+
+  async function retryWithForum() {
+    if (!governingForum.trim() || streaming) return;
+    await runDrafter(messages.filter((m) => m.content.trim()), messages.length === 0);
   }
 
   // Persist the client's checklist answers as confirmed facts on the file BEFORE
@@ -674,6 +695,51 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   const hasAnyInput = filledCount > 0 || extraNote.trim().length > 0;
   const starterFilledCount = starterItems.filter((it) => answers[it.id]?.trim()).length;
   const hasStarterInput = starterFilledCount > 0 || extraNote.trim().length > 0;
+
+  if (forumBlock) {
+    const forumLabel = forumBlock.missing === "court"
+      ? "Court and governing jurisdiction"
+      : forumBlock.missing === "agency"
+        ? "Agency and governing jurisdiction"
+        : "Governing jurisdiction";
+    return (
+      <div className="wiz-shell wiz-shell-v2">
+        <header className="wiz-header">
+          <button className="wiz-back" onClick={() => router.push(fileBackHref)}>← Back to your case</button>
+          <div className="wiz-title"><span className="wiz-type-pill">{label}</span></div>
+        </header>
+        <div className="wiz-gate">
+          <div className="wiz-gate-icon" aria-hidden="true">⚖</div>
+          <h2 className="wiz-gate-title">Confirm the forum before we draft</h2>
+          <p className="wiz-gate-msg">
+            This is a high-risk {forumBlock.category}. We won&apos;t assume Texas or save a substantive draft under an unconfirmed forum.
+          </p>
+          <div className="wiz-field" style={{ width: "min(100%, 560px)", textAlign: "left" }}>
+            <label className="wiz-field-label" htmlFor="governing-forum">{forumLabel}</label>
+            <p className="wiz-field-hint">
+              {forumBlock.missing === "court"
+                ? "Enter the state and the full court name."
+                : forumBlock.missing === "agency"
+                  ? "Enter the jurisdiction and the agency that will receive the filing or request."
+                  : "Enter the state, territory, or country whose law governs."}
+            </p>
+            <input
+              id="governing-forum"
+              className="wiz-field-input"
+              value={governingForum}
+              onChange={(e) => setGoverningForum(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") retryWithForum(); }}
+              autoFocus
+            />
+          </div>
+          {error && <p className="att-upload-error">{error}</p>}
+          <button className="wiz-gate-btn" onClick={retryWithForum} disabled={!governingForum.trim() || streaming}>
+            {streaming ? "Saving and drafting…" : "Save forum and draft →"}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (docReviewGated) {
     return (
