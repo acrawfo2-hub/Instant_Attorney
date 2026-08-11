@@ -32,7 +32,15 @@ import type { MatterTasksResult, MatterTask, MatterUrgency } from "./matter-task
 export type TileTone = "urgent" | "attention" | "calm" | "neutral";
 
 /** Icon keyword the renderer maps to an inline SVG. */
-export type TileIcon = "documents" | "inbox" | "calendar" | "scales" | "wallet" | "person";
+export type TileIcon =
+  | "draft"
+  | "review"
+  | "upload"
+  | "facts"
+  | "opponent"
+  | "calendar"
+  | "wallet"
+  | "person";
 
 export interface FileTile {
   id: string;
@@ -42,7 +50,7 @@ export interface FileTile {
   status: string;
   /** Badge number, or null when a count would be noise. */
   count: number | null;
-  /** In-page anchor (`#documents`) or a route. */
+  /** A dedicated in-page focus target or route for this destination. */
   href: string;
   tone: TileTone;
   icon: TileIcon;
@@ -166,12 +174,6 @@ function documentBlanks(doc: Document, childDocuments: Document[]): number {
   return target?.draft_text ? findBlanks(target.draft_text).length : 0;
 }
 
-/** Join status fragments into one line, capped so a tile stays one line tall. */
-function statusLine(parts: string[], fallback: string, max = 2): string {
-  const kept = parts.filter(Boolean).slice(0, max);
-  return kept.length ? kept.join(" · ") : fallback;
-}
-
 function toneForUrgency(u: DocketEntry["urgency"]): TileTone {
   if (u === "expired" || u === "critical") return "urgent";
   if (u === "warning") return "attention";
@@ -252,7 +254,7 @@ function buildDrafts(
 
 // ── Tiles ────────────────────────────────────────────────────────────────────
 //
-// Six tiles, always the same six in the same order. Counts and status change;
+// Eight tiles, always the same eight in the same order. Counts and status change;
 // the map doesn't. A client learns where things live once and never re-learns —
 // which is exactly what a conditional, self-rearranging grid would cost her.
 
@@ -260,125 +262,110 @@ function buildTiles(input: FileDeckInput, docket: DocketEntry[]): FileTile[] {
   const {
     caseFile,
     documents,
-    childDocuments = [],
     workspaceDrafts = [],
     requestedAttachments = [],
-    govForms = [],
     facts,
     consultRequest,
   } = input;
 
   const openDrafts = workspaceDrafts.filter((d) => !d.promoted_document_id);
   const inReview = documents.filter((d) => d.status === "pending_review");
-  const finished = documents.filter((d) => FINALIZED.has(d.status));
-  const working = documents.filter((d) => !FINALIZED.has(d.status) && d.status !== "pending_review");
-
-  // ① Your documents
-  const docTotal = openDrafts.length + documents.length;
-  const docParts = [
-    openDrafts.length + working.length > 0
-      ? `${openDrafts.length + working.length} working draft${openDrafts.length + working.length === 1 ? "" : "s"}`
-      : "",
-    inReview.length > 0 ? `${inReview.length} with your attorney` : "",
-    finished.length > 0 ? `${finished.length} finished` : "",
-  ];
-
-  // ② Needs your info — everything the matter is waiting on *her* for.
-  const blankCount =
-    openDrafts.reduce((n, d) => n + (d.content ? findBlanks(d.content).length : 0), 0) +
-    documents.reduce((n, d) => n + documentBlanks(d, childDocuments), 0);
-  const uploadsWanted = requestedAttachments.filter((r) => r.status !== "uploaded").length;
-  const formsOpen = govForms.filter((f) => f.status !== "completed" && f.status !== "dismissed").length;
-  const needTotal = blankCount + uploadsWanted + formsOpen;
-  const needParts = [
-    blankCount > 0 ? `${blankCount} blank${blankCount === 1 ? "" : "s"} to fill` : "",
-    uploadsWanted > 0 ? `${uploadsWanted} document${uploadsWanted === 1 ? "" : "s"} to upload` : "",
-    formsOpen > 0 ? `${formsOpen} form${formsOpen === 1 ? "" : "s"} to complete` : "",
-  ];
-
-  // ③ Key dates
-  const nextDate = docket[0] ?? null;
-
-  // ④ Your case details
+  const drafted = openDrafts.length + documents.filter((d) => d.status !== "pending_review").length;
+  const uploads = requestedAttachments.filter((r) => r.status !== "waived");
+  const uploadsWanted = uploads.filter((r) => r.status === "requested").length;
   const confirmed = facts.filter((f) => f.status === "confirmed").length;
-  const goals = (caseFile.goals as string[] | null)?.length ?? 0;
-
-  // ⑥ Talk to a person
-  let personStatus = "Questions? Reach the firm by email";
+  const counterarguments = caseFile.legal_strategy?.strength_check?.counterarguments.length ?? 0;
+  const nextDate = docket[0] ?? null;
+  const activeConsult = Boolean(
+    consultRequest && consultRequest.status !== "cancelled" && consultRequest.status !== "completed",
+  );
+  let personStatus = "Contact the firm";
   let personTone: TileTone = "neutral";
   if (consultRequest?.status === "confirmed") {
-    personStatus = "Your consult is confirmed";
+    personStatus = "Consult confirmed";
     personTone = "calm";
   } else if (consultRequest?.status === "attorney_proposed") {
-    personStatus = "A new time was proposed — respond";
+    personStatus = "New time proposed";
     personTone = "attention";
   } else if (consultRequest?.status === "pending") {
-    personStatus = "Waiting on the firm to confirm a time";
+    personStatus = "Confirmation pending";
     personTone = "neutral";
   } else if (caseFile.legal_strategy?.recommend_consult) {
-    personStatus = "Your attorney suggests a live call";
+    personStatus = "Consult recommended";
     personTone = "attention";
   }
 
   return [
     {
-      id: "documents",
-      label: "Your documents",
-      status: statusLine(docParts, "Nothing drafted yet — ask your assistant to start one"),
-      count: docTotal || null,
-      href: `/dashboard/${caseFile.id}?view=documents`,
+      id: "drafted",
+      label: "Drafted documents",
+      status: drafted > 0 ? "Ready to open" : "None yet",
+      count: drafted || null,
+      href: `/dashboard/${caseFile.id}?view=documents#drafted-documents`,
       tone: "neutral",
-      icon: "documents",
+      icon: "draft",
     },
     {
-      id: "needs-info",
-      label: "Needs your info",
-      status: statusLine(needParts, "You're all caught up — nothing is waiting on you"),
-      count: needTotal || null,
-      href: `/dashboard/${caseFile.id}?view=documents`,
-      tone: needTotal > 0 ? "attention" : "calm",
-      icon: "inbox",
+      id: "attorney-review",
+      label: "Attorney review",
+      status: inReview.length > 0 ? "Awaiting review" : "Nothing pending",
+      count: inReview.length || null,
+      href: `/dashboard/${caseFile.id}?view=documents#attorney-review`,
+      tone: inReview.length > 0 ? "attention" : "calm",
+      icon: "review",
     },
     {
-      id: "deadlines",
-      label: "Key dates",
-      status: nextDate
-        ? `${nextDate.label} — ${countdownText(nextDate.daysRemaining)}`
-        : "No deadlines computed from your file yet",
-      count: docket.length || null,
-      href: `/dashboard/${caseFile.id}?view=deadlines`,
-      tone: nextDate ? toneForUrgency(nextDate.urgency) : "neutral",
-      icon: "calendar",
+      id: "uploads",
+      label: "Uploads",
+      status: uploadsWanted > 0 ? `${uploadsWanted} still needed` : "All received",
+      count: uploads.length || null,
+      href: `/dashboard/${caseFile.id}?view=documents#uploads`,
+      tone: uploadsWanted > 0 ? "attention" : "calm",
+      icon: "upload",
     },
     {
-      id: "case-details",
-      label: "Your case details",
-      status: statusLine(
-        [
-          goals > 0 ? `${goals} goal${goals === 1 ? "" : "s"}` : "",
-          confirmed > 0 ? `${confirmed} confirmed fact${confirmed === 1 ? "" : "s"}` : "",
-        ],
-        "Summary, goals, and strategy",
-      ),
-      count: null,
-      href: `/dashboard/${caseFile.id}?view=case-details`,
+      id: "facts",
+      label: "Facts",
+      status: confirmed > 0 ? "Confirmed on file" : "None confirmed",
+      count: confirmed || null,
+      href: `/dashboard/${caseFile.id}?view=facts`,
       tone: "neutral",
-      icon: "scales",
+      icon: "facts",
+    },
+    {
+      id: "other-side",
+      label: "Other side’s position",
+      status: counterarguments > 0 ? "Likely arguments" : "Not checked yet",
+      count: counterarguments || null,
+      href: `/dashboard/${caseFile.id}?view=strength`,
+      tone: counterarguments > 0 ? "attention" : "neutral",
+      icon: "opponent",
     },
     {
       id: "financials",
-      label: "Money & property",
-      status: "Assets, debts, and income worksheet",
+      label: "Financial vault",
+      status: "Private records",
       count: null,
       href: `/dashboard/${caseFile.id}/financials`,
       tone: "neutral",
       icon: "wallet",
     },
     {
-      id: "help",
-      label: "Talk to a person",
+      id: "deadlines",
+      label: "Key dates",
+      status: nextDate
+        ? `${nextDate.label} — ${countdownText(nextDate.daysRemaining)}`
+        : "No dates yet",
+      count: docket.length || null,
+      href: `/dashboard/${caseFile.id}?view=deadlines`,
+      tone: nextDate ? toneForUrgency(nextDate.urgency) : "neutral",
+      icon: "calendar",
+    },
+    {
+      id: "attorney",
+      label: "Attorney",
       status: personStatus,
-      count: null,
+      count: activeConsult ? 1 : null,
       href: `/dashboard/${caseFile.id}?view=help`,
       tone: personTone,
       icon: "person",
