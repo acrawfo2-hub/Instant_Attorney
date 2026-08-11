@@ -14,6 +14,7 @@
 // refreshing persisted messages/drafts.
 
 import { randomUUID } from "crypto";
+import type { DraftPersistenceResult } from "@/lib/draft-persistence";
 
 export interface AcpJob {
   id: string;
@@ -29,6 +30,7 @@ export interface AcpJob {
   /** Full raw model response once done (markers included). */
   finalText: string | null;
   truncated: boolean;
+  draftPersistence: DraftPersistenceResult;
   finishedAt: number | null;
   /** Resolves when the job finishes (success or failure). */
   promise: Promise<void>;
@@ -91,6 +93,7 @@ export function createAcpJob(caseFileId: string, userId: string): AcpJob {
     error: null,
     finalText: null,
     truncated: false,
+    draftPersistence: { persisted: [], failed: [] },
     finishedAt: null,
     promise,
     listeners: new Set(),

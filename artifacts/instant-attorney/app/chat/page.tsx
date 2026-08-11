@@ -61,7 +61,7 @@ const FREESTYLE_ATTACH_TYPES = new Set([
   "application/json", "application/rtf", "text/rtf",
 ]);
 
-function renderContent(text: string, onOpenDraft?: (title: string) => void) {
+function renderContent(text: string, onOpenDraft?: (title: string) => void, persistedDrafts: Record<string, string> = {}) {
   // Freestyle drafts live in the side panel, not the transcript — pull the
   // document blocks out and leave a compact marker where each one was.
   const drafted = parseDrafts(text);
@@ -129,12 +129,14 @@ function renderContent(text: string, onOpenDraft?: (title: string) => void) {
   }
 
   for (const d of drafted) {
+    const persistedId = persistedDrafts[d.title];
+    if (!persistedId) continue;
     elements.push(
       <button
         key={`draft-${d.title}`}
         type="button"
         className="fc-draft-note fc-draft-note-btn"
-        onClick={onOpenDraft ? () => onOpenDraft(d.title) : undefined}
+        onClick={onOpenDraft ? () => onOpenDraft(persistedId) : undefined}
         disabled={!onOpenDraft}
         title="Open this draft"
       >
@@ -208,6 +210,8 @@ function AcpChatInner() {
   const [dragOver, setDragOver] = useState(false);
   // When the AI saves a new draft, show a dismissible banner so users know where it went.
   const [draftSavedTitle, setDraftSavedTitle] = useState<string | null>(null);
+  const [persistedDrafts, setPersistedDrafts] = useState<Record<string, string>>({});
+  const [draftRecovery, setDraftRecovery] = useState<{ jobId: string; titles: string[]; saving: boolean } | null>(null);
   // Count badge on the Drafts button — loaded once caseFileId is known, refreshed
   // each time draftsRefresh bumps.
   const [draftCount, setDraftCount] = useState(0);
@@ -314,11 +318,17 @@ function AcpChatInner() {
     if (bgJobs.length === 0) return;
     let cancelled = false;
 
-    const resolveJob = (job: (typeof bgJobs)[number], data: { finalText?: string | null; truncated?: boolean }) => {
+    const resolveJob = (job: (typeof bgJobs)[number], data: { finalText?: string | null; truncated?: boolean; draftPersistence?: { persisted: Array<{ id: string; title: string }>; failed: Array<{ title: string }> } }) => {
       setBgJobs((prev) => prev.filter((j) => j !== job));
       if (data.truncated) setChatTruncated(true);
       const raw = typeof data.finalText === "string" ? data.finalText : "";
       const text = stripToolMarkers(raw).trim();
+      const persistence = data.draftPersistence;
+      if (persistence) {
+        setPersistedDrafts((prev) => ({ ...prev, ...Object.fromEntries(persistence.persisted.map((d) => [d.title, d.id])) }));
+        if (persistence.persisted.length) setDraftSavedTitle(persistence.persisted[0].title);
+        setDraftRecovery(persistence.failed.length ? { jobId: job.jobId, titles: persistence.failed.map((d) => d.title), saving: false } : null);
+      }
       setMessages((prev) => {
         // Replace the turn's placeholder in place (stable anchor even after
         // later messages arrived); fall back to appending.
@@ -339,7 +349,6 @@ function AcpChatInner() {
         if (newDrafts.length > 0 || openedUpload) {
           setDraftsPanelOpen(true);
           setDraftsRefresh((n) => n + 1);
-          if (newDrafts.length > 0) setDraftSavedTitle(newDrafts[0].title);
         }
       } else {
         // Job unknown (e.g. server restarted) or empty — refresh drafts in
@@ -353,7 +362,7 @@ function AcpChatInner() {
         try {
           const res = await fetch(`/api/chat-acp/status?jobId=${encodeURIComponent(job.jobId)}`);
           if (!res.ok) continue;
-          const data = await res.json() as { running?: boolean; finalText?: string | null; truncated?: boolean };
+          const data = await res.json() as { running?: boolean; finalText?: string | null; truncated?: boolean; draftPersistence?: { persisted: Array<{ id: string; title: string }>; failed: Array<{ title: string }> } };
           if (cancelled) return;
           if (data.running) continue;
           resolveJob(job, data);
@@ -869,12 +878,24 @@ function AcpChatInner() {
       setStreamingText("");
       // The server persisted any ---DRAFT--- blocks (or opened an uploaded doc as a
       // draft via the tool); open the panel and refresh it.
-      const newDrafts = parseDrafts(full);
-      if (mode === "freestyle" && (newDrafts.length > 0 || openedUpload)) {
+      let confirmedDraftCount = 0;
+      const completedJobId = currentJobIdRef.current;
+      if (completedJobId) {
+        const statusRes = await fetch(`/api/chat-acp/status?jobId=${encodeURIComponent(completedJobId)}`);
+        if (statusRes.ok) {
+          const status = await statusRes.json() as { draftPersistence?: { persisted: Array<{ id: string; title: string }>; failed: Array<{ title: string }> } };
+          const persistence = status.draftPersistence;
+          if (persistence) {
+            confirmedDraftCount = persistence.persisted.length;
+            setPersistedDrafts((prev) => ({ ...prev, ...Object.fromEntries(persistence.persisted.map((d) => [d.title, d.id])) }));
+            if (persistence.persisted.length) setDraftSavedTitle(persistence.persisted[0].title);
+            setDraftRecovery(persistence.failed.length ? { jobId: completedJobId, titles: persistence.failed.map((d) => d.title), saving: false } : null);
+          }
+        }
+      }
+      if (mode === "freestyle" && (confirmedDraftCount > 0 || openedUpload)) {
         setDraftsPanelOpen(true);
         setDraftsRefresh((n) => n + 1);
-        // Show a notification banner so it's clear where the draft went.
-        if (newDrafts.length > 0) setDraftSavedTitle(newDrafts[0].title);
       }
       setPendingCounselContext(null);
       // Resolved doc uploads are now in the file context; keep only in-flight ones.
@@ -900,6 +921,29 @@ function AcpChatInner() {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       sendMessage(e as unknown as FormEvent);
+    }
+  }
+
+  async function saveDraftsAgain() {
+    if (!draftRecovery || draftRecovery.saving) return;
+    setDraftRecovery({ ...draftRecovery, saving: true });
+    try {
+      const res = await fetch("/api/chat-acp/status", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId: draftRecovery.jobId }),
+      });
+      if (!res.ok) throw new Error("Save retry failed");
+      const data = await res.json() as { draftPersistence: { persisted: Array<{ id: string; title: string }>; failed: Array<{ title: string }> } };
+      setPersistedDrafts((prev) => ({ ...prev, ...Object.fromEntries(data.draftPersistence.persisted.map((d) => [d.title, d.id])) }));
+      if (data.draftPersistence.persisted.length) {
+        setDraftSavedTitle(data.draftPersistence.persisted.at(-1)?.title ?? null);
+        setDraftsRefresh((n) => n + 1);
+      }
+      setDraftRecovery(data.draftPersistence.failed.length ? {
+        jobId: draftRecovery.jobId, titles: data.draftPersistence.failed.map((d) => d.title), saving: false,
+      } : null);
+    } catch {
+      setDraftRecovery((current) => current ? { ...current, saving: false } : current);
     }
   }
 
@@ -1037,7 +1081,7 @@ function AcpChatInner() {
             )}
             <div className={msg.role === "user" ? "fc-bubble fc-bubble-user" : "fc-bubble fc-bubble-ai"}>
               {msg.role === "assistant" ? (
-                renderContent(msg.content, (title) => openDraft({ title }))
+                renderContent(msg.content, (id) => openDraft({ id }), persistedDrafts)
               ) : msg.imageUrl ? (
                 <>
                   <img src={msg.imageUrl} alt="attached screenshot" className="fc-bubble-image" />
@@ -1062,7 +1106,7 @@ function AcpChatInner() {
               </svg>
             </div>
             <div className="fc-bubble fc-bubble-ai fc-bubble-streaming">
-              {renderContent(streamingText, (title) => openDraft({ title }))}
+              {renderContent(streamingText)}
               <ToolRunChips tools={activeTools} />
               <span className="fc-cursor" />
             </div>
@@ -1173,6 +1217,16 @@ function AcpChatInner() {
               onClick={() => setDraftSavedTitle(null)}
               aria-label="Dismiss"
             >×</button>
+          </div>
+        )}
+        {draftRecovery && (
+          <div className="fc-draft-notify" role="alert">
+            <span className="fc-draft-notify-text">
+              Your generated {draftRecovery.titles.length === 1 ? "draft is" : "drafts are"} safe in this recovery job, but could not be saved yet.
+            </span>
+            <button type="button" className="fc-draft-notify-open" onClick={saveDraftsAgain} disabled={draftRecovery.saving}>
+              {draftRecovery.saving ? "Saving…" : "Save again"}
+            </button>
           </div>
         )}
 

@@ -12,6 +12,7 @@ import { triggerPendingLookups } from "@/lib/gov-form-lookup";
 import { generateCaseTitle } from "@/lib/title-generator";
 import { toAnthropicBlock, processAttachment } from "@/lib/attachment-processor";
 import { parseDrafts } from "@/lib/freestyle-drafts";
+import { persistDrafts } from "@/lib/draft-persistence";
 import { stripToolMarkers } from "@/lib/tool-markers";
 import { createAcpJob, getAcpJob, getPredecessorChain, emitAcpChunk, finishAcpJob } from "@/lib/acp-jobs";
 import { recordAiFromMessage, recordStorageUpload } from "@/lib/usage-tracker";
@@ -452,33 +453,40 @@ export async function POST(req: NextRequest) {
           // creates a fresh one. Only in freestyle — guided intake keeps drafts
           // inline in the transcript.
           if (mode === "freestyle") {
-            for (const draft of parseDrafts(fullResponse)) {
-              try {
-                const { data: existing } = await db
+            const completedDrafts = parseDrafts(fullResponse);
+            job.draftPersistence = await persistDrafts(completedDrafts, {
+              find: async (title) => {
+                const { data, error } = await db
                   .from("client_workspace_drafts")
                   .select("id")
                   .eq("case_file_id", resolvedCaseFileId)
                   .eq("user_id", userId)
-                  .eq("title", draft.title)
+                  .eq("title", title)
                   .order("updated_at", { ascending: false })
                   .limit(1)
                   .maybeSingle();
-                if (existing?.id) {
-                  await db.from("client_workspace_drafts")
+                return { id: data?.id ?? null, error };
+              },
+              update: async (id, draft) => {
+                const { error } = await db.from("client_workspace_drafts")
                     .update({ content: draft.content, source: "assistant", updated_at: new Date().toISOString() })
-                    .eq("id", existing.id);
-                } else {
-                  await db.from("client_workspace_drafts").insert({
+                    .eq("id", id);
+                return { error };
+              },
+              insert: async (draft) => {
+                const { data, error } = await db.from("client_workspace_drafts").insert({
                     case_file_id: resolvedCaseFileId,
                     user_id: userId,
                     title: draft.title,
                     content: draft.content,
                     source: "assistant",
-                  });
-                }
-              } catch (err) {
-                console.error("[chat-acp] persist draft error:", err);
-              }
+                  }).select("id").single();
+                return { id: data?.id ?? null, error };
+              },
+            });
+            if (job.draftPersistence.failed.length > 0) {
+              runError = "One or more generated drafts still need to be saved.";
+              console.error("[chat-acp] draft persistence exhausted retries", job.draftPersistence.failed);
             }
           }
 
