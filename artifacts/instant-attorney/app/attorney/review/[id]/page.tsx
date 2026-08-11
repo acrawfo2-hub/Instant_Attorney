@@ -2,11 +2,11 @@
 
 import { use, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import type { Attachment, Document, DocumentComment, DocumentReviewRun, DocumentImprovement, DocumentQaCitation } from "@/lib/types";
-import { docTypeLabel, personDisplayName, citationBlocksApproval } from "@/lib/types";
+import type { Document, DocumentComment, DocumentReviewRun, DocumentImprovement, DocumentQaCitation } from "@/lib/types";
+import { docTypeLabel, citationBlocksApproval } from "@/lib/types";
 import AccountMenu from "@/components/AccountMenu";
 import { parseDrafterResponse } from "@/lib/wizard-parsing";
+import ReviewCoverSheet from "@/components/attorney-review/ReviewCoverSheet";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -126,7 +126,6 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [aiRunning, setAiRunning] = useState(false);
   const [generatingSecondDraft, setGeneratingSecondDraft] = useState(false);
   const [aiError, setAiError] = useState("");
@@ -250,14 +249,6 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
       setDoc(data);
       setClientNotes(data.attorney_notes ?? "");
       setSecondDraftPrompt(data.attorney_second_draft_prompt ?? "");
-      const caseFileId = data.case_files?.id;
-      if (caseFileId) {
-        const attRes = await fetch(`/api/attachments?caseFileId=${caseFileId}`);
-        if (attRes.ok) {
-          const attData = await attRes.json();
-          setAttachments(attData.attachments ?? []);
-        }
-      }
       if (data.review_status === "reviewing" || data.review_status === "merging") {
         startPolling();
       }
@@ -528,53 +519,12 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
 
       <div className="atty-review-body">
         <div className="atty-review-sidebar">
-          <div className="atty-review-section">
-            <h3>Client</h3>
-            <p>{personDisplayName(doc.profiles, "—")}</p>
-            <p>{doc.profiles.email}</p>
-            {doc.profiles.phone && <p>{doc.profiles.phone}</p>}
-          </div>
-
-          <div className="atty-review-section">
-            <h3>Matter</h3>
-            <p>{doc.case_files.matter_type ?? "Unclassified"} {doc.case_files.matter_subtype ? `— ${doc.case_files.matter_subtype}` : ""}</p>
-            {doc.case_files.summary && <p className="atty-review-summary">{doc.case_files.summary}</p>}
-          </div>
-
-          <div className="atty-review-section">
-            <h3>Living File</h3>
-            <Link href={`/attorney/file/${doc.case_files.id}`} className="atty-living-file-link">
-              View full file →
-            </Link>
-            <Link
-              href={`/attorney/file/${doc.case_files.id}/brief-pack`}
-              className="atty-living-file-link"
-              style={{ display: "block", marginTop: 6 }}
-            >
-              Open brief pack (print/PDF) →
-            </Link>
-          </div>
+          <ReviewCoverSheet documentId={id} fallbackCaseFileId={doc.case_files.id} />
 
           <div className="atty-review-section">
             <h3>Submitted</h3>
             <p>{doc.submitted_at ? new Date(doc.submitted_at).toLocaleString() : new Date(doc.created_at).toLocaleString()}</p>
           </div>
-
-          {attachments.length > 0 && (
-            <div className="atty-review-section">
-              <h3>Attachments</h3>
-              {attachments.map((att) => (
-                <div key={att.id} className="atty-att-item">
-                  <span className="atty-att-name">{att.file_name}</span>
-                  {att.status === "ready" && (
-                    <a href={`/api/attachments/${att.id}`} target="_blank" rel="noopener noreferrer" className="atty-att-link">
-                      View / Download
-                    </a>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
 
           <div className="atty-review-section atty-ai-actions">
             <h3>Critical Review</h3>
