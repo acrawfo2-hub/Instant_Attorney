@@ -527,7 +527,7 @@ export default function CaseDocumentsTable({
                       />
                     )}
                     <div className="cdt-detail-links">
-                      <a href={`/api/workspace/drafts/${d.id}/download`}>Download draft</a>
+                      <a href={`/api/workspace/drafts/${d.id}/download`}>Download draft (.docx)</a>
                     </div>
                   </Row>
                 );
