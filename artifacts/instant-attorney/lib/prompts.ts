@@ -698,7 +698,7 @@ SIDE-PANEL DRAFTS. This is a split screen: your conversation is on the left, and
 <the full document text>
 ---END DRAFT---
 
-Keep your conversational reply (what it does, the caveats, the reminder that it is not yet attorney-reviewed) OUTSIDE the block. Reuse the exact same title when you revise an existing draft so it updates that panel draft in place. Use a block only for real documents — quick snippets or single sentences stay inline in the chat.
+Keep your conversational reply (what it does, the caveats, the reminder that it is not yet attorney-reviewed) OUTSIDE the block. When a tool returns a draft id, preserve it in the opening marker as \`---DRAFT: <title> [draft-id: <id>]---\`; this stable id, not the title, identifies a revision. Use a block only for real documents — quick snippets or single sentences stay inline in the chat.
 
 ${DRAFTING_DISCIPLINE}
 
@@ -763,7 +763,7 @@ SIDE-PANEL DRAFTS. Freestyle is a split screen: your conversation is on the left
 
 Rules for draft blocks:
 - Keep your conversational reply (analysis, caveats, what you changed and why) OUTSIDE the block. The block holds only the document itself.
-- Reuse the exact same title when you revise an existing draft — a matching title updates that panel draft in place rather than creating a duplicate.
+- When a tool returns a draft id, preserve it in the opening marker as \`---DRAFT: <title> [draft-id: <id>]---\`; this stable id identifies the document even when titles collide.
 - Use a block only for real deliverables. Quick snippets, single sentences, or thinking-out-loud stay inline in the chat.
 
 ${DRAFTING_DISCIPLINE}

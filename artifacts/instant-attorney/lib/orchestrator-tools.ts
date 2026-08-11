@@ -764,30 +764,33 @@ const TOOLS: Record<string, ToolDef> = {
       const title = loaded.fileName.replace(/\.[a-z0-9]+$/i, "").trim() || "Uploaded document";
       const { data: existing } = await ctx.db
         .from("client_workspace_drafts")
-        .select("id")
+        .select("id, source, content, promoted_document_id")
         .eq("case_file_id", ctx.caseFileId)
         .eq("user_id", ctx.userId)
         .eq("title", title)
         .order("updated_at", { ascending: false })
         .limit(1)
         .maybeSingle();
-      if (existing?.id) {
+      let draftId = existing?.id as string | undefined;
+      if (draftId) {
         await ctx.db.from("client_workspace_drafts")
           .update({ content: loaded.text, source: "client", updated_at: new Date().toISOString() })
-          .eq("id", existing.id);
+          .eq("id", draftId);
       } else {
-        const { error } = await ctx.db.from("client_workspace_drafts").insert({
-          case_file_id: ctx.caseFileId, user_id: ctx.userId, title, content: loaded.text, source: "client",
-        });
+        const { data: inserted, error } = await ctx.db.from("client_workspace_drafts")
+          .insert({ case_file_id: ctx.caseFileId, user_id: ctx.userId, title, content: loaded.text, source: "client" })
+          .select("id")
+          .single();
         if (error) {
           console.error("[orchestrator-tools] open_uploaded_document insert error:", error);
           return { forModel: JSON.stringify({ error: "failed", message: "Could not open the document as a draft." }), raw: null };
         }
+        draftId = inserted?.id;
       }
 
       const forModel =
         `Opened "${loaded.fileName}" as an editable draft titled "${title}" in the client's side panel. ` +
-        `Its full text is below so you can propose specific revisions. To change it, emit the revised document as a ---DRAFT: ${title}--- block (reuse this exact title so it updates the same panel draft in place). Tell the client it's open and ask what they'd like to change.\n\n` +
+        `Its full text is below so you can propose specific revisions. To change it, emit the revised document as a ---DRAFT: ${title}${draftId ? ` [draft-id: ${draftId}]` : ""}--- block. Tell the client it's open and ask what they'd like to change.\n\n` +
         `--- FULL TEXT OF ${loaded.fileName} ---\n${loaded.text}`;
       return { forModel, raw: { opened: title, file_name: loaded.fileName, chars: loaded.text.length } };
     },

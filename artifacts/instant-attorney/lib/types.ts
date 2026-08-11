@@ -591,6 +591,7 @@ export interface ClientWorkspaceDraft {
   content: string;
   source: "assistant" | "client";
   promoted_document_id: string | null;
+  revision_of_draft_id?: string | null;
   created_at: string;
   updated_at: string;
 }
