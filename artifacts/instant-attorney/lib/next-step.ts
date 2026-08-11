@@ -161,6 +161,11 @@ function docPlanKey(doc: Document): string | undefined {
   return typeof k === "string" ? k : undefined;
 }
 
+function docInstrumentKey(doc: Document): string | undefined {
+  const metadataKey = (doc.content_json as Record<string, unknown> | null)?.instrument_key;
+  return doc.instrument_key ?? (typeof metadataKey === "string" ? metadataKey : undefined) ?? undefined;
+}
+
 /**
  * Build the file's ranked document plan. Prefers the structured
  * `document_plan` (each entry tracked by its stable key, so several custom
@@ -186,6 +191,7 @@ export function buildDocumentPlan(caseFile: CaseFile, documents: Document[]): Pl
       // Match by stamped plan_key; fall back to a legacy doc of the same typed
       // engine that was never stamped (best-effort for files mid-migration).
       const doc =
+        topLevel.find((d) => docInstrumentKey(d) === entry.instrument_key) ??
         topLevel.find((d) => docPlanKey(d) === entry.key) ??
         (entry.engine !== "general_document"
           ? topLevel.find((d) => d.doc_type === entry.engine && !docPlanKey(d))

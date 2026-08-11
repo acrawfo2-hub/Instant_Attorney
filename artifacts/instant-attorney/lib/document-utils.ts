@@ -52,7 +52,8 @@ export async function findReusableDocument(
   caseFileId: string,
   wizardType: string,
   userId?: string,
-  planKey?: string
+  planKey?: string,
+  instrumentKey?: string
 ): Promise<{ id: string } | null> {
   let query = db
     .from("documents")
@@ -63,7 +64,9 @@ export async function findReusableDocument(
     .order("updated_at", { ascending: false })
     .limit(1);
 
-  if (planKey) {
+  if (instrumentKey) {
+    query = query.eq("instrument_key", instrumentKey);
+  } else if (planKey) {
     query = query.eq("content_json->>plan_key", planKey);
   } else {
     query = query.eq("doc_type", wizardType);
@@ -87,7 +90,8 @@ export async function findPrimaryDocument(
   caseFileId: string,
   wizardType: string,
   userId?: string,
-  planKey?: string
+  planKey?: string,
+  instrumentKey?: string
 ): Promise<{ id: string; status: string | null; content_json: unknown; draft_text: string | null } | null> {
   let query = db
     .from("documents")
@@ -97,7 +101,9 @@ export async function findPrimaryDocument(
     .order("updated_at", { ascending: false })
     .limit(1);
 
-  if (planKey) {
+  if (instrumentKey) {
+    query = query.eq("instrument_key", instrumentKey);
+  } else if (planKey) {
     query = query.eq("content_json->>plan_key", planKey);
   } else {
     query = query.eq("doc_type", wizardType);
@@ -150,13 +156,14 @@ export async function resolveWizardDocumentTarget(
     userId: string;
     suppliedDocumentId?: string;
     planKey?: string;
+    instrumentKey?: string;
   }
 ): Promise<WizardDocumentTarget> {
-  const { caseFileId, wizardType, userId, suppliedDocumentId, planKey } = params;
+  const { caseFileId, wizardType, userId, suppliedDocumentId, planKey, instrumentKey } = params;
   let savedDocId: string | undefined = suppliedDocumentId;
 
   if (!savedDocId) {
-    const reusable = await findReusableDocument(db, caseFileId, wizardType, userId, planKey);
+    const reusable = await findReusableDocument(db, caseFileId, wizardType, userId, planKey, instrumentKey);
     savedDocId = reusable?.id;
   }
 
@@ -177,7 +184,7 @@ export async function resolveWizardDocumentTarget(
   }
 
   if (!savedDocId) {
-    const primary = await findPrimaryDocument(db, caseFileId, wizardType, userId, planKey);
+    const primary = await findPrimaryDocument(db, caseFileId, wizardType, userId, planKey, instrumentKey);
     if (primary) {
       const isEditable =
         primary.status === "draft" ||
@@ -390,4 +397,3 @@ export async function finalizeDocumentSubmission(
 
   return doc as Document;
 }
-

@@ -27,6 +27,7 @@ import {
 import { lienInstrumentsForPrompt } from "./lien-instruments.ts";
 import { isFullDepthState, isPrepMode, prepModePromptBlock, stateName } from "./jurisdiction.ts";
 import { computeDocket, formatDocketForPrompt } from "./docket.ts";
+import { instrumentGuidance, resolveInstrumentProfile } from "./instruments/index.ts";
 
 // ── Free chat (Phase I) ──────────────────────────────────────────────────────
 
@@ -298,8 +299,8 @@ RISKS:
 SUGGESTED INSTRUMENTS:
 • [Legal instrument or document type relevant to this matter]
 DOCUMENT PLAN:
-1. [Specific document name] | [engine] | [one short sentence: why this document matters / its priority]
-2. [Specific document name] | [engine] | [why]
+1. [Specific document name] | [engine] | [one short sentence: why this document matters / its priority] | [instrument_key]
+2. [Specific document name] | [engine] | [why] | [instrument_key]
 RECOMMEND_CONSULT: [true | false — true if the matter has significant legal complexity, tight deadlines, high financial or liberty stakes, active litigation, or facts that genuinely require attorney judgment before proceeding]
 ---END STRATEGY---
 
@@ -307,6 +308,7 @@ DOCUMENT PLAN rules:
 - List the documents in PRIORITY ORDER — the single most important document FIRST. It is the client's "lead" document; the client is guided to finish it before the others. Most files need more than one document.
 - Use the document's REAL, specific name as the title (e.g. "LLC Operating Agreement", "Demand Letter to Landlord", "Promissory Note") — not the generic engine name.
 - [engine] is the drafting engine, exactly one of: demand_letter, complaint_letter, draft_contract, draft_waiver, wills_trusts, doc_review, general_document. Pick the closest fit; use general_document for anything that doesn't match a specific engine. The engine only controls formatting/interview hints — the title is what identifies the document.
+- [instrument_key] is a stable lowercase snake_case legal-instrument identity, independent of engine and title. Reuse one of business_letter, federal_foia_request, texas_public_information_request, civil_complaint_petition, individual_will, or revocable_trust when it fits; otherwise mint a specific stable key.
 - Keep document titles STABLE across updates: if a document already exists in the plan, reuse the same title wording so the client's progress isn't lost.
 
 Wizard recommendation rules:
@@ -1020,6 +1022,13 @@ export const WIZARD_FIELD_HINTS: Record<WizardType, string> = {
   general_document: `Required fields vary by instrument — identify instrument type from the "Document being drafted" line, then gather: all parties (full legal names, roles, addresses), specific purpose of the instrument, key facts and dates, governing jurisdiction, response/cure deadlines if applicable, who signs and who receives the document. Apply the correct legal format for this specific instrument type (letter, memo, filing, policy, notice, etc.).`,
   improve_draft: `The client's own existing draft of this document is provided verbatim in the first message (an uploaded file). Treat it as the base to improve, not a blank page: identify its document type and purpose, preserve its structure and defined terms where sound, and produce a materially better version — tighten language, cut redundancy and legalese, resolve blanks using facts already confirmed in the Living File, and fix any legal gaps a senior attorney would catch. Never invent facts. Use [[PLACEHOLDER]] for anything genuinely missing.`,
 };
+
+/** Merge generic rendering-engine guidance with the resolved legal instrument. */
+export function wizardFieldGuidance(engine: WizardType, instrumentKey?: string | null): string {
+  const engineGuidance = WIZARD_FIELD_HINTS[engine];
+  const profile = resolveInstrumentProfile(instrumentKey);
+  return profile ? `${engineGuidance}\n\n${instrumentGuidance(profile)}` : engineGuidance;
+}
 
 // ── Drafter agent system prompt ──────────────────────────────────────────────
 // This is a separate agent from the intake orchestrator. It receives the full
