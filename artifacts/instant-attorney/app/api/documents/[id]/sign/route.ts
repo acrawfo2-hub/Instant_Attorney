@@ -10,6 +10,7 @@ import {
 } from "@/lib/dropbox-sign";
 import {
   generateDocxFromText,
+  profileForDocumentType,
   isAttorneyApproved,
 } from "@/lib/doc-generator";
 
@@ -197,6 +198,7 @@ export async function POST(
     const buffer = await generateDocxFromText(
       doc.title,
       String(doc.draft_text ?? ""),
+      profileForDocumentType(doc.doc_type),
       caseFile,
       doc.status
     );

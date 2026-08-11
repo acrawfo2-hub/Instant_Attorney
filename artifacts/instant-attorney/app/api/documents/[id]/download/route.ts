@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { generateDocxFromText, docxContentDisposition, isAttorneyApproved } from "@/lib/doc-generator";
+import { generateDocxFromText, docxContentDisposition, isAttorneyApproved, profileForDocumentType } from "@/lib/doc-generator";
 import { recordDocumentDelivery } from "@/lib/document-delivery";
 import { BYPASS_USER_ID } from "@/lib/types";
 import type { CaseFile } from "@/lib/types";
@@ -72,7 +72,7 @@ export async function GET(
     // drops the watermark once an attorney has approved the document (AI
     // Philosophy §4.2, Terms §7). A child (critical_review/second_draft) carries
     // its own status, set to "approved" alongside its parent on approval.
-    buffer = await generateDocxFromText(doc.title, text, (caseFile as CaseFile) ?? null, doc.status, isAttorneyUserDoc);
+    buffer = await generateDocxFromText(doc.title, text, profileForDocumentType(doc.doc_type), (caseFile as CaseFile) ?? null, doc.status, isAttorneyUserDoc);
   } catch (err) {
     console.error("[documents/download] docx generation error:", err);
     return NextResponse.json({ error: "Could not build the document file" }, { status: 500 });
