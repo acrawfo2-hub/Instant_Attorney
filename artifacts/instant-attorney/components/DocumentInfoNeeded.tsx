@@ -48,7 +48,9 @@ export default function DocumentInfoNeeded({
         return;
       }
       setMessage(
-        data.remaining > 0
+        data.forwarded_for_review
+          ? `Saved as revision ${data.revision} and forwarded to your attorney for review.${data.remaining > 0 ? ` ${data.remaining} item${data.remaining === 1 ? "" : "s"} still open.` : ""}`
+          : data.remaining > 0
           ? `Saved. ${data.filled} item${data.filled === 1 ? "" : "s"} added — ${data.remaining} still open.`
           : `Saved. Everything we needed is now in your document.`
       );
