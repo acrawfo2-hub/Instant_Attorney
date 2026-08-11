@@ -609,9 +609,12 @@ export interface Document {
   user_id: string;
   parent_document_id: string | null;
   doc_type: DocType;
-  title: string;
-  /** Stable instrument identity/profile. Optional only for rows created before migration. */
+  /**
+   * Stable instrument identity: unlike the title, it survives renames and
+   * regeneration. Optional because rows created before the migration have none.
+   */
   instrument_key?: string | null;
+  title: string;
   status: DocumentStatus;
   content_json: Record<string, unknown>;
   draft_text: string | null;

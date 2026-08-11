@@ -44,7 +44,8 @@ export function pickFirstValidWizard(wizards: string[] | undefined): WizardType 
 }
 
 /** Reuse an in-progress or pre-warmed primary draft (never child documents).
- *  When a planKey is given it is the document's stable identity — match on it
+ *  When a planKey is given it is the document's stable identity — match on the
+ *  dedicated column (rather than mutable JSON metadata)
  *  so two documents sharing the general_document engine stay distinct. Without
  *  a planKey (legacy / typed engines) fall back to matching by doc_type. */
 export async function findReusableDocument(

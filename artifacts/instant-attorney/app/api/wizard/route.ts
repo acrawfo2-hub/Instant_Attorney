@@ -411,6 +411,8 @@ export async function POST(req: NextRequest) {
           user_id: userId,
           doc_type: wizardType,
           title: `${documentLabel} — ${new Date().toLocaleDateString()}`,
+          // instrumentKeyStr, not planKeyStr: #122 wrote the plan key here,
+          // which re-conflates the two identities #115 separated.
           instrument_key: instrumentKeyStr ?? null,
           content_json: {
             init_response: fullResponse,
