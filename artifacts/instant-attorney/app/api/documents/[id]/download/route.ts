@@ -43,6 +43,12 @@ export async function GET(
   if (doc.user_id !== userId && !profile?.is_attorney) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  if ((doc.content_json as Record<string, unknown> | null)?.generation_incomplete === true) {
+    return NextResponse.json(
+      { error: "This generation is incomplete. Regenerate or have an attorney repair and accept it before downloading." },
+      { status: 409 }
+    );
+  }
 
   // Every renderable doc type keeps its text in draft_text (the critical-review
   // and second-draft children do too); fall back to the legacy columns just in

@@ -10,7 +10,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const { action, attorney_notes } = await req.json();
+  const { action, attorney_notes, accept_repaired_incomplete } = await req.json();
 
   if (!action || !["approve", "request_changes"].includes(action)) {
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
@@ -52,6 +52,19 @@ export async function POST(
   const children = await getChildDocuments(db, id);
   const secondDraft = children.find((c) => c.doc_type === "second_draft");
 
+  const { data: approvalCandidate } = await db
+    .from("documents")
+    .select("content_json")
+    .eq("id", id)
+    .single();
+  const incomplete = (approvalCandidate?.content_json as Record<string, unknown> | null)?.generation_incomplete === true;
+  if (action === "approve" && incomplete && accept_repaired_incomplete !== true) {
+    return NextResponse.json(
+      { error: "This generation is incomplete. Repair it and explicitly accept the repaired text before approval." },
+      { status: 409 }
+    );
+  }
+
   if (action === "approve" && secondDraft && !secondDraft.draft_text) {
     return NextResponse.json(
       { error: "A revised draft record exists but has no content yet." },
@@ -91,6 +104,17 @@ export async function POST(
       reviewed_by: user.id,
       reviewed_at: now,
       updated_at: now,
+      ...(incomplete && accept_repaired_incomplete === true
+        ? {
+            content_json: {
+              ...((approvalCandidate?.content_json as Record<string, unknown>) ?? {}),
+              generation_incomplete: false,
+              generation_state: "attorney_repaired_and_accepted",
+              repaired_accepted_by: user.id,
+              repaired_accepted_at: now,
+            },
+          }
+        : {}),
     })
     .eq("id", id)
     .eq("revision_number", sourceDoc?.revision_number ?? 1)

@@ -72,6 +72,9 @@ export async function POST(
   if (doc.user_id !== userId) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  if ((doc.content_json as Record<string, unknown> | null)?.generation_incomplete === true) {
+    return NextResponse.json({ error: "An incomplete generation cannot be signed." }, { status: 409 });
+  }
   if (!isAttorneyApproved(doc.status)) {
     return NextResponse.json(
       { error: "Document must be attorney-approved before signing" },
