@@ -37,9 +37,9 @@ interface PendingAttachment {
 }
 
 interface DocUpload {
-  key: string;
-  fileName: string;
-  status: "uploading" | "ready" | "error";
+  id: string;
+  file: File;
+  status: "queued" | "uploading" | "ready" | "error";
 }
 
 const INITIAL_MESSAGE: Msg = {
@@ -50,6 +50,7 @@ const INITIAL_MESSAGE: Msg = {
 
 const MAX_INLINE_BYTES = 4 * 1024 * 1024; // 4 MB for inline screenshots (intake)
 const MAX_FREESTYLE_BYTES = 10 * 1024 * 1024; // 10 MB for freestyle document attachments
+const MAX_FREESTYLE_MB = MAX_FREESTYLE_BYTES / (1024 * 1024);
 
 // Freestyle accepts documents too, not just screenshots — the chat-acp backend
 // already turns PDFs, Word docs, and text files into Anthropic content blocks.
@@ -202,9 +203,6 @@ function AcpChatInner() {
   // inline base64), so large files don't blow the request-body limit. These
   // chips track their upload/analysis state.
   const [docUploads, setDocUploads] = useState<DocUpload[]>([]);
-  // Docs queued before the first message (no caseFileId yet). Uploaded as soon
-  // as caseFileId becomes available.
-  const [queuedDocFiles, setQueuedDocFiles] = useState<File[]>([]);
   const [dragOver, setDragOver] = useState(false);
   // When the AI saves a new draft, show a dismissible banner so users know where it went.
   const [draftSavedTitle, setDraftSavedTitle] = useState<string | null>(null);
@@ -375,29 +373,46 @@ function AcpChatInner() {
       .catch(() => {});
   }, [caseFileId, draftsRefresh]);
 
-  // When caseFileId becomes available (first message sent), upload any docs the
-  // user had already attached before the conversation started.
-  useEffect(() => {
-    if (!caseFileId || queuedDocFiles.length === 0) return;
-    const files = [...queuedDocFiles];
-    setQueuedDocFiles([]);
-    files.forEach((file) => {
-      const key = `${file.name}-${Date.now()}`;
-      setDocUploads((prev) => [...prev, { key, fileName: file.name || "document", status: "uploading" }]);
+  const uploadDoc = useCallback(async (id: string, file: File, targetCaseFileId: string) => {
+    setDocUploads((prev) => prev.map((doc) => (
+      doc.id === id ? { ...doc, status: "uploading" } : doc
+    )));
+    try {
       const fd = new FormData();
       fd.append("file", file);
-      fd.append("caseFileId", caseFileId);
-      fetch("/api/attachments/upload", { method: "POST", body: fd })
-        .then((res) => {
-          if (!res.ok) throw new Error(res.status === 413 ? "File is too large." : "Upload failed.");
-          setDocUploads((prev) => prev.map((d) => (d.key === key ? { ...d, status: "ready" } : d)));
-        })
-        .catch(() => {
-          setDocUploads((prev) => prev.map((d) => (d.key === key ? { ...d, status: "error" } : d)));
-        });
+      fd.append("caseFileId", targetCaseFileId);
+      const res = await fetch("/api/attachments/upload", { method: "POST", body: fd });
+      if (!res.ok) {
+        throw new Error(res.status === 413 ? "File is too large to upload." : "Upload failed.");
+      }
+      setDocUploads((prev) => prev.map((doc) => (
+        doc.id === id ? { ...doc, status: "ready" } : doc
+      )));
+    } catch (err) {
+      setDocUploads((prev) => prev.map((doc) => (
+        doc.id === id ? { ...doc, status: "error" } : doc
+      )));
+      throw err;
+    }
+  }, []);
+
+  // When caseFileId becomes available (first message sent), transition the
+  // existing queued records in place. Their IDs and File objects stay stable.
+  useEffect(() => {
+    if (!caseFileId) return;
+    const queued = docUploads.filter((doc) => doc.status === "queued");
+    if (queued.length === 0) return;
+
+    // Claim every queued record before starting network work. This prevents a
+    // subsequent render (including React Strict Mode's extra effect pass) from
+    // scheduling the same upload twice.
+    setDocUploads((prev) => prev.map((doc) => (
+      doc.status === "queued" ? { ...doc, status: "uploading" } : doc
+    )));
+    queued.forEach((doc) => {
+      void uploadDoc(doc.id, doc.file, caseFileId).catch(() => {});
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [caseFileId]);
+  }, [caseFileId, docUploads, uploadDoc]);
 
   // Put a suggested question in the composer and focus it. Never auto-sends: the
   // client reads and edits before it costs her a turn.
@@ -645,37 +660,24 @@ function AcpChatInner() {
       return;
     }
     if (file.size > MAX_FREESTYLE_BYTES) {
-      alert("Attachments must be under 20 MB. For larger files, use the Upload Documents section on your dashboard.");
+      alert(`Attachments must be under ${MAX_FREESTYLE_MB} MB. For larger files, use the Upload Documents section on your dashboard.`);
       return;
     }
-    const id = caseFileIdRef.current;
-    if (!id) {
+    const uploadId = crypto.randomUUID();
+    const upload: DocUpload = { id: uploadId, file, status: caseFileIdRef.current ? "uploading" : "queued" };
+    setDocUploads((prev) => [...prev, upload]);
+    const targetCaseFileId = caseFileIdRef.current;
+    if (!targetCaseFileId) {
       // No case file yet — queue the doc. It will be uploaded automatically as
       // soon as the user sends their first message and a case file is created.
-      setQueuedDocFiles((prev) => [...prev, file]);
-      setDocUploads((prev) => [
-        ...prev,
-        { key: `${file.name}-queued-${Date.now()}`, fileName: file.name || "document", status: "uploading" },
-      ]);
       return;
     }
-    const key = `${file.name}-${Date.now()}`;
-    setDocUploads((prev) => [...prev, { key, fileName: file.name || "document", status: "uploading" }]);
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("caseFileId", id);
-      const res = await fetch("/api/attachments/upload", { method: "POST", body: fd });
-      if (!res.ok) {
-        const msg = res.status === 413 ? "File is too large to upload." : "Upload failed.";
-        throw new Error(msg);
-      }
-      setDocUploads((prev) => prev.map((d) => (d.key === key ? { ...d, status: "ready" } : d)));
+      await uploadDoc(upload.id, file, targetCaseFileId);
     } catch (err) {
-      setDocUploads((prev) => prev.map((d) => (d.key === key ? { ...d, status: "error" } : d)));
       alert(err instanceof Error ? err.message : "Upload failed.");
     }
-  }, [mode]);
+  }, [mode, uploadDoc]);
 
   function handlePaste(e: React.ClipboardEvent) {
     const items = Array.from(e.clipboardData.items);
@@ -1181,7 +1183,7 @@ function AcpChatInner() {
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
             {docUploads.map((d) => (
               <span
-                key={d.key}
+                key={d.id}
                 style={{
                   display: "inline-flex", alignItems: "center", gap: 6,
                   padding: "4px 10px", borderRadius: 999, fontSize: 12,
@@ -1191,12 +1193,30 @@ function AcpChatInner() {
                 }}
               >
                 <span aria-hidden>{d.status === "error" ? "⚠" : "📄"}</span>
-                {d.fileName}
+                {d.file.name || "document"}
                 <span style={{ opacity: 0.6 }}>
-                  {d.status === "uploading" ? "· adding…" : d.status === "ready" ? "· added to your file" : "· failed"}
+                  {d.status === "queued"
+                    ? "· Waiting until your case is created"
+                    : d.status === "uploading"
+                      ? "· adding…"
+                      : d.status === "ready"
+                        ? "· added to your file"
+                        : "· failed"}
                 </span>
+                {d.status === "error" && caseFileId && (
+                  <button
+                    type="button"
+                    onClick={() => void uploadDoc(d.id, d.file, caseFileId).catch((err) => {
+                      alert(err instanceof Error ? err.message : "Upload failed.");
+                    })}
+                    aria-label={`Retry uploading ${d.file.name || "document"}`}
+                    style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", padding: 0, textDecoration: "underline" }}
+                  >
+                    Retry
+                  </button>
+                )}
                 <button
-                  onClick={() => setDocUploads((prev) => prev.filter((x) => x.key !== d.key))}
+                  onClick={() => setDocUploads((prev) => prev.filter((x) => x.id !== d.id))}
                   aria-label="Dismiss"
                   style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", opacity: 0.7, padding: 0, lineHeight: 1 }}
                 >
