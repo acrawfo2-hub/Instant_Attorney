@@ -11,6 +11,8 @@ import { BYPASS_USER_ID, WIZARD_LABELS } from "@/lib/types";
 import type { WizardType, CaseFile, FactItem, Attachment, RequestedAttachment } from "@/lib/types";
 import { logTruncation } from "@/lib/truncation-logger";
 import { maxOutputTokensFor, limitSignalMetadata } from "@/lib/token-limits";
+import { getDocumentGenerationSpec, specForPrompt } from "@/lib/document-generation-spec";
+import { parseStructuredSections, stripStructuredSections } from "@/lib/document-refinement";
 
 // Allow up to 5 minutes for this route — legal doc generation can be slow
 export const maxDuration = 300;
@@ -202,7 +204,7 @@ export async function POST(req: NextRequest) {
         },
         {
           type: "text" as const,
-          text: `Document being drafted: ${documentLabel}\n\n${fieldHints}`,
+          text: `Document being drafted: ${documentLabel}\n\n${fieldHints}\n\n${specForPrompt(wizardType as WizardType)}`,
           cache_control: { type: "ephemeral" as const },
         },
         {
@@ -263,7 +265,15 @@ export async function POST(req: NextRequest) {
   // truncated before them), fall back to the raw response so the client always
   // gets a documentId back and can submit for attorney review. A markerless
   // response must never strand a client with an on-screen draft they can't send.
-  const draftText = extractDraftText(fullResponse) ?? (fullResponse.trim() || null);
+  const generationSpec = getDocumentGenerationSpec(wizardType as WizardType);
+  let structuredSections = [] as ReturnType<typeof parseStructuredSections>;
+  try {
+    structuredSections = parseStructuredSections(fullResponse, generationSpec);
+  } catch (sectionErr) {
+    console.error("[wizard] structured section parse error:", sectionErr);
+  }
+  const renderedResponse = stripStructuredSections(fullResponse);
+  const draftText = extractDraftText(renderedResponse) ?? (renderedResponse.trim() || null);
   let savedDocId: string | undefined = documentId as string | undefined;
 
   if (draftText) {
@@ -352,6 +362,21 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       );
     }
+
+    if (structuredSections.length) {
+      const { error: sectionErr } = await writeDb.from("document_sections").upsert(
+        structuredSections.map((section) => ({
+          document_id: savedDocId,
+          section_id: section.id,
+          section_kind: section.kind,
+          rendered_text: section.text,
+          fact_keys: section.factKeys,
+          updated_at: now,
+        })),
+        { onConflict: "document_id,section_id" },
+      );
+      if (sectionErr) console.error("[wizard] section persistence error:", sectionErr.message);
+    }
   }
 
   if (truncated && savedDocId) {
@@ -385,8 +410,9 @@ export async function POST(req: NextRequest) {
     .map((f) => f.description);
 
   return NextResponse.json({
-    text: fullResponse,
+    text: renderedResponse,
     documentId: savedDocId ?? null,
+    sections: structuredSections,
     truncated,
     gapSyncWarning,
     knownFacts,
