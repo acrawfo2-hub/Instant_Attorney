@@ -13,7 +13,7 @@ import { generateCaseTitle } from "@/lib/title-generator";
 import { toAnthropicBlock, processAttachment } from "@/lib/attachment-processor";
 import { parseDrafts } from "@/lib/freestyle-drafts";
 import { stripToolMarkers } from "@/lib/tool-markers";
-import { createAcpJob, getAcpJob, getPredecessorChain, emitAcpChunk, finishAcpJob } from "@/lib/acp-jobs";
+import { createDurableAcpJob, getAcpJob, getPredecessorChain, emitAcpChunk, finishDurableAcpJob } from "@/lib/acp-jobs";
 import { recordAiFromMessage, recordStorageUpload } from "@/lib/usage-tracker";
 import { getBillingGate } from "@/lib/topup";
 import { maxOutputTokensFor, limitSignalMetadata } from "@/lib/token-limits";
@@ -312,7 +312,7 @@ export async function POST(req: NextRequest) {
   // queues it behind any still-unfinished turn for this case; waiting on the
   // immediate predecessor is transitive (that predecessor waits on ITS
   // predecessor before it starts), so turns execute strictly in order.
-  const job = createAcpJob(resolvedCaseFileId, userId);
+  const job = await createDurableAcpJob(db, resolvedCaseFileId, userId);
   const waitForPrev = job.predecessorId ? getAcpJob(job.predecessorId) : null;
   // Never wait forever on a predecessor — if it somehow never finishes (crash
   // before finish, swept as stale), proceed without its reply.
@@ -328,6 +328,7 @@ export async function POST(req: NextRequest) {
       let runError: string | null = null;
       // The last model turn's final message — used below for truncation/usage.
       let finalMsg: Anthropic.Message | null = null;
+      let assistantMessageId: string | null = null;
       const toolDb = createServiceClient();
 
       try {
@@ -440,12 +441,13 @@ export async function POST(req: NextRequest) {
         const userMessageId = await userMessagePromise;
 
         if (fullResponse) {
-          await db.from("intake_messages").insert({
+          const { data: assistantMessage } = await db.from("intake_messages").insert({
             case_file_id: resolvedCaseFileId,
             user_id: userId,
             role: "assistant",
             content: fullResponse,
-          });
+          }).select("id").single();
+          assistantMessageId = assistantMessage?.id ?? null;
 
           // Freestyle split-screen: land any ---DRAFT--- blocks in the drafts
           // panel. A matching title updates that draft in place; a new title
@@ -626,10 +628,11 @@ export async function POST(req: NextRequest) {
           console.error("[chat-acp] post-processing error:", persistErr);
           runError = runError ?? "Post-processing failed.";
         } finally {
-          finishAcpJob(job, {
+          await finishDurableAcpJob(db, job, {
             finalText: fullResponse,
             truncated: finalMsg?.stop_reason === "max_tokens",
             error: runError,
+            assistantMessageId,
           });
         }
       }
@@ -662,6 +665,9 @@ export async function POST(req: NextRequest) {
       emitAcpChunk(job, "\x02TOOL:previous_turn:done\x02");
     }
 
+    await db.from("chat_acp_jobs").update({ state: "running", updated_at: new Date().toISOString() })
+      .eq("id", job.id).eq("user_id", userId);
+
     // The client's history can't contain replies it never received — splice
     // every finished predecessor reply that's missing from the history in
     // ahead of the new user message (oldest first) so the model sees a
@@ -690,7 +696,7 @@ export async function POST(req: NextRequest) {
   void runTurn().catch((err) => {
     console.error("[chat-acp] turn failed to start:", err);
     if (!job.done) {
-      finishAcpJob(job, { finalText: "", truncated: false, error: "The turn failed to start." });
+      void finishDurableAcpJob(db, job, { finalText: "", truncated: false, error: "The turn failed to start." });
     }
   });
 

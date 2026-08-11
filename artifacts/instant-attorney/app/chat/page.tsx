@@ -228,7 +228,8 @@ function AcpChatInner() {
   // via /api/chat-acp/status until the finished text can be placed into the
   // transcript. pendingId anchors the reply to a placeholder message (stable
   // even as more messages arrive); null means append at the end.
-  const [bgJobs, setBgJobs] = useState<Array<{ jobId: string; pendingId: string | null; startedAt: number }>>([]);
+  const [bgJobs, setBgJobs] = useState<Array<{ jobId: string; pendingId: string | null; startedAt: number; sequence?: number }>>([]);
+  const bgJobsRef = useRef(bgJobs);
   const currentJobIdRef = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const sendSeqRef = useRef(0);
@@ -246,6 +247,8 @@ function AcpChatInner() {
   const caseFileIdRef = useRef<string | null>(caseFileId);
   const hasUserMessages = messages.some((m) => m.role === "user");
   const caseHomeHref = caseFileId ? `/dashboard/${caseFileId}` : "/dashboard";
+
+  useEffect(() => { bgJobsRef.current = bgJobs; }, [bgJobs]);
 
   // Arriving from a file button with `?ask=`: put the cursor in the composer,
   // sized to the seeded text, so the only thing left to do is press send.
@@ -287,43 +290,21 @@ function AcpChatInner() {
     }
   }
 
-  // Resume a still-running background turn on page load: reopening the chat
-  // while a long draft generates shows the progress card again instead of
-  // silently dropping the run.
+  // Durable case-level discovery deliberately keeps polling after each
+  // completion: this attaches the next queued turn and delivers every
+  // unacknowledged reply in its original sequence after reload/restart.
   useEffect(() => {
     if (!urlCaseFileId) return;
     let cancelled = false;
-    fetch(`/api/chat-acp/status?caseFileId=${urlCaseFileId}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d: { running?: boolean; jobId?: string; startedAt?: number } | null) => {
-        if (cancelled || !d?.running || !d.jobId) return;
-        const jobId = d.jobId;
-        setBgJobs((prev) =>
-          prev.some((j) => j.jobId === jobId)
-            ? prev
-            : [...prev, { jobId, pendingId: null, startedAt: d.startedAt ?? Date.now() }]
-        );
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [urlCaseFileId]);
-
-  // Poll background turns until they finish, then place the reply into the
-  // transcript and surface any drafts it produced.
-  useEffect(() => {
-    if (bgJobs.length === 0) return;
-    let cancelled = false;
-
-    const resolveJob = (job: (typeof bgJobs)[number], data: { finalText?: string | null; truncated?: boolean }) => {
-      setBgJobs((prev) => prev.filter((j) => j !== job));
-      if (data.truncated) setChatTruncated(true);
-      const raw = typeof data.finalText === "string" ? data.finalText : "";
+    type DurableJob = { jobId: string; sequence: number; state: string; running?: boolean; startedAt: number; finalText?: string | null; truncated?: boolean; error?: string | null };
+    const resolveJob = (job: DurableJob) => {
+      if (job.truncated) setChatTruncated(true);
+      const raw = typeof job.finalText === "string" ? job.finalText : "";
       const text = stripToolMarkers(raw).trim();
       setMessages((prev) => {
-        // Replace the turn's placeholder in place (stable anchor even after
-        // later messages arrived); fall back to appending.
-        if (job.pendingId) {
-          const idx = prev.findIndex((m) => m.pendingId === job.pendingId);
+        const tracked = bgJobsRef.current.find((j) => j.jobId === job.jobId);
+        if (tracked?.pendingId) {
+          const idx = prev.findIndex((m) => m.pendingId === tracked.pendingId);
           if (idx !== -1) {
             const next = [...prev];
             if (text) next[idx] = { role: "assistant", content: text };
@@ -331,7 +312,9 @@ function AcpChatInner() {
             return next;
           }
         }
-        return text ? [...prev, { role: "assistant", content: text }] : prev;
+        // Hydration may already have loaded the linked intake message.
+        return text && !prev.some((m) => m.role === "assistant" && m.content.trim() === text)
+          ? [...prev, { role: "assistant", content: text }] : prev;
       });
       if (text) {
         const newDrafts = parseDrafts(raw);
@@ -342,29 +325,44 @@ function AcpChatInner() {
           if (newDrafts.length > 0) setDraftSavedTitle(newDrafts[0].title);
         }
       } else {
-        // Job unknown (e.g. server restarted) or empty — refresh drafts in
-        // case results were persisted before it went away.
         setDraftsRefresh((n) => n + 1);
       }
+      if (job.error) setError(job.error);
     };
 
     const tick = async () => {
-      for (const job of bgJobs) {
-        try {
-          const res = await fetch(`/api/chat-acp/status?jobId=${encodeURIComponent(job.jobId)}`);
-          if (!res.ok) continue;
-          const data = await res.json() as { running?: boolean; finalText?: string | null; truncated?: boolean };
-          if (cancelled) return;
-          if (data.running) continue;
-          resolveJob(job, data);
-        } catch { /* transient network error — retry on next tick */ }
-      }
+      try {
+        const res = await fetch(`/api/chat-acp/status?caseFileId=${encodeURIComponent(urlCaseFileId)}`);
+        if (!res.ok) return;
+        const data = await res.json() as { jobs?: DurableJob[] };
+        if (cancelled) return;
+        const jobs = data.jobs ?? [];
+        setBgJobs((prev) => jobs.filter((j) => j.running).map((j) => ({
+          jobId: j.jobId, sequence: j.sequence, startedAt: j.startedAt,
+          pendingId: prev.find((p) => p.jobId === j.jobId)?.pendingId ?? null,
+        })));
+        const completed: DurableJob[] = [];
+        // Do not advance the cursor across an unfinished predecessor: doing so
+        // could hide its later reply and would display successors out of order.
+        for (const job of [...jobs].sort((a, b) => a.sequence - b.sequence)) {
+          if (job.running) break;
+          completed.push(job);
+        }
+        for (const job of completed) resolveJob(job);
+        if (completed.length) {
+          await fetch("/api/chat-acp/status", { method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ caseFileId: urlCaseFileId, sequence: completed.at(-1)!.sequence }) });
+        }
+      } catch { /* transient network error — retry */ }
     };
 
     const t = setInterval(tick, 4000);
     tick();
     return () => { cancelled = true; clearInterval(t); };
-  }, [bgJobs]);
+  // bgJobs is intentionally read from the interval closure only to preserve
+  // local placeholder anchors; case discovery owns subsequent polling.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlCaseFileId]);
 
   // Keep the draft count badge on the Drafts button current.
   useEffect(() => {
