@@ -212,6 +212,8 @@ export interface PlanEntry {
   title: string;
   /** Which wizard engine drafts/formats this document. */
   engine: WizardType;
+  /** Stable legal-instrument profile; independent of the rendering engine and display title. */
+  instrument_key: string;
   /** One-line reason this document matters / why its priority. */
   rationale?: string;
 }
@@ -602,6 +604,8 @@ export interface Document {
   parent_document_id: string | null;
   doc_type: DocType;
   title: string;
+  /** Stable instrument identity/profile. Optional only for rows created before migration. */
+  instrument_key?: string | null;
   status: DocumentStatus;
   content_json: Record<string, unknown>;
   draft_text: string | null;

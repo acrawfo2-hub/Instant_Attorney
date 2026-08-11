@@ -164,6 +164,7 @@ mock.module(libUrl("prompts.ts"), {
   namedExports: {
     buildDrafterSystemPrompt: () => "SYS",
     WIZARD_FIELD_HINTS: new Proxy({}, { get: () => "hints" }),
+    wizardFieldGuidance: () => "hints",
     buildFileContext: () => "ctx",
   },
 });

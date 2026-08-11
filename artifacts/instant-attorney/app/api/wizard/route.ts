@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { buildDrafterSystemPrompt, WIZARD_FIELD_HINTS, buildFileContext } from "@/lib/prompts";
+import { buildDrafterSystemPrompt, wizardFieldGuidance, buildFileContext } from "@/lib/prompts";
 import { parseAndUpdateFile, extractDraftText, syncDraftGapsToLivingFile, isCompleteFileUpdate } from "@/lib/file-parser";
 import { resolveWizardDocumentTarget, stampFactsSynced } from "@/lib/document-utils";
 import { loadAttachmentAsContentBlocks } from "@/lib/attachment-processor";
@@ -23,8 +23,9 @@ export async function POST(req: NextRequest) {
   if (!body || typeof body !== "object") {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
-  const { messages, caseFileId, wizardType, documentId, instrument, planKey, baseAttachmentId, isInit } = body;
+  const { messages, caseFileId, wizardType, documentId, instrument, instrumentKey, planKey, baseAttachmentId, isInit } = body;
   const planKeyStr = typeof planKey === "string" && planKey.trim() ? planKey.trim() : undefined;
+  let instrumentKeyStr = typeof instrumentKey === "string" && instrumentKey.trim() ? instrumentKey.trim() : undefined;
 
   if (!Array.isArray(messages) || messages.length === 0) {
     return NextResponse.json({ error: "Invalid messages" }, { status: 400 });
@@ -123,11 +124,15 @@ export async function POST(req: NextRequest) {
     ]);
 
   const caseFile = caseFileRow as CaseFile | null;
+  // Existing clients send only planKey. Resolve its independent profile key
+  // from the persisted plan instead of conflating the two identities.
+  instrumentKeyStr ??= caseFile?.legal_strategy?.document_plan
+    ?.find((entry) => entry.key === planKeyStr)?.instrument_key;
   const facts = (factRows ?? []) as FactItem[];
   const attachments = (attachmentRows ?? []) as Attachment[];
   const requestedAttachments = (requestedRows ?? []) as RequestedAttachment[];
   const fileContext = caseFile ? buildFileContext(caseFile, facts, attachments, requestedAttachments) : "";
-  const fieldHints = WIZARD_FIELD_HINTS[wizardType as WizardType];
+  const fieldHints = wizardFieldGuidance(wizardType as WizardType, instrumentKeyStr);
   // Attorney-users get a targeted-edit follow-up behavior instead of a full
   // regeneration on every turn — same prompt, different "on follow-up" rule.
   const drafterPersona = profileRow?.account_type === "attorney_user" ? "attorney" as const : "client" as const;
@@ -275,6 +280,7 @@ export async function POST(req: NextRequest) {
       userId,
       suppliedDocumentId: savedDocId,
       planKey: planKeyStr,
+      instrumentKey: instrumentKeyStr,
     });
 
     if (target.action === "already_finalized") {
@@ -297,13 +303,15 @@ export async function POST(req: NextRequest) {
         draft_text: draftText,
         status: nextStatus,
         updated_at: now,
+        ...(instrumentKeyStr ? { instrument_key: instrumentKeyStr } : {}),
       };
       const existingCj = (existingDoc.content_json as Record<string, unknown>) ?? {};
-      if (truncated || (planKeyStr && existingCj.plan_key !== planKeyStr)) {
+      if (truncated || (planKeyStr && existingCj.plan_key !== planKeyStr) || (instrumentKeyStr && existingCj.instrument_key !== instrumentKeyStr)) {
         update.content_json = {
           ...existingCj,
           ...(truncated ? { truncated: true } : {}),
           ...(planKeyStr ? { plan_key: planKeyStr } : {}),
+          ...(instrumentKeyStr ? { instrument_key: instrumentKeyStr } : {}),
         };
       }
       const { error: updateErr } = await writeDb
@@ -323,10 +331,12 @@ export async function POST(req: NextRequest) {
           user_id: userId,
           doc_type: wizardType,
           title: `${documentLabel} — ${new Date().toLocaleDateString()}`,
+          instrument_key: instrumentKeyStr ?? null,
           content_json: {
             init_response: fullResponse,
             ...(truncated ? { truncated: true } : {}),
             ...(planKeyStr ? { plan_key: planKeyStr } : {}),
+            ...(instrumentKeyStr ? { instrument_key: instrumentKeyStr } : {}),
             ...(wizardType === "improve_draft" && baseAttachmentId ? { base_attachment_id: baseAttachmentId } : {}),
           },
           draft_text: draftText,

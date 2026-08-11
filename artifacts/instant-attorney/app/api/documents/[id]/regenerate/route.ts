@@ -10,7 +10,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { DRAFTER_SYSTEM_PROMPT, WIZARD_FIELD_HINTS, buildFileContext } from "@/lib/prompts";
+import { DRAFTER_SYSTEM_PROMPT, wizardFieldGuidance, buildFileContext } from "@/lib/prompts";
 import { parseAndUpdateFile, extractDraftText, syncDraftGapsToLivingFile, isCompleteFileUpdate } from "@/lib/file-parser";
 import { stampFactsSynced, isValidWizardType } from "@/lib/document-utils";
 import { loadAttachmentAsContentBlocks } from "@/lib/attachment-processor";
@@ -150,7 +150,8 @@ export async function POST(
   const attachments = (attachmentRows ?? []) as Attachment[];
   const requestedAttachments = (requestedRows ?? []) as RequestedAttachment[];
   const fileContext = buildFileContext(caseFile, facts, attachments, requestedAttachments);
-  const fieldHints = WIZARD_FIELD_HINTS[wizardType as WizardType];
+  const instrumentKey = doc.instrument_key ?? (doc.content_json as Record<string, unknown> | null)?.instrument_key as string | undefined;
+  const fieldHints = wizardFieldGuidance(wizardType as WizardType, instrumentKey);
 
   // For a general document the specific instrument isn't stored as its own field;
   // recover it from the saved title (drafted as "<instrument> — <date>") so the
