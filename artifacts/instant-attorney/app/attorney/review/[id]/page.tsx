@@ -6,7 +6,6 @@ import Link from "next/link";
 import type { Attachment, Document, DocumentComment, DocumentReviewRun, DocumentImprovement, DocumentQaCitation } from "@/lib/types";
 import { docTypeLabel, personDisplayName, citationBlocksApproval } from "@/lib/types";
 import AccountMenu from "@/components/AccountMenu";
-import { parseDrafterResponse } from "@/lib/wizard-parsing";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -138,11 +137,10 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
     rationale: string;
     recommendedType: string | null;
   } | null>(null);
-  // "Junior associate" chat: targeted edits against the working (second-draft)
-  // document, distinct from the one-shot critical-review/second-draft pipeline
-  // above. Ephemeral — a refresh reloads the persisted draft text, not the
-  // conversation, same as the client wizard's equivalent chat.
+  // Persistent document-partner conversation, scoped to the active revision.
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [workingRevisionId, setWorkingRevisionId] = useState("");
+  const [chatHistoryLoading, setChatHistoryLoading] = useState(true);
   const [chatInput, setChatInput] = useState("");
   const [chatSending, setChatSending] = useState(false);
   const [chatError, setChatError] = useState("");
@@ -262,10 +260,27 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
         startPolling();
       }
       loadComments();
+      loadChatHistory();
     } else {
       setError("Document not found or access denied");
     }
     setLoading(false);
+  }
+
+  async function loadChatHistory() {
+    setChatHistoryLoading(true);
+    try {
+      const res = await fetch(`/api/attorney/documents/${id}/chat-edit`);
+      if (res.ok) {
+        const data = (await res.json()) as { messages: ChatMessage[]; workingRevisionId: string };
+        setChatMessages(data.messages ?? []);
+        setWorkingRevisionId(data.workingRevisionId);
+      } else {
+        setChatError("Conversation history could not be loaded.");
+      }
+    } finally {
+      setChatHistoryLoading(false);
+    }
   }
 
   async function loadComments() {
@@ -448,9 +463,9 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
 
   async function sendChatEdit() {
     const text = chatInput.trim();
-    // Never race the Opus second-draft pipeline: it deletes and re-inserts
-    // the same second-draft child this chat edits (see chat-edit/route.ts).
-    if (!text || chatSending || generatingSecondDraft || doc?.review_status === "merging") return;
+    // Never race the Opus second-draft pipeline: it replaces the active
+    // revision and this request is intentionally revision-pinned.
+    if (!text || !workingRevisionId || chatSending || generatingSecondDraft || doc?.review_status === "merging") return;
     setChatSending(true);
     setChatError("");
     const nextMessages = [...chatMessages, { role: "user" as const, content: text }];
@@ -459,7 +474,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
       const res = await fetch(`/api/attorney/documents/${id}/chat-edit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: nextMessages }),
+        body: JSON.stringify({ message: text, workingRevisionId }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -470,14 +485,15 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
         // attempt starts from the real current document.
         setChatMessages(chatMessages);
         setChatError(data.error ?? "Edit failed");
-        if (res.status === 409) await load();
+        if (res.status === 409) {
+          await load();
+          await loadChatHistory();
+        }
         return;
       }
       setChatInput("");
-      const parsed = parseDrafterResponse(data.text ?? "");
-      const reply = parsed.questions.length ? parsed.questions.join(" ") : "Draft updated ✓";
-      setChatMessages((prev) => [...prev, { role: "assistant", content: reply }]);
-      await load();
+      setChatMessages([...(data.userMessage ? chatMessages.concat(data.userMessage) : nextMessages), data.assistantMessage]);
+      if (data.patchApplied) await load();
     } catch {
       setChatMessages(chatMessages);
       setChatError("Network error — please try again.");
@@ -785,15 +801,14 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
           )}
 
           <div className="atty-chat-edit">
-            <h2>Ask for a Change</h2>
+            <h2>Document Partner</h2>
             <p className="atty-second-draft-hint">
-              A targeted edit, not a full rewrite — say what you want changed
-              (e.g. &quot;change the notice period to 60 days&quot;) and only that
-              changes. {secondDraft ? "Edits apply to Document 3, the revised draft." : "Your first message here creates Document 3 (a working copy) seeded from the client's draft — the client's original is never overwritten."}
+              Ask for analysis, questions, alternatives, or a proposed patch. Replies do not change the draft unless you explicitly ask to apply a complete patch. This conversation is saved to {secondDraft ? "Document 3, the active revised draft." : "the client draft revision."}
             </p>
             <ul className="atty-comment-list">
-              {chatMessages.length === 0 && (
-                <li className="atty-comment-empty">No edits requested yet.</li>
+              {chatHistoryLoading && <li className="atty-comment-empty">Loading conversation…</li>}
+              {!chatHistoryLoading && chatMessages.length === 0 && (
+                <li className="atty-comment-empty">No conversation yet.</li>
               )}
               {chatMessages.map((m, i) => (
                 <li
@@ -808,10 +823,10 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
               <textarea
                 className="atty-comment-input"
                 value={chatInput}
-                disabled={chatSending || isMerging}
+                disabled={chatHistoryLoading || chatSending || isMerging}
                 onChange={(e) => setChatInput(e.target.value)}
                 rows={2}
-                placeholder={isMerging ? "Wait for the 2nd draft generation to finish…" : "Type the change you want…"}
+                placeholder={isMerging ? "Wait for the 2nd draft generation to finish…" : "Ask a question, request alternatives, or propose a change…"}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
@@ -823,9 +838,9 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
                 type="button"
                 className="atty-btn"
                 onClick={sendChatEdit}
-                disabled={chatSending || isMerging || !chatInput.trim()}
+                disabled={chatHistoryLoading || chatSending || isMerging || !chatInput.trim() || !workingRevisionId}
               >
-                {chatSending ? "Applying…" : "Send"}
+                {chatSending ? "Thinking…" : "Send"}
               </button>
             </div>
             {isMerging && (
