@@ -5,6 +5,8 @@ import { parseAndUpdateFile } from "./file-parser.ts";
 import { recordAiFromMessage } from "./usage-tracker.ts";
 import { limitSignalMetadata } from "./token-limits.ts";
 import type { CaseFile, FactItem, Attachment, RequestedAttachment } from "./types.ts";
+import { randomUUID } from "crypto";
+import { cursorAfter, type MessageCursor } from "./message-cursor.ts";
 
 // Cheap, narrow summarizer — a small file block, not legal reasoning.
 const EXTRACTOR_MODEL = "claude-haiku-4-5-20251001";
@@ -21,7 +23,57 @@ const MIN_UNSYNCED_MESSAGES = 6;
 interface SyncResult {
   synced: boolean;
   processedMessages: number;
-  reason?: "no_messages" | "below_threshold" | "no_update" | "updated";
+  reason?: "no_messages" | "below_threshold" | "busy" | "no_update" | "updated";
+}
+
+export type { MessageCursor } from "./message-cursor.ts";
+
+const LOCK_SECONDS = 300;
+const WINDOW_SIZE = 100;
+
+async function release(db: SupabaseClient, caseFileId: string, token: string) {
+  await db.rpc("release_living_file_sync", { p_case_file_id: caseFileId, p_lock_token: token });
+}
+
+/** Advance only if both the durable lease and the cursor read for this window still match. */
+async function advance(
+  db: SupabaseClient, caseFileId: string, token: string,
+  before: { createdAt: string; id: string | null } | null, after: MessageCursor,
+) {
+  const { data, error } = await db.rpc("advance_living_file_cursor", {
+    p_case_file_id: caseFileId, p_lock_token: token,
+    p_expected_created_at: before?.createdAt ?? null, p_expected_id: before?.id ?? null,
+    p_new_created_at: after.createdAt, p_new_id: after.id,
+  });
+  if (error || data !== true) throw error ?? new Error("Living File cursor compare-and-set failed");
+}
+
+/** Marks a complete inline update through its persisted user-message boundary. */
+export async function markLivingFileSyncedThrough(
+  db: SupabaseClient, caseFileId: string, boundary: MessageCursor,
+): Promise<boolean> {
+  const token = randomUUID();
+  const { data: locked, error } = await db.rpc("acquire_living_file_sync", {
+    p_case_file_id: caseFileId, p_lock_token: token, p_lease_seconds: LOCK_SECONDS,
+  });
+  if (error || locked !== true) return false;
+  try {
+    const { data: row } = await db.from("case_files")
+      .select("last_file_synced_at,last_file_synced_message_id").eq("id", caseFileId).single();
+    const before = row?.last_file_synced_at
+      ? { createdAt: row.last_file_synced_at, id: row.last_file_synced_message_id ?? null } : null;
+    const alreadyPastBoundary = before && (before.createdAt > boundary.createdAt ||
+      (before.createdAt === boundary.createdAt && (before.id === null || !cursorAfter(boundary, before as MessageCursor))));
+    if (alreadyPastBoundary) {
+      await release(db, caseFileId, token);
+      return true;
+    }
+    await advance(db, caseFileId, token, before, boundary);
+    return true;
+  } catch (err) {
+    await release(db, caseFileId, token);
+    throw err;
+  }
 }
 
 // Strip machine-emitted structured blocks from assistant turns so the extractor
@@ -57,49 +109,54 @@ export async function syncLivingFile(
   db: SupabaseClient,
   caseFileId: string,
   userId: string,
-  opts: { force?: boolean } = {}
+  opts: { force?: boolean; through?: MessageCursor } = {}
 ): Promise<SyncResult> {
+  const lockToken = randomUUID();
+  const { data: locked, error: lockError } = await db.rpc("acquire_living_file_sync", {
+    p_case_file_id: caseFileId, p_lock_token: lockToken, p_lease_seconds: LOCK_SECONDS,
+  });
+  if (lockError || locked !== true) return { synced: false, processedMessages: 0, reason: "busy" };
+
+  const fail = async (result: SyncResult) => { await release(db, caseFileId, lockToken); return result; };
   const { data: caseFileRow } = await db
     .from("case_files")
     .select("*")
     .eq("id", caseFileId)
     .single();
   const caseFile = caseFileRow as CaseFile | null;
-  if (!caseFile) return { synced: false, processedMessages: 0, reason: "no_messages" };
+  if (!caseFile) return fail({ synced: false, processedMessages: 0, reason: "no_messages" });
 
   // Only messages the extractor hasn't already folded in. A null watermark
   // (never synced, or pre-migration) means read the whole transcript.
-  const watermark = caseFile.last_file_synced_at ?? null;
+  const watermark = caseFile.last_file_synced_at
+    ? { createdAt: caseFile.last_file_synced_at, id: caseFile.last_file_synced_message_id ?? null } : null;
   let query = db
     .from("intake_messages")
-    .select("role, content, created_at")
+    .select("id, role, content, created_at")
     .eq("case_file_id", caseFileId)
-    .order("created_at", { ascending: true });
-  if (watermark) query = query.gt("created_at", watermark);
+    .order("created_at", { ascending: true }).order("id", { ascending: true }).limit(WINDOW_SIZE);
+  if (watermark?.id) query = query.or(`created_at.gt.${watermark.createdAt},and(created_at.eq.${watermark.createdAt},id.gt.${watermark.id})`);
+  else if (watermark) query = query.gt("created_at", watermark.createdAt);
+  if (opts.through) query = query.or(`created_at.lt.${opts.through.createdAt},and(created_at.eq.${opts.through.createdAt},id.lte.${opts.through.id})`);
 
   const { data: msgRows } = await query;
-  const newMessages = (msgRows ?? []) as Array<{ role: string; content: string; created_at: string }>;
+  const newMessages = (msgRows ?? []) as Array<{ id: string; role: string; content: string; created_at: string }>;
 
   if (newMessages.length === 0) {
-    return { synced: false, processedMessages: 0, reason: "no_messages" };
+    return fail({ synced: false, processedMessages: 0, reason: "no_messages" });
   }
   if (!opts.force && newMessages.length < MIN_UNSYNCED_MESSAGES) {
-    return { synced: false, processedMessages: newMessages.length, reason: "below_threshold" };
+    return fail({ synced: false, processedMessages: newMessages.length, reason: "below_threshold" });
   }
 
-  const lastCreatedAt = newMessages[newMessages.length - 1].created_at;
+  const last = newMessages[newMessages.length - 1];
+  const windowEnd = { createdAt: last.created_at, id: last.id };
 
   // Advance the watermark to the last processed message. Called only after the
   // model call succeeds (or when there's nothing to send), so a failed call
   // leaves the window for the next sweep to retry rather than dropping it. A
   // missing column (pre-migration) is swallowed.
-  const advanceWatermark = async () => {
-    await db
-      .from("case_files")
-      .update({ last_file_synced_at: lastCreatedAt })
-      .eq("id", caseFileId)
-      .then(undefined, (err) => console.error("[living-file-extractor] watermark advance error:", err));
-  };
+  const advanceWatermark = () => advance(db, caseFileId, lockToken, watermark, windowEnd);
 
   // Current file + the new dialogue, as the model's single user message.
   const [{ data: factRows }, { data: attachmentRows }, { data: requestedRows }] = await Promise.all([
@@ -147,7 +204,7 @@ export async function syncLivingFile(
   } catch (err) {
     console.error("[living-file-extractor] model call failed:", err);
     // Do NOT advance the watermark — let the next sweep retry this window.
-    return { synced: false, processedMessages: newMessages.length, reason: "no_update" };
+    return fail({ synced: false, processedMessages: newMessages.length, reason: "no_update" });
   }
 
   const output = finalMsg.content
@@ -187,12 +244,17 @@ export async function syncLivingFile(
       "[living-file-extractor] incomplete LIVING FILE block (no ---END FILE---); leaving watermark for retry.",
       { caseFileId, outputTokens: finalMsg.usage.output_tokens, stopReason: finalMsg.stop_reason }
     );
-    return { synced: false, processedMessages: newMessages.length, reason: "no_update" };
+    return fail({ synced: false, processedMessages: newMessages.length, reason: "no_update" });
   }
 
   // Complete block — write it, THEN advance the watermark so a parse failure
   // never strands a window as "synced".
-  await parseAndUpdateFile(db, caseFileId, userId, output);
-  await advanceWatermark();
-  return { synced: true, processedMessages: newMessages.length, reason: "updated" };
+  try {
+    await parseAndUpdateFile(db, caseFileId, userId, output);
+    await advanceWatermark();
+    return { synced: true, processedMessages: newMessages.length, reason: "updated" };
+  } catch (err) {
+    await release(db, caseFileId, lockToken);
+    throw err;
+  }
 }
