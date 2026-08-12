@@ -12,6 +12,8 @@ import ReviewDocumentEditor from "@/components/attorney-review/ReviewDocumentEdi
 import ReviewPartnerChat from "@/components/attorney-review/ReviewPartnerChat";
 import type { ReviewChange, RevisionSaveState } from "@/components/attorney-review/types";
 import AttorneyContextHeader from "@/components/AttorneyContextHeader";
+import { parseDrafterResponse } from "@/lib/wizard-parsing";
+import LivingFileSyncWarning from "@/components/LivingFileSyncWarning";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -58,6 +60,7 @@ interface DocumentDetail {
     phone: string | null;
   };
   child_documents?: Document[];
+  living_file_sync_status?: "pending" | "synced" | "failed";
 }
 
 interface PersistedValidationReport {
@@ -730,6 +733,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
         dirty: clientNotes !== (doc.attorney_notes ?? "") || secondDraftPrompt !== (doc.attorney_second_draft_prompt ?? ""),
         unresolvedQa: citations.some((citation) => citationBlocksApproval(citation) && !citation.waived),
       }} />
+      {doc.living_file_sync_status && doc.living_file_sync_status !== "synced" && <LivingFileSyncWarning documentId={doc.id} />}
       <header className="atty-review-header">
         <button className="atty-back" onClick={async () => { await saveRevision(); router.push("/attorney"); }}>← Dashboard</button>
         <div className="atty-review-title">
