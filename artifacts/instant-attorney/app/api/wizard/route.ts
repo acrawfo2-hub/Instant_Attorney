@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { buildDrafterSystemPrompt, wizardFieldGuidance, buildFileContext } from "@/lib/prompts";
 import { parseAndUpdateFile, extractDraftText, syncDraftGapsToLivingFile, isCompleteFileUpdate } from "@/lib/file-parser";
+import { saveDocumentRevision } from "@/lib/document-persistence";
 import { resolveWizardDocumentTarget, stampFactsSynced } from "@/lib/document-utils";
 import { loadAttachmentAsContentBlocks } from "@/lib/attachment-processor";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
@@ -497,13 +498,18 @@ export async function POST(req: NextRequest) {
   }
 
   let gapSyncWarning = false;
-  if (draftText) {
-    try {
-      await syncDraftGapsToLivingFile(writeDb, caseFileId, userId, draftText);
-    } catch (gapErr) {
-      gapSyncWarning = true;
-      console.error("[wizard] gap sync error:", gapErr);
-    }
+  if (draftText && savedDocId) {
+    // The document write already happened above, in the update/insert that also
+    // carries status, generation_state, instrument_key and validation_report.
+    // #118 added a second update here that rewrote only draft_text — redundant,
+    // and it displaced the real payload as the last write on the row. persist
+    // therefore just names the document; the boundary still stamps the revision
+    // id and drives the durable Living File sync, which is its actual job.
+    const result = await saveDocumentRevision(writeDb, {
+      caseFileId, userId, draftText,
+      persist: async () => savedDocId!,
+    });
+    gapSyncWarning = result.syncPending;
   }
 
   if (savedDocId) {

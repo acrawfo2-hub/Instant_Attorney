@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import LivingFileSyncWarning from "@/components/LivingFileSyncWarning";
 import type { Attachment, Document, FactItem, ClientWorkspaceDraft } from "@/lib/types";
 import { docTypeLabel, isDocumentOutOfDate } from "@/lib/types";
 import { findBlanks } from "@/lib/freestyle-drafts";
@@ -519,6 +520,8 @@ export default function CaseDocumentsTable({
       )}
 
       <span id="drafted-documents" className="lf-anchor" aria-hidden="true" />
+      {documents.filter((d) => d.living_file_sync_status && d.living_file_sync_status !== "synced")
+        .map((d) => <LivingFileSyncWarning key={`sync-${d.id}`} documentId={d.id} />)}
       {total === 0 && <span id="attorney-review" className="lf-anchor" aria-hidden="true" />}
       {total === 0 ? (
         <p className="cdt-empty">Nothing on the file yet. Attachments you upload and documents you draft with your assistant will appear here.</p>

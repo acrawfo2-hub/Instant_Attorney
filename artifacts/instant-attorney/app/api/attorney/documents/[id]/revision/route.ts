@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getChildDocuments, getSecondDraftChild } from "@/lib/document-utils";
+import { saveDocumentRevision } from "@/lib/document-persistence";
 import { BYPASS_USER_ID } from "@/lib/types";
 import type { Document } from "@/lib/types";
 
@@ -27,16 +28,42 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const parent = parentRow as Document;
   const existing = getSecondDraftChild(await getChildDocuments(db, id));
   const now = new Date().toISOString();
-  if (existing) {
-    const { data, error } = await db.from("documents").update({ draft_text: text, updated_at: now }).eq("id", existing.id).select("id, draft_text, updated_at").single();
-    if (error) return NextResponse.json({ error: "Revision could not be saved" }, { status: 500 });
-    await db.from("documents").update({ improved_draft_text: text, updated_at: now }).eq("id", id);
-    return NextResponse.json({ revision: data });
+  // #118's revision boundary belongs here rather than on chat-edit. Under #123
+  // the partner only proposes; this endpoint is where an attorney's accepted
+  // edit is actually written, so it is the write that must carry a revision id
+  // and drive the durable Living File sync.
+  let saved: { id: string; draft_text: string | null; updated_at: string } | null = null;
+  let conflict = false;
+  const revision = await saveDocumentRevision(db, {
+    caseFileId: parent.case_file_id, userId: parent.user_id, draftText: text,
+    persist: async () => {
+      if (existing) {
+        const { data, error } = await db.from("documents").update({ draft_text: text, updated_at: now })
+          .eq("id", existing.id).select("id, draft_text, updated_at").single();
+        if (error) throw error;
+        saved = data;
+        await db.from("documents").update({ improved_draft_text: text, updated_at: now }).eq("id", id);
+        return data.id;
+      }
+      const { data, error } = await db.from("documents").insert({
+        case_file_id: parent.case_file_id, user_id: parent.user_id, parent_document_id: id,
+        doc_type: "second_draft", title: `${parent.title} — Attorney Working Copy`,
+        status: "draft", draft_text: text, content_json: { source: "manual_working_copy" },
+      }).select("id, draft_text, updated_at").single();
+      if (error) { conflict = error.code === "23505"; throw error; }
+      saved = data;
+      await db.from("documents").update({ improved_draft_text: text, updated_at: now }).eq("id", id);
+      return data.id;
+    },
+  }).catch(() => null);
+
+  if (!revision || !saved) {
+    return NextResponse.json(
+      { error: conflict ? "The revision changed in another tab. Reload and try again." : "Revision could not be saved" },
+      { status: conflict ? 409 : 500 },
+    );
   }
-  const { data, error } = await db.from("documents").insert({ case_file_id: parent.case_file_id, user_id: parent.user_id, parent_document_id: id, doc_type: "second_draft", title: `${parent.title} — Attorney Working Copy`, status: "draft", draft_text: text, content_json: { source: "manual_working_copy" } }).select("id, draft_text, updated_at").single();
-  if (error) return NextResponse.json({ error: error.code === "23505" ? "The revision changed in another tab. Reload and try again." : "Revision could not be saved" }, { status: error.code === "23505" ? 409 : 500 });
-  await db.from("documents").update({ improved_draft_text: text, updated_at: now }).eq("id", id);
-  return NextResponse.json({ revision: data }, { status: 201 });
+  return NextResponse.json({ revision: saved, livingFileSyncPending: revision.syncPending }, { status: existing ? 200 : 201 });
 }
 
 // sendBeacon uses POST while unloading; it shares the exact attorney-only save path.

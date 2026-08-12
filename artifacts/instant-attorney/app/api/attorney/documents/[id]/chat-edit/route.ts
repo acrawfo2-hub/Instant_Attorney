@@ -8,6 +8,7 @@ import { BYPASS_USER_ID } from "@/lib/types";
 import type { Document, CaseFile, FactItem, Attachment } from "@/lib/types";
 import { logTruncation } from "@/lib/truncation-logger";
 import { maxOutputTokensForDoc, limitSignalMetadata } from "@/lib/token-limits";
+import { saveDocumentRevision } from "@/lib/document-persistence";
 
 // Legal doc edits can be slow on a long document — same ceiling as the wizard route.
 export const maxDuration = 300;
@@ -21,6 +22,43 @@ const MODEL = "claude-sonnet-4-6";
  * against the canonical attorney revision. It only proposes before/after
  * changes; accepting and saving those proposals is a separate explicit action.
  */
+type PartnerMessage = { id?: string; role: "user" | "assistant"; content: string; created_at?: string };
+
+/**
+ * #124: serves the persisted partner thread so a reload restores it. Restored
+ * here after #118's merge of this file dropped it — the review page fetches
+ * this on mount and would otherwise get a 405 and show an empty conversation.
+ */
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const db = BYPASS_AUTH ? createServiceClient() : await createClient();
+
+  let userId: string;
+  if (BYPASS_AUTH) {
+    userId = BYPASS_USER_ID;
+  } else {
+    const { data: { user }, error } = await (db as Awaited<ReturnType<typeof createClient>>).auth.getUser();
+    if (error || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    userId = user.id;
+  }
+
+  const { data: profile } = await db.from("profiles").select("is_attorney").eq("id", userId).single();
+  if (!profile?.is_attorney) {
+    return NextResponse.json({ error: "Attorney access required" }, { status: 403 });
+  }
+
+  const { data } = await db
+    .from("attorney_document_messages")
+    .select("id, role, content, created_at")
+    .eq("document_id", id)
+    .order("created_at", { ascending: true });
+
+  return NextResponse.json({ messages: (data ?? []) as PartnerMessage[] });
+}
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -149,6 +187,12 @@ export async function POST(
   ).map((change, index) => ({ id: `${Date.now()}-${index}`, before: change.before!, after: change.after!, summary: change.summary?.trim() || "Proposed edit" }));
   if (!changes.length) return NextResponse.json({ error: "No applicable changes were proposed. Try describing the passage more precisely." }, { status: 422 });
 
+  // #118 auto-merged a saveDocumentRevision write-through here. Dropped: this
+  // route proposes and never writes, so serviceDb/draftText/childId do not
+  // exist on this path. The document write — and therefore the Living File
+  // sync #118 wants to make durable — happens when the attorney accepts a
+  // change, not when the partner suggests one.
+
   recordAiFromMessage(db, message, {
     userId: parent.user_id,
     actorId: userId,
@@ -165,9 +209,29 @@ export async function POST(
     },
   }).catch((e) => console.error("[attorney/chat-edit] usage record error:", e));
 
+  // #124's persisted transcript, restored: #118's merge of this file dropped it.
+  // Failures are logged, not surfaced — the proposals are already computed, and
+  // losing a transcript row should not cost the attorney the response.
+  const partnerReply = proposal.message?.trim() || `${changes.length} change${changes.length === 1 ? "" : "s"} proposed.`;
+  const lastAttorneyTurn = [...body.messages].reverse().find((m) => m.role === "user");
+  const { error: transcriptError } = await createServiceClient()
+    .from("attorney_document_messages")
+    .insert([
+      ...(lastAttorneyTurn
+        ? [{ document_id: parent.id, attorney_id: userId, role: "user", content: lastAttorneyTurn.content }]
+        : []),
+      { document_id: parent.id, attorney_id: userId, role: "assistant", content: partnerReply },
+    ]);
+  if (transcriptError) {
+    console.error("[attorney/chat-edit] transcript persist error:", transcriptError.message);
+  }
+
   return NextResponse.json({
-    message: proposal.message?.trim() || `${changes.length} change${changes.length === 1 ? "" : "s"} proposed.`,
+    message: partnerReply,
     changes,
     truncated,
+    // No livingFileSyncPending here: #118 reported it from the write this route
+    // used to perform, and this route no longer writes. The sync status belongs
+    // to the accept path that actually persists the change.
   });
 }

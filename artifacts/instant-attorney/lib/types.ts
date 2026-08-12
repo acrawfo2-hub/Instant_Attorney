@@ -647,6 +647,10 @@ export interface Document {
   revision_number?: number;
   approved_text?: string | null;
   approved_revision?: number | null;
+  current_revision_id?: string | null;
+  living_file_sync_status?: "pending" | "synced" | "failed";
+  living_file_sync_error?: string | null;
+  living_file_synced_at?: string | null;
 }
 
 /**
