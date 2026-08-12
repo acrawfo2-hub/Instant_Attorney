@@ -149,6 +149,12 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
   const [reviewRun, setReviewRun] = useState<DocumentReviewRun | null>(null);
   const [improvements, setImprovements] = useState<DocumentImprovement[]>([]);
   const [citations, setCitations] = useState<DocumentQaCitation[]>([]);
+  const [focusedImprovementId, setFocusedImprovementId] = useState<string | null>(null);
+  const [improvementBusy, setImprovementBusy] = useState<string | null>(null);
+  const [editingImprovementId, setEditingImprovementId] = useState<string | null>(null);
+  const [editedImprovementText, setEditedImprovementText] = useState("");
+  const [improvementError, setImprovementError] = useState("");
+  const workingEditorRef = useRef<HTMLDivElement | null>(null);
   const [waivingId, setWaivingId] = useState<string | null>(null);
   const runStartedRef = useRef(false);
 
@@ -255,6 +261,44 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
     } finally {
       setWaivingId(null);
     }
+  }
+
+  function focusImprovement(imp: DocumentImprovement) {
+    setFocusedImprovementId(imp.id);
+    workingEditorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  async function proposeImprovement(imp: DocumentImprovement, editedText?: string) {
+    setImprovementBusy(imp.id);
+    setImprovementError("");
+    try {
+      const res = await fetch(`/api/attorney/documents/${id}/improvements/${imp.id}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editedText === undefined ? {} : { edited_text: editedText }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Could not create proposed diff");
+      setImprovements((prev) => prev.map((item) => item.id === imp.id ? data.improvement : item));
+      setEditingImprovementId(null);
+      focusImprovement(data.improvement);
+    } catch (err) { setImprovementError(err instanceof Error ? err.message : "Could not create proposed diff"); }
+    finally { setImprovementBusy(null); }
+  }
+
+  async function dispositionImprovement(imp: DocumentImprovement, disposition: "accepted" | "rejected" | "ask_partner" | "needs_client_input") {
+    const rationale = disposition === "accepted" ? "" : (window.prompt("Optional rationale", imp.attorney_rationale ?? "") ?? "");
+    setImprovementBusy(imp.id); setImprovementError("");
+    try {
+      const res = await fetch(`/api/attorney/documents/${id}/improvements/${imp.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ disposition, rationale }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Could not save decision");
+      setImprovements((prev) => prev.map((item) => item.id === imp.id ? data.improvement : item));
+      if (typeof data.workingDraft === "string") { await load(); await loadReviewRun(); }
+      else if (data.qaRerun) await loadReviewRun();
+    } catch (err) { setImprovementError(err instanceof Error ? err.message : "Could not save decision"); }
+    finally { setImprovementBusy(null); }
   }
 
   function startRunPolling() {
@@ -615,19 +659,40 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
               {improvements.length > 0 && (
                 <ol className="arr-list">
                   {improvements.map((imp) => (
-                    <li key={imp.id} className="arr-item">
+                    <li key={imp.id} className={`arr-item ${focusedImprovementId === imp.id ? "arr-item-focused" : ""}`} onClick={() => focusImprovement(imp)}>
                       <div className="arr-item-head">
                         <span className={`arr-sev arr-sev-${imp.severity}`}>{imp.severity}</span>
                         <span className="arr-kind">{imp.kind.replace(/_/g, " ")}</span>
-                        <span className="arr-section">{imp.section}</span>
+                        <span className="arr-section">{imp.section} · {imp.anchor?.section_id ?? "locating…"}</span>
                       </div>
                       <p className="arr-item-title">{imp.title}</p>
                       {imp.proposed_change && <p className="arr-item-change">{imp.proposed_change}</p>}
                       {imp.rationale && <p className="arr-item-rationale">{imp.rationale}</p>}
+                      {imp.proposed_diff && (
+                        <div className="arr-diff" aria-label="Proposed diff">
+                          <del>{imp.proposed_diff.before}</del><ins>{imp.proposed_diff.after}</ins>
+                        </div>
+                      )}
+                      {editingImprovementId === imp.id && (
+                        <textarea className="arr-edit" value={editedImprovementText} onClick={(e) => e.stopPropagation()} onChange={(e) => setEditedImprovementText(e.target.value)} rows={4} />
+                      )}
+                      <div className="arr-actions" onClick={(e) => e.stopPropagation()}>
+                        {imp.status === "proposed" ? <>
+                          {!imp.proposed_diff ? <button onClick={() => proposeImprovement(imp)} disabled={improvementBusy === imp.id}>Accept</button> : <button onClick={() => dispositionImprovement(imp, "accepted")} disabled={improvementBusy === imp.id}>Accept proposed diff</button>}
+                          {editingImprovementId === imp.id
+                            ? <button onClick={() => proposeImprovement(imp, editedImprovementText)} disabled={!editedImprovementText.trim() || improvementBusy === imp.id}>Preview edited diff</button>
+                            : <button onClick={() => { setEditingImprovementId(imp.id); setEditedImprovementText(imp.proposed_diff?.after ?? imp.proposed_change); }}>Edit and accept</button>}
+                          <button onClick={() => dispositionImprovement(imp, "rejected")}>Reject</button>
+                          <button onClick={() => dispositionImprovement(imp, "ask_partner")}>Ask partner</button>
+                          <button onClick={() => dispositionImprovement(imp, "needs_client_input")}>Needs client input</button>
+                        </> : <span className={`arr-disposition arr-disposition-${imp.status}`}>{imp.status.replace(/_/g, " ")}</span>}
+                      </div>
+                      {imp.attorney_rationale && <p className="arr-rationale">Attorney note: {imp.attorney_rationale}</p>}
                     </li>
                   ))}
                 </ol>
               )}
+              {improvementError && <p className="arr-error">{improvementError}</p>}
             </section>
           )}
 

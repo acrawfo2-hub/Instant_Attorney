@@ -864,7 +864,7 @@ export type ImprovementKind =
   | "compliance"
   | "citation";
 export type ImprovementSeverity = "high" | "medium" | "low";
-export type ImprovementStatus = "proposed" | "accepted" | "rejected" | "superseded";
+export type ImprovementStatus = "proposed" | "accepted" | "rejected" | "ask_partner" | "needs_client_input" | "superseded";
 
 export interface DocumentImprovement {
   id: string;
@@ -878,7 +878,14 @@ export interface DocumentImprovement {
   rationale: string;
   proposed_change: string;
   status: ImprovementStatus;
+  anchor: import("@/lib/improvement-diffs").DocumentAnchor | null;
+  proposed_diff: import("@/lib/improvement-diffs").ImprovementDiff | null;
+  attorney_rationale: string;
+  disposition_by: string | null;
+  disposition_at: string | null;
+  evidence_hash: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 // ── Authorities QA gate (schema-stage45) ────────────────────────────────────

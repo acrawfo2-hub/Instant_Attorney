@@ -141,3 +141,19 @@ idempotent (replace children + improvements for the run).
   existing manual controls (retired in later phases as the workspace lands).
 
 Not in Phase 1: QA gates, questions loop, memo/email, the three-pane diff UI.
+
+## Actionable improvement decisions (Stage 46)
+
+Each improvement is anchored to a revision hash, stable `section_id`, character
+range, and exact quote. `POST …/improvements/[iid]` persists a proposed diff but
+never edits the working revision. `PATCH …/improvements/[iid]` records one of
+`accepted`, `rejected`, `ask_partner`, or `needs_client_input`, plus an optional
+attorney rationale. Acceptance is rejected unless a still-current proposed diff
+exists; only then is its replacement written to the `second_draft` working copy.
+Open anchors are rebased after an accepted edit while retaining their stable
+section IDs.
+
+Rejected/deferred findings retain an evidence hash tied to the working revision,
+so an orchestrator re-run carries the disposition forward when the evidence is
+unchanged. Accepted authority-affecting passages invalidate and rerun the
+Authorities gate; unrelated passage edits retain its prior QA result.

@@ -11442,3 +11442,20 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
 .review-workbench-docmeta { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-bottom: .75rem; }
 .review-workbench-docmeta .atty-doc-downloads { display: flex; gap: .5rem; }
 .review-workbench-docmeta .doc-truncation-notice { flex: 1 1 320px; min-width: 0; }
+
+/* Actionable attorney improvements (stage 46). */
+.arr-item { cursor: pointer; }
+.arr-item-focused { border-color: var(--brand-gold); box-shadow: 0 0 0 2px rgba(200, 169, 110, .2); }
+.arr-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.arr-actions button { border: 1px solid var(--brand-border); border-radius: 6px; padding: 5px 8px; background: #fff; color: var(--brand-navy); font-size: 11.5px; cursor: pointer; }
+.arr-actions button:first-child { background: var(--brand-navy); color: #fff; }
+.arr-actions button:disabled { opacity: .55; cursor: wait; }
+.arr-edit { width: 100%; margin-top: 8px; border: 1px solid var(--brand-border); border-radius: 6px; padding: 8px; font: inherit; }
+.arr-diff { display: grid; gap: 5px; margin-top: 8px; padding: 8px; border-radius: 6px; background: #f8fafc; font-size: 12px; white-space: pre-wrap; }
+.arr-diff del { color: #991b1b; background: #fee2e2; }
+.arr-diff ins { color: #166534; background: #dcfce7; text-decoration: none; }
+.arr-disposition { align-self: center; margin-left: auto; font-size: 10px; font-weight: 800; text-transform: uppercase; color: var(--brand-text-md); }
+.arr-rationale { margin: 7px 0 0; font-size: 12px; color: var(--brand-text-md); }
+.arr-working-editor:focus { outline: 2px solid rgba(200, 169, 110, .5); outline-offset: 3px; }
+.arr-working-text { margin: 0; font: inherit; white-space: pre-wrap; }
+.arr-working-text mark { padding: 2px 0; background: #fef08a; box-shadow: 0 0 0 2px #facc15; }
