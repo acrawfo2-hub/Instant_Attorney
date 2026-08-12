@@ -249,7 +249,21 @@ export async function runDocumentReview(runId: string): Promise<void> {
       .join("");
     const { draftText, changes } = parseSecondDraft(rawDraft);
     if (draftText.trim()) {
+      const { data: beforeRevision } = await db.from("document_revisions").insert({
+        document_id: documentId, content: parentDoc.draft_text ?? "", title: parentDoc.title,
+        author_type: "system", source_action: "orchestrator_rewrite_before",
+        summary: `Before orchestrator review run ${runId}`,
+      }).select("id").single();
       await upsertSecondDraftChild(db, parentDoc, draftText, changes);
+      const { data: evaluatedRevision } = await db.from("document_revisions").insert({
+        document_id: documentId, parent_revision_id: beforeRevision?.id ?? null,
+        content: draftText, title: parentDoc.title, author_type: "ai",
+        source_action: "orchestrator_rewrite_after",
+        summary: `Orchestrator rewrite from review run ${runId}`,
+      }).select("id").single();
+      // QA below evaluates this exact immutable content, never a moving document row.
+      if (evaluatedRevision) await db.from("document_review_runs")
+        .update({ revision_id: evaluatedRevision.id }).eq("id", runId);
     }
 
     // ── Stage 3: Authorities QA gate (verify every citation) ─────────────────

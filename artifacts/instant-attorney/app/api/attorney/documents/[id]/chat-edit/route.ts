@@ -144,6 +144,14 @@ export async function POST(
   // owning client to write their own rows; the caller here is a verified
   // attorney editing the client's document on their behalf.
   const serviceDb = createServiceClient();
+  // AI patch boundary: preserve both inputs and outputs. These are top-level
+  // revisions even though the editable work product lives in a child row.
+  const beforeText = existingChild?.draft_text ?? parent.draft_text ?? "";
+  const { data: beforeRevision } = await serviceDb.from("document_revisions").insert({
+    document_id: parent.id, content: beforeText, title: parent.title,
+    author_type: "system", source_action: "ai_patch_before",
+    summary: "Checkpoint before accepted AI edit",
+  }).select("id").single();
   let childId: string;
   if (existingChild) {
     childId = existingChild.id;
@@ -209,6 +217,12 @@ export async function POST(
     improved_draft_text: draftText,
     updated_at: new Date().toISOString(),
   }).eq("id", parent.id);
+
+  await serviceDb.from("document_revisions").insert({
+    document_id: parent.id, parent_revision_id: beforeRevision?.id ?? null,
+    content: draftText, title: parent.title, author_type: "ai",
+    source_action: "ai_patch_after", summary: "Accepted AI edit",
+  });
 
   recordAiFromMessage(db, message, {
     userId: parent.user_id,
