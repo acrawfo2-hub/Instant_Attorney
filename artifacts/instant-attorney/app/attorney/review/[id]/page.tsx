@@ -1,12 +1,16 @@
 "use client";
 
-import { use, useState, useEffect, useRef } from "react";
+import { use, useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import type { Attachment, Document, DocumentComment, DocumentReviewRun, DocumentImprovement, DocumentQaCitation } from "@/lib/types";
+import type { Attachment, Document, DocumentComment, DocumentReviewRun, DocumentImprovement, DocumentQaCitation, DocumentDeliveryDraft } from "@/lib/types";
 import { docTypeLabel, personDisplayName, citationBlocksApproval } from "@/lib/types";
 import AccountMenu from "@/components/AccountMenu";
-import { parseDrafterResponse } from "@/lib/wizard-parsing";
+import ReviewContextPane from "@/components/attorney-review/ReviewContextPane";
+import ReviewCoverSheet from "@/components/attorney-review/ReviewCoverSheet";
+import ReviewDocumentEditor from "@/components/attorney-review/ReviewDocumentEditor";
+import ReviewPartnerChat from "@/components/attorney-review/ReviewPartnerChat";
+import type { ReviewChange, RevisionSaveState } from "@/components/attorney-review/types";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -97,28 +101,6 @@ async function readFinalNdjson(
   return last;
 }
 
-function renderDocumentText(text: string) {
-  return text.split("\n\n").map((para, i) => (
-    <p key={i}
-      dangerouslySetInnerHTML={{
-        __html: para
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;")
-          .replace(/\[\[([^\]]+)\]\]/g, '<mark class="atty-placeholder">[[<em>$1</em>]]</mark>')
-          .replace(/\n/g, "<br>"),
-      }}
-    />
-  ));
-}
-
-function stripReviewMarkers(text: string) {
-  return text
-    .replace(/---DOCUMENT REVIEW---\n?/, "")
-    .replace(/\n?---END REVIEW---/, "")
-    .trim();
-}
-
 export default function ReviewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
@@ -131,11 +113,13 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [aiRunning, setAiRunning] = useState(false);
   const [generatingSecondDraft, setGeneratingSecondDraft] = useState(false);
   const [aiError, setAiError] = useState("");
   const [secondDraftMessage, setSecondDraftMessage] = useState("");
+  // Feeds #123's ReviewContextPane. Auto-merge dropped this alongside #126's
+  // sidebar rewrite; the pane still referenced it, so typecheck caught it.
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [comments, setComments] = useState<DocumentComment[]>([]);
   const [newComment, setNewComment] = useState("");
   const [commentBusy, setCommentBusy] = useState(false);
@@ -151,6 +135,14 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
   const [chatInput, setChatInput] = useState("");
   const [chatSending, setChatSending] = useState(false);
   const [chatError, setChatError] = useState("");
+  const [revisionText, setRevisionText] = useState("");
+  const [revisionSource, setRevisionSource] = useState<"second_draft" | "working_copy">("working_copy");
+  const [saveState, setSaveState] = useState<RevisionSaveState>("idle");
+  const [proposedChanges, setProposedChanges] = useState<ReviewChange[]>([]);
+  const [collapsed, setCollapsed] = useState({ context: false, editor: false, partner: false });
+  const revisionRef = useRef("");
+  const dirtyRef = useRef(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Orchestrator review run (schema-stage44): auto-kicks off on submission and
   // drives issue-spotting -> revised draft. This page reads its live state and
@@ -158,7 +150,16 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
   const [reviewRun, setReviewRun] = useState<DocumentReviewRun | null>(null);
   const [improvements, setImprovements] = useState<DocumentImprovement[]>([]);
   const [citations, setCitations] = useState<DocumentQaCitation[]>([]);
+  const [focusedImprovementId, setFocusedImprovementId] = useState<string | null>(null);
+  const [improvementBusy, setImprovementBusy] = useState<string | null>(null);
+  const [editingImprovementId, setEditingImprovementId] = useState<string | null>(null);
+  const [editedImprovementText, setEditedImprovementText] = useState("");
+  const [improvementError, setImprovementError] = useState("");
+  const workingEditorRef = useRef<HTMLDivElement | null>(null);
   const [waivingId, setWaivingId] = useState<string | null>(null);
+  const [deliveryDraft, setDeliveryDraft] = useState<DocumentDeliveryDraft | null>(null);
+  const [deliveryBusy, setDeliveryBusy] = useState<"save" | "send" | "approve-send" | null>(null);
+  const [deliveryStatus, setDeliveryStatus] = useState("");
   const runStartedRef = useRef(false);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -167,12 +168,53 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
   useEffect(() => {
     load();
     loadReviewRun({ allowAutoStart: true });
+    loadDeliveryDraft();
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
       if (runPollRef.current) clearInterval(runPollRef.current);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  const saveRevision = useCallback(async () => {
+    if (!dirtyRef.current) return true;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    const textBeingSaved = revisionRef.current;
+    setSaveState("saving");
+    try {
+      const res = await fetch(`/api/attorney/documents/${id}/revision`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: textBeingSaved }), keepalive: true });
+      if (!res.ok) throw new Error("save failed");
+      setRevisionSource("second_draft");
+      if (revisionRef.current === textBeingSaved) {
+        dirtyRef.current = false;
+        setSaveState("saved");
+      } else {
+        setSaveState("dirty");
+      }
+      return true;
+    } catch {
+      setSaveState("error");
+      return false;
+    }
+  }, [id]);
+
+  useEffect(() => {
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      if (!dirtyRef.current) return;
+      navigator.sendBeacon(`/api/attorney/documents/${id}/revision`, new Blob([JSON.stringify({ text: revisionRef.current })], { type: "application/json" }));
+      event.preventDefault();
+    };
+    const pageHide = () => { if (dirtyRef.current) navigator.sendBeacon(`/api/attorney/documents/${id}/revision`, new Blob([JSON.stringify({ text: revisionRef.current })], { type: "application/json" })); };
+    window.addEventListener("beforeunload", beforeUnload);
+    window.addEventListener("pagehide", pageHide);
+    return () => { window.removeEventListener("beforeunload", beforeUnload); window.removeEventListener("pagehide", pageHide); if (saveTimerRef.current) clearTimeout(saveTimerRef.current); void saveRevision(); };
+  }, [id, saveRevision]);
+
+  function editRevision(text: string) {
+    revisionRef.current = text; setRevisionText(text); dirtyRef.current = true; setSaveState("dirty");
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => void saveRevision(), 900);
+  }
 
   // Read the orchestrator run + structured improvements. On first load, if the
   // document is awaiting review and no run has ever started (e.g. the submit-time
@@ -197,6 +239,34 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
     if (data.run && (data.run.status === "queued" || data.run.status === "running")) {
       startRunPolling();
     }
+  }
+
+  async function loadDeliveryDraft() {
+    const res = await fetch(`/api/attorney/documents/${id}/delivery`);
+    if (res.ok) {
+      const data = await res.json() as { draft: DocumentDeliveryDraft | null };
+      setDeliveryDraft(data.draft);
+    }
+  }
+
+  async function saveDeliveryDraft(): Promise<boolean> {
+    if (!deliveryDraft) return false;
+    setDeliveryBusy("save"); setDeliveryStatus("");
+    const res = await fetch(`/api/attorney/documents/${id}/delivery`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(deliveryDraft) });
+    const data = await res.json().catch(() => ({}));
+    setDeliveryBusy(null);
+    if (!res.ok) { setDeliveryStatus(data.error ?? "Unable to save draft."); return false; }
+    setDeliveryDraft(data.draft); setDeliveryStatus("Message draft saved."); return true;
+  }
+
+  async function sendDelivery(approveAndSend: boolean) {
+    if (!deliveryDraft || deliveryBusy) return;
+    if (!await saveDeliveryDraft()) return;
+    setDeliveryBusy(approveAndSend ? "approve-send" : "send"); setDeliveryStatus("");
+    const res = await fetch(`/api/attorney/documents/${id}/delivery`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ approveAndSend }) });
+    const data = await res.json().catch(() => ({}));
+    setDeliveryBusy(null);
+    if (res.ok) setDone(true); else setDeliveryStatus(data.error ?? "Unable to send.");
   }
 
   async function startReviewRun() {
@@ -226,6 +296,44 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
     }
   }
 
+  function focusImprovement(imp: DocumentImprovement) {
+    setFocusedImprovementId(imp.id);
+    workingEditorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  async function proposeImprovement(imp: DocumentImprovement, editedText?: string) {
+    setImprovementBusy(imp.id);
+    setImprovementError("");
+    try {
+      const res = await fetch(`/api/attorney/documents/${id}/improvements/${imp.id}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editedText === undefined ? {} : { edited_text: editedText }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Could not create proposed diff");
+      setImprovements((prev) => prev.map((item) => item.id === imp.id ? data.improvement : item));
+      setEditingImprovementId(null);
+      focusImprovement(data.improvement);
+    } catch (err) { setImprovementError(err instanceof Error ? err.message : "Could not create proposed diff"); }
+    finally { setImprovementBusy(null); }
+  }
+
+  async function dispositionImprovement(imp: DocumentImprovement, disposition: "accepted" | "rejected" | "ask_partner" | "needs_client_input") {
+    const rationale = disposition === "accepted" ? "" : (window.prompt("Optional rationale", imp.attorney_rationale ?? "") ?? "");
+    setImprovementBusy(imp.id); setImprovementError("");
+    try {
+      const res = await fetch(`/api/attorney/documents/${id}/improvements/${imp.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ disposition, rationale }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Could not save decision");
+      setImprovements((prev) => prev.map((item) => item.id === imp.id ? data.improvement : item));
+      if (typeof data.workingDraft === "string") { await load(); await loadReviewRun(); }
+      else if (data.qaRerun) await loadReviewRun();
+    } catch (err) { setImprovementError(err instanceof Error ? err.message : "Could not save decision"); }
+    finally { setImprovementBusy(null); }
+  }
+
   function startRunPolling() {
     if (runPollRef.current) return;
     runPollRef.current = setInterval(async () => {
@@ -244,6 +352,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
         runPollRef.current = null;
         // Pull in the freshly-generated revised draft + critical review children.
         load();
+        loadDeliveryDraft();
       }
     }, 4000);
   }
@@ -253,6 +362,11 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
     if (res.ok) {
       const data = await res.json() as DocumentDetail;
       setDoc(data);
+      if (!dirtyRef.current) {
+        const latest = (data.child_documents ?? []).filter((child) => child.doc_type === "second_draft").sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at))[0];
+        const editable = latest?.draft_text ?? data.draft_text ?? "";
+        revisionRef.current = editable; setRevisionText(editable); setRevisionSource(latest ? "second_draft" : "working_copy"); setSaveState("idle");
+      }
       setClientNotes(data.attorney_notes ?? "");
       setSecondDraftPrompt(data.attorney_second_draft_prompt ?? "");
       const caseFileId = data.case_files?.id;
@@ -464,7 +578,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
       const res = await fetch(`/api/attorney/documents/${id}/chat-edit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: nextMessages }),
+        body: JSON.stringify({ messages: nextMessages, currentText: revisionRef.current }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -479,10 +593,9 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
         return;
       }
       setChatInput("");
-      const parsed = parseDrafterResponse(data.text ?? "");
-      const reply = parsed.questions.length ? parsed.questions.join(" ") : "Draft updated ✓";
+      const reply = data.message ?? "Changes proposed.";
       setChatMessages((prev) => [...prev, { role: "assistant", content: reply }]);
-      await load();
+      setProposedChanges((prev) => [...prev, ...(data.changes as ReviewChange[])]);
     } catch {
       setChatMessages(chatMessages);
       setChatError("Network error — please try again.");
@@ -515,7 +628,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
   return (
     <div className="atty-review-shell">
       <header className="atty-review-header">
-        <button className="atty-back" onClick={() => router.push("/attorney")}>← Dashboard</button>
+        <button className="atty-back" onClick={async () => { await saveRevision(); router.push("/attorney"); }}>← Dashboard</button>
         <div className="atty-review-title">
           <h1>{doc.title}</h1>
           <span className="atty-badge atty-badge-amber">{doc.status.replace(/_/g, " ")}</span>
@@ -532,68 +645,22 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
       </header>
 
       <div className="atty-review-body">
-        <div className="atty-review-sidebar">
-          <div className="atty-review-section">
-            <h3>Client</h3>
-            <p>{personDisplayName(doc.profiles, "—")}</p>
-            <p>{doc.profiles.email}</p>
-            {doc.profiles.phone && <p>{doc.profiles.phone}</p>}
-          </div>
-
-          <div className="atty-review-section">
-            <h3>Matter</h3>
-            <p>{doc.case_files.matter_type ?? "Unclassified"} {doc.case_files.matter_subtype ? `— ${doc.case_files.matter_subtype}` : ""}</p>
-            {doc.case_files.summary && <p className="atty-review-summary">{doc.case_files.summary}</p>}
-          </div>
-
-          <div className="atty-review-section">
-            <h3>Living File</h3>
-            <Link href={`/attorney/file/${doc.case_files.id}`} className="atty-living-file-link">
-              View full file →
-            </Link>
-            <Link
-              href={`/attorney/file/${doc.case_files.id}/brief-pack`}
-              className="atty-living-file-link"
-              style={{ display: "block", marginTop: 6 }}
-            >
-              Open brief pack (print/PDF) →
-            </Link>
-          </div>
-
-          <div className="atty-review-section">
-            <h3>Submitted</h3>
-            <p>{doc.submitted_at ? new Date(doc.submitted_at).toLocaleString() : new Date(doc.created_at).toLocaleString()}</p>
-          </div>
-
-          {attachments.length > 0 && (
-            <div className="atty-review-section">
-              <h3>Attachments</h3>
-              {attachments.map((att) => (
-                <div key={att.id} className="atty-att-item">
-                  <span className="atty-att-name">{att.file_name}</span>
-                  {att.status === "ready" && (
-                    <a href={`/api/attachments/${att.id}`} target="_blank" rel="noopener noreferrer" className="atty-att-link">
-                      View / Download
-                    </a>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="atty-review-section atty-ai-actions">
-            <h3>Critical Review</h3>
-            <button
-              className={`atty-ai-btn${reviewText ? " atty-ai-btn-done" : ""}`}
-              onClick={runManualReview}
-              disabled={aiRunning}
-            >
-              {aiRunning ? "Generating…" : reviewText ? "Re-run Critical Review" : "Run Critical Review"}
-            </button>
-            {aiError && <p className="atty-ai-error">{aiError}</p>}
-          </div>
+        <div className={`review-collapsible-column${collapsed.context ? " is-collapsed" : ""}`}>
+          <button type="button" className="review-pane-toggle" onClick={() => setCollapsed((value) => ({ ...value, context: !value.context }))}>{collapsed.context ? "Show context" : "Hide context"}</button>
+          {!collapsed.context && <ReviewContextPane
+            clientName={personDisplayName(doc.profiles, "—")} email={doc.profiles.email} phone={doc.profiles.phone}
+            matter={`${doc.case_files.matter_type ?? "Unclassified"}${doc.case_files.matter_subtype ? ` — ${doc.case_files.matter_subtype}` : ""}`}
+            summary={doc.case_files.summary} caseFileId={doc.case_files.id}
+            submitted={new Date(doc.submitted_at ?? doc.created_at).toLocaleString()} attachments={attachments}
+            onRunReview={runManualReview} running={aiRunning} hasReview={Boolean(reviewText)} error={aiError}
+          />}
+          {/* #126's cover sheet, kept alongside #123's context pane rather than
+              instead of it. They do not overlap: the pane carries client,
+              matter and the review action, while this fetches the case
+              substance an attorney reviews against — confirmed facts, open
+              gaps, deadlines, existing counsel and source files. */}
+          {!collapsed.context && <ReviewCoverSheet documentId={id} fallbackCaseFileId={doc.case_files.id} />}
         </div>
-
         <div className="atty-review-content">
           {/* Orchestrator auto-review (schema-stage44): live run status + the
               structured improvements it produced. */}
@@ -626,19 +693,40 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
               {improvements.length > 0 && (
                 <ol className="arr-list">
                   {improvements.map((imp) => (
-                    <li key={imp.id} className="arr-item">
+                    <li key={imp.id} className={`arr-item ${focusedImprovementId === imp.id ? "arr-item-focused" : ""}`} onClick={() => focusImprovement(imp)}>
                       <div className="arr-item-head">
                         <span className={`arr-sev arr-sev-${imp.severity}`}>{imp.severity}</span>
                         <span className="arr-kind">{imp.kind.replace(/_/g, " ")}</span>
-                        <span className="arr-section">{imp.section}</span>
+                        <span className="arr-section">{imp.section} · {imp.anchor?.section_id ?? "locating…"}</span>
                       </div>
                       <p className="arr-item-title">{imp.title}</p>
                       {imp.proposed_change && <p className="arr-item-change">{imp.proposed_change}</p>}
                       {imp.rationale && <p className="arr-item-rationale">{imp.rationale}</p>}
+                      {imp.proposed_diff && (
+                        <div className="arr-diff" aria-label="Proposed diff">
+                          <del>{imp.proposed_diff.before}</del><ins>{imp.proposed_diff.after}</ins>
+                        </div>
+                      )}
+                      {editingImprovementId === imp.id && (
+                        <textarea className="arr-edit" value={editedImprovementText} onClick={(e) => e.stopPropagation()} onChange={(e) => setEditedImprovementText(e.target.value)} rows={4} />
+                      )}
+                      <div className="arr-actions" onClick={(e) => e.stopPropagation()}>
+                        {imp.status === "proposed" ? <>
+                          {!imp.proposed_diff ? <button onClick={() => proposeImprovement(imp)} disabled={improvementBusy === imp.id}>Accept</button> : <button onClick={() => dispositionImprovement(imp, "accepted")} disabled={improvementBusy === imp.id}>Accept proposed diff</button>}
+                          {editingImprovementId === imp.id
+                            ? <button onClick={() => proposeImprovement(imp, editedImprovementText)} disabled={!editedImprovementText.trim() || improvementBusy === imp.id}>Preview edited diff</button>
+                            : <button onClick={() => { setEditingImprovementId(imp.id); setEditedImprovementText(imp.proposed_diff?.after ?? imp.proposed_change); }}>Edit and accept</button>}
+                          <button onClick={() => dispositionImprovement(imp, "rejected")}>Reject</button>
+                          <button onClick={() => dispositionImprovement(imp, "ask_partner")}>Ask partner</button>
+                          <button onClick={() => dispositionImprovement(imp, "needs_client_input")}>Needs client input</button>
+                        </> : <span className={`arr-disposition arr-disposition-${imp.status}`}>{imp.status.replace(/_/g, " ")}</span>}
+                      </div>
+                      {imp.attorney_rationale && <p className="arr-rationale">Attorney note: {imp.attorney_rationale}</p>}
                     </li>
                   ))}
                 </ol>
               )}
+              {improvementError && <p className="arr-error">{improvementError}</p>}
             </section>
           )}
 
@@ -694,162 +782,54 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
             );
           })()}
 
-          <div className="atty-two-doc-grid">
-            <section className="atty-standalone-doc">
-              <div className="atty-standalone-doc-header">
-                <div>
-                  <h2>Document 1 — Client Draft</h2>
-                  <p className="atty-standalone-doc-sub">{docTypeLabel(doc.doc_type)} · original wizard output</p>
-                </div>
-                {doc.draft_text && (
-                  <div className="atty-doc-downloads">
-                    <a href={`/api/documents/${id}/download`} download className="atty-btn atty-btn-download">
-                      Download .docx
-                    </a>
-                    <a href={`/api/documents/${id}/needed-info`} download className="atty-btn atty-btn-download">
-                      Info needed
-                    </a>
-                  </div>
-                )}
+          {/* Carried over from the pre-workbench layout, which #123 replaced
+              wholesale. The refactor dropped both downloads and the truncation
+              warning, and none of its new panes reinstated them — an attorney
+              would have lost the ability to pull the .docx and would no longer
+              be told the draft they are approving was cut off mid-generation. */}
+          <div className="review-workbench-docmeta">
+            {doc.draft_text && (
+              <div className="atty-doc-downloads">
+                <a href={`/api/documents/${id}/download`} download className="atty-btn atty-btn-download">
+                  Download .docx
+                </a>
+                <a href={`/api/documents/${id}/needed-info`} download className="atty-btn atty-btn-download">
+                  Info needed
+                </a>
               </div>
-              {Boolean(doc.content_json?.truncated) && (
-                <div className="doc-truncation-notice" role="status">
-                  <span className="doc-truncation-icon">⚠</span>
-                  <span>
-                    This draft was generated from a very long document and may have been cut
-                    short. Review the full text for any abrupt endings before finalizing.
-                  </span>
-                </div>
-              )}
-              {(() => {
-                const report = doc.content_json?.validation_report as PersistedValidationReport | undefined;
-                return report?.errors?.length ? (
-                  <div className="doc-truncation-notice" role="alert">
-                    <span className="doc-truncation-icon">!</span>
-                    <div><strong>Unresolved instrument validation errors</strong><ul>{report.errors.map((issue, index) => <li key={`${issue.code}-${index}`}>{issue.message}</li>)}</ul></div>
-                  </div>
-                ) : null;
-              })()}
-              {doc.draft_text ? (
-                <div className="atty-review-draft">{renderDocumentText(doc.draft_text)}</div>
-              ) : (
-                <p className="atty-ai-empty">No draft text available.</p>
-              )}
-            </section>
-
-            <section className="atty-standalone-doc">
-              <div className="atty-standalone-doc-header">
-                <div>
-                  <h2>Document 2 — Critical Review Memo</h2>
-                  <p className="atty-standalone-doc-sub">AI analysis · standalone review document</p>
-                </div>
-                {criticalReview?.id && reviewText && (
-                  <a href={`/api/documents/${criticalReview.id}/download`} download className="atty-btn atty-btn-download">
-                    Download .docx
-                  </a>
-                )}
-              </div>
-              {isReviewing ? (
-                <div className="atty-ai-running">Generating critical review memo…</div>
-              ) : reviewText ? (
-                <pre className="atty-review-preformatted">{stripReviewMarkers(reviewText)}</pre>
-              ) : (
-                <p className="atty-ai-empty">
-                  No review memo yet. Click Run Critical Review in the sidebar to generate one.
-                </p>
-              )}
-            </section>
-          </div>
-
-          {isMerging && !secondDraft?.draft_text && (
-            <section className="atty-standalone-doc atty-second-draft-preview">
-              <div className="atty-ai-running">
-                Checking document type fit, then generating revised draft… This may take a minute.
-              </div>
-            </section>
-          )}
-
-          {secondDraft?.draft_text && (
-            <section className="atty-standalone-doc atty-second-draft-preview">
-              <div className="atty-standalone-doc-header">
-                <div>
-                  <h2>Document 3 — Revised Draft</h2>
-                  <p className="atty-standalone-doc-sub">Generated second draft (approve this version to send to client)</p>
-                </div>
-                <div className="atty-doc-downloads">
-                  <a href={`/api/documents/${secondDraft.id}/download`} download className="atty-btn atty-btn-download">
-                    Download .docx
-                  </a>
-                  <a href={`/api/documents/${secondDraft.id}/needed-info`} download className="atty-btn atty-btn-download">
-                    Info needed
-                  </a>
-                </div>
-              </div>
-              {(() => {
-                const changes = (secondDraft.content_json as Record<string, unknown> | null)?.changes;
-                return typeof changes === "string" && changes.trim() ? (
-                  <details className="atty-changes-panel" open>
-                    <summary>Key changes from first draft (attorney only — not shown to client)</summary>
-                    <pre className="atty-review-preformatted">{changes.trim()}</pre>
-                  </details>
-                ) : null;
-              })()}
-              <div className="atty-review-draft">{renderDocumentText(secondDraft.draft_text)}</div>
-            </section>
-          )}
-
-          <div className="atty-chat-edit">
-            <h2>Ask for a Change</h2>
-            <p className="atty-second-draft-hint">
-              A targeted edit, not a full rewrite — say what you want changed
-              (e.g. &quot;change the notice period to 60 days&quot;) and only that
-              changes. {secondDraft ? "Edits apply to Document 3, the revised draft." : "Your first message here creates Document 3 (a working copy) seeded from the client's draft — the client's original is never overwritten."}
-            </p>
-            <ul className="atty-comment-list">
-              {chatMessages.length === 0 && (
-                <li className="atty-comment-empty">No edits requested yet.</li>
-              )}
-              {chatMessages.map((m, i) => (
-                <li
-                  key={i}
-                  className={`atty-comment ${m.role === "assistant" ? "atty-chat-msg-assistant" : "atty-chat-msg-user"}`}
-                >
-                  <span className="atty-comment-body">{m.content}</span>
-                </li>
-              ))}
-            </ul>
-            <div className="atty-comment-compose">
-              <textarea
-                className="atty-comment-input"
-                value={chatInput}
-                disabled={chatSending || isMerging}
-                onChange={(e) => setChatInput(e.target.value)}
-                rows={2}
-                placeholder={isMerging ? "Wait for the 2nd draft generation to finish…" : "Type the change you want…"}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    sendChatEdit();
-                  }
-                }}
-              />
-              <button
-                type="button"
-                className="atty-btn"
-                onClick={sendChatEdit}
-                disabled={chatSending || isMerging || !chatInput.trim()}
-              >
-                {chatSending ? "Applying…" : "Send"}
-              </button>
-            </div>
-            {isMerging && (
-              <p className="atty-second-draft-hint">
-                Chat edits are paused while the 2nd draft is generating to avoid conflicting writes.
-              </p>
             )}
-            {chatError && <p className="atty-ai-error">{chatError}</p>}
+            {Boolean(doc.content_json?.truncated) && (
+              <div className="doc-truncation-notice" role="status">
+                <span className="doc-truncation-icon">⚠</span>
+                <span>
+                  This draft was generated from a very long document and may have been cut
+                  short. Check the end of the text before approving.
+                </span>
+              </div>
+            )}
           </div>
 
+          <div className="review-workbench-main">
+            <div className={`review-collapsible-column review-editor-column${collapsed.editor ? " is-collapsed" : ""}`}>
+              <button type="button" className="review-pane-toggle" onClick={() => setCollapsed((value) => ({ ...value, editor: !value.editor }))}>{collapsed.editor ? "Show editor" : "Hide editor"}</button>
+              {!collapsed.editor && <ReviewDocumentEditor title={secondDraft?.title ?? `${doc.title} — Attorney Working Copy`} text={revisionText} source={revisionSource} saveState={saveState} changes={proposedChanges} onChange={editRevision} onBlur={() => void saveRevision()}
+                onAccept={(changeId) => {
+                  const change = proposedChanges.find((item) => item.id === changeId); if (!change) return;
+                  if (!revisionRef.current.includes(change.before)) { setChatError("That passage changed and this proposal can no longer be applied."); return; }
+                  editRevision(revisionRef.current.replace(change.before, change.after)); setProposedChanges((items) => items.filter((item) => item.id !== changeId));
+                }}
+                onReject={(changeId) => setProposedChanges((items) => items.filter((item) => item.id !== changeId))}
+                onAcceptAll={() => {
+                  let next = revisionRef.current; const remaining: ReviewChange[] = [];
+                  for (const change of proposedChanges) { if (next.includes(change.before)) next = next.replace(change.before, change.after); else remaining.push(change); }
+                  if (next !== revisionRef.current) editRevision(next); setProposedChanges(remaining);
+                }} />}
+            </div>
+            <div className={`review-collapsible-column review-partner-column${collapsed.partner ? " is-collapsed" : ""}`}>
+              <button type="button" className="review-pane-toggle" onClick={() => setCollapsed((value) => ({ ...value, partner: !value.partner }))}>{collapsed.partner ? "Show AI partner" : "Hide AI partner"}</button>
+              {!collapsed.partner && <ReviewPartnerChat messages={chatMessages} input={chatInput} sending={chatSending} disabled={isMerging} error={chatError} onInput={setChatInput} onSend={sendChatEdit} />}
+            </div>
+          </div>
           <div className="atty-comments-workspace">
             <h2>Comments &amp; Concerns</h2>
             <p className="atty-second-draft-hint">
@@ -952,6 +932,35 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
             />
           </div>
 
+          {deliveryDraft && (
+            <section className="arr-panel" aria-labelledby="delivery-composer-title">
+              <div className="arr-head"><h2 id="delivery-composer-title">Client delivery composer</h2></div>
+              <p className="atty-second-draft-hint">Preview and edit the exact message that will accompany the approved revision. Saving, approval, and sending are separate actions.</p>
+              <div className="arr-delivery-preview">
+                <p><strong>Exact attachment:</strong> <a href={`/api/documents/${deliveryDraft.revision_document_id}/download`} target="_blank" rel="noreferrer">{doc.title} — approved revision ({deliveryDraft.revision_document_id.slice(0, 8)}) ↗</a></p>
+                <label>Recipient<input value={deliveryDraft.recipient} readOnly /></label>
+                <label>Subject<input value={deliveryDraft.subject} onChange={(e) => setDeliveryDraft({ ...deliveryDraft, subject: e.target.value })} /></label>
+                <label>Message body<textarea rows={12} value={deliveryDraft.body} onChange={(e) => setDeliveryDraft({ ...deliveryDraft, body: e.target.value })} /></label>
+                <label className="arr-consult-toggle"><input type="checkbox" checked={deliveryDraft.consultation_enabled} onChange={(e) => setDeliveryDraft({ ...deliveryDraft, consultation_enabled: e.target.checked })} /> Include direct consultation scheduling CTA</label>
+                {deliveryDraft.consultation_enabled && <label>Consultation link<input value={deliveryDraft.consultation_url ?? ""} onChange={(e) => setDeliveryDraft({ ...deliveryDraft, consultation_url: e.target.value })} /></label>}
+                <details><summary>Structured attorney memo</summary>
+                  <h4>Document purpose</h4><p>{deliveryDraft.memo.documentPurpose}</p>
+                  <h4>Principal changes</h4><ul>{deliveryDraft.memo.principalChanges.map((x, i) => <li key={i}>{x}</li>)}</ul>
+                  <h4>Risks or concerns</h4><ul>{deliveryDraft.memo.risksOrConcerns.map((x, i) => <li key={i}>{x}</li>)}</ul>
+                  <h4>Client action items</h4><ul>{deliveryDraft.memo.clientActionItems.map((x, i) => <li key={i}>{x}</li>)}</ul>
+                  <h4>Consultation offer</h4><p>{deliveryDraft.memo.consultationOffer}</p>
+                </details>
+                {citations.some(citationBlocksApproval) && <div className="arr-approve-block">Outstanding warning: unresolved authorities prevent approval and delivery.</div>}
+              </div>
+              <div className="atty-review-actions">
+                <button className="atty-btn" onClick={saveDeliveryDraft} disabled={Boolean(deliveryBusy)}>{deliveryBusy === "save" ? "Saving…" : "Save message draft"}</button>
+                <button className="atty-btn atty-btn-primary" onClick={() => sendDelivery(false)} disabled={Boolean(deliveryBusy) || doc.status !== "approved" || citations.some(citationBlocksApproval)}>{deliveryBusy === "send" ? "Sending…" : "Send to client"}</button>
+                {doc.status !== "approved" && <button className="atty-btn atty-btn-approve" onClick={() => sendDelivery(true)} disabled={Boolean(deliveryBusy) || citations.some(citationBlocksApproval)}>{deliveryBusy === "approve-send" ? "Approving and sending…" : "Approve and send"}</button>}
+              </div>
+              {deliveryStatus && <p role="status">{deliveryStatus}</p>}
+            </section>
+          )}
+
           {error && <div className="atty-review-error-inline">{error}</div>}
 
           {(() => {
@@ -973,8 +982,8 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
               {submitting
                 ? "Submitting…"
                 : secondDraft?.draft_text
-                  ? "Approve Revised Draft & Notify Client"
-                  : "Approve Draft & Notify Client"}
+                  ? "Approve Revised Draft"
+                  : "Approve Draft"}
             </button>
             <button
               className="atty-btn atty-btn-changes"

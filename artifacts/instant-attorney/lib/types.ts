@@ -864,7 +864,7 @@ export type ImprovementKind =
   | "compliance"
   | "citation";
 export type ImprovementSeverity = "high" | "medium" | "low";
-export type ImprovementStatus = "proposed" | "accepted" | "rejected" | "superseded";
+export type ImprovementStatus = "proposed" | "accepted" | "rejected" | "ask_partner" | "needs_client_input" | "superseded";
 
 export interface DocumentImprovement {
   id: string;
@@ -878,7 +878,14 @@ export interface DocumentImprovement {
   rationale: string;
   proposed_change: string;
   status: ImprovementStatus;
+  anchor: import("@/lib/improvement-diffs").DocumentAnchor | null;
+  proposed_diff: import("@/lib/improvement-diffs").ImprovementDiff | null;
+  attorney_rationale: string;
+  disposition_by: string | null;
+  disposition_at: string | null;
+  evidence_hash: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 // ── Authorities QA gate (schema-stage45) ────────────────────────────────────
@@ -898,6 +905,28 @@ export interface DocumentQaCitation {
   waived: boolean;
   waived_at: string | null;
   created_at: string;
+}
+
+export interface AttorneyReviewMemo {
+  documentPurpose: string;
+  principalChanges: string[];
+  risksOrConcerns: string[];
+  clientActionItems: string[];
+  consultationOffer: string;
+}
+
+export interface DocumentDeliveryDraft {
+  id: string;
+  document_id: string;
+  revision_document_id: string;
+  review_run_id: string | null;
+  memo: AttorneyReviewMemo;
+  recipient: string;
+  subject: string;
+  body: string;
+  consultation_url: string | null;
+  consultation_enabled: boolean;
+  updated_at: string;
 }
 
 /** A citation blocks approval when it is not verified and not waived. */

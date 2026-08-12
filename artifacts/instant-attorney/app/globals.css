@@ -3111,12 +3111,57 @@ body {
 
 .atty-review-body {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: minmax(320px, 360px) 1fr;
   gap: 24px;
   max-width: 1100px;
   margin: 0 auto;
   padding: 24px;
 }
+
+/* Attorney review cover sheet: dense, provenance-forward context without
+   reproducing the full Living File alongside the draft. */
+.rcs { display:flex; flex-direction:column; gap:12px; position:relative; }
+.rcs-heading,.rcs-heading>div,.rcs-file summary,.rcs-file summary>span:first-child { display:flex; }
+.rcs-heading { align-items:center; justify-content:space-between; padding:2px 2px 4px; }
+.rcs-heading>div,.rcs-file summary>span:first-child { flex-direction:column; gap:3px; }
+.rcs-heading h2 { margin:0; font-size:18px; color:var(--brand-text-dk); }
+.rcs-eyebrow { color:var(--brand-text-xlt); font-size:10px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; }
+.rcs-count,.rcs section h3 span,.rcs-transcript summary span { border-radius:999px; background:#eef1f5; color:var(--brand-text-lt); font-size:10px; padding:2px 7px; }
+.rcs-legend { display:flex; flex-wrap:wrap; gap:5px; padding:0 2px; }
+.rcs-source { display:inline-block; width:max-content; flex:none; border:1px solid; border-radius:999px; font-size:9px; font-weight:750; letter-spacing:.02em; line-height:1; padding:3px 6px; }
+.rcs-source-client { color:#155e4b; border-color:#acd5c9; background:#effaf6; }
+.rcs-source-ai { color:#66521a; border-color:#ded09d; background:#fffae8; }
+.rcs-source-attorney { color:#334f7d; border-color:#b9c9e4; background:#f1f5fc; }
+.rcs section,.rcs-transcript { background:var(--brand-white); border:1px solid var(--brand-border); border-radius:var(--brand-r-lg); padding:14px; }
+.rcs section h3,.rcs-transcript summary { display:flex; align-items:center; gap:6px; margin:0 0 10px; color:var(--brand-text-dk); font-size:12px; font-weight:750; }
+.rcs-item p { margin:7px 0 0; color:var(--brand-text-md); font-size:12px; line-height:1.55; }
+.rcs-meta { display:grid; gap:8px; margin:12px 0 0; }
+.rcs-meta div { display:grid; grid-template-columns:78px 1fr; gap:8px; }
+.rcs-meta dt { color:var(--brand-text-xlt); font-size:10px; font-weight:700; text-transform:uppercase; }
+.rcs-meta dd { margin:0; color:var(--brand-text-md); font-size:12px; }
+.rcs-list { display:flex; flex-direction:column; gap:8px; margin:0; padding:0; list-style:none; }
+.rcs-list li { display:flex; align-items:flex-start; gap:7px; color:var(--brand-text-md); font-size:12px; line-height:1.45; }
+.rcs-list li>span:last-child { display:flex; flex-direction:column; }
+.rcs-list small,.rcs-muted,.rcs-file small,.rcs-message small { color:var(--brand-text-xlt); font-size:10px; }
+.rcs-muted { margin:7px 0 0; }
+.rcs-gaps { border-left:3px solid #d49b32 !important; }
+.rcs-deadline { display:grid; grid-template-columns:auto 1fr; align-items:center; gap:4px 8px; border-left:3px solid #d49b32; padding:6px 8px; margin-top:6px; background:#fffaf0; font-size:11px; }
+.rcs-deadline .rcs-source { grid-column:2; }
+.rcs-deadline-expired,.rcs-deadline-critical { border-left-color:#b83b3b; background:#fff4f4; }
+.rcs-files { display:flex; flex-direction:column; gap:7px; }
+.rcs-file { overflow:hidden; border:1px solid var(--brand-border); border-radius:8px; }
+.rcs-file summary { align-items:center; justify-content:space-between; cursor:pointer; padding:9px; font-size:11px; }
+.rcs-file summary strong { overflow-wrap:anywhere; }
+.rcs-file>div { border-top:1px solid var(--brand-border); padding:10px; }
+.rcs-file p { margin:7px 0; color:var(--brand-text-md); font-size:11px; line-height:1.5; }
+.rcs-file nav { display:flex; gap:12px; }
+.rcs-file nav a { color:var(--brand-gold-dk); font-size:11px; font-weight:700; }
+.rcs-transcript summary { cursor:pointer; margin:0; }
+.rcs-message { padding:10px 0; border-top:1px solid var(--brand-border); }
+.rcs-message p { margin:5px 0; white-space:pre-wrap; color:var(--brand-text-md); font-size:11px; line-height:1.5; }
+.rcs-full-file { position:sticky; bottom:12px; display:flex; justify-content:space-between; padding:12px 14px; border-radius:9px; background:var(--brand-navy); box-shadow:0 4px 18px rgba(11,29,52,.2); color:white; font-size:12px; font-weight:750; z-index:2; }
+.rcs-loading,.rcs-error { padding:16px; border:1px solid var(--brand-border); border-radius:8px; color:var(--brand-text-lt); font-size:12px; }
+.rcs-error { color:#9c2929; }
 @media (max-width: 768px) { .atty-review-body { grid-template-columns: 1fr; } }
 
 .atty-review-sidebar {
@@ -6457,6 +6502,47 @@ mark.atty-placeholder {
   grid-template-columns: 1fr 1fr;
   gap: 20px;
 }
+
+/* Attorney document workbench */
+.review-collapsible-column { min-width: 0; }
+.review-pane-toggle {
+  width: 100%; margin-bottom: 8px; padding: 6px 10px; border: 1px solid var(--brand-border);
+  border-radius: 7px; background: var(--brand-white); color: var(--brand-text-lt); cursor: pointer;
+  font: 600 12px var(--font-dm-sans), sans-serif; text-align: left;
+}
+.review-workbench-main { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+.review-workbench-pane { background: var(--brand-white); border: 1px solid var(--brand-border); border-radius: 12px; min-width: 0; overflow: hidden; }
+.review-pane-heading { display: flex; justify-content: space-between; gap: 12px; align-items: start; padding: 14px 16px; border-bottom: 1px solid var(--brand-border); }
+.review-pane-heading h2 { margin: 0; font-size: 15px; }
+.review-pane-heading p { margin: 3px 0 0; color: var(--brand-text-lt); font-size: 11px; }
+.review-context-pane section { padding: 12px 16px; border-bottom: 1px solid var(--brand-border); }
+.review-context-pane section:last-child { border-bottom: 0; }
+.review-context-pane h3 { margin: 0 0 6px; color: var(--brand-text-xlt); text-transform: uppercase; letter-spacing: .07em; font-size: 10px; }
+.review-context-pane p { margin: 3px 0; overflow-wrap: anywhere; font-size: 12px; }
+.review-context-pane a { color: var(--brand-navy); font-size: 12px; }
+.review-context-pane button, .review-partner-compose button, .review-proposals button { border: 0; border-radius: 6px; padding: 7px 10px; background: var(--brand-navy); color: white; cursor: pointer; font-weight: 700; }
+.review-document-textarea { display: block; width: 100%; min-height: 68vh; resize: vertical; padding: 28px 34px; border: 0; outline: 0; color: var(--brand-text-dk); background: #fff; font: 15px/1.65 Georgia, serif; }
+.review-save-state { flex-shrink: 0; min-height: 20px; font-size: 12px; font-weight: 700; color: var(--brand-text-lt); }
+.review-save-saving { color: #9a7636; } .review-save-saved { color: #2e7d5b; } .review-save-error { color: #b42318; }
+.review-editor-footnote { margin: 0; padding: 9px 16px; border-top: 1px solid var(--brand-border); color: var(--brand-text-xlt); font-size: 11px; }
+.review-proposals { padding: 12px; border-bottom: 1px solid var(--brand-border); background: #fffaf0; max-height: 340px; overflow: auto; }
+.review-proposals-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+.review-proposal { margin-top: 10px; padding: 10px; border: 1px solid #e7d7b6; border-radius: 8px; background: white; }
+.review-proposal p { margin: 0 0 6px; font-size: 12px; font-weight: 700; }
+.review-proposal button { margin: 8px 6px 0 0; padding: 5px 8px; font-size: 11px; }
+.review-change-set { display: grid; gap: 4px; font: 11px/1.4 ui-monospace, monospace; white-space: pre-wrap; }
+.review-change-set del, .review-change-set ins { padding: 6px; text-decoration: none; border-radius: 4px; }
+.review-change-set del { background: #fee2e2; } .review-change-set ins { background: #dcfce7; }
+.review-partner-pane { position: sticky; top: 12px; }
+.review-partner-messages { max-height: 48vh; min-height: 180px; overflow: auto; padding: 12px; }
+.review-partner-message { margin-bottom: 10px; padding: 9px; border-radius: 8px; background: var(--brand-cream); font-size: 12px; }
+.review-partner-message strong { font-size: 10px; text-transform: uppercase; color: var(--brand-text-xlt); }
+.review-partner-message p { margin: 4px 0 0; white-space: pre-wrap; }
+.review-partner-user { margin-left: 18px; background: #eef2ff; }
+.review-partner-compose { padding: 12px; border-top: 1px solid var(--brand-border); }
+.review-partner-compose textarea { width: 100%; resize: vertical; padding: 9px; border: 1px solid var(--brand-border); border-radius: 7px; font: inherit; }
+.review-partner-compose button { width: 100%; margin-top: 7px; }
+@media (max-width: 1100px) { .review-workbench-main { grid-template-columns: 1fr; } .review-partner-pane { position: static; } }
 @media (max-width: 1100px) {
   .atty-two-doc-grid { grid-template-columns: 1fr; }
 }
@@ -11349,3 +11435,33 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
 .draft-job-card button { grid-column: 2; grid-row: 2; font-size: 12px; }
 .draft-job-error, .draft-job-failed .cdt-draft-progress-text { color: #b91c1c !important; }
 .cdt-draft-jobs { display: grid; gap: 8px; }
+
+/* Document affordances kept from the pre-workbench review layout: the .docx
+   downloads and the truncation warning. The workbench refactor replaced the
+   old two-document grid that carried them. */
+.review-workbench-docmeta { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-bottom: .75rem; }
+.review-workbench-docmeta .atty-doc-downloads { display: flex; gap: .5rem; }
+.review-workbench-docmeta .doc-truncation-notice { flex: 1 1 320px; min-width: 0; }
+
+/* Actionable attorney improvements (stage 46). */
+.arr-item { cursor: pointer; }
+.arr-item-focused { border-color: var(--brand-gold); box-shadow: 0 0 0 2px rgba(200, 169, 110, .2); }
+.arr-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.arr-actions button { border: 1px solid var(--brand-border); border-radius: 6px; padding: 5px 8px; background: #fff; color: var(--brand-navy); font-size: 11.5px; cursor: pointer; }
+.arr-actions button:first-child { background: var(--brand-navy); color: #fff; }
+.arr-actions button:disabled { opacity: .55; cursor: wait; }
+.arr-edit { width: 100%; margin-top: 8px; border: 1px solid var(--brand-border); border-radius: 6px; padding: 8px; font: inherit; }
+.arr-diff { display: grid; gap: 5px; margin-top: 8px; padding: 8px; border-radius: 6px; background: #f8fafc; font-size: 12px; white-space: pre-wrap; }
+.arr-diff del { color: #991b1b; background: #fee2e2; }
+.arr-diff ins { color: #166534; background: #dcfce7; text-decoration: none; }
+.arr-disposition { align-self: center; margin-left: auto; font-size: 10px; font-weight: 800; text-transform: uppercase; color: var(--brand-text-md); }
+.arr-rationale { margin: 7px 0 0; font-size: 12px; color: var(--brand-text-md); }
+.arr-working-editor:focus { outline: 2px solid rgba(200, 169, 110, .5); outline-offset: 3px; }
+.arr-working-text { margin: 0; font: inherit; white-space: pre-wrap; }
+.arr-working-text mark { padding: 2px 0; background: #fef08a; box-shadow: 0 0 0 2px #facc15; }
+.arr-delivery-preview { display: grid; gap: 12px; }
+.arr-delivery-preview label { display: grid; gap: 5px; font-weight: 600; }
+.arr-delivery-preview input:not([type="checkbox"]), .arr-delivery-preview textarea { width: 100%; border: 1px solid #cbd5e1; border-radius: 7px; padding: 10px; background: #fff; color: #172033; font: inherit; }
+.arr-delivery-preview textarea { resize: vertical; font-weight: 400; line-height: 1.5; }
+.arr-delivery-preview .arr-consult-toggle { display: flex; align-items: center; gap: 8px; }
+.arr-delivery-preview details { border: 1px solid #dbe3ec; border-radius: 7px; padding: 12px; }

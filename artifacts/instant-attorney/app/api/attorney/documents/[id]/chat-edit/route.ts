@@ -2,7 +2,6 @@ import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { buildDrafterSystemPrompt, buildFileContext } from "@/lib/prompts";
-import { extractDraftText } from "@/lib/file-parser";
 import { getChildDocuments, getSecondDraftChild } from "@/lib/document-utils";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
 import { BYPASS_USER_ID } from "@/lib/types";
@@ -19,11 +18,8 @@ const MODEL = "claude-sonnet-4-6";
 
 /**
  * Andrew's "junior associate" chat: an ongoing, targeted-edit conversation
- * against a document, distinct from the one-shot critical-review/second-draft
- * pipeline in second-draft/route.ts. Always operates on the SECOND-DRAFT
- * CHILD (creating it, seeded from the parent, on first use) — the parent's
- * draft_text is the client's original submission and is never overwritten
- * directly, the same invariant the existing second-draft flow keeps.
+ * against the canonical attorney revision. It only proposes before/after
+ * changes; accepting and saving those proposals is a separate explicit action.
  */
 export async function POST(
   req: NextRequest,
@@ -32,6 +28,7 @@ export async function POST(
   const { id } = await params;
   const body = await req.json().catch(() => ({})) as {
     messages?: Array<{ role: "user" | "assistant"; content: string }>;
+    currentText?: string;
   };
 
   if (!Array.isArray(body.messages) || body.messages.length === 0) {
@@ -74,7 +71,11 @@ export async function POST(
 
   const children = await getChildDocuments(db, id);
   const existingChild = getSecondDraftChild(children);
-  const baseText = existingChild?.draft_text ?? parent.draft_text;
+  // The browser's editor model may contain not-yet-debounced manual changes.
+  // It is safe to use as proposal context because this endpoint never writes it.
+  const baseText = typeof body.currentText === "string" && body.currentText.trim()
+    ? body.currentText
+    : existingChild?.draft_text ?? parent.draft_text;
 
   const [{ data: caseFileRow }, { data: factRows }, { data: attRows }] = await Promise.all([
     db.from("case_files").select("*").eq("id", parent.case_file_id).single(),
@@ -104,7 +105,7 @@ export async function POST(
         },
         {
           type: "text" as const,
-          text: `${fileContext}\n\n---DOCUMENT BEING EDITED---\n${baseText}\n---END DOCUMENT---`,
+          text: `${fileContext}\n\n---DOCUMENT BEING EDITED---\n${baseText}\n---END DOCUMENT---\n\nReturn ONLY valid JSON in this shape: {"message":"short explanation","changes":[{"before":"exact text copied from the document","after":"replacement text","summary":"short label"}]}. Each before string must occur verbatim in the document. Propose focused replacements; do not return or rewrite the whole document unless explicitly asked.`,
         },
       ],
       messages: body.messages,
@@ -135,80 +136,18 @@ export async function POST(
     });
   }
 
-  const draftText = extractDraftText(fullResponse) ?? (fullResponse.trim() || null);
-  if (!draftText) {
-    return NextResponse.json({ error: "The edit produced no document text. Please try again." }, { status: 502 });
+  let proposal: { message?: string; changes?: Array<{ before?: string; after?: string; summary?: string }> };
+  try {
+    const json = fullResponse.replace(/^```json\s*/i, "").replace(/\s*```$/, "").trim();
+    proposal = JSON.parse(json);
+  } catch {
+    return NextResponse.json({ error: "The partner did not return a usable change set. Please try again." }, { status: 502 });
   }
-
-  // Writes go through the service client — RLS on `documents` only allows the
-  // owning client to write their own rows; the caller here is a verified
-  // attorney editing the client's document on their behalf.
-  const serviceDb = createServiceClient();
-  let childId: string;
-  if (existingChild) {
-    childId = existingChild.id;
-    // Check whether the update actually matched a row. The Opus second-draft
-    // pipeline (upsertSecondDraftChild) DELETES and re-INSERTs this same
-    // doc_type when it finishes, so a concurrent "Generate 2nd Draft" run can
-    // remove existingChild out from under us between our read and this write.
-    // Silently updating 0 rows while still overwriting the parent's
-    // denormalized copy below would corrupt it with text that isn't saved
-    // anywhere — so fail loudly instead of guessing.
-    const { data: updatedRows, error: updateErr } = await serviceDb
-      .from("documents")
-      .update({
-        draft_text: draftText,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", existingChild.id)
-      .select("id");
-    if (updateErr) {
-      console.error("[attorney/chat-edit] child update error:", updateErr.message);
-      return NextResponse.json({ error: "The edit couldn't be saved. Please try again." }, { status: 500 });
-    }
-    if (!updatedRows || updatedRows.length === 0) {
-      return NextResponse.json(
-        { error: "This document changed while your edit was being generated (a second draft may have just finished). Please try again." },
-        { status: 409 }
-      );
-    }
-  } else {
-    const { data: inserted, error: insertErr } = await serviceDb
-      .from("documents")
-      .insert({
-        case_file_id: parent.case_file_id,
-        user_id: parent.user_id,
-        parent_document_id: parent.id,
-        doc_type: "second_draft",
-        title: `${parent.title} — Revised Draft`,
-        status: "draft",
-        draft_text: draftText,
-        content_json: {},
-      })
-      .select("id")
-      .single();
-    if (insertErr || !inserted) {
-      // Unique violation (documents_parent_doctype_unique, schema-stage34) means
-      // a concurrent request (double-click, second tab, or the second-draft
-      // pipeline) already created the second-draft child first — don't silently
-      // create a duplicate, ask the caller to retry against the real one.
-      if (insertErr?.code === "23505") {
-        return NextResponse.json(
-          { error: "Another edit just started on this document. Please try again." },
-          { status: 409 }
-        );
-      }
-      console.error("[attorney/chat-edit] child insert error:", insertErr?.message);
-      return NextResponse.json({ error: "The edit was generated but couldn't be saved. Please try again." }, { status: 500 });
-    }
-    childId = inserted.id;
-  }
-
-  // Keep the parent's denormalized copy in sync, same as upsertSecondDraftChild.
-  await serviceDb.from("documents").update({
-    improved_draft_text: draftText,
-    updated_at: new Date().toISOString(),
-  }).eq("id", parent.id);
+  const changes = (proposal.changes ?? []).filter((change) =>
+    typeof change.before === "string" && change.before.length > 0 &&
+    typeof change.after === "string" && baseText.includes(change.before)
+  ).map((change, index) => ({ id: `${Date.now()}-${index}`, before: change.before!, after: change.after!, summary: change.summary?.trim() || "Proposed edit" }));
+  if (!changes.length) return NextResponse.json({ error: "No applicable changes were proposed. Try describing the passage more precisely." }, { status: 422 });
 
   recordAiFromMessage(db, message, {
     userId: parent.user_id,
@@ -216,7 +155,7 @@ export async function POST(
     caseFileId: parent.case_file_id,
     feature: "attorney_chat_edit",
     metadata: {
-      document_id: childId,
+      document_id: existingChild?.id ?? parent.id,
       ...limitSignalMetadata({
         model: message.model,
         outputTokens: message.usage.output_tokens,
@@ -227,8 +166,8 @@ export async function POST(
   }).catch((e) => console.error("[attorney/chat-edit] usage record error:", e));
 
   return NextResponse.json({
-    documentId: childId,
-    text: fullResponse,
+    message: proposal.message?.trim() || `${changes.length} change${changes.length === 1 ? "" : "s"} proposed.`,
+    changes,
     truncated,
   });
 }
