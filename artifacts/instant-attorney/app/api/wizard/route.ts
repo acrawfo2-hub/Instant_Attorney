@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { buildDrafterSystemPrompt, WIZARD_FIELD_HINTS, buildFileContext } from "@/lib/prompts";
+import { buildDrafterSystemPrompt, wizardFieldGuidance, buildFileContext } from "@/lib/prompts";
 import { parseAndUpdateFile, extractDraftText, syncDraftGapsToLivingFile, isCompleteFileUpdate } from "@/lib/file-parser";
 import { resolveWizardDocumentTarget, stampFactsSynced } from "@/lib/document-utils";
 import { loadAttachmentAsContentBlocks } from "@/lib/attachment-processor";
@@ -11,6 +11,15 @@ import { BYPASS_USER_ID, WIZARD_LABELS } from "@/lib/types";
 import type { WizardType, CaseFile, FactItem, Attachment, RequestedAttachment } from "@/lib/types";
 import { logTruncation } from "@/lib/truncation-logger";
 import { maxOutputTokensFor, limitSignalMetadata } from "@/lib/token-limits";
+import { buildJurisdictionBlock, classifyInstrumentRisk, hasRequiredForum } from "@/lib/document-risk";
+import { resolveInstrumentProfile, validateInstrument } from "@/lib/instruments/validator";
+// #116's authority provenance, consolidated under lib/instruments/. Renamed on
+// the way in: it also exported `resolveInstrumentProfile`/`InstrumentProfile`,
+// which collided with #115's drafting-spec profiles. Different concepts —
+// #115 says what to draft, this says which pinned authority backs it.
+import { formatInstrumentAuthorityBlock, resolveInstrumentAuthority } from "@/lib/instruments/authority";
+import { getDocumentGenerationSpec, specForPrompt } from "@/lib/document-generation-spec";
+import { parseStructuredSections, stripStructuredSections } from "@/lib/document-refinement";
 
 // Allow up to 5 minutes for this route — legal doc generation can be slow
 export const maxDuration = 300;
@@ -23,8 +32,9 @@ export async function POST(req: NextRequest) {
   if (!body || typeof body !== "object") {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
-  const { messages, caseFileId, wizardType, documentId, instrument, planKey, baseAttachmentId, isInit } = body;
+  const { messages, caseFileId, wizardType, documentId, instrument, instrumentKey, planKey, baseAttachmentId, isInit, governingForum } = body;
   const planKeyStr = typeof planKey === "string" && planKey.trim() ? planKey.trim() : undefined;
+  let instrumentKeyStr = typeof instrumentKey === "string" && instrumentKey.trim() ? instrumentKey.trim() : undefined;
 
   if (!Array.isArray(messages) || messages.length === 0) {
     return NextResponse.json({ error: "Invalid messages" }, { status: 400 });
@@ -122,19 +132,48 @@ export async function POST(req: NextRequest) {
       db.from("profiles").select("account_type").eq("id", userId).maybeSingle(),
     ]);
 
-  const caseFile = caseFileRow as CaseFile | null;
+  // `let`, not `const`: the governing-forum path below replaces this with a
+  // forum-corrected copy before drafting (#114).
+  let caseFile = caseFileRow as CaseFile | null;
+  // Existing clients send only planKey. Resolve its independent profile key
+  // from the persisted plan instead of conflating the two identities.
+  instrumentKeyStr ??= caseFile?.legal_strategy?.document_plan
+    ?.find((entry) => entry.key === planKeyStr)?.instrument_key;
   const facts = (factRows ?? []) as FactItem[];
   const attachments = (attachmentRows ?? []) as Attachment[];
   const requestedAttachments = (requestedRows ?? []) as RequestedAttachment[];
+  const suppliedForum = typeof governingForum === "string" ? governingForum.trim() : "";
+  if (suppliedForum && caseFile) {
+    const { error: forumUpdateError } = await writeDb
+      .from("case_files")
+      .update({ jurisdiction: suppliedForum, updated_at: new Date().toISOString() })
+      .eq("id", caseFileId)
+      .eq("user_id", userId);
+    if (forumUpdateError) {
+      return NextResponse.json({ error: "We couldn't save that jurisdiction or forum. Please try again." }, { status: 500 });
+    }
+    caseFile = { ...caseFile, jurisdiction: suppliedForum };
+  }
+
+  const riskProfile = classifyInstrumentRisk(wizardType as WizardType, instrument || WIZARD_LABELS[wizardType as WizardType]);
+  const confirmedFactText = facts.filter((fact) => fact.status === "confirmed").map((fact) => fact.description);
+  if (riskProfile.risk === "high" && !hasRequiredForum(riskProfile, caseFile?.jurisdiction, confirmedFactText)) {
+    return NextResponse.json({ blocking: buildJurisdictionBlock(riskProfile) }, { status: 409 });
+  }
   const fileContext = caseFile ? buildFileContext(caseFile, facts, attachments, requestedAttachments) : "";
-  const fieldHints = WIZARD_FIELD_HINTS[wizardType as WizardType];
+  const fieldHints = wizardFieldGuidance(wizardType as WizardType, instrumentKeyStr);
   // Attorney-users get a targeted-edit follow-up behavior instead of a full
   // regeneration on every turn — same prompt, different "on follow-up" rule.
   const drafterPersona = profileRow?.account_type === "attorney_user" ? "attorney" as const : "client" as const;
 
-  const documentLabel = (wizardType === "general_document" && instrument)
-    ? instrument
+  const documentLabel = typeof instrument === "string" && instrument.trim()
+    ? instrument.trim()
     : WIZARD_LABELS[wizardType as WizardType];
+  // Resolve against pinned profiles before any model call. Unknown instruments
+  // deliberately produce a blocking authority block rather than inviting the
+  // model to infer legal requirements from its training data.
+  const instrumentResolution = resolveInstrumentAuthority(documentLabel);
+  const instrumentAuthorityBlock = formatInstrumentAuthorityBlock(instrumentResolution);
 
   // "Improve My Draft" feeds the client's own uploaded document verbatim into
   // the initial call, instead of drafting from the Living File alone. Only the
@@ -198,11 +237,11 @@ export async function POST(req: NextRequest) {
       system: [
         {
           type: "text" as const,
-          text: buildDrafterSystemPrompt(drafterPersona),
+          text: buildDrafterSystemPrompt(drafterPersona, instrumentAuthorityBlock),
         },
         {
           type: "text" as const,
-          text: `Document being drafted: ${documentLabel}\n\n${fieldHints}`,
+          text: `Document being drafted: ${documentLabel}\n\n${fieldHints}\n\n${specForPrompt(wizardType as WizardType)}`,
           cache_control: { type: "ephemeral" as const },
         },
         {
@@ -229,6 +268,20 @@ export async function POST(req: NextRequest) {
     .map((b) => (b as Anthropic.TextBlock).text)
     .join("");
 
+  // Defense in depth: recognize the drafter's structured gate if context was
+  // ambiguous in a way the deterministic preflight could not identify.
+  const modelBlock = fullResponse.trim().match(/^\{"blocking":([\s\S]+)\}$/);
+  if (modelBlock) {
+    try {
+      const parsedBlock = JSON.parse(fullResponse) as { blocking?: { code?: string } };
+      if (parsedBlock.blocking?.code === "MISSING_GOVERNING_FORUM") {
+        return NextResponse.json(parsedBlock, { status: 409 });
+      }
+    } catch {
+      // Not valid structured output; process it as an ordinary model response.
+    }
+  }
+
   // Record usage (fire-and-forget, don't block the response)
   recordAiFromMessage(db, message, {
     userId,
@@ -246,8 +299,20 @@ export async function POST(req: NextRequest) {
     },
   }).catch((e) => console.error("[wizard] usage record error:", e));
 
-  // Detect truncation before saving so the flag lands in content_json
+  // A response is renderable only when the entire draft block arrived. The
+  // model may finish the draft and then hit its token limit while writing the
+  // optional metadata; that is safe. Conversely, an end_turn without markers
+  // is not a draft and must remain recovery material only.
   const truncated = message.stop_reason === "max_tokens";
+  const extractedDraft = extractDraftText(fullResponse);
+  const hasDraftStart = fullResponse.includes("---DRAFT READY---");
+  const hasDraftEnd = fullResponse.includes("---END DRAFT---");
+  const generationIncomplete = !extractedDraft;
+  const incompleteReason = !hasDraftStart
+    ? "missing_draft_block"
+    : !hasDraftEnd
+      ? "truncated_draft_block"
+      : "empty_draft_block";
   if (truncated) {
     logTruncation({
       endpoint: "wizard",
@@ -258,15 +323,45 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Save the draft text to the documents table. Always persist *something* when
-  // the model returned any text: if it omitted the ---DRAFT READY--- markers (or
-  // truncated before them), fall back to the raw response so the client always
-  // gets a documentId back and can submit for attorney review. A markerless
-  // response must never strand a client with an on-screen draft they can't send.
-  const draftText = extractDraftText(fullResponse) ?? (fullResponse.trim() || null);
+  // #101's section metadata. Parsed for storage only — deliberately NOT used to
+  // derive draftText: #101 fell back to the raw response when the DRAFT READY
+  // markers were missing, which is precisely the behaviour #111 removed. A
+  // markerless response is recovery material, not a renderable draft.
+  const generationSpec = getDocumentGenerationSpec(wizardType as WizardType);
+  let structuredSections = [] as ReturnType<typeof parseStructuredSections>;
+  try {
+    structuredSections = parseStructuredSections(fullResponse, generationSpec);
+  } catch (sectionErr) {
+    console.error("[wizard] structured section parse error:", sectionErr);
+  }
+  // Client-facing text only: strip the section markup so the user does not see
+  // raw markers. draftText is still derived from fullResponse below, so this
+  // cannot affect whether a generation counts as complete.
+  const renderedResponse = stripStructuredSections(fullResponse);
+
+  // Raw output is always retained for recovery/debugging, but never promoted to
+  // renderable draft_text unless the complete draft block was parsed.
+  const draftText = extractedDraft;
   let savedDocId: string | undefined = documentId as string | undefined;
 
-  if (draftText) {
+  // Readiness is a deterministic quality-gate decision, never a model-authored
+  // STATUS line. Citation-like authority references are retained as metadata;
+  // prose that merely says "authority" is deliberately not enough.
+  const authorityReferences = fullResponse.match(/(?:\b\d+\s+U\.S\.C\.\s*§+\s*[\w.-]+|\b(?:Tex\.|Texas)\s+(?:Gov't|Estates|Property|Trust)\s+Code\s*§+\s*[\w.-]+)/gi) ?? [];
+  const validationReport = draftText ? validateInstrument({
+    profile: resolveInstrumentProfile({ wizardType, instrument, planKey: planKeyStr }),
+    document: { text: draftText, authorityMetadata: authorityReferences.length ? { references: authorityReferences } : undefined },
+    livingFile: {
+      facts: facts.map((fact) => ({ description: fact.description, status: fact.status })),
+      jurisdiction: caseFile?.jurisdiction ?? null,
+    },
+  }) : null;
+
+  // Kept #111's wider condition rather than #112's `if (draftText)`: an
+  // incomplete generation can return prose with no extractable draft, and that
+  // run still has to persist its generation_state so the retry path can see it.
+  // validateInstrument is already null-guarded on draftText above.
+  if (draftText || fullResponse.trim()) {
     const now = new Date().toISOString();
 
     const target = await resolveWizardDocumentTarget(writeDb, {
@@ -275,6 +370,7 @@ export async function POST(req: NextRequest) {
       userId,
       suppliedDocumentId: savedDocId,
       planKey: planKeyStr,
+      instrumentKey: instrumentKeyStr,
     });
 
     if (target.action === "already_finalized") {
@@ -294,18 +390,28 @@ export async function POST(req: NextRequest) {
       const nextStatus = curStatus && curStatus !== "pre_warmed" ? curStatus : "draft";
 
       const update: Record<string, unknown> = {
-        draft_text: draftText,
         status: nextStatus,
         updated_at: now,
-      };
-      const existingCj = (existingDoc.content_json as Record<string, unknown>) ?? {};
-      if (truncated || (planKeyStr && existingCj.plan_key !== planKeyStr)) {
-        update.content_json = {
-          ...existingCj,
-          ...(truncated ? { truncated: true } : {}),
+        // #115's stable document identity, promoted to its own column.
+        ...(instrumentKeyStr ? { instrument_key: instrumentKeyStr } : {}),
+        // Written unconditionally, not behind #115's change-detection guard:
+        // #111 relies on generation_state/raw_generation_response being
+        // refreshed on every attempt to tell an incomplete draft from a good
+        // one, and a guarded write would leave stale state after a clean retry.
+        content_json: {
+          ...((existingDoc.content_json as Record<string, unknown>) ?? {}),
+          generation_state: generationIncomplete ? "generation_incomplete" : "complete",
+          generation_incomplete: generationIncomplete,
+          raw_generation_response: fullResponse,
+          ...(generationIncomplete ? { generation_incomplete_reason: incompleteReason } : {}),
+          ...(truncated ? { truncated: true } : { truncated: false }),
           ...(planKeyStr ? { plan_key: planKeyStr } : {}),
-        };
-      }
+          ...(instrumentKeyStr ? { instrument_key: instrumentKeyStr } : {}),
+          validation_report: validationReport,
+        },
+      };
+      // A failed retry must not overwrite the last known-good draft.
+      if (draftText) update.draft_text = draftText;
       const { error: updateErr } = await writeDb
         .from("documents")
         .update(update)
@@ -323,11 +429,20 @@ export async function POST(req: NextRequest) {
           user_id: userId,
           doc_type: wizardType,
           title: `${documentLabel} — ${new Date().toLocaleDateString()}`,
+          // instrumentKeyStr, not planKeyStr: #122 wrote the plan key here,
+          // which re-conflates the two identities #115 separated.
+          instrument_key: instrumentKeyStr ?? null,
           content_json: {
             init_response: fullResponse,
+            raw_generation_response: fullResponse,
+            generation_state: generationIncomplete ? "generation_incomplete" : "complete",
+            generation_incomplete: generationIncomplete,
+            ...(generationIncomplete ? { generation_incomplete_reason: incompleteReason } : {}),
             ...(truncated ? { truncated: true } : {}),
             ...(planKeyStr ? { plan_key: planKeyStr } : {}),
+            ...(instrumentKeyStr ? { instrument_key: instrumentKeyStr } : {}),
             ...(wizardType === "improve_draft" && baseAttachmentId ? { base_attachment_id: baseAttachmentId } : {}),
+            validation_report: validationReport,
           },
           draft_text: draftText,
           status: "draft",
@@ -351,6 +466,21 @@ export async function POST(req: NextRequest) {
         },
         { status: 500 }
       );
+    }
+
+    if (structuredSections.length) {
+      const { error: sectionErr } = await writeDb.from("document_sections").upsert(
+        structuredSections.map((section) => ({
+          document_id: savedDocId,
+          section_id: section.id,
+          section_kind: section.kind,
+          rendered_text: section.text,
+          fact_keys: section.factKeys,
+          updated_at: now,
+        })),
+        { onConflict: "document_id,section_id" },
+      );
+      if (sectionErr) console.error("[wizard] section persistence error:", sectionErr.message);
     }
   }
 
@@ -385,10 +515,13 @@ export async function POST(req: NextRequest) {
     .map((f) => f.description);
 
   return NextResponse.json({
-    text: fullResponse,
+    text: renderedResponse,
     documentId: savedDocId ?? null,
+    sections: structuredSections,
     truncated,
+    generationIncomplete,
     gapSyncWarning,
     knownFacts,
+    validationReport,
   });
 }

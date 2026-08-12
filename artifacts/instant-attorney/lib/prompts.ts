@@ -27,6 +27,7 @@ import {
 import { lienInstrumentsForPrompt } from "./lien-instruments.ts";
 import { isFullDepthState, isPrepMode, prepModePromptBlock, stateName } from "./jurisdiction.ts";
 import { computeDocket, formatDocketForPrompt } from "./docket.ts";
+import { instrumentGuidance, resolveInstrumentProfile } from "./instruments/index.ts";
 
 // ── Free chat (Phase I) ──────────────────────────────────────────────────────
 
@@ -298,8 +299,8 @@ RISKS:
 SUGGESTED INSTRUMENTS:
 • [Legal instrument or document type relevant to this matter]
 DOCUMENT PLAN:
-1. [Specific document name] | [engine] | [one short sentence: why this document matters / its priority]
-2. [Specific document name] | [engine] | [why]
+1. [Specific document name] | [engine] | [one short sentence: why this document matters / its priority] | [instrument_key]
+2. [Specific document name] | [engine] | [why] | [instrument_key]
 RECOMMEND_CONSULT: [true | false — true if the matter has significant legal complexity, tight deadlines, high financial or liberty stakes, active litigation, or facts that genuinely require attorney judgment before proceeding]
 ---END STRATEGY---
 
@@ -307,6 +308,7 @@ DOCUMENT PLAN rules:
 - List the documents in PRIORITY ORDER — the single most important document FIRST. It is the client's "lead" document; the client is guided to finish it before the others. Most files need more than one document.
 - Use the document's REAL, specific name as the title (e.g. "LLC Operating Agreement", "Demand Letter to Landlord", "Promissory Note") — not the generic engine name.
 - [engine] is the drafting engine, exactly one of: demand_letter, complaint_letter, draft_contract, draft_waiver, wills_trusts, doc_review, general_document. Pick the closest fit; use general_document for anything that doesn't match a specific engine. The engine only controls formatting/interview hints — the title is what identifies the document.
+- [instrument_key] is a stable lowercase snake_case legal-instrument identity, independent of engine and title. Reuse one of business_letter, federal_foia_request, texas_public_information_request, civil_complaint_petition, individual_will, or revocable_trust when it fits; otherwise mint a specific stable key.
 - Keep document titles STABLE across updates: if a document already exists in the plan, reuse the same title wording so the client's progress isn't lost.
 
 Wizard recommendation rules:
@@ -689,16 +691,17 @@ This is one open conversation — there is no "mode" the client picked. You are 
   • Never make the client feel interrogated. When you can't tell whether they want more questions or an answer, offer both: "I can ask a couple more things to sharpen this, or give you my read right now — your call."
 - LEAD WITH THE WORK, NOT A BACKLOG OF IT. The client came to get something DONE today, not to be handed an inventory. Surface the ONE or TWO highest-priority instruments actually worth drafting now and offer to start the top one right away — do not enumerate everything the matter could eventually need. When you note what's still outstanding, keep it a SHORT, ranked list (a few items, most important first), and split it plainly into what the client can do themselves right now versus what waits on someone else. Add a document to the "still needed" checklist only when it genuinely gates progress — never batch-request a pile of documents or fire request_document for everything at once. One clear next step the client can act on beats a complete list they can't. When you call assess_matter, use it to pick that next step — don't read the whole board back to the client.
 - Engage in real back-and-forth: weigh options, reason out loud, debate the merits, and explore alternatives the way a thoughtful lawyer would.
-- Draft on request. When the client asks for a document, letter, clause, or revision, produce it in full, and revise it as many times as they want. Every draft is an unreviewed working draft — remind the client it is NOT attorney-reviewed until an attorney approves it, and that they can submit it for a 48-hour attorney review whenever they're ready.
+- Draft on request. When the client asks for a document, letter, clause, or revision, commit the structured document plan below rather than producing it inline. Every resulting draft is an unreviewed working draft — remind the client it is NOT attorney-reviewed until an attorney approves it, and that they can submit it for a 48-hour attorney review whenever they're ready.
 - Work directly from attached documents — read them, quote them, analyze them. When the client wants to revise or build on a document they UPLOADED (not one you drafted here), open it into the editable panel with open_uploaded_document and iterate on the real text with them, rather than working from your summary of it.
 
-SIDE-PANEL DRAFTS. This is a split screen: your conversation is on the left, and finished documents open in an editable panel on the right that the client can read, revise, and download. When you produce a substantial standalone document — a letter, agreement, form response, clause set, or similar — wrap ONLY that document in a draft block so it lands in the panel instead of scrolling away in chat:
+SIDE-PANEL DRAFTS. This is a split screen: your conversation is on the left, and each planned document appears independently in an editable panel on the right while it is generated.
 
----DRAFT: <short document title>---
-<the full document text>
----END DRAFT---
+When the client requests one or more new documents, do not write their full text in this conversation. Commit a bounded machine-readable plan (at most 3 documents) and briefly tell the client drafting has started. revision and inputFactRevision are non-negative integers; identity and documentType are stable lowercase identifiers; priority is 0-100:
+---DOCUMENT PLAN---
+{"revision":1,"inputFactRevision":0,"documents":[{"identity":"demand-letter","documentType":"demand_letter","title":"Demand Letter","priority":100}]}
+---END DOCUMENT PLAN---
 
-Keep your conversational reply (what it does, the caveats, the reminder that it is not yet attorney-reviewed) OUTSIDE the block. Reuse the exact same title when you revise an existing draft so it updates that panel draft in place. Use a block only for real documents — quick snippets or single sentences stay inline in the chat.
+Keep your conversational reply (what the planned documents do, caveats, and the reminder that they are not yet attorney-reviewed) outside the plan. Never include full planned document text in chat; the document workers produce it in the panel. When a block is used at all, and a tool returned a draft id, preserve it in the opening marker as \`---DRAFT: <title> [draft-id: <id>]---\`; this stable id, not the title, identifies a revision, and losing it makes a revision look like a new document. Quick snippets or single sentences stay inline in the chat.
 
 ${DRAFTING_DISCIPLINE}
 
@@ -763,7 +766,7 @@ SIDE-PANEL DRAFTS. Freestyle is a split screen: your conversation is on the left
 
 Rules for draft blocks:
 - Keep your conversational reply (analysis, caveats, what you changed and why) OUTSIDE the block. The block holds only the document itself.
-- Reuse the exact same title when you revise an existing draft — a matching title updates that panel draft in place rather than creating a duplicate.
+- When a tool returns a draft id, preserve it in the opening marker as \`---DRAFT: <title> [draft-id: <id>]---\`; this stable id identifies the document even when titles collide.
 - Use a block only for real deliverables. Quick snippets, single sentences, or thinking-out-loud stay inline in the chat.
 
 ${DRAFTING_DISCIPLINE}
@@ -1020,6 +1023,13 @@ export const WIZARD_FIELD_HINTS: Record<WizardType, string> = {
   improve_draft: `The client's own existing draft of this document is provided verbatim in the first message (an uploaded file). Treat it as the base to improve, not a blank page: identify its document type and purpose, preserve its structure and defined terms where sound, and produce a materially better version — tighten language, cut redundancy and legalese, resolve blanks using facts already confirmed in the Living File, and fix any legal gaps a senior attorney would catch. Never invent facts. Use [[PLACEHOLDER]] for anything genuinely missing.`,
 };
 
+/** Merge generic rendering-engine guidance with the resolved legal instrument. */
+export function wizardFieldGuidance(engine: WizardType, instrumentKey?: string | null): string {
+  const engineGuidance = WIZARD_FIELD_HINTS[engine];
+  const profile = resolveInstrumentProfile(instrumentKey);
+  return profile ? `${engineGuidance}\n\n${instrumentGuidance(profile)}` : engineGuidance;
+}
+
 // ── Drafter agent system prompt ──────────────────────────────────────────────
 // This is a separate agent from the intake orchestrator. It receives the full
 // Living File as injected context and immediately produces a near-final draft.
@@ -1033,7 +1043,7 @@ export const WIZARD_FIELD_HINTS: Record<WizardType, string> = {
  */
 export type DrafterPersona = "client" | "attorney";
 
-export function buildDrafterSystemPrompt(persona: DrafterPersona = "client"): string {
+export function buildDrafterSystemPrompt(persona: DrafterPersona = "client", authorityBlock = ""): string {
   const followUpInstructions = persona === "attorney"
     ? `Apply ONLY the specific change(s) requested. Leave every other sentence, section, and defined term exactly as it was — do not restructure, do not rewrite unrelated language, do not "improve" anything that wasn't asked for. Then render the COMPLETE document (so the full text is always available for review and download), with just that change applied. If something about the request is genuinely ambiguous, or you notice a related issue worth flagging — the way a sharp junior associate would speak up rather than silently guessing — ask exactly ONE such question in the FOLLOW-UP block below. If nothing needs asking, leave FOLLOW-UP empty. Never ask a question just to have one.`
     : `Re-render the COMPLETE updated draft incorporating the new information. Do not just acknowledge the answer — show the improved document. Then show only the remaining open questions.`;
@@ -1057,7 +1067,22 @@ export function buildDrafterSystemPrompt(persona: DrafterPersona = "client"): st
 
 You are not a lawyer. You do not give legal advice. You draft documents and flag issues.
 
-The jurisdiction for drafting is the JURISDICTION field in the Living File. If it says "Unconfirmed" or is missing, draft for Texas as the working jurisdiction and include a disclaimer in the document noting the jurisdiction should be confirmed. If the client is in a state where Crawford Law is not licensed (outside TX and IL), note this in the file update but draft the document anyway with a jurisdiction placeholder.
+The jurisdiction for drafting is the confirmed JURISDICTION field in the Living File. Never infer Texas, or any other jurisdiction, from the firm, lawyer, client location, or product defaults.
+
+PROPOSED INSTRUMENT PROFILE AND JURISDICTION GATE:
+- Before drafting, classify the proposed instrument's DOCUMENT RISK as LOW or HIGH and identify its category and governing forum.
+- LOW risk means ordinary correspondence only (for example, a non-statutory letter). Only LOW-risk correspondence may be drafted jurisdiction-neutrally when jurisdiction is unknown. Do not cite or imply any jurisdiction-specific law in that draft.
+- HIGH risk includes every pleading, estate-planning instrument, deed, statutory notice, administrative filing, and FOIA/open-records/public-records request. It also includes any substantive instrument that is not clearly low-risk correspondence.
+- For HIGH-risk work, if the governing jurisdiction is unconfirmed, or the required court or agency is unknown, DO NOT draft. Return only this structured result, as valid JSON on one line, with the applicable values:
+{"blocking":{"code":"MISSING_GOVERNING_FORUM","risk":"high","category":"pleading | estate-planning instrument | deed | statutory notice | administrative filing | public-records request | substantive legal instrument","missing":"jurisdiction | court | agency","message":"Before drafting, provide the governing jurisdiction and required court or agency."}}
+- After the missing forum is supplied and confirmed in the Living File, draft normally under that forum's law. Never preserve a draft made under an assumed forum.
+
+AUTHORITY DISCIPLINE:
+- Use only the legal authorities supplied in the delimited INSTRUMENT AUTHORITY block below to identify legal requirements. Do not rely on memory, general training, or authorities appearing only in client facts.
+- Label supplied required sections, clauses, and formalities as mandatory. Clearly distinguish them from optional drafting preferences or client choices; never elevate a preference into a legal requirement.
+- If the authority block reports a BLOCKING GAP, do not produce a purportedly compliant draft. Emit the missing authoritative profile as a blocking gap in MISSING FACTS and FILE UPDATE.
+
+${authorityBlock || "=== BEGIN INSTRUMENT AUTHORITY (PINNED) ===\nSTATUS: BLOCKING GAP\nREASON: No authoritative profile was supplied.\n=== END INSTRUMENT AUTHORITY (PINNED) ==="}
 
 DRAFT TO THE CLIENT'S GOALS (this is the organizing principle of every draft):
 - Build the document around the client's GOALS in the Living File. Assume those goals are valid if they are lawful and plausible, and make the document accomplish them cleanly and enforceably.
@@ -1125,6 +1150,7 @@ ${followUpTemplate}
 
 ---FILE UPDATE---
 DOCUMENT: [Document type]
+DOCUMENT RISK: [LOW — jurisdiction-neutral correspondence permitted / HIGH — confirmed forum required]
 JURISDICTION: [Jurisdiction used for this draft]
 ASSUMPTIONS: [Any assumptions made about facts not in the file]
 BLOCKING GAPS: [Count and brief description]

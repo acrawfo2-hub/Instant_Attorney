@@ -5,6 +5,7 @@ import type { ClientWorkspaceDraft } from "@/lib/types";
 import { findBlanks, type DraftBlank } from "@/lib/freestyle-drafts";
 import { runPromoteWithSaveGuard } from "@/lib/draft-promote-guard";
 import { resolveDraftFocus, missingDraftNotice } from "@/lib/draft-focus";
+import type { DraftGenerationJob } from "@/lib/draft-generation-status";
 
 // Consumer freestyle drafts panel — the docked right side of the split screen.
 // Mirrors the attorney workspace panel: draft tabs, an editable title + body with
@@ -39,6 +40,8 @@ export default function ChatDraftsPanel({
   const [saving, setSaving] = useState(false);
   const [promoting, setPromoting] = useState(false);
   const [notice, setNotice] = useState("");
+  const [jobs, setJobs] = useState<Array<DraftGenerationJob & { label: string; active: boolean }>>([]);
+  const priorJobsRef = useRef<Map<string, string>>(new Map());
   // preview = rendered view with highlighted [[placeholders]]; edit = raw textarea
   const [viewMode, setViewMode] = useState<"preview" | "edit">("preview");
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -120,6 +123,35 @@ export default function ChatDraftsPanel({
   // Reload on mount and whenever the parent bumps refreshKey (a new draft arrived).
   useEffect(() => { load(); }, [load, refreshKey]);
 
+  // Per-document recovery: a ready sibling opens immediately, even while other
+  // jobs are still drafting or have failed. The durable endpoint also makes a
+  // reconnect recover completions missed while this component was unmounted.
+  useEffect(() => {
+    let stopped = false;
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/workspace/drafts/status?caseFileId=${caseFileId}`);
+        if (!res.ok || stopped) return;
+        const data = await res.json();
+        const next = (data.jobs ?? []) as Array<DraftGenerationJob & { label: string; active: boolean }>;
+        const previous = priorJobsRef.current;
+        setJobs(next);
+        for (const job of next) {
+          const newlyReady = job.state === "ready" && previous.get(job.id) !== "ready";
+          if (newlyReady && job.workspace_draft_id) {
+            pendingFocusRef.current = { id: job.workspace_draft_id, title: null };
+            await load();
+            break;
+          }
+        }
+        priorJobsRef.current = new Map(next.map((job) => [job.id, job.state]));
+      } catch { /* reconnect on the next poll */ }
+    };
+    void poll();
+    const timer = setInterval(poll, 3000);
+    return () => { stopped = true; clearInterval(timer); };
+  }, [caseFileId, load]);
+
   // A focus request from the chat — record it and reload so the just-produced
   // draft is present, then select it.
   useEffect(() => {
@@ -147,7 +179,16 @@ export default function ChatDraftsPanel({
         body: JSON.stringify({ title: toSave.title, content: toSave.content }),
       });
       ok = res.ok;
-      if (ok) setDirty(false);
+      if (ok) {
+        const payload = await res.json().catch(() => null);
+        if (payload?.draft) {
+          setDrafts((prev) => prev.map((d) => d.id === id ? { ...d, ...payload.draft } : d));
+          if (payload.draft.revision_notice && payload.draft.revision_action !== "unpromoted") {
+            setNotice(payload.draft.revision_notice);
+          }
+        }
+        setDirty(false);
+      }
     } catch {
       /* keep dirty; retry on next edit or blur */
     } finally {
@@ -251,6 +292,20 @@ export default function ChatDraftsPanel({
         <button type="button" className="fs-draft-new" onClick={onClose} title="Hide drafts" aria-label="Hide drafts">×</button>
       </div>
 
+      {jobs.length > 0 && (
+        <div className="draft-job-list" aria-label="Draft generation status">
+          {jobs.map((job) => (
+            <article className={`draft-job-card draft-job-${job.state}`} key={job.id} role="status">
+              <strong>{job.title}</strong><span>{job.label}</span>
+              {job.missing_fact_labels.length > 0 && <small>Needed: {job.missing_fact_labels.join(", ")}</small>}
+              {job.latest_revision > 0 && <small>Revision {job.latest_revision}</small>}
+              {job.state === "failed" && <small className="draft-job-error">{job.failure_message ?? "This draft could not be generated."}</small>}
+              {job.active && <button type="button" onClick={() => fetch(`/api/workspace/drafts/status?caseFileId=${caseFileId}&jobId=${job.id}`, { method: "DELETE" })}>Cancel</button>}
+            </article>
+          ))}
+        </div>
+      )}
+
       {active ? (
         <div className="fs-draft-editor">
           <div className="fs-draft-editor-head">
@@ -338,7 +393,11 @@ export default function ChatDraftsPanel({
             {active.promoted_document_id ? (
               <span className="fc-draft-promoted">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ verticalAlign: "middle", marginRight: 4 }}><polyline points="20 6 9 17 4 12"/></svg>
-                Sent to your attorney for review — you&apos;ll find it under &ldquo;With your attorney&rdquo; on your case file.
+                {active.revision_action === "create_revision"
+                  ? "Saved as a new revision; the approved version is unchanged. Another attorney review is pending."
+                  : active.revision_action === "revise_in_place"
+                    ? "Revision saved. The earlier review was superseded and another attorney review is pending."
+                    : "Sent to your attorney for review — you’ll find it under “With your attorney” on your case file."}
               </span>
             ) : (
               <>

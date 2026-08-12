@@ -30,6 +30,19 @@ interface Message {
   content: string;
 }
 
+interface ForumBlock {
+  code: "MISSING_GOVERNING_FORUM";
+  category: string;
+  missing: "jurisdiction" | "court" | "agency";
+  message: string;
+}
+
+interface ValidationReport {
+  ready_for_attorney_review: boolean;
+  errors: Array<{ code: string; message: string }>;
+  warnings: Array<{ code: string; message: string }>;
+}
+
 // Append dictated text to whatever the client has already typed in a field, so
 // voice is purely additive (and they can still edit before sending).
 function appendDictation(existing: string | undefined, dictated: string): string {
@@ -74,6 +87,8 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [forumBlock, setForumBlock] = useState<ForumBlock | null>(null);
+  const [governingForum, setGoverningForum] = useState("");
   // Attorney-users draft for their own clients and are the reviewing attorney
   // themselves — they never submit into Andrew Crawford's review queue.
   const [isAttorneyUser, setIsAttorneyUser] = useState(false);
@@ -115,7 +130,9 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   const [extraNote, setExtraNote] = useState("");
   const [justUpdated, setJustUpdated] = useState(false);
   const [truncatedDraft, setTruncatedDraft] = useState(false);
+  const [generationIncomplete, setGenerationIncomplete] = useState(false);
   const [gapSyncWarning, setGapSyncWarning] = useState(false);
+  const [validationReport, setValidationReport] = useState<ValidationReport | null>(null);
 
   // Pre-draft "starter questions": surfaced immediately while the first draft is
   // generated live in the background, so the client can answer during the wait.
@@ -181,9 +198,17 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
       draft_text: string;
       status?: string;
       submitted_at?: string | null;
-      content_json?: { init_response?: string };
+      content_json?: { init_response?: string; raw_generation_response?: string; generation_incomplete?: boolean; validation_report?: ValidationReport };
     }
   ) {
+    if (doc.content_json?.generation_incomplete) {
+      setDocumentId(doc.id);
+      docIdRef.current = doc.id;
+      setGenerationIncomplete(true);
+      setMessages([]);
+      setParsed(null);
+      return;
+    }
     const fakeResponse = `---DRAFT READY---\n${doc.draft_text}\n---END DRAFT---\n\n${doc.content_json?.init_response ?? ""}`;
     const p = parseDrafterResponse(fakeResponse);
     if (!p.draftText) p.draftText = doc.draft_text;
@@ -192,6 +217,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
     lastAssistantRef.current = fakeResponse;
     setDocumentId(doc.id);
     docIdRef.current = doc.id;
+    setValidationReport(doc.content_json?.validation_report ?? null);
     if (doc.status === "pending_review") {
       setSubmittedForReview(true);
       setSubmittedAt(doc.submitted_at ?? null);
@@ -206,7 +232,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
         const res = await fetch(`/api/documents/${resumeDocId}`);
         if (res.ok) {
           const doc = await res.json();
-          if (doc.draft_text) {
+          if (doc.draft_text || doc.content_json?.generation_incomplete) {
             loadExistingDraft(doc);
             return;
           }
@@ -225,7 +251,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
         );
         if (res.ok) {
           const doc = await res.json();
-          if (doc.draft_text) {
+          if (doc.draft_text || doc.content_json?.generation_incomplete) {
             loadExistingDraft(doc);
             return;
           }
@@ -469,16 +495,22 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
           instrument: instrumentParam || undefined,
           baseAttachmentId: wizardType === "improve_draft" ? (baseAttachmentIdRef.current || undefined) : undefined,
           isInit,
+          governingForum: governingForum.trim() || undefined,
         }),
         signal: abort.signal,
       });
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({ error: `Server error ${res.status}` }));
+        if (res.status === 409 && body?.blocking?.code === "MISSING_GOVERNING_FORUM") {
+          setForumBlock(body.blocking as ForumBlock);
+          setMessages(history);
+          return false;
+        }
         throw new Error(body?.error || `Server error ${res.status}`);
       }
 
-      const data = await res.json() as { text: string; documentId: string | null; truncated?: boolean; gapSyncWarning?: boolean; alreadyFinalized?: boolean; status?: string | null };
+      const data = await res.json() as { text: string; documentId: string | null; truncated?: boolean; generationIncomplete?: boolean; gapSyncWarning?: boolean; alreadyFinalized?: boolean; status?: string | null; validationReport?: ValidationReport | null };
       const fullText = data.text ?? "";
 
       if (data.documentId) {
@@ -486,7 +518,10 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
         docIdRef.current = data.documentId;
       }
       if (data.truncated) setTruncatedDraft(true);
+      setGenerationIncomplete(Boolean(data.generationIncomplete));
       setGapSyncWarning(Boolean(data.gapSyncWarning));
+      setForumBlock(null);
+      setValidationReport(data.validationReport ?? null);
 
       // The server resolved us to an already-finalized / in-review primary document
       // instead of overwriting it. Reflect that state so the client sees their real
@@ -502,12 +537,13 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
       });
       lastAssistantRef.current = fullText;
 
-      // If Claude returned something but without proper markers, use the whole response as draft
       let p = parseDrafterResponse(fullText);
-      if (!p.draftText && fullText.trim()) {
-        p = { ...p, draftText: fullText.trim() };
+      if (data.generationIncomplete) {
+        setParsed(null);
+        return false;
       }
-      // Absolute fallback — guarantee a draft AND the questions needed to finish it
+      // A complete response that unexpectedly parses without text still gets a
+      // local template; incomplete/raw recovery output is never rendered here.
       if (!p.draftText) {
         const template = buildFallbackTemplate(label, wizardType);
         const derived = deriveQuestionsFromTemplate(template);
@@ -545,6 +581,11 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
       setStreaming(false);
       inputRef.current?.focus();
     }
+  }
+
+  async function retryWithForum() {
+    if (!governingForum.trim() || streaming) return;
+    await runDrafter(messages.filter((m) => m.content.trim()), messages.length === 0);
   }
 
   // Persist the client's checklist answers as confirmed facts on the file BEFORE
@@ -625,7 +666,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   }
 
   async function handleDownload() {
-    if (!documentId || downloading) return;
+    if (!documentId || downloading || generationIncomplete) return;
     setDownloading(true);
     try {
       const res = await fetch(`/api/documents/${documentId}/download`);
@@ -645,7 +686,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   }
 
   async function submitToAttorney() {
-    if (submitting) return;
+    if (submitting || generationIncomplete) return;
     const id = docIdRef.current || documentId;
     if (!id) {
       setError("Your draft was saved but we couldn't send it just yet. Please click “Send to Attorney” again in a moment.");
@@ -674,6 +715,51 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
   const hasAnyInput = filledCount > 0 || extraNote.trim().length > 0;
   const starterFilledCount = starterItems.filter((it) => answers[it.id]?.trim()).length;
   const hasStarterInput = starterFilledCount > 0 || extraNote.trim().length > 0;
+
+  if (forumBlock) {
+    const forumLabel = forumBlock.missing === "court"
+      ? "Court and governing jurisdiction"
+      : forumBlock.missing === "agency"
+        ? "Agency and governing jurisdiction"
+        : "Governing jurisdiction";
+    return (
+      <div className="wiz-shell wiz-shell-v2">
+        <header className="wiz-header">
+          <button className="wiz-back" onClick={() => router.push(fileBackHref)}>← Back to your case</button>
+          <div className="wiz-title"><span className="wiz-type-pill">{label}</span></div>
+        </header>
+        <div className="wiz-gate">
+          <div className="wiz-gate-icon" aria-hidden="true">⚖</div>
+          <h2 className="wiz-gate-title">Confirm the forum before we draft</h2>
+          <p className="wiz-gate-msg">
+            This is a high-risk {forumBlock.category}. We won&apos;t assume Texas or save a substantive draft under an unconfirmed forum.
+          </p>
+          <div className="wiz-field" style={{ width: "min(100%, 560px)", textAlign: "left" }}>
+            <label className="wiz-field-label" htmlFor="governing-forum">{forumLabel}</label>
+            <p className="wiz-field-hint">
+              {forumBlock.missing === "court"
+                ? "Enter the state and the full court name."
+                : forumBlock.missing === "agency"
+                  ? "Enter the jurisdiction and the agency that will receive the filing or request."
+                  : "Enter the state, territory, or country whose law governs."}
+            </p>
+            <input
+              id="governing-forum"
+              className="wiz-field-input"
+              value={governingForum}
+              onChange={(e) => setGoverningForum(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") retryWithForum(); }}
+              autoFocus
+            />
+          </div>
+          {error && <p className="att-upload-error">{error}</p>}
+          <button className="wiz-gate-btn" onClick={retryWithForum} disabled={!governingForum.trim() || streaming}>
+            {streaming ? "Saving and drafting…" : "Save forum and draft →"}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (docReviewGated) {
     return (
@@ -798,7 +884,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
         </div>
         <div className="wiz-header-actions">
           {documentId && (
-            <button className="wiz-dl-btn" onClick={handleDownload} disabled={downloading}>
+            <button className="wiz-dl-btn" onClick={handleDownload} disabled={downloading || generationIncomplete}>
               {downloading ? "…" : "Download .docx"}
             </button>
           )}
@@ -813,7 +899,16 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
             {streaming && <span className="wiz-doc-updating">Updating…</span>}
           </div>
 
-          {error && !currentDraft ? (
+          {generationIncomplete && !streaming ? (
+            <div className="wiz-doc-loading" role="alert">
+              <div className="wiz-gen-error-icon">⚠</div>
+              <p className="wiz-gen-error-msg">The draft response ended before a complete document was received.</p>
+              <p className="wiz-gen-error-reassure">The raw response was saved for recovery, but it cannot be reviewed, signed, or downloaded as a document.</p>
+              <button className="wiz-retry-btn" onClick={() => runDrafter([], true)}>
+                Retry complete draft →
+              </button>
+            </div>
+          ) : error && !currentDraft ? (
             <div className="wiz-doc-loading">
               <div className="wiz-gen-error-icon">⚠</div>
               <p className="wiz-gen-error-msg">{error}</p>
@@ -863,6 +958,14 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
 
         {/* Right: Questions & Status */}
         <div className="wiz-qa-pane">
+          {validationReport && validationReport.errors.length > 0 && (
+            <section className="doc-truncation-notice" role="alert" aria-label="Instrument validation errors">
+              <div>
+                <strong>Not ready for attorney review</strong>
+                <ul>{validationReport.errors.map((issue, index) => <li key={`${issue.code}-${index}`}>{issue.message}</li>)}</ul>
+              </div>
+            </section>
+          )}
           {submittedForReview ? (
             <div className="wiz-review-submitted">
               <div className="wiz-review-icon">✓</div>
@@ -1227,7 +1330,7 @@ export default function WizardPage({ params }: { params: Promise<{ type: string 
                     <button
                       className="wiz-submit-btn"
                       onClick={hasAnyInput ? handleSubmitAnswers : submitToAttorney}
-                      disabled={submitting || streaming || !documentId}
+                      disabled={submitting || streaming || !documentId || generationIncomplete}
                     >
                       {submitting
                         ? "Sending…"

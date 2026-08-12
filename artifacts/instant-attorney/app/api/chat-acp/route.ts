@@ -7,12 +7,14 @@ import { buildAcpSystemPrompt, buildFileContext, ORCHESTRATOR_TOOLS_GUIDANCE } f
 import { ORCHESTRATOR_TOOLS, dispatchTool } from "@/lib/orchestrator-tools";
 import { detectAcpAreasFromContext } from "@/lib/acp-area-router";
 import { parseAndUpdateFile, isCompleteFileUpdate } from "@/lib/file-parser";
-import { syncLivingFile } from "@/lib/living-file-extractor";
+import { markLivingFileSyncedThrough, syncLivingFile, type MessageCursor } from "@/lib/living-file-extractor";
 import { triggerPendingLookups } from "@/lib/gov-form-lookup";
 import { generateCaseTitle } from "@/lib/title-generator";
 import { toAnthropicBlock, processAttachment } from "@/lib/attachment-processor";
-import { parseDrafts } from "@/lib/freestyle-drafts";
+import { parseDrafts, planAssistantDraftPersistence } from "@/lib/freestyle-drafts";
+import { persistDrafts } from "@/lib/draft-persistence";
 import { stripToolMarkers } from "@/lib/tool-markers";
+import { dispatchDocumentPlan, parseDocumentPlan } from "@/lib/document-plan";
 import { createAcpJob, getAcpJob, getPredecessorChain, emitAcpChunk, finishAcpJob } from "@/lib/acp-jobs";
 import { recordAiFromMessage, recordStorageUpload } from "@/lib/usage-tracker";
 import { getBillingGate } from "@/lib/topup";
@@ -245,7 +247,7 @@ export async function POST(req: NextRequest) {
   // (after the stream) needs its id; the stream's finally awaits this promise
   // before the response closes, so persistence is still guaranteed.
   const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
-  const userMessagePromise: Promise<string | null> = lastUserMsg
+  const userMessagePromise: Promise<(MessageCursor & { id: string }) | null> = lastUserMsg
     ? (async () => {
         try {
           const { data } = await db
@@ -258,9 +260,9 @@ export async function POST(req: NextRequest) {
                 ? `[${pendingAttachment.fileName}]\n${lastUserMsg.content}`
                 : lastUserMsg.content,
             })
-            .select("id")
+            .select("id, created_at")
             .single();
-          return data?.id ?? null;
+          return data ? { id: data.id, createdAt: data.created_at } : null;
         } catch (err) {
           console.error("[chat-acp] failed to persist user message:", err);
           return null;
@@ -437,7 +439,8 @@ export async function POST(req: NextRequest) {
         // off time-to-first-token; await it here so its id is available for the
         // screenshot path below and persistence is flushed before the response
         // closes.
-        const userMessageId = await userMessagePromise;
+        const userMessageCursor = await userMessagePromise;
+        const userMessageId = userMessageCursor?.id ?? null;
 
         if (fullResponse) {
           await db.from("intake_messages").insert({
@@ -448,37 +451,69 @@ export async function POST(req: NextRequest) {
           });
 
           // Freestyle split-screen: land any ---DRAFT--- blocks in the drafts
-          // panel. A matching title updates that draft in place; a new title
-          // creates a fresh one. Only in freestyle — guided intake keeps drafts
+          // panel. Stable protocol ids update their draft; a title is only a
+          // fallback when it resolves unambiguously. Only in freestyle — guided intake keeps drafts
           // inline in the transcript.
           if (mode === "freestyle") {
-            for (const draft of parseDrafts(fullResponse)) {
+            const plan = parseDocumentPlan(fullResponse);
+            if (plan) {
               try {
-                const { data: existing } = await db
-                  .from("client_workspace_drafts")
-                  .select("id")
-                  .eq("case_file_id", resolvedCaseFileId)
-                  .eq("user_id", userId)
-                  .eq("title", draft.title)
-                  .order("updated_at", { ascending: false })
-                  .limit(1)
-                  .maybeSingle();
-                if (existing?.id) {
-                  await db.from("client_workspace_drafts")
-                    .update({ content: draft.content, source: "assistant", updated_at: new Date().toISOString() })
-                    .eq("id", existing.id);
-                } else {
-                  await db.from("client_workspace_drafts").insert({
-                    case_file_id: resolvedCaseFileId,
-                    user_id: userId,
-                    title: draft.title,
-                    content: draft.content,
-                    source: "assistant",
-                  });
-                }
+                await dispatchDocumentPlan(toolDb, { caseFileId: resolvedCaseFileId, userId, plan });
               } catch (err) {
-                console.error("[chat-acp] persist draft error:", err);
+                console.error("[chat-acp] document-plan dispatch error:", err);
               }
+            }
+            // Legacy inline drafts remain supported, but planned documents are
+            // only enqueued here and are generated by the durable worker.
+            //
+            // #108's retry harness drives the loop; the callbacks keep #105's
+            // semantics. Using #108's own callbacks would have matched on title
+            // alone and updated unconditionally, dropping the two guards #105
+            // exists for: never touch a draft the client has edited
+            // (source <> 'assistant') and never touch one already promoted to a
+            // document.
+            const completedDrafts = parseDrafts(fullResponse);
+            job.draftPersistence = await persistDrafts(completedDrafts, {
+              find: async (draft) => {
+                let query = db
+                  .from("client_workspace_drafts")
+                  .select("id, source, content, promoted_document_id, title")
+                  .eq("case_file_id", resolvedCaseFileId)
+                  .eq("user_id", userId);
+                query = draft.draftId ? query.eq("id", draft.draftId) : query.eq("title", draft.title);
+                const { data: matches, error } = await query
+                  .order("updated_at", { ascending: false })
+                  .limit(draft.draftId ? 1 : 2);
+                if (error) return { id: null, error };
+                const action = planAssistantDraftPersistence(draft, matches ?? []);
+                // A null id routes the harness to insert(), which is what the
+                // planner means by "do not overwrite this one".
+                return { id: action.kind === "update" ? action.id : null, error: null };
+              },
+              update: async (id, draft) => {
+                const { error } = await db.from("client_workspace_drafts")
+                  .update({ content: draft.content, source: "assistant", updated_at: new Date().toISOString() })
+                  .eq("id", id)
+                  .eq("source", "assistant")
+                  .is("promoted_document_id", null);
+                return { error };
+              },
+              insert: async (draft) => {
+                const action = planAssistantDraftPersistence(draft, []);
+                const { data, error } = await db.from("client_workspace_drafts").insert({
+                  case_file_id: resolvedCaseFileId,
+                  user_id: userId,
+                  title: action.kind === "insert" ? action.title : draft.title,
+                  content: draft.content,
+                  source: "assistant",
+                  revision_of_draft_id: action.kind === "insert" ? action.revisionOfDraftId ?? null : null,
+                }).select("id").single();
+                return { id: data?.id ?? null, error };
+              },
+            });
+            if (job.draftPersistence.failed.length > 0) {
+              runError = "One or more generated drafts still need to be saved.";
+              console.error("[chat-acp] draft persistence exhausted retries", job.draftPersistence.failed);
             }
           }
 
@@ -508,14 +543,8 @@ export async function POST(req: NextRequest) {
               // doesn't reprocess these same messages and produce near-duplicate
               // facts (upsertFacts only dedupes exact matches). Incomplete blocks
               // are left un-watermarked so the extractor still catches them.
-              if (hasLivingFile && fullResponse.includes("---END FILE---")) {
-                await db
-                  .from("case_files")
-                  .update({ last_file_synced_at: new Date().toISOString() })
-                  .eq("id", resolvedCaseFileId)
-                  .then(undefined, (err) =>
-                    console.error("[chat-acp] inline watermark advance error:", err)
-                  );
+              if (hasLivingFile && fullResponse.includes("---END FILE---") && userMessageCursor) {
+                await markLivingFileSyncedThrough(db, resolvedCaseFileId, userMessageCursor);
               }
 
               // Kick off grounded web lookups for any newly-detected forms that
@@ -606,7 +635,8 @@ export async function POST(req: NextRequest) {
         // the file stays current even when this turn emitted no inline block.
         // Fire-and-forget, same lifetime as the other post-stream background
         // tasks above.
-        syncLivingFile(anthropic, db, resolvedCaseFileId, userId).catch(
+        syncLivingFile(anthropic, db, resolvedCaseFileId, userId,
+          userMessageCursor ? { through: userMessageCursor } : {}).catch(
           (err) => console.error("[chat-acp] living file sync error:", err)
         );
 

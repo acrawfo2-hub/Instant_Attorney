@@ -212,6 +212,8 @@ export interface PlanEntry {
   title: string;
   /** Which wizard engine drafts/formats this document. */
   engine: WizardType;
+  /** Stable legal-instrument profile; independent of the rendering engine and display title. */
+  instrument_key: string;
   /** One-line reason this document matters / why its priority. */
   rationale?: string;
 }
@@ -264,6 +266,8 @@ export interface CaseFile {
   /** created_at of the last intake message the Living File extractor has folded
    *  into the file. The background sweep reads only messages newer than this. */
   last_file_synced_at?: string | null;
+  /** UUID tie-breaker paired with last_file_synced_at for a stable cursor. */
+  last_file_synced_message_id?: string | null;
   /** True when the reviewing attorney created this file to onboard a client from
    *  their own practice (file is owned by the attorney's account). */
   created_by_attorney?: boolean;
@@ -591,8 +595,13 @@ export interface ClientWorkspaceDraft {
   content: string;
   source: "assistant" | "client";
   promoted_document_id: string | null;
+  revision_of_draft_id?: string | null;
   created_at: string;
   updated_at: string;
+  /** Returned after a post-submission save so the editor can explain its disposition. */
+  revision_action?: "unpromoted" | "revise_in_place" | "create_revision";
+  attorney_review_pending?: boolean;
+  revision_notice?: string;
 }
 
 export interface Document {
@@ -601,6 +610,11 @@ export interface Document {
   user_id: string;
   parent_document_id: string | null;
   doc_type: DocType;
+  /**
+   * Stable instrument identity: unlike the title, it survives renames and
+   * regeneration. Optional because rows created before the migration have none.
+   */
+  instrument_key?: string | null;
   title: string;
   status: DocumentStatus;
   content_json: Record<string, unknown>;
@@ -625,6 +639,9 @@ export interface Document {
    * runs or before a draft has been (re)generated.
    */
   facts_synced_at?: string | null;
+  revision_number?: number;
+  approved_text?: string | null;
+  approved_revision?: number | null;
 }
 
 /**
@@ -821,7 +838,8 @@ export type ReviewRunStatus =
   | "running"
   | "awaiting_attorney"
   | "complete"
-  | "failed";
+  | "failed"
+  | "stale";
 
 export interface DocumentReviewRun {
   id: string;
@@ -835,6 +853,7 @@ export interface DocumentReviewRun {
   created_at: string;
   updated_at: string;
   completed_at: string | null;
+  source_revision?: number | null;
 }
 
 export type ImprovementKind =

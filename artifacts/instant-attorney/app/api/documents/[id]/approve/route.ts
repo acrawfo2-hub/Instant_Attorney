@@ -10,7 +10,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const { action, attorney_notes } = await req.json();
+  const { action, attorney_notes, accept_repaired_incomplete } = await req.json();
 
   if (!action || !["approve", "request_changes"].includes(action)) {
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
@@ -32,8 +32,38 @@ export async function POST(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // Approval/request-changes is publication of review output. Bind it to the
+  // exact revision reviewed so an in-flight client answer wins the race.
+  const [{ data: sourceDoc }, { data: reviewRun }] = await Promise.all([
+    db.from("documents").select("revision_number").eq("id", id).is("parent_document_id", null).single(),
+    db.from("document_review_runs").select("id, status, source_revision").eq("document_id", id)
+      .order("created_at", { ascending: false }).limit(1).maybeSingle(),
+  ]);
+  if (reviewRun && (
+    reviewRun.status === "stale" ||
+    (reviewRun.source_revision ?? 1) !== (sourceDoc?.revision_number ?? 1)
+  )) {
+    return NextResponse.json(
+      { error: "The client submitted a newer revision. Review it before publishing a decision.", review_state: "stale" },
+      { status: 409 },
+    );
+  }
+
   const children = await getChildDocuments(db, id);
   const secondDraft = children.find((c) => c.doc_type === "second_draft");
+
+  const { data: approvalCandidate } = await db
+    .from("documents")
+    .select("content_json")
+    .eq("id", id)
+    .single();
+  const incomplete = (approvalCandidate?.content_json as Record<string, unknown> | null)?.generation_incomplete === true;
+  if (action === "approve" && incomplete && accept_repaired_incomplete !== true) {
+    return NextResponse.json(
+      { error: "This generation is incomplete. Repair it and explicitly accept the repaired text before approval." },
+      { status: 409 }
+    );
+  }
 
   if (action === "approve" && secondDraft && !secondDraft.draft_text) {
     return NextResponse.json(
@@ -74,8 +104,20 @@ export async function POST(
       reviewed_by: user.id,
       reviewed_at: now,
       updated_at: now,
+      ...(incomplete && accept_repaired_incomplete === true
+        ? {
+            content_json: {
+              ...((approvalCandidate?.content_json as Record<string, unknown>) ?? {}),
+              generation_incomplete: false,
+              generation_state: "attorney_repaired_and_accepted",
+              repaired_accepted_by: user.id,
+              repaired_accepted_at: now,
+            },
+          }
+        : {}),
     })
     .eq("id", id)
+    .eq("revision_number", sourceDoc?.revision_number ?? 1)
     .is("parent_document_id", null)
     .select("*, profiles!documents_user_id_fkey(*)")
     .single();

@@ -37,9 +37,9 @@ interface PendingAttachment {
 }
 
 interface DocUpload {
-  key: string;
-  fileName: string;
-  status: "uploading" | "ready" | "error";
+  id: string;
+  file: File;
+  status: "queued" | "uploading" | "ready" | "error";
 }
 
 const INITIAL_MESSAGE: Msg = {
@@ -50,6 +50,7 @@ const INITIAL_MESSAGE: Msg = {
 
 const MAX_INLINE_BYTES = 4 * 1024 * 1024; // 4 MB for inline screenshots (intake)
 const MAX_FREESTYLE_BYTES = 10 * 1024 * 1024; // 10 MB for freestyle document attachments
+const MAX_FREESTYLE_MB = MAX_FREESTYLE_BYTES / (1024 * 1024);
 
 // Freestyle accepts documents too, not just screenshots — the chat-acp backend
 // already turns PDFs, Word docs, and text files into Anthropic content blocks.
@@ -61,7 +62,7 @@ const FREESTYLE_ATTACH_TYPES = new Set([
   "application/json", "application/rtf", "text/rtf",
 ]);
 
-function renderContent(text: string, onOpenDraft?: (title: string) => void) {
+function renderContent(text: string, onOpenDraft?: (title: string) => void, persistedDrafts: Record<string, string> = {}) {
   // Freestyle drafts live in the side panel, not the transcript — pull the
   // document blocks out and leave a compact marker where each one was.
   const drafted = parseDrafts(text);
@@ -129,12 +130,14 @@ function renderContent(text: string, onOpenDraft?: (title: string) => void) {
   }
 
   for (const d of drafted) {
+    const persistedId = persistedDrafts[d.title];
+    if (!persistedId) continue;
     elements.push(
       <button
         key={`draft-${d.title}`}
         type="button"
         className="fc-draft-note fc-draft-note-btn"
-        onClick={onOpenDraft ? () => onOpenDraft(d.title) : undefined}
+        onClick={onOpenDraft ? () => onOpenDraft(persistedId) : undefined}
         disabled={!onOpenDraft}
         title="Open this draft"
       >
@@ -202,12 +205,11 @@ function AcpChatInner() {
   // inline base64), so large files don't blow the request-body limit. These
   // chips track their upload/analysis state.
   const [docUploads, setDocUploads] = useState<DocUpload[]>([]);
-  // Docs queued before the first message (no caseFileId yet). Uploaded as soon
-  // as caseFileId becomes available.
-  const [queuedDocFiles, setQueuedDocFiles] = useState<File[]>([]);
   const [dragOver, setDragOver] = useState(false);
   // When the AI saves a new draft, show a dismissible banner so users know where it went.
   const [draftSavedTitle, setDraftSavedTitle] = useState<string | null>(null);
+  const [persistedDrafts, setPersistedDrafts] = useState<Record<string, string>>({});
+  const [draftRecovery, setDraftRecovery] = useState<{ jobId: string; titles: string[]; saving: boolean } | null>(null);
   // Count badge on the Drafts button — loaded once caseFileId is known, refreshed
   // each time draftsRefresh bumps.
   const [draftCount, setDraftCount] = useState(0);
@@ -314,11 +316,17 @@ function AcpChatInner() {
     if (bgJobs.length === 0) return;
     let cancelled = false;
 
-    const resolveJob = (job: (typeof bgJobs)[number], data: { finalText?: string | null; truncated?: boolean }) => {
+    const resolveJob = (job: (typeof bgJobs)[number], data: { finalText?: string | null; truncated?: boolean; draftPersistence?: { persisted: Array<{ id: string; title: string }>; failed: Array<{ title: string }> } }) => {
       setBgJobs((prev) => prev.filter((j) => j !== job));
       if (data.truncated) setChatTruncated(true);
       const raw = typeof data.finalText === "string" ? data.finalText : "";
       const text = stripToolMarkers(raw).trim();
+      const persistence = data.draftPersistence;
+      if (persistence) {
+        setPersistedDrafts((prev) => ({ ...prev, ...Object.fromEntries(persistence.persisted.map((d) => [d.title, d.id])) }));
+        if (persistence.persisted.length) setDraftSavedTitle(persistence.persisted[0].title);
+        setDraftRecovery(persistence.failed.length ? { jobId: job.jobId, titles: persistence.failed.map((d) => d.title), saving: false } : null);
+      }
       setMessages((prev) => {
         // Replace the turn's placeholder in place (stable anchor even after
         // later messages arrived); fall back to appending.
@@ -339,7 +347,6 @@ function AcpChatInner() {
         if (newDrafts.length > 0 || openedUpload) {
           setDraftsPanelOpen(true);
           setDraftsRefresh((n) => n + 1);
-          if (newDrafts.length > 0) setDraftSavedTitle(newDrafts[0].title);
         }
       } else {
         // Job unknown (e.g. server restarted) or empty — refresh drafts in
@@ -353,7 +360,7 @@ function AcpChatInner() {
         try {
           const res = await fetch(`/api/chat-acp/status?jobId=${encodeURIComponent(job.jobId)}`);
           if (!res.ok) continue;
-          const data = await res.json() as { running?: boolean; finalText?: string | null; truncated?: boolean };
+          const data = await res.json() as { running?: boolean; finalText?: string | null; truncated?: boolean; draftPersistence?: { persisted: Array<{ id: string; title: string }>; failed: Array<{ title: string }> } };
           if (cancelled) return;
           if (data.running) continue;
           resolveJob(job, data);
@@ -375,29 +382,46 @@ function AcpChatInner() {
       .catch(() => {});
   }, [caseFileId, draftsRefresh]);
 
-  // When caseFileId becomes available (first message sent), upload any docs the
-  // user had already attached before the conversation started.
-  useEffect(() => {
-    if (!caseFileId || queuedDocFiles.length === 0) return;
-    const files = [...queuedDocFiles];
-    setQueuedDocFiles([]);
-    files.forEach((file) => {
-      const key = `${file.name}-${Date.now()}`;
-      setDocUploads((prev) => [...prev, { key, fileName: file.name || "document", status: "uploading" }]);
+  const uploadDoc = useCallback(async (id: string, file: File, targetCaseFileId: string) => {
+    setDocUploads((prev) => prev.map((doc) => (
+      doc.id === id ? { ...doc, status: "uploading" } : doc
+    )));
+    try {
       const fd = new FormData();
       fd.append("file", file);
-      fd.append("caseFileId", caseFileId);
-      fetch("/api/attachments/upload", { method: "POST", body: fd })
-        .then((res) => {
-          if (!res.ok) throw new Error(res.status === 413 ? "File is too large." : "Upload failed.");
-          setDocUploads((prev) => prev.map((d) => (d.key === key ? { ...d, status: "ready" } : d)));
-        })
-        .catch(() => {
-          setDocUploads((prev) => prev.map((d) => (d.key === key ? { ...d, status: "error" } : d)));
-        });
+      fd.append("caseFileId", targetCaseFileId);
+      const res = await fetch("/api/attachments/upload", { method: "POST", body: fd });
+      if (!res.ok) {
+        throw new Error(res.status === 413 ? "File is too large to upload." : "Upload failed.");
+      }
+      setDocUploads((prev) => prev.map((doc) => (
+        doc.id === id ? { ...doc, status: "ready" } : doc
+      )));
+    } catch (err) {
+      setDocUploads((prev) => prev.map((doc) => (
+        doc.id === id ? { ...doc, status: "error" } : doc
+      )));
+      throw err;
+    }
+  }, []);
+
+  // When caseFileId becomes available (first message sent), transition the
+  // existing queued records in place. Their IDs and File objects stay stable.
+  useEffect(() => {
+    if (!caseFileId) return;
+    const queued = docUploads.filter((doc) => doc.status === "queued");
+    if (queued.length === 0) return;
+
+    // Claim every queued record before starting network work. This prevents a
+    // subsequent render (including React Strict Mode's extra effect pass) from
+    // scheduling the same upload twice.
+    setDocUploads((prev) => prev.map((doc) => (
+      doc.status === "queued" ? { ...doc, status: "uploading" } : doc
+    )));
+    queued.forEach((doc) => {
+      void uploadDoc(doc.id, doc.file, caseFileId).catch(() => {});
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [caseFileId]);
+  }, [caseFileId, docUploads, uploadDoc]);
 
   // Put a suggested question in the composer and focus it. Never auto-sends: the
   // client reads and edits before it costs her a turn.
@@ -645,37 +669,24 @@ function AcpChatInner() {
       return;
     }
     if (file.size > MAX_FREESTYLE_BYTES) {
-      alert("Attachments must be under 20 MB. For larger files, use the Upload Documents section on your dashboard.");
+      alert(`Attachments must be under ${MAX_FREESTYLE_MB} MB. For larger files, use the Upload Documents section on your dashboard.`);
       return;
     }
-    const id = caseFileIdRef.current;
-    if (!id) {
+    const uploadId = crypto.randomUUID();
+    const upload: DocUpload = { id: uploadId, file, status: caseFileIdRef.current ? "uploading" : "queued" };
+    setDocUploads((prev) => [...prev, upload]);
+    const targetCaseFileId = caseFileIdRef.current;
+    if (!targetCaseFileId) {
       // No case file yet — queue the doc. It will be uploaded automatically as
       // soon as the user sends their first message and a case file is created.
-      setQueuedDocFiles((prev) => [...prev, file]);
-      setDocUploads((prev) => [
-        ...prev,
-        { key: `${file.name}-queued-${Date.now()}`, fileName: file.name || "document", status: "uploading" },
-      ]);
       return;
     }
-    const key = `${file.name}-${Date.now()}`;
-    setDocUploads((prev) => [...prev, { key, fileName: file.name || "document", status: "uploading" }]);
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("caseFileId", id);
-      const res = await fetch("/api/attachments/upload", { method: "POST", body: fd });
-      if (!res.ok) {
-        const msg = res.status === 413 ? "File is too large to upload." : "Upload failed.";
-        throw new Error(msg);
-      }
-      setDocUploads((prev) => prev.map((d) => (d.key === key ? { ...d, status: "ready" } : d)));
+      await uploadDoc(upload.id, file, targetCaseFileId);
     } catch (err) {
-      setDocUploads((prev) => prev.map((d) => (d.key === key ? { ...d, status: "error" } : d)));
       alert(err instanceof Error ? err.message : "Upload failed.");
     }
-  }, [mode]);
+  }, [mode, uploadDoc]);
 
   function handlePaste(e: React.ClipboardEvent) {
     const items = Array.from(e.clipboardData.items);
@@ -869,12 +880,24 @@ function AcpChatInner() {
       setStreamingText("");
       // The server persisted any ---DRAFT--- blocks (or opened an uploaded doc as a
       // draft via the tool); open the panel and refresh it.
-      const newDrafts = parseDrafts(full);
-      if (mode === "freestyle" && (newDrafts.length > 0 || openedUpload)) {
+      let confirmedDraftCount = 0;
+      const completedJobId = currentJobIdRef.current;
+      if (completedJobId) {
+        const statusRes = await fetch(`/api/chat-acp/status?jobId=${encodeURIComponent(completedJobId)}`);
+        if (statusRes.ok) {
+          const status = await statusRes.json() as { draftPersistence?: { persisted: Array<{ id: string; title: string }>; failed: Array<{ title: string }> } };
+          const persistence = status.draftPersistence;
+          if (persistence) {
+            confirmedDraftCount = persistence.persisted.length;
+            setPersistedDrafts((prev) => ({ ...prev, ...Object.fromEntries(persistence.persisted.map((d) => [d.title, d.id])) }));
+            if (persistence.persisted.length) setDraftSavedTitle(persistence.persisted[0].title);
+            setDraftRecovery(persistence.failed.length ? { jobId: completedJobId, titles: persistence.failed.map((d) => d.title), saving: false } : null);
+          }
+        }
+      }
+      if (mode === "freestyle" && (confirmedDraftCount > 0 || openedUpload)) {
         setDraftsPanelOpen(true);
         setDraftsRefresh((n) => n + 1);
-        // Show a notification banner so it's clear where the draft went.
-        if (newDrafts.length > 0) setDraftSavedTitle(newDrafts[0].title);
       }
       setPendingCounselContext(null);
       // Resolved doc uploads are now in the file context; keep only in-flight ones.
@@ -900,6 +923,29 @@ function AcpChatInner() {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       sendMessage(e as unknown as FormEvent);
+    }
+  }
+
+  async function saveDraftsAgain() {
+    if (!draftRecovery || draftRecovery.saving) return;
+    setDraftRecovery({ ...draftRecovery, saving: true });
+    try {
+      const res = await fetch("/api/chat-acp/status", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId: draftRecovery.jobId }),
+      });
+      if (!res.ok) throw new Error("Save retry failed");
+      const data = await res.json() as { draftPersistence: { persisted: Array<{ id: string; title: string }>; failed: Array<{ title: string }> } };
+      setPersistedDrafts((prev) => ({ ...prev, ...Object.fromEntries(data.draftPersistence.persisted.map((d) => [d.title, d.id])) }));
+      if (data.draftPersistence.persisted.length) {
+        setDraftSavedTitle(data.draftPersistence.persisted.at(-1)?.title ?? null);
+        setDraftsRefresh((n) => n + 1);
+      }
+      setDraftRecovery(data.draftPersistence.failed.length ? {
+        jobId: draftRecovery.jobId, titles: data.draftPersistence.failed.map((d) => d.title), saving: false,
+      } : null);
+    } catch {
+      setDraftRecovery((current) => current ? { ...current, saving: false } : current);
     }
   }
 
@@ -1037,7 +1083,7 @@ function AcpChatInner() {
             )}
             <div className={msg.role === "user" ? "fc-bubble fc-bubble-user" : "fc-bubble fc-bubble-ai"}>
               {msg.role === "assistant" ? (
-                renderContent(msg.content, (title) => openDraft({ title }))
+                renderContent(msg.content, (id) => openDraft({ id }), persistedDrafts)
               ) : msg.imageUrl ? (
                 <>
                   <img src={msg.imageUrl} alt="attached screenshot" className="fc-bubble-image" />
@@ -1062,7 +1108,7 @@ function AcpChatInner() {
               </svg>
             </div>
             <div className="fc-bubble fc-bubble-ai fc-bubble-streaming">
-              {renderContent(streamingText, (title) => openDraft({ title }))}
+              {renderContent(streamingText)}
               <ToolRunChips tools={activeTools} />
               <span className="fc-cursor" />
             </div>
@@ -1175,13 +1221,23 @@ function AcpChatInner() {
             >×</button>
           </div>
         )}
+        {draftRecovery && (
+          <div className="fc-draft-notify" role="alert">
+            <span className="fc-draft-notify-text">
+              Your generated {draftRecovery.titles.length === 1 ? "draft is" : "drafts are"} safe in this recovery job, but could not be saved yet.
+            </span>
+            <button type="button" className="fc-draft-notify-open" onClick={saveDraftsAgain} disabled={draftRecovery.saving}>
+              {draftRecovery.saving ? "Saving…" : "Save again"}
+            </button>
+          </div>
+        )}
 
         {/* Document uploads (freestyle) — added to the file + analyzed, not sent inline */}
         {docUploads.length > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
             {docUploads.map((d) => (
               <span
-                key={d.key}
+                key={d.id}
                 style={{
                   display: "inline-flex", alignItems: "center", gap: 6,
                   padding: "4px 10px", borderRadius: 999, fontSize: 12,
@@ -1191,12 +1247,30 @@ function AcpChatInner() {
                 }}
               >
                 <span aria-hidden>{d.status === "error" ? "⚠" : "📄"}</span>
-                {d.fileName}
+                {d.file.name || "document"}
                 <span style={{ opacity: 0.6 }}>
-                  {d.status === "uploading" ? "· adding…" : d.status === "ready" ? "· added to your file" : "· failed"}
+                  {d.status === "queued"
+                    ? "· Waiting until your case is created"
+                    : d.status === "uploading"
+                      ? "· adding…"
+                      : d.status === "ready"
+                        ? "· added to your file"
+                        : "· failed"}
                 </span>
+                {d.status === "error" && caseFileId && (
+                  <button
+                    type="button"
+                    onClick={() => void uploadDoc(d.id, d.file, caseFileId).catch((err) => {
+                      alert(err instanceof Error ? err.message : "Upload failed.");
+                    })}
+                    aria-label={`Retry uploading ${d.file.name || "document"}`}
+                    style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", padding: 0, textDecoration: "underline" }}
+                  >
+                    Retry
+                  </button>
+                )}
                 <button
-                  onClick={() => setDocUploads((prev) => prev.filter((x) => x.key !== d.key))}
+                  onClick={() => setDocUploads((prev) => prev.filter((x) => x.id !== d.id))}
                   aria-label="Dismiss"
                   style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", opacity: 0.7, padding: 0, lineHeight: 1 }}
                 >

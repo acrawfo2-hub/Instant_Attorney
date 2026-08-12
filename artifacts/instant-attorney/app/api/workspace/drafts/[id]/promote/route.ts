@@ -34,6 +34,22 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
 
   // Already promoted? Re-submit the existing document rather than duplicating.
   if (draft.promoted_document_id) {
+    const { data: linked } = await serviceDb.from("documents")
+      .select("id, status, content_json")
+      .eq("id", draft.promoted_document_id).eq("user_id", ctx.userId).maybeSingle();
+    if (linked?.status === "approved" || linked?.status === "delivered") {
+      return NextResponse.json({
+        error: "This version is already approved. Edit the workspace draft to create a new review revision.",
+      }, { status: 409 });
+    }
+    // Idempotent does not mean stale: always copy the editor's latest saved text
+    // before resubmitting (notably after an attorney requests changes).
+    if (linked) {
+      const now = new Date().toISOString();
+      await serviceDb.from("documents").update({
+        title: draft.title, draft_text: draft.content, updated_at: now,
+      }).eq("id", linked.id).eq("user_id", ctx.userId);
+    }
     const doc = await finalizeDocumentSubmission(serviceDb, draft.promoted_document_id, ctx.userId);
     if (doc) return NextResponse.json({ documentId: doc.id, status: doc.status, reused: true });
     // The linked doc vanished — fall through and create a fresh one.
@@ -56,6 +72,23 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     .single();
 
   if (insErr || !inserted) {
+    // A concurrent request may have inserted this exact promotion after our
+    // initial read but before this insert. The DB unique index makes it safe to
+    // recover that winner instead of creating a duplicate or returning a
+    // misleading failure.
+    const { data: winner } = await serviceDb.from("documents").select("id")
+      .eq("user_id", ctx.userId)
+      .contains("content_json", { workspace_draft_id: draft.id })
+      .maybeSingle();
+    if (winner?.id) {
+      const existingDoc = await finalizeDocumentSubmission(serviceDb, winner.id, ctx.userId);
+      if (existingDoc) {
+        await serviceDb.from("client_workspace_drafts")
+          .update({ promoted_document_id: existingDoc.id, updated_at: now })
+          .eq("id", draft.id).eq("user_id", ctx.userId);
+        return NextResponse.json({ documentId: existingDoc.id, status: existingDoc.status, reused: true });
+      }
+    }
     console.error("[workspace/drafts/promote] insert error:", insErr);
     return NextResponse.json({ error: "Could not create the document" }, { status: 500 });
   }

@@ -14,6 +14,7 @@ const VALID_ENGINES = new Set<string>([
   "general_document",
 ]);
 import { coerceWizardType } from "./types.ts";
+import { inferInstrumentKey } from "./instruments/index.ts";
 import { isKnownFormKey } from "./government-forms.ts";
 import { provisionalFormDef, slugifyFormKey } from "./gov-form-lookup.ts";
 import type { DynamicCandidate } from "./gov-form-lookup.ts";
@@ -439,7 +440,12 @@ export function parseDocumentPlan(block: string, prior: PlanEntry[] = []): PlanE
     while (usedKeys.has(key)) key = `${base}_${n++}`;
     usedKeys.add(key);
 
-    entries.push({ key, title, engine, rationale });
+    // A fourth column may name a curated profile. Otherwise derive a durable
+    // instrument identity from the title (not from the shared engine).
+    const instrument_key = parts[3]?.toLowerCase().replace(/[^a-z0-9_]/g, "")
+      || priorEntry?.instrument_key
+      || inferInstrumentKey(title, engine);
+    entries.push({ key, title, engine, instrument_key, rationale });
   }
 
   return entries;

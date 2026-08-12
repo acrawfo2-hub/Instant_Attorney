@@ -10278,6 +10278,13 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
   color: var(--brand-text-dk);
 }
 .cdt-sub { margin-top: 3px; font-size: 12.5px; color: var(--brand-text-lt); line-height: 1.45; }
+.cdt-updated {
+  display: inline-block;
+  margin-top: 5px;
+  color: var(--brand-success, #39735b);
+  font-size: 11.5px;
+  font-weight: 600;
+}
 .cdt-draft-progress {
   display: flex;
   align-items: center;
@@ -11334,3 +11341,11 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
   .lf-client-memo-section:last-child { border-bottom: 0; }
   .lf-client-detail { grid-template-columns: 1fr; }
 }
+/* Durable per-document generation cards (chat panel + case file). */
+.draft-job-list { display: grid; gap: 8px; padding: 10px; border-bottom: 1px solid rgba(148,163,184,.25); }
+.draft-job-card { display: grid; grid-template-columns: 1fr auto; gap: 3px 10px; padding: 10px; border: 1px solid rgba(148,163,184,.35); border-radius: 8px; }
+.draft-job-card span, .draft-job-card small { color: #94a3b8; }
+.draft-job-card small { grid-column: 1 / -1; }
+.draft-job-card button { grid-column: 2; grid-row: 2; font-size: 12px; }
+.draft-job-error, .draft-job-failed .cdt-draft-progress-text { color: #b91c1c !important; }
+.cdt-draft-jobs { display: grid; gap: 8px; }
