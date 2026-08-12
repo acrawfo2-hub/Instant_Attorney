@@ -11334,3 +11334,9 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
   .lf-client-memo-section:last-child { border-bottom: 0; }
   .lf-client-detail { grid-template-columns: 1fr; }
 }
+
+/* Independently addressable document QA workbench (schema-stage48). */
+.arr-qa-controls { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.arr-check-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.45rem 0.8rem; margin: 1rem 0; }
+.arr-check-option { display: flex; align-items: center; gap: 0.45rem; color: #334155; font-size: 0.86rem; text-transform: capitalize; }
+.arr-check-option input { accent-color: #1d4ed8; }

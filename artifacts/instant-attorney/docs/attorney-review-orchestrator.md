@@ -4,7 +4,7 @@ Living spec for moving the attorney document-review flow from a fixed button
 "rail" to an orchestrator-driven, auto-running pipeline that produces structured,
 individually-actionable artifacts and hard QA guarantees.
 
-Status: **Phases 1–2 landed.** This document is the reference for the whole
+Status: **Phases 1–2 and independently addressable QA checks landed.** This document is the reference for the whole
 multi-phase build; each phase ships independently.
 
 ---
@@ -108,6 +108,18 @@ idempotent (replace children + improvements for the run).
 3. **Structured memo + client email (send in-app).** ← next
 4. **One-click questions loop.**
 5. **Formatting/court-requirements gate + side-by-side diff workspace.**
+
+### Structured QA checks (schema-stage48)
+
+The active `second_draft` revision can now be checked independently for factual
+consistency, completeness, defined terms/cross-references, blanks/execution,
+formatting/court requirements, client comprehension, and authorities. Findings
+record type, severity, location, evidence, disposition, and revision. Clean check
+runs are recorded separately so **Re-run affected** also works when a prior check
+had no findings. Curated formatting standards are preferred; missing registry
+coverage invokes official-source web search and is explicitly reported as
+unvalidated when the controlling rule cannot be established. Automated results
+and reasoned attorney waivers remain distinct audit events.
 
 ### Phase 2 as built (Authorities gate, schema-stage45)
 
