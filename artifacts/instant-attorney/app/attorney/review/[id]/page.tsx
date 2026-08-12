@@ -143,7 +143,10 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
   // document, distinct from the one-shot critical-review/second-draft pipeline
   // above. Ephemeral — a refresh reloads the persisted draft text, not the
   // conversation, same as the client wizard's equivalent chat.
+  // #124: the partner thread is persisted server-side, so a reload restores it
+  // rather than dropping the attorney's conversation.
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatHistoryLoading, setChatHistoryLoading] = useState(true);
   const [chatInput, setChatInput] = useState("");
   const [chatSending, setChatSending] = useState(false);
   const [chatError, setChatError] = useState("");
@@ -189,6 +192,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
     load();
     loadReviewRun({ allowAutoStart: true });
     loadDeliveryDraft();
+    loadPartnerMessages();
     loadRevisions();
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
@@ -235,6 +239,17 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
     revisionRef.current = text; setRevisionText(text); dirtyRef.current = true; setSaveState("dirty");
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => void saveRevision(), 900);
+  }
+
+  async function loadPartnerMessages() {
+    try {
+      const res = await fetch(`/api/attorney/documents/${id}/chat-edit`);
+      if (!res.ok) return;
+      const data = await res.json() as { messages: Array<{ role: "user" | "assistant"; content: string }> };
+      setChatMessages(data.messages.map((m) => ({ role: m.role, content: m.content })));
+    } finally {
+      setChatHistoryLoading(false);
+    }
   }
 
   async function loadRevisions() {
@@ -995,7 +1010,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
             </div>
             <div className={`review-collapsible-column review-partner-column${collapsed.partner ? " is-collapsed" : ""}`}>
               <button type="button" className="review-pane-toggle" onClick={() => setCollapsed((value) => ({ ...value, partner: !value.partner }))}>{collapsed.partner ? "Show AI partner" : "Hide AI partner"}</button>
-              {!collapsed.partner && <ReviewPartnerChat messages={chatMessages} input={chatInput} sending={chatSending} disabled={isMerging} error={chatError} onInput={setChatInput} onSend={sendChatEdit} />}
+              {!collapsed.partner && <ReviewPartnerChat messages={chatMessages} input={chatInput} sending={chatSending} disabled={isMerging || chatHistoryLoading} error={chatError} onInput={setChatInput} onSend={sendChatEdit} />}
             </div>
           </div>
           <div className="atty-comments-workspace">
