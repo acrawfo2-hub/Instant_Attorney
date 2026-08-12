@@ -31,6 +31,7 @@ export const NEXT_OWNED_API_PREFIXES: readonly string[] = [
   "/api/chat",
   "/api/chat-acp",
   "/api/consult",
+  "/api/document-jobs",
   "/api/documents",
   "/api/dropbox-sign",
   "/api/family",
