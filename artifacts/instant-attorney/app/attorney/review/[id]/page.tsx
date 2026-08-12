@@ -18,6 +18,17 @@ interface ChatMessage {
   content: string;
 }
 
+interface DocumentRevision {
+  id: string;
+  parent_revision_id: string | null;
+  content: string;
+  title: string;
+  author_type: "client" | "attorney" | "ai" | "system";
+  source_action: string;
+  summary: string;
+  created_at: string;
+}
+
 interface DocumentDetail {
   id: string;
   title: string;
@@ -132,7 +143,10 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
   // document, distinct from the one-shot critical-review/second-draft pipeline
   // above. Ephemeral — a refresh reloads the persisted draft text, not the
   // conversation, same as the client wizard's equivalent chat.
+  // #124: the partner thread is persisted server-side, so a reload restores it
+  // rather than dropping the attorney's conversation.
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatHistoryLoading, setChatHistoryLoading] = useState(true);
   const [chatInput, setChatInput] = useState("");
   const [chatSending, setChatSending] = useState(false);
   const [chatError, setChatError] = useState("");
@@ -165,6 +179,10 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
   const [deliveryDraft, setDeliveryDraft] = useState<DocumentDeliveryDraft | null>(null);
   const [deliveryBusy, setDeliveryBusy] = useState<"save" | "send" | "approve-send" | null>(null);
   const [deliveryStatus, setDeliveryStatus] = useState("");
+  const [revisions, setRevisions] = useState<DocumentRevision[]>([]);
+  const [selectedRevisionId, setSelectedRevisionId] = useState("");
+  const [compareMode, setCompareMode] = useState<"submitted" | "previous">("previous");
+  const [revisionBusy, setRevisionBusy] = useState(false);
   const runStartedRef = useRef(false);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -174,6 +192,8 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
     load();
     loadReviewRun({ allowAutoStart: true });
     loadDeliveryDraft();
+    loadPartnerMessages();
+    loadRevisions();
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
       if (runPollRef.current) clearInterval(runPollRef.current);
@@ -219,6 +239,38 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
     revisionRef.current = text; setRevisionText(text); dirtyRef.current = true; setSaveState("dirty");
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => void saveRevision(), 900);
+  }
+
+  async function loadPartnerMessages() {
+    try {
+      const res = await fetch(`/api/attorney/documents/${id}/chat-edit`);
+      if (!res.ok) return;
+      const data = await res.json() as { messages: Array<{ role: "user" | "assistant"; content: string }> };
+      setChatMessages(data.messages.map((m) => ({ role: m.role, content: m.content })));
+    } finally {
+      setChatHistoryLoading(false);
+    }
+  }
+
+  async function loadRevisions() {
+    const res = await fetch(`/api/attorney/documents/${id}/revisions`);
+    if (!res.ok) return;
+    const data = await res.json() as { revisions: DocumentRevision[] };
+    setRevisions(data.revisions);
+    setSelectedRevisionId((current) => current || data.revisions[0]?.id || "");
+  }
+
+  async function revisionAction(action: "restore" | "branch") {
+    if (!selectedRevisionId || revisionBusy) return;
+    setRevisionBusy(true);
+    const res = await fetch(`/api/attorney/documents/${id}/revisions`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ revisionId: selectedRevisionId, action }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) setError(data.error ?? "Revision operation failed");
+    else { await Promise.all([load(), loadRevisions()]); }
+    setRevisionBusy(false);
   }
 
   // Read the orchestrator run + structured improvements. On first load, if the
@@ -661,6 +713,11 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
   const reviewText = criticalReview?.draft_text ?? doc.review_report;
   const isReviewing = doc.review_status === "reviewing" || (aiRunning && !generatingSecondDraft);
   const isMerging = doc.review_status === "merging" || generatingSecondDraft;
+  const selectedRevision = revisions.find((revision) => revision.id === selectedRevisionId);
+  const selectedIndex = revisions.findIndex((revision) => revision.id === selectedRevisionId);
+  const comparisonRevision = compareMode === "submitted"
+    ? [...revisions].reverse().find((revision) => revision.source_action === "client_submitted")
+    : revisions[selectedIndex + 1];
 
   return (
     <div className="atty-review-shell">
@@ -708,6 +765,34 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
           {!collapsed.context && <ReviewCoverSheet documentId={id} fallbackCaseFileId={doc.case_files.id} />}
         </div>
         <div className="atty-review-content">
+          <section className="arr-panel" aria-label="Revision history">
+            <div className="arr-head">
+              <div>
+                <strong>Revision history</strong>
+                <p className="atty-standalone-doc-sub">Immutable checkpoints; editor autosaves stay in the working buffer.</p>
+              </div>
+              <select value={selectedRevisionId} onChange={(event) => setSelectedRevisionId(event.target.value)} aria-label="Select revision">
+                {revisions.map((revision) => <option key={revision.id} value={revision.id}>
+                  {new Date(revision.created_at).toLocaleString()} · {revision.source_action.replace(/_/g, " ")} · {revision.author_type}
+                </option>)}
+              </select>
+            </div>
+            {selectedRevision && <>
+              <p>{selectedRevision.summary || selectedRevision.title}</p>
+              <div className="arr-cite-actions">
+                <button type="button" className="atty-btn" onClick={() => setCompareMode("submitted")}>Compare with submitted</button>
+                <button type="button" className="atty-btn" onClick={() => setCompareMode("previous")}>Compare with previous</button>
+                <button type="button" className="atty-btn" disabled={revisionBusy} onClick={() => revisionAction("restore")}>Restore as new revision</button>
+                <button type="button" className="atty-btn" disabled={revisionBusy} onClick={() => revisionAction("branch")}>Branch from this revision</button>
+              </div>
+              <div className="atty-two-doc-grid" style={{ marginTop: 16 }}>
+                <div><h3>Selected</h3><pre className="atty-review-preformatted">{selectedRevision.content}</pre></div>
+                <div><h3>{compareMode === "submitted" ? "Submitted original" : "Previous revision"}</h3>
+                  <pre className="atty-review-preformatted">{comparisonRevision?.content ?? "No comparison revision available."}</pre></div>
+              </div>
+            </>}
+            {!revisions.length && <p>No checkpoints yet. The submitted original is created when Stage 48 is deployed.</p>}
+          </section>
           {/* Orchestrator auto-review (schema-stage44): live run status + the
               structured improvements it produced. */}
           {reviewRun && (
@@ -925,7 +1010,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
             </div>
             <div className={`review-collapsible-column review-partner-column${collapsed.partner ? " is-collapsed" : ""}`}>
               <button type="button" className="review-pane-toggle" onClick={() => setCollapsed((value) => ({ ...value, partner: !value.partner }))}>{collapsed.partner ? "Show AI partner" : "Hide AI partner"}</button>
-              {!collapsed.partner && <ReviewPartnerChat messages={chatMessages} input={chatInput} sending={chatSending} disabled={isMerging} error={chatError} onInput={setChatInput} onSend={sendChatEdit} />}
+              {!collapsed.partner && <ReviewPartnerChat messages={chatMessages} input={chatInput} sending={chatSending} disabled={isMerging || chatHistoryLoading} error={chatError} onInput={setChatInput} onSend={sendChatEdit} />}
             </div>
           </div>
           <div className="atty-comments-workspace">

@@ -230,6 +230,23 @@ export async function runDocumentReview(runId: string): Promise<void> {
       await upsertSecondDraftChild(db, parentDoc, sourceText, "Working copy created; no proposed improvements applied.");
     }
 
+    // #129: pin the exact bytes this run evaluated to an immutable revision,
+    // so QA findings stay attributable to content that cannot move underneath
+    // them. #129 recorded a before/after pair around an orchestrator rewrite;
+    // #127 removed that rewrite (findings are proposals now), so there is only
+    // one snapshot to pin — the accepted working revision QA actually reads.
+    const { data: evaluatedRevision } = await db.from("document_revisions").insert({
+      document_id: documentId,
+      content: sourceText,
+      title: parentDoc.title,
+      author_type: "system",
+      source_action: "orchestrator_rewrite_before",
+      summary: `Working revision evaluated by review run ${runId}`,
+    }).select("id").single();
+    if (evaluatedRevision) {
+      await db.from("document_review_runs").update({ revision_id: evaluatedRevision.id }).eq("id", runId);
+    }
+
     // Phase 3 (#130): persist a structured memo and a client-facing delivery
     // draft against this run's revision. Kept, but detached from #130's
     // regenerate step below — the memo describes the improvements, not a
