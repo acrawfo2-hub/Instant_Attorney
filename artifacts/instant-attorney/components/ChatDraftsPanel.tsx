@@ -326,7 +326,7 @@ export default function ChatDraftsPanel({
                 {viewMode === "preview" ? "Edit" : "Preview"}
               </button>
               <span className="fs-draft-save-state">{saving ? "Saving…" : dirty ? "Unsaved" : "Saved"}</span>
-              <a className="fs-draft-dl" href={`/api/workspace/drafts/${active.id}/download`} title="Download as Word document">Download</a>
+              <a className="fs-draft-dl" href={`/api/workspace/drafts/${active.id}/download`} title="Download as Word document">Download Word (.docx)</a>
               <button type="button" className="fs-draft-del" onClick={() => remove(active.id)} title="Delete draft">Delete</button>
             </div>
           </div>
