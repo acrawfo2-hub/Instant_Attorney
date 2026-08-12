@@ -60,7 +60,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
   const consultationUrl = draft.consultation_enabled ? draft.consultation_url : null;
   const fileName = `${ctx.doc.title} - approved.docx`;
-  const { data: delivery, error: insertError } = await ctx.db.from("document_deliveries").insert({
+  const { data: delivery, error: insertError } = await ctx.db.from("document_delivery_sends").insert({
     document_id: id, revision_document_id: draft.revision_document_id, case_file_id: ctx.doc.case_file_id,
     user_id: ctx.doc.user_id, sent_by: ctx.user.id, recipient: ctx.doc.profiles.email,
     subject: draft.subject, body: draft.body, consultation_url: consultationUrl, attachment_file_name: fileName, sent_at: now,
