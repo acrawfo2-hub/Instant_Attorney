@@ -22,6 +22,7 @@ import { maxOutputTokensFor, limitSignalMetadata } from "@/lib/token-limits";
 import { BYPASS_USER_ID } from "@/lib/types";
 import type { CaseFile, FactItem, Attachment, RequestedAttachment, CounselEngagementGoal } from "@/lib/types";
 import { buildCounselContextPatch, persistCounselContext } from "@/lib/existing-counsel-persist";
+import { resolveMatter } from "@/lib/matter-routing";
 import {
   jurisdictionFromCaseFileText,
   normalizeStateCode,
@@ -127,40 +128,18 @@ export async function POST(req: NextRequest) {
   const profileHomeState = normalizeStateCode(homeStateRow?.home_state ?? null);
   const preferredAiProvider = parseAiProvider(homeStateRow?.preferred_ai_provider);
 
-  if (!resolvedCaseFileId) {
-    const { data: existing } = await db
-      .from("case_files")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("status", "open")
-      .order("opened_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (existing) {
-      resolvedCaseFileId = existing.id;
-    } else {
-      const newFileData: Record<string, unknown> = { user_id: userId };
-      if (fileType === "quick_consult") {
-        newFileData.file_type = "quick_consult";
-        newFileData.archive_at = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-      }
-      if (profileHomeState && profileHomeState !== "OTHER") {
-        newFileData.jurisdiction = stateName(profileHomeState);
-      } else if (profileHomeState === "OTHER") {
-        newFileData.jurisdiction = "Outside the United States";
-      }
-      const { data: created, error } = await db
-        .from("case_files")
-        .insert(newFileData)
-        .select("id")
-        .single();
-      if (error || !created) {
-        return NextResponse.json({ error: "Failed to create case file" }, { status: 500 });
-      }
-      resolvedCaseFileId = created.id;
-    }
+  // Which matter this turn belongs to — the one place that decides. An explicit
+  // caseFileId is verified and used; no caseFileId opens a new matter. It never
+  // falls back to the client's most recent file. See lib/matter-routing.ts.
+  const routed = await resolveMatter(db, userId, {
+    caseFileId: resolvedCaseFileId || undefined,
+    fileType,
+    homeState: homeStateRow?.home_state ?? null,
+  });
+  if (!routed.ok) {
+    return NextResponse.json({ error: routed.error }, { status: routed.status });
   }
+  resolvedCaseFileId = routed.caseFileId;
 
   // Apply counsel intake from the pre-chat modal when the file has not recorded it yet.
   if (counselContext && resolvedCaseFileId) {

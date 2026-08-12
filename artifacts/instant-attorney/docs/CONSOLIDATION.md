@@ -108,8 +108,8 @@ routing guards by removing the second service that made shadowing possible.
 | 0 | Write down the intent — `ARCHITECTURE.md`, `CLAUDE.md` | done |
 | 1 | One write path for document text — `saveDocumentRevision` + writer guard | done |
 | 2 | Delete the second architecture and the guardrail it required | done |
-| 3 | One matter routing decision — fixes the defect above | next |
-| 4 | One guidance result — `CaseGuidance`; retire the roadmap spine | |
+| 3 | One matter routing decision — fixes the defect above | done |
+| 4 | One guidance result — `CaseGuidance`; retire the roadmap spine | next |
 | 5 | One drafting surface — orchestrator meets the completion contract | |
 | 6 | One attorney workbench — one associate, one thread, one accept gate | |
 | 7 | Remove the retired `pre_warmed` state | |

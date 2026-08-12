@@ -134,6 +134,53 @@ draft. Verifying an auto-rewrite certifies text nobody approved.
 Updated on every input, as the product promises. The client-facing surface is
 the case memo and the tile map in `components/ClientFileView.tsx`.
 
+## Which matter — the routing decision
+
+**`lib/matter-routing.ts` decides which `case_files` row a piece of work belongs
+to, and it is the only thing that decides.**
+
+A client can have many matters at once. That has always been true — `user_id` is
+one-to-many, ten active per client, and every document, message, fact,
+attachment and job keys off `case_file_id`. What was missing was an owner for
+"which one is this?", so `chat-acp` answered it by taking the most recently
+opened file. A client with an open will matter who pressed the dashboard's own
+"Start another case" button was attached to the will — the button did the
+opposite of its label — and everything they said about the new problem was
+extracted into the wrong Living File.
+
+There is no default now:
+
+| Caller | Result |
+|---|---|
+| passes `caseFileId` | that matter, after ownership is verified |
+| passes nothing | a **new** matter |
+
+Bare `/chat` means *new*, because every resume path in the UI passes an id —
+`/dashboard/[id]`, the case cards, the attorney client list, the drafts table.
+Ownership is checked here rather than left to RLS: RLS refuses by returning no
+rows, which reads downstream as "a matter with no facts" rather than as a
+refusal.
+
+`matter-routing.test.ts` fails any file in `app/`, `lib/` or `components/` that
+pairs `order("opened_at")` with `limit(1)` — the signature of picking a working
+matter by recency. Listing matters for the switcher orders the same way but
+takes all of them, which is why the pair is what the guard looks for. Do not add
+a file to an allowlist to make it pass.
+
+The client's second matter is also a product action, not just navigation: the
+`open_new_matter` orchestrator tool opens a separate file when the client
+confirms one is warranted. Like `record_fact`, it must **ask first** — and it
+must ask *before* exploring the new problem, because anything said first lands
+in the current file.
+
+> **Known gap.** Asking early is prompt guidance, not an enforced boundary. If
+> the client volunteers a paragraph about the new matter before the assistant
+> can ask, `parseAndUpdateFile` still extracts it into the current file. Closing
+> that needs the case-event boundary in `CONSOLIDATION.md`, which is
+> deliberately deferred. The routing seam and the tool remove the silent,
+> systematic version of this bug; they do not make cross-matter contamination
+> impossible.
+
 ## Database
 
 Migrations live in `supabase/`, named `schema-stageNN-<topic>.sql`. Several
@@ -168,10 +215,6 @@ Tracked so nobody "fixes" it twice, and so nobody adds to it. The order of
 removal and the reasoning behind it are in **`CONSOLIDATION.md`** — read that
 before starting on any entry here.
 
-- **Matter routing has no owner.** `app/api/chat-acp/route.ts` resolves a turn
-  with no `caseFileId` by taking the most recently opened file. A client with
-  two matters can have facts from one extracted into the other, silently. Being
-  fixed next; do not add another entry point that picks a case file by recency.
 - **Four modules compute "what next"** — `lib/next-step.ts`,
   `lib/mission-control.ts`, `lib/file-deck.ts`, and the roadmap engines. They can
   disagree. Collapsing into one `CaseGuidance` result.
