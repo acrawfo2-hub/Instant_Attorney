@@ -109,26 +109,47 @@ routing guards by removing the second service that made shadowing possible.
 | 1 | One write path for document text — `saveDocumentRevision` + writer guard | done |
 | 2 | Delete the second architecture and the guardrail it required | done |
 | 3 | One matter routing decision — fixes the defect above | done |
-| 4 | One guidance result — `CaseGuidance`; retire the roadmap spine | next |
-| 5 | One drafting surface — orchestrator meets the completion contract | |
+| 4 | Retire the roadmap spine; confirm the guidance chain | done |
+| 5 | One drafting surface — orchestrator meets the completion contract | next |
 | 6 | One attorney workbench — one associate, one thread, one accept gate | |
 | 7 | Remove the retired `pre_warmed` state | |
 
-### Chunk 4 — one guidance result
+### Chunk 4 — what it turned out to be
 
-`next-step.ts` (466), `mission-control.ts` (438), `file-deck.ts` (530) and the
-now-deleted `case-cta.ts` all answered "where is this client and what do they do
-next," and could disagree. Collapse to one `CaseGuidance` result — standing, one
-recommended action, blockers, active jobs, documents awaiting someone. Several
-components may render it; none may compute it.
+Planned as "collapse four competing guidance engines into one `CaseGuidance`
+result, and retire the roadmap spine." Half of that was right.
 
-The roadmap subsystem (25 `lib/*-roadmap*` modules, 10 components, 2 routes)
-goes with it: it is a second spine answering the same question. Deterministic
-legal sequencing worth keeping moves behind a consult-brief adapter.
+**The roadmap was a competing spine, and was already unreachable.** `RoadmapSpine`
+had no importer; it was the only thing importing the other panels and the only
+caller of both `/api/roadmap/*` routes. The dashboard still queried
+`roadmap_snapshots` on every file load and passed an overlay `ClientFileView`
+accepted, defaulted, and never read. Deleted, along with six other orphaned
+components and the `/api/assess-matter` route that only one of them called. The
+roadmap *lib* layer stays: `consult-brief.ts` and `consult-fee-estimate.ts` use
+it for legal sequencing, which is the internal-adapter disposition the audit
+proposed.
 
-*Deletion test:* if removing the roadmap panels does not prevent drafting,
-document access, editing, submission, attorney review, or Living File updates, it
-was not kernel.
+**The remaining "four engines" were one chain.** `next-step → mission-control →
+matter-tasks → file-deck`, each layer consuming the one below, read by two
+surfaces at different heights — the client deck and the attorney board. They
+cannot disagree. No `CaseGuidance` rewrite was done, because there was no defect
+that rewriting would fix, and replacing a working pipeline with a new abstraction
+is the exact change this codebase keeps being damaged by. See "The guidance
+chain" in `ARCHITECTURE.md`.
+
+Two real defects surfaced while establishing that, and were fixed:
+
+* the Document Review gate — "stays locked until the client has brought in a
+  document" — was applied only to the attorney's board, not to the client task
+  view it was written for;
+* the attorney board was computed on every *client* file load, above the early
+  return that discards it.
+
+**The lesson, for the chunks still queued:** the audit's file-level counts marked
+the right places to look and were wrong about what was there. Verify the
+duplication before consolidating it. Twice now the honest finding has been "this
+is already dead" or "this is already one thing," and both were cheaper and safer
+outcomes than the rewrite that was planned.
 
 ### Chunk 5 — one drafting surface
 

@@ -142,45 +142,6 @@ export default function ClientFileView({
   const isAttorney = mode === "attorney";
   const chatHref = `/chat?caseFileId=${caseFile.id}`;
 
-  // The consumer file's single live block. Computed server-side from the
-  // deterministic task view (Mission Control + finalized records), so "Where
-  // things stand" renders instantly — no button, no per-view model call. The
-  // orchestrator keeps the underlying facts/documents current; this reads them.
-  const matterTasks = !isAttorney
-    ? buildMatterTasks({
-        caseFile,
-        facts,
-        documents,
-        requestedAttachments,
-        govForms,
-        attachments,
-        mode: "client",
-      })
-    : null;
-
-  // Everything the client-side layout renders above the fold, distilled from the
-  // same rows the sections below display in full. Pure — see lib/file-deck.ts.
-  const deck = matterTasks
-    ? buildFileDeck({
-        caseFile,
-        facts,
-        tasks: matterTasks,
-        documents,
-        childDocuments,
-        workspaceDrafts,
-        attachments,
-        requestedAttachments,
-        govForms,
-        consultRequest,
-      })
-    : null;
-
-  const hasActiveConsult =
-    Boolean(consultRequest) &&
-    consultRequest?.status !== "cancelled" &&
-    consultRequest?.status !== "completed";
-  const consultAction = getConsultAction(consultRequest, hasConsultSub);
-
   // The client has "brought in a document" once at least one upload exists that
   // didn't fail to store. Document Review only makes sense against a real
   // uploaded document, so it stays locked until then.
@@ -201,17 +162,44 @@ export default function ClientFileView({
           },
         };
 
-  const missionBoard = computeMissionControl({
-    caseFile: gatedCaseFile,
-    documents,
-    facts,
-    requestedAttachments,
-    govForms,
-    mode,
-    consultClientActions: completedConsultWrapUp?.clientActions ?? [],
-    recommendConsult: Boolean(strategy?.recommend_consult) && !hasActiveConsult,
-    hasConsultSub,
-  });
+  // The consumer file's single live block. Computed server-side from the
+  // deterministic task view (Mission Control + finalized records), so "Where
+  // things stand" renders instantly — no button, no per-view model call. The
+  // orchestrator keeps the underlying facts/documents current; this reads them.
+  const matterTasks = !isAttorney
+    ? buildMatterTasks({
+        caseFile: gatedCaseFile,
+        facts,
+        documents,
+        requestedAttachments,
+        govForms,
+        attachments,
+        mode: "client",
+      })
+    : null;
+
+  // Everything the client-side layout renders above the fold, distilled from the
+  // same rows the sections below display in full. Pure — see lib/file-deck.ts.
+  const deck = matterTasks
+    ? buildFileDeck({
+        caseFile: gatedCaseFile,
+        facts,
+        tasks: matterTasks,
+        documents,
+        childDocuments,
+        workspaceDrafts,
+        attachments,
+        requestedAttachments,
+        govForms,
+        consultRequest,
+      })
+    : null;
+
+  const hasActiveConsult =
+    Boolean(consultRequest) &&
+    consultRequest?.status !== "cancelled" &&
+    consultRequest?.status !== "completed";
+  const consultAction = getConsultAction(consultRequest, hasConsultSub);
 
   // ── Shared blocks ──────────────────────────────────────────────────────────
   // Built once, placed differently by each layout. Kept as consts (not inlined)
@@ -547,6 +535,21 @@ export default function ClientFileView({
   }
 
   // ── Attorney layout — the full reference stack ─────────────────────────────
+
+  // The attorney's entry point into the same guidance chain the client deck
+  // reads through buildMatterTasks. Computed here, below the client return, so
+  // a client file load no longer builds a board nothing renders.
+  const missionBoard = computeMissionControl({
+    caseFile: gatedCaseFile,
+    documents,
+    facts,
+    requestedAttachments,
+    govForms,
+    mode,
+    consultClientActions: completedConsultWrapUp?.clientActions ?? [],
+    recommendConsult: Boolean(strategy?.recommend_consult) && !hasActiveConsult,
+    hasConsultSub,
+  });
 
   return (
     <div className="lf-grid">

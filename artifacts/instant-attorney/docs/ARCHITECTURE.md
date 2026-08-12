@@ -134,6 +134,41 @@ draft. Verifying an auto-rewrite certifies text nobody approved.
 Updated on every input, as the product promises. The client-facing surface is
 the case memo and the tile map in `components/ClientFileView.tsx`.
 
+## The guidance chain — "what should this client do next?"
+
+One chain answers it. Each layer consumes the one below, so they cannot
+disagree:
+
+```
+lib/next-step.ts        computeNextStep         the hero action
+  ↓                     mission-control is its only caller
+lib/mission-control.ts  computeMissionControl   the ranked board
+  ↓                     matter-tasks wraps the board
+lib/matter-tasks.ts     buildMatterTasks        doable-now / blocked buckets
+  ↓                     file-deck ranks the tasks
+lib/file-deck.ts        buildFileDeck           tiles, pressing deadline, memo
+```
+
+Two surfaces read it at different heights, because they serve different people:
+
+| Reader | Enters at | Renders |
+|---|---|---|
+| client — `ClientFileView`, and the chat rail via `/api/case-files/[id]/deck` | `buildFileDeck` | tiles, case hub, memo |
+| attorney — `ClientFileView`'s second layout | `computeMissionControl` | `MissionControlBoard` |
+
+That is one engine with two presentations, which is the target shape. **It was
+not rewritten into a `CaseGuidance` result**, because there was no defect to fix
+by doing so — the consolidation audit had read these as four peers that could
+disagree. Two of the four were real and are gone: `case-cta.ts` was orphaned
+(deleted in chunk 2), and the roadmap was a genuinely competing spine that turned
+out to be unreachable (deleted in chunk 4a). What remained was already a
+pipeline. Rewriting a working pipeline for the shape of it is the change this
+codebase keeps being damaged by.
+
+`guidance-chain.test.ts` pins two things: `computeNextStep` has exactly one
+caller, so a new surface cannot grow a second opinion about the next action; and
+no layer imports one above it, so the chain only ever reaches downward.
+
 ## Which matter — the routing decision
 
 **`lib/matter-routing.ts` decides which `case_files` row a piece of work belongs
@@ -215,9 +250,8 @@ Tracked so nobody "fixes" it twice, and so nobody adds to it. The order of
 removal and the reasoning behind it are in **`CONSOLIDATION.md`** — read that
 before starting on any entry here.
 
-- **Four modules compute "what next"** — `lib/next-step.ts`,
-  `lib/mission-control.ts`, `lib/file-deck.ts`, and the roadmap engines. They can
-  disagree. Collapsing into one `CaseGuidance` result.
+- ~~Four modules compute "what next"~~ — **investigated and not true.** See
+  "The guidance chain" below. The two real problems it described are gone.
 - **Two client drafting journeys** — `app/wizard/[type]/page.tsx` and the
   orchestrator. The *page* retires; `app/api/wizard/route.ts` is the generation
   engine and stays. See CONSOLIDATION.md before touching either.
