@@ -32,7 +32,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   try {
     // The shared renderer converts the draft's Markdown structure into native
     // Word headings, paragraphs, lists, and highlighted placeholder runs.
-    buffer = await generateDocxFromText(title, draft.content, null);
+    //
+    // #113 reshaped this signature around layout profiles, and #109 branched
+    // before that. "correspondence" is the right profile for a workspace
+    // draft: it is client-authored freestyle text with no doc_type to derive a
+    // formal instrument layout from, and it must not be dressed as a pleading
+    // or estate instrument. Status stays null so the pre-approval watermark
+    // still applies — nothing here has been through attorney review.
+    buffer = await generateDocxFromText(title, draft.content, "correspondence", null, null);
   } catch (error) {
     console.error("[workspace/drafts/download] docx generation error:", error);
     return NextResponse.json({ error: "Could not build the document file" }, { status: 500 });

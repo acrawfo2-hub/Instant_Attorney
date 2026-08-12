@@ -13,7 +13,10 @@ import {
   WidthType,
 } from "docx";
 import type { CaseFile, DocumentStatus, FactItem, Profile, WizardType } from "./types";
-import { placeholderFields } from "./wizard-parsing";
+// Explicit extension: this is a value import, so it is resolved at runtime by
+// node --test, which does not infer ".ts". The type-only import above is erased
+// before resolution and so never hit this.
+import { placeholderFields } from "./wizard-parsing.ts";
 import { isFullDepthState, jurisdictionFromCaseFileText, prepModeWatermarkDetail } from "./jurisdiction.ts";
 import { DOCUMENT_PROFILES, draftTextToDocumentModel, renderDocumentModel } from "./doc-layout.ts";
 import type { DocumentProfileName } from "./doc-layout.ts";
