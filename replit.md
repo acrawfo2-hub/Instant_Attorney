@@ -29,11 +29,8 @@ npm test             # node:test unit suite — 661 tests
 npm run test:playwright   # P0 browser tests
 ```
 
-Workspace-level (the other artifacts, which use pnpm):
-
-- `pnpm run typecheck` — typechecks the pnpm packages **only**; does not cover
-  instant-attorney
-- `pnpm --filter @workspace/api-server run dev` — API server (port 5000)
+instant-attorney is the only artifact. `pnpm run typecheck` at the root covers
+the `scripts` package only; it does not touch instant-attorney.
 
 Required env for instant-attorney: `NEXT_PUBLIC_SUPABASE_URL`,
 `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
@@ -48,11 +45,13 @@ it there regardless). Set `ADMIN_EMAILS` so admin break-glass works.
   TypeScript 5.9, Tailwind 3, **npm**. Data via **Supabase** (Postgres + RLS +
   Storage) accessed directly with `@supabase/supabase-js` — *not* Drizzle. AI via
   `@anthropic-ai/sdk` (`claude-sonnet-4-6`), always streamed.
-- **api-server**: Express 5 scaffold, Drizzle + Postgres, pnpm workspace. Owns
-  the `/api` path prefix in the proxy (see Gotchas).
-- **mockup-sandbox**: Vite + React design sandbox, not user-facing.
-- **lib/**: shared pnpm packages (`api-spec`, `api-zod`, `api-client-react`,
-  `db`) used by api-server, not by instant-attorney.
+
+instant-attorney is the whole product. There is no second stack: an Express
+`api-server` (Drizzle + Postgres), a `mockup-sandbox`, and shared `lib/*`
+packages (`api-spec`, `api-zod`, `api-client-react`, `db`) used to sit beside
+it. Nothing in the product imported any of them and api-server served one route
+(`GET /api/healthz`), so they were deleted rather than maintained as a second
+architectural option.
 
 ## Where things live
 
@@ -98,11 +97,14 @@ it there regardless). Set `ADMIN_EMAILS` so admin break-glass works.
 
 - **npm, not pnpm, inside `artifacts/instant-attorney`.** It has its own
   `package-lock.json`, which is what the Replit publish build resolves from.
-- **`/api/*` routing is path-ownership based.** The Express api-server owns
-  `/api`. Any `/api/<x>` **not** listed in
-  `artifacts/instant-attorney/.replit-artifact/artifact.toml` → `paths` silently
-  falls through to Express (tell-tale: `X-Powered-By: Express`). Add new API
-  prefixes there **via the artifacts skill**, not by hand-editing the TOML.
+- **`/api/*` no longer needs registering — keep it that way.** This app owns
+  `/` outright in `.replit-artifact/artifact.toml`, so a new route under
+  `app/api/` just works. That is new: the Express api-server used to own bare
+  `/api`, and because the proxy matches most-specific-first, any prefix missing
+  from that TOML's `paths` silently fell through to Express and 404'd while
+  typecheck and tests stayed green. It bit four prefixes before the server was
+  deleted. Adding a second service to this artifact reintroduces the whole
+  failure mode and needs the path enumeration and its guard test back.
 - **Unapplied Supabase migrations fail silently** with PGRST205 — writes look
   like they succeeded. Verify with `supabase/schema-verify.sql` **and**
   `supabase/schema-verify-stage38-45.sql` (the latter covers every

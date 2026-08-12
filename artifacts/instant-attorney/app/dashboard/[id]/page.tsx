@@ -174,10 +174,11 @@ export default async function FileDetailPage({
 
   const { caseFile, facts, documents, childDocuments, consultRequest, hasConsultSub, completedConsultWrapUp, completedConsultSubmittedAt, requestedAttachments, govForms, attachments, roadmapOverlay, workspaceDrafts, openMatters, isAttorneyUser } = result;
 
-  // The header action now points to the orchestrator rather than a computed
+  // The header action points to the orchestrator rather than a computed
   // next-step path — figuring out (and doing) what's next is a conversation with
-  // the assistant that knows the whole file. computeNextStep/getCaseHeaderCta are
-  // kept in the codebase (still used by the attorney/legacy surfaces).
+  // the assistant that knows the whole file. getCaseHeaderCta computed this link
+  // before that change and nothing picked it up afterwards, so lib/case-cta.ts
+  // has been deleted; computeNextStep is still live on other surfaces.
   const headerCta = {
     href: `/chat?caseFileId=${caseFile.id}&mode=freestyle`,
     label: "Legal chat",

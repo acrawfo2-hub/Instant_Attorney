@@ -29,18 +29,6 @@ export const CHECK_CATALOG: readonly CheckMeta[] = [
     matters: "A missing or unreachable bucket breaks attachment upload and document delivery.",
   },
   {
-    id: "routing.api-shadow",
-    title: "No API prefix shadowed by Express",
-    group: "routing",
-    matters:
-      "Any /api/* prefix absent from artifact.toml falls through to the Express api-server " +
-      "and 404s, while typecheck and tests stay green. It has happened before.",
-    memo: ".agents/memory/instant-attorney-routing.md",
-    // Above the 8s per-probe budget, so a slow prefix reports as a slow prefix
-    // rather than collapsing the whole check into a timeout.
-    timeoutMs: 20000,
-  },
-  {
     id: "integrations.anthropic",
     title: "Anthropic API answers",
     group: "integrations",

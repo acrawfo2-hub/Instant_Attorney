@@ -9,11 +9,10 @@
 
 export type CheckStatus = "ok" | "warn" | "fail" | "skip";
 
-export type CheckGroup = "database" | "routing" | "integrations" | "runtime" | "config";
+export type CheckGroup = "database" | "integrations" | "runtime" | "config";
 
 export const CHECK_GROUPS: readonly CheckGroup[] = [
   "database",
-  "routing",
   "integrations",
   "runtime",
   "config",

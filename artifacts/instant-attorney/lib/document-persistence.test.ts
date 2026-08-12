@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
+import { placeholderFillLifecycle } from "./document-persistence.ts";
 
 const revisionWriters = [
   "app/api/wizard/route.ts",
@@ -98,3 +99,26 @@ test("revision-scoped gaps do not use case-wide description identity", async () 
   assert.match(parser, /source_revision_id: source\.revisionId/);
   assert.match(parser, /g\.source_document_id === source\.documentId/);
 });
+
+// ── placeholderFillLifecycle ───────────────────────────────────────────────
+// These moved here with the function, from lib/document-revisions.ts. That
+// module held three helpers; only this one had a caller. `isReviewResultCurrent`
+// had none, and `statusAfterPlaceholderFill` restated in TypeScript a rule the
+// `apply_document_placeholder_revision` RPC already enforces in SQL — so its
+// test proved the copy agreed with itself, not with the code that runs.
+
+test("an unsubmitted draft is filled in place", () => {
+  assert.equal(placeholderFillLifecycle("draft"), "draft_in_place");
+});
+
+for (const status of ["pending_review", "changes_requested"] as const) {
+  test(`${status} creates a review revision`, () => {
+    assert.equal(placeholderFillLifecycle(status), "review_revision");
+  });
+}
+
+for (const status of ["approved", "delivered"] as const) {
+  test(`${status} preserves the approved version and requires a new approval`, () => {
+    assert.equal(placeholderFillLifecycle(status), "approval_revision");
+  });
+}

@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { applyPlaceholderAnswers, extractPlaceholders, placeholderFields } from "@/lib/wizard-parsing";
-import { saveDocumentRevision } from "@/lib/document-persistence";
+import { placeholderFillLifecycle, saveDocumentRevision } from "@/lib/document-persistence";
 import { BYPASS_USER_ID } from "@/lib/types";
-import { placeholderFillLifecycle } from "@/lib/document-revisions";
 import { startDocumentReview } from "@/lib/attorney-review";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";

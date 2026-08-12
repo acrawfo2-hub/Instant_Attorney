@@ -2,15 +2,9 @@
   "extends": "./tsconfig.base.json",
   "compileOnSave": false,
   "files": [],
-  "references": [
-    {
-      "path": "./lib/db"
-    },
-    {
-      "path": "./lib/api-client-react"
-    },
-    {
-      "path": "./lib/api-zod"
-    }
-  ]
+  // No project references: the shared lib/* packages (db, api-spec, api-zod,
+  // api-client-react) existed only for the deleted Express api-server. The
+  // product in artifacts/instant-attorney has its own tsconfig and is
+  // deliberately outside this workspace.
+  "references": []
 }

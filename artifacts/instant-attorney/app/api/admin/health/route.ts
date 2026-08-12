@@ -8,9 +8,10 @@ export const maxDuration = 60;
 /**
  * Run the health board. GET /api/admin/health[?id=database.schema]
  *
- * Lives under /api/admin deliberately: `/api/health*` belongs to the Express
- * api-server, and inventing a path this app does not own is the exact mistake
- * the routing check exists to catch.
+ * Lives under /api/admin because it is an admin-gated report, not a liveness
+ * probe. (It originally sat here to avoid colliding with the Express
+ * api-server's `/api/healthz`; that server is gone, but /api/admin is still
+ * where this belongs — an unauthenticated caller must not be able to run it.)
  *
  * Always 200 when the caller is an admin — a red board is a successful report,
  * not a failed request, and an HTTP error here would hide the very state the
