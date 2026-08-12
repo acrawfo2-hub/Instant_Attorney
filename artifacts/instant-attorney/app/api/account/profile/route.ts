@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { BYPASS_USER_ID } from "@/lib/types";
 import { normalizeStateCode } from "@/lib/jurisdiction";
+import { isAiProvider, parseAiProvider, type PreferredAiProvider } from "@/lib/ai/providers";
+import { isXaiProviderOffered } from "@/lib/zdr";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
@@ -27,7 +29,7 @@ export async function GET(_req: NextRequest) {
 
   const { data } = await ctx.db
     .from("profiles")
-    .select("full_name, phone, email, is_attorney, account_type, attorney_user_status, bar_number, firm_name, home_state")
+    .select("full_name, phone, email, is_attorney, account_type, attorney_user_status, bar_number, firm_name, home_state, preferred_ai_provider")
     .eq("id", ctx.userId)
     .maybeSingle();
 
@@ -41,6 +43,8 @@ export async function GET(_req: NextRequest) {
     bar_number: data?.bar_number ?? "",
     firm_name: data?.firm_name ?? "",
     home_state: data?.home_state ?? "",
+    preferred_ai_provider: parseAiProvider(data?.preferred_ai_provider),
+    xai_provider_offered: isXaiProviderOffered(),
   });
 }
 
@@ -59,6 +63,7 @@ export async function POST(req: NextRequest) {
     bar_number?: unknown;
     firm_name?: unknown;
     home_state?: unknown;
+    preferred_ai_provider?: unknown;
   };
   try {
     body = await req.json();
@@ -72,6 +77,7 @@ export async function POST(req: NextRequest) {
     bar_number?: string;
     firm_name?: string;
     home_state?: string;
+    preferred_ai_provider?: PreferredAiProvider;
   } = {};
 
   if (typeof body.full_name === "string") {
@@ -125,6 +131,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Please select a valid state." }, { status: 400 });
     }
     update.home_state = normalized;
+  }
+
+  if (body.preferred_ai_provider !== undefined) {
+    if (!isAiProvider(body.preferred_ai_provider)) {
+      return NextResponse.json(
+        { error: "Preferred AI provider must be anthropic or xai." },
+        { status: 400 }
+      );
+    }
+    if (body.preferred_ai_provider === "xai" && !isXaiProviderOffered()) {
+      return NextResponse.json(
+        {
+          error:
+            "Grok is not available yet. Add XAI_API_KEY and confirm xAI ZDR before enabling this preference in production.",
+        },
+        { status: 400 }
+      );
+    }
+    update.preferred_ai_provider = body.preferred_ai_provider;
   }
 
   if (Object.keys(update).length === 0) {

@@ -4982,6 +4982,36 @@ mark.atty-placeholder {
   line-height: 1.5;
   margin: 0.25rem 0 1rem;
 }
+.acc-ai-fieldset {
+  border: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+.acc-ai-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.75rem 0.85rem;
+  border: 0.5px solid var(--brand-border);
+  border-radius: 8px;
+  cursor: pointer;
+  background: var(--brand-cream, #faf8f5);
+}
+.acc-ai-option input {
+  margin-top: 0.2rem;
+}
+.acc-ai-option span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.acc-ai-option--disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
 .acc-legal-links {
   display: flex;
   flex-wrap: wrap;

@@ -15,7 +15,9 @@ Copy `.env.local.example` to `artifacts/instant-attorney/.env.local` and fill in
 | `NEXT_PUBLIC_SUPABASE_URL` | Everything | Staging Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | App + Playwright redirects | Public anon key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Playwright submit tests, e2e-t002 | Server-only — never commit |
-| `Claude_Instant_Attorney` | AI features | Anthropic API key (code reads this name, not `ANTHROPIC_API_KEY`) |
+| `Claude_Instant_Attorney` | AI features | Anthropic API key (code reads this name; `ANTHROPIC_API_KEY` is a fallback) |
+| `XAI_API_KEY` | Optional Grok preference | xAI API key from https://console.x.ai (required to offer Grok) |
+| `XAI_ZDR_CONFIRMED` | Grok go-live gate | Set `true` only after xAI team ZDR is enabled |
 | `STRIPE_SECRET_KEY` | Onboarding checkout | `sk_test_...` only |
 | `STRIPE_WEBHOOK_SECRET` | Subscription activation | From `stripe listen` locally or Stripe dashboard webhook |
 | `STRIPE_PHASE2_PRICE_ID` | $9.99/mo plan | Test-mode Price ID |

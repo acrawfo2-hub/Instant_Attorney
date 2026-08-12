@@ -199,18 +199,19 @@ export const AI_PHILOSOPHY_SECTIONS: LegalSection[] = [
         </p>
         <ul>
           <li>
-            <strong>Single AI provider.</strong> We use Anthropic, PBC as our AI inference
-            provider, deliberately limiting vendor complexity so we can enforce strong data-handling
-            terms.
+            <strong>Vetted AI providers.</strong> We use Anthropic, PBC (Claude) as the default AI
+            inference provider and may offer xAI (Grok) as a user-selectable alternative for
+            supported features, limiting vendors so we can enforce strong data-handling terms with
+            each.
           </li>
           <li>
             <strong>No training on your content.</strong> We do not permit your communications to
             be used to train AI models.
           </li>
           <li>
-            <strong>Zero-data-retention (ZDR).</strong> We are implementing ZDR processing with our
-            AI provider before public launch, so that prompt and output content is not retained by
-            the provider.
+            <strong>Zero-data-retention (ZDR).</strong> We are implementing ZDR processing with each
+            AI provider before that provider is used for public client content, so that prompt and
+            output content is not retained by that provider.
           </li>
           <li>
             <strong>Vetted service providers.</strong> Cloud hosting, payments, and email are

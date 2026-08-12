@@ -9,12 +9,14 @@
  * the attorney-only /admin dashboard for optimization loops.
  */
 
-/** Max output tokens supported per model (Claude 4.x generation). */
+/** Max output tokens supported per model. */
 export const MODEL_MAX_OUTPUT_TOKENS: Record<string, number> = {
   "claude-sonnet-4-6": 64000,
   "claude-opus-4-8": 64000,
   "claude-opus-4-6": 32000,
   "claude-haiku-4-5-20251001": 64000,
+  // Grok 4.5 supports large generations; keep a practical ceiling for chat.
+  "grok-4.5": 32000,
 };
 
 /** Conservative fallback for any model not in the map. */

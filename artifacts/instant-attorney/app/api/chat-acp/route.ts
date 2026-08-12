@@ -16,7 +16,7 @@ import { persistDrafts } from "@/lib/draft-persistence";
 import { stripToolMarkers } from "@/lib/tool-markers";
 import { dispatchDocumentPlan, parseDocumentPlan } from "@/lib/document-plan";
 import { createDurableAcpJob, getAcpJob, getPredecessorChain, emitAcpChunk, finishDurableAcpJob } from "@/lib/acp-jobs";
-import { recordAiFromMessage, recordStorageUpload } from "@/lib/usage-tracker";
+import { recordAiFromMessage, recordAiUsage, recordStorageUpload } from "@/lib/usage-tracker";
 import { getBillingGate } from "@/lib/topup";
 import { maxOutputTokensFor, limitSignalMetadata } from "@/lib/token-limits";
 import { BYPASS_USER_ID } from "@/lib/types";
@@ -27,8 +27,12 @@ import {
   normalizeStateCode,
   stateName,
 } from "@/lib/jurisdiction";
+import { getAnthropicClient, isXaiConfigured } from "@/lib/ai/clients";
+import { resolveModel } from "@/lib/ai/models";
+import { parseAiProvider } from "@/lib/ai/providers";
+import { joinSystemBlocks, streamXaiChat } from "@/lib/ai/xai-chat";
 
-const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney, maxRetries: 4 });
+const anthropic = getAnthropicClient();
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 // Cap on model↔tool round-trips per user turn, so a tool loop can't run away.
 const MAX_TOOL_ITERATIONS = 5;
@@ -114,12 +118,14 @@ export async function POST(req: NextRequest) {
   }
 
   // Ensure case file exists — seed jurisdiction from the client's home_state.
+  // Also load AI provider preference for the workhorse model resolver.
   const { data: homeStateRow } = await db
     .from("profiles")
-    .select("home_state")
+    .select("home_state, preferred_ai_provider")
     .eq("id", userId)
     .maybeSingle();
   const profileHomeState = normalizeStateCode(homeStateRow?.home_state ?? null);
+  const preferredAiProvider = parseAiProvider(homeStateRow?.preferred_ai_provider);
 
   if (!resolvedCaseFileId) {
     const { data: existing } = await db
@@ -300,7 +306,19 @@ export async function POST(req: NextRequest) {
   // Orchestrator tools are available only in freestyle. The system blocks and the
   // agentic loop below are shared by both modes: with no tools, the loop runs
   // exactly once and behaves like the previous single-stream path.
+  //
+  // Phase A: Grok preference applies to text-only intake. Freestyle tools and
+  // multimodal attachments still require Anthropic capabilities, so those turns
+  // fall back to Claude automatically (see resolveModel).
   const useTools = mode === "freestyle";
+  const requiresAnthropicCapabilities = useTools || Boolean(pendingAttachment);
+  const resolved = resolveModel({
+    tier: "workhorse",
+    preference: preferredAiProvider,
+    requiresAnthropicCapabilities,
+    xaiConfigured: isXaiConfigured(),
+  });
+  const useXai = resolved.provider === "xai";
   const systemBlocks = [
     { type: "text" as const, text: acpSystemPrompt, cache_control: { type: "ephemeral" as const } },
     ...(fileContext ? [{ type: "text" as const, text: fileContext }] : []),
@@ -331,13 +349,66 @@ export async function POST(req: NextRequest) {
       // The last model turn's final message — used below for truncation/usage.
       let finalMsg: Anthropic.Message | null = null;
       let assistantMessageId: string | null = null;
+      let xaiFinishReason: string | null = null;
+      let xaiOutputTokens = 0;
+      // #87 declared loopMessages here; it is an executeTurn parameter now, so
+      // the local shadow would break the detached-execution contract.
       const toolDb = createServiceClient();
 
       try {
-        for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
+        if (useXai) {
+          const xaiMessages = [
+            { role: "system" as const, content: joinSystemBlocks(systemBlocks) },
+            ...messages
+              .filter((m) => m.role === "user" || m.role === "assistant")
+              .map((m) => ({
+                role: m.role as "user" | "assistant",
+                content: m.content,
+              })),
+          ];
+          const xaiResult = await streamXaiChat({
+            model: resolved.modelId,
+            messages: xaiMessages,
+            maxTokens: maxOutputTokensFor(resolved.modelId),
+            onTextDelta: (delta) => {
+              fullResponse += delta;
+              // #87 wrote straight to the response controller. Execution is
+              // detached from the HTTP response now, so deltas fan out through
+              // the job's listeners — otherwise an xAI turn would stream
+              // nowhere once the browser disconnects.
+              emitAcpChunk(job, delta);
+            },
+          });
+          xaiFinishReason = xaiResult.finishReason;
+          xaiOutputTokens = xaiResult.usage?.completion_tokens ?? 0;
+          if (xaiResult.usage) {
+            await recordAiUsage(db, {
+              userId,
+              actorId: userId,
+              caseFileId: resolvedCaseFileId,
+              feature: "chat_acp",
+              model: xaiResult.model || resolved.modelId,
+              inputTokens: xaiResult.usage.prompt_tokens,
+              outputTokens: xaiResult.usage.completion_tokens,
+              cacheReadTokens: xaiResult.usage.prompt_tokens_details?.cached_tokens ?? 0,
+              metadata: {
+                ...limitSignalMetadata({
+                  model: xaiResult.model || resolved.modelId,
+                  outputTokens: xaiResult.usage.completion_tokens,
+                  priorLimit: 4000,
+                  stopReason: xaiResult.finishReason,
+                }),
+                provider: "xai",
+                resolve_reason: resolved.reason,
+                preferred_ai_provider: preferredAiProvider,
+                x_zero_data_retention: xaiResult.zeroDataRetention,
+              },
+            });
+          }
+        } else for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
           const turn = anthropic.messages.stream({
-            model: "claude-sonnet-4-6",
-            max_tokens: maxOutputTokensFor("claude-sonnet-4-6"),
+            model: resolved.modelId,
+            max_tokens: maxOutputTokensFor(resolved.modelId),
             system: systemBlocks,
             messages: loopMessages,
             ...(useTools ? { tools: [...ORCHESTRATOR_TOOLS, ...WEB_TOOLS] } : {}),
@@ -370,6 +441,9 @@ export async function POST(req: NextRequest) {
                   priorLimit: 4000,
                   stopReason: finalMsg.stop_reason,
                 }),
+                provider: "anthropic",
+                resolve_reason: resolved.reason,
+                preferred_ai_provider: preferredAiProvider,
                 ...(serverToolUse
                   ? {
                       server_tools: true,
@@ -642,13 +716,16 @@ export async function POST(req: NextRequest) {
           (err) => console.error("[chat-acp] living file sync error:", err)
         );
 
-        if (finalMsg?.stop_reason === "max_tokens") {
+        const truncated =
+          finalMsg?.stop_reason === "max_tokens" ||
+          xaiFinishReason === "length";
+        if (truncated) {
           logTruncation({
             endpoint: "chat-acp",
             feature: "chat_acp",
             userId,
             caseFileId: resolvedCaseFileId,
-            outputTokens: finalMsg.usage.output_tokens,
+            outputTokens: finalMsg?.usage.output_tokens ?? xaiOutputTokens,
           });
         }
         } catch (persistErr) {

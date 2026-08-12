@@ -5,6 +5,9 @@ import { BYPASS_USER_ID, BYPASS_EMAIL } from "@/lib/types";
 import LogoutButton from "@/components/LogoutButton";
 import ManageBillingButton from "@/components/ManageBillingButton";
 import ProfileEditForm from "@/components/ProfileEditForm";
+import AiProviderToggle from "@/components/AiProviderToggle";
+import { parseAiProvider } from "@/lib/ai/providers";
+import { isXaiProviderOffered } from "@/lib/zdr";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
@@ -16,6 +19,7 @@ interface ProfileRow {
   phone: string | null;
   created_at: string | null;
   is_attorney?: boolean | null;
+  preferred_ai_provider?: string | null;
 }
 interface SubscriptionRow {
   status: string | null;
@@ -86,7 +90,7 @@ async function getData() {
   }
 
   const [{ data: profile }, { data: sub }, { data: ledger }, { data: charges }] = await Promise.all([
-    db.from("profiles").select("email, full_name, phone, created_at, is_attorney").eq("id", userId).maybeSingle(),
+    db.from("profiles").select("email, full_name, phone, created_at, is_attorney, preferred_ai_provider").eq("id", userId).maybeSingle(),
     db.from("subscriptions").select("status, plan, current_period_end, consult_credits, stripe_customer_id").eq("user_id", userId).maybeSingle(),
     db.from("top_up_ledger").select("total_topups, total_topup_usd, month_topup_usd, monthly_topup_limit_usd").eq("user_id", userId).maybeSingle(),
     db.from("top_up_charges").select("id, amount_usd, status, created_at, settled_at").eq("user_id", userId).order("created_at", { ascending: false }).limit(50),
@@ -152,6 +156,19 @@ export default async function AccountPage() {
             email={email}
           />
         </section>
+
+        {!isAttorney && (
+          <section className="acc-card">
+            <div className="acc-card-head">
+              <h2 className="acc-card-title">AI model preference</h2>
+              <span className="acc-card-meta">Workhorse chat</span>
+            </div>
+            <AiProviderToggle
+              initialProvider={parseAiProvider(profile?.preferred_ai_provider)}
+              xaiOffered={isXaiProviderOffered()}
+            />
+          </section>
+        )}
 
         {isAttorney && (
           <section className="acc-card">
