@@ -1,6 +1,11 @@
 # Design Note: The Admin Console — Detect, Repair, Endure
 
-**Status:** Phases 0, 1 and 2 shipped; phases 3–4 proposed. See §5 for what is built.
+**Status:** Phases 0, 1 and 2 shipped. See §5 for what is built.
+**Phases 3–4: not being built.** Each proposed an automated repair for an
+incident that has not happened. Speculative repair actions are themselves a
+failure surface — they run with elevated privilege against production data on a
+trigger nobody has validated. Build one only when a real incident names it, and
+write the incident down first. (Consolidation decision, 2026-08-12.)
 **Author:** Instant Attorney engineering
 **Related:** `app/admin/page.tsx` (today's Token Limit Monitor), `lib/admin-auth.ts`,
 `lib/testers.ts`, `scripts/ensure-tester.mjs`, `supabase/schema-stage46-auth-access-repair.sql`,

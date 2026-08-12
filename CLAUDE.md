@@ -10,6 +10,13 @@ its commands from that directory.
 which module owns each capability, and the rules that have already been broken
 more than once. Read it before changing anything under `lib/` or `app/api/`.
 
+**`artifacts/instant-attorney/docs/CONSOLIDATION.md`** — what is being removed,
+in what order, and what was deliberately deferred. Read it before deleting or
+merging anything: several duplications are scheduled, and removing one out of
+order (or "helpfully" removing a deferred one) is its own kind of collision.
+It also settles the question that keeps getting re-asked — **a client can have
+many matters, that has always been true, and nothing in the plan changes it.**
+
 The short version: this codebase was built by several agents working in parallel
 from the same commit, none able to see the others' work. The result was three
 PRs adding the same table with different columns, four PRs carrying back a fix a

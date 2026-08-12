@@ -164,10 +164,30 @@ version is the current one.
 
 ## Known duplication, being consolidated
 
-Tracked so nobody "fixes" it twice, and so nobody adds to it:
+Tracked so nobody "fixes" it twice, and so nobody adds to it. The order of
+removal and the reasoning behind it are in **`CONSOLIDATION.md`** — read that
+before starting on any entry here.
 
-- **`lib/document-generation-policy.ts`** — real rules (3-job cap, supersession)
-  that nothing calls yet. Either wire it up or delete it; do not duplicate it.
-- **`lib/case-cta.ts`** — orphaned. Nothing imports it.
-- **`lib/document-revisions.ts`** — 18 lines; likely belongs inside the
-  persistence boundary.
+- **Matter routing has no owner.** `app/api/chat-acp/route.ts` resolves a turn
+  with no `caseFileId` by taking the most recently opened file. A client with
+  two matters can have facts from one extracted into the other, silently. Being
+  fixed next; do not add another entry point that picks a case file by recency.
+- **Four modules compute "what next"** — `lib/next-step.ts`,
+  `lib/mission-control.ts`, `lib/file-deck.ts`, and the roadmap engines. They can
+  disagree. Collapsing into one `CaseGuidance` result.
+- **Two client drafting journeys** — `app/wizard/[type]/page.tsx` and the
+  orchestrator. The *page* retires; `app/api/wizard/route.ts` is the generation
+  engine and stays. See CONSOLIDATION.md before touching either.
+- **Two draft records** — `client_workspace_drafts` and `documents`, bridged by
+  promotion. One service and one UI model first; a physical merge only if that
+  does not already remove the complexity.
+- **Five attorney AI rooms** — general chat, freestyle workspace, document
+  partner chat, brainstorm, consult tools. Fragmented context defeats the
+  junior-associate goal. Combining into one case workbench.
+- **`pre_warmed`** — a retired document status that ~15 call sites must remember
+  to filter out. Every query that forgets shows a document that does not exist.
+
+Removed in chunk 2, recorded so they are not recreated: `lib/case-cta.ts` and
+`lib/document-generation-policy.ts` (both imported only by their own tests), and
+`lib/document-revisions.ts` (folded into `document-persistence.ts`, where
+revision policy now lives beside the write it governs).
