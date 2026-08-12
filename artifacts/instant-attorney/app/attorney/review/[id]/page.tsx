@@ -11,6 +11,7 @@ import ReviewCoverSheet from "@/components/attorney-review/ReviewCoverSheet";
 import ReviewDocumentEditor from "@/components/attorney-review/ReviewDocumentEditor";
 import ReviewPartnerChat from "@/components/attorney-review/ReviewPartnerChat";
 import type { ReviewChange, RevisionSaveState } from "@/components/attorney-review/types";
+import AttorneyContextHeader from "@/components/AttorneyContextHeader";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -663,6 +664,15 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
 
   return (
     <div className="atty-review-shell">
+      <AttorneyContextHeader currentArea="workbench" context={{
+        documentId: doc.id, documentTitle: doc.title, documentStatus: doc.status,
+        revision: secondDraft ? "Attorney revision" : "Client draft",
+        caseFileId: doc.case_files.id, clientId: doc.user_id,
+        clientName: personDisplayName(doc.profiles, "Client"),
+        matter: doc.case_files.matter_subtype?.replaceAll("_", " ") || doc.case_files.matter_type || "Matter",
+        dirty: clientNotes !== (doc.attorney_notes ?? "") || secondDraftPrompt !== (doc.attorney_second_draft_prompt ?? ""),
+        unresolvedQa: citations.some((citation) => citationBlocksApproval(citation) && !citation.waived),
+      }} />
       <header className="atty-review-header">
         <button className="atty-back" onClick={async () => { await saveRevision(); router.push("/attorney"); }}>← Dashboard</button>
         <div className="atty-review-title">

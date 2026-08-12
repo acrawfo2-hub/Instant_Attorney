@@ -4,6 +4,7 @@ import { requireViewer } from "@/lib/auth/require-attorney";
 import ClientFileView from "@/components/ClientFileView";
 import CaseBrainstormChat from "@/components/CaseBrainstormChat";
 import AccountMenu from "@/components/AccountMenu";
+import AttorneyContextHeader from "@/components/AttorneyContextHeader";
 import type {
   CaseFile,
   FactItem,
@@ -14,6 +15,7 @@ import type {
   ConsultRequest,
   CaseBrainstormMessage,
 } from "@/lib/types";
+import { personDisplayName } from "@/lib/types";
 
 // Attorney view of a single client case file. Renders the exact same Living
 // File the client sees (legal strategy, instruments, fact cards, gov forms,
@@ -28,10 +30,10 @@ export default async function AttorneyFilePage({
   searchParams,
 }: {
   params: Promise<{ caseFileId: string }>;
-  searchParams: Promise<{ view?: string }>;
+  searchParams: Promise<{ view?: string; documentId?: string }>;
 }) {
   const { caseFileId } = await params;
-  const { view } = await searchParams;
+  const { view, documentId } = await searchParams;
   const isBrainstorm = view === "brainstorm";
 
   const { db, isAttorney } = await requireViewer();
@@ -98,6 +100,7 @@ export default async function AttorneyFilePage({
   const childDocuments = allDocs.filter((d) => !!d.parent_document_id);
 
   const client = (clientProfile as Profile | null) ?? undefined;
+  const activeDocument = topDocuments.find((document) => document.id === documentId);
   const title =
     caseFile.title ||
     (caseFile.matter_subtype ? caseFile.matter_subtype.replace(/_/g, " ") : null) ||
@@ -105,6 +108,11 @@ export default async function AttorneyFilePage({
 
   return (
     <div className="lf-shell">
+      <AttorneyContextHeader currentArea="file" context={activeDocument ? {
+        documentId: activeDocument.id, documentTitle: activeDocument.title, documentStatus: activeDocument.status,
+        revision: childDocuments.some((child) => child.parent_document_id === activeDocument.id && child.doc_type === "second_draft") ? "Attorney revision" : "Client draft",
+        caseFileId, clientId: caseFile.user_id, clientName: client ? personDisplayName(client, "Client") : "Client", matter: title,
+      } : undefined} />
       <header className="lf-header">
         <Link href={`/attorney/client/${caseFile.user_id}`} className="lf-header-logo">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
