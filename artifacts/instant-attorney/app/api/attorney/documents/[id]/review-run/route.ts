@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { startDocumentReview } from "@/lib/attorney-review";
-import { BYPASS_USER_ID } from "@/lib/types";
-import type { DocumentImprovement, DocumentReviewRun, DocumentQaCitation } from "@/lib/types";
+import { startDocumentReview, runSelectedDocumentQa } from "@/lib/attorney-review";
+import { normalizeCheckTypes } from "@/lib/attorney-review-qa";
+import { BYPASS_USER_ID, DOCUMENT_QA_CHECK_TYPES } from "@/lib/types";
+import type { DocumentImprovement, DocumentReviewRun, DocumentQaCitation, DocumentQaFinding, DocumentQaCheckRun } from "@/lib/types";
 
 // Attorney review orchestrator run (schema-stage44). GET returns the latest run
 // plus its structured improvements and the revised-draft child so the review page
@@ -11,6 +12,7 @@ import type { DocumentImprovement, DocumentReviewRun, DocumentQaCitation } from 
 // docs/attorney-review-orchestrator.md.
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
+export const maxDuration = 300;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function requireAttorney(): Promise<{ db: any; userId: string } | null> {
@@ -63,10 +65,16 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     .order("created_at", { ascending: true });
   const citations = (citRows ?? []) as DocumentQaCitation[];
 
-  return NextResponse.json({ run, improvements, revisedDraft: revised ?? null, citations });
+  const { data: findingRows } = await ctx.db.from("document_qa_findings").select("*")
+    .eq("document_id", id).order("check_type").order("created_at");
+  const findings = (findingRows ?? []) as DocumentQaFinding[];
+  const { data: checkRunRows } = await ctx.db.from("document_qa_check_runs").select("*").eq("document_id", id);
+  const checkRuns = (checkRunRows ?? []) as DocumentQaCheckRun[];
+
+  return NextResponse.json({ run, improvements, revisedDraft: revised ?? null, citations, findings, checkRuns, checkTypes: DOCUMENT_QA_CHECK_TYPES });
 }
 
-export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const ctx = await requireAttorney();
   if (!ctx) return NextResponse.json({ error: "Attorney access required" }, { status: 403 });
@@ -79,6 +87,23 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     .maybeSingle();
   if (!doc || doc.parent_document_id) {
     return NextResponse.json({ error: "Document not found" }, { status: 404 });
+  }
+
+  const body = await req.json().catch(() => ({})) as { mode?: string; checkTypes?: unknown };
+  if (body.mode === "all" || body.mode === "selected" || body.mode === "affected") {
+    let checkTypes = body.mode === "all" ? [...DOCUMENT_QA_CHECK_TYPES] : normalizeCheckTypes(body.checkTypes);
+    if (body.mode === "affected") {
+      const [{ data: working }, { data: rows }] = await Promise.all([
+        ctx.db.from("documents").select("updated_at").eq("parent_document_id", id).eq("doc_type", "second_draft").maybeSingle(),
+        ctx.db.from("document_qa_check_runs").select("check_type,last_run_revision").eq("document_id", id),
+      ]);
+      if (!working) return NextResponse.json({ error: "Active working revision not found" }, { status: 409 });
+      const current = new Set((rows ?? []).filter((f: { last_run_revision: string }) => f.last_run_revision === working.updated_at).map((f: { check_type: string }) => f.check_type));
+      checkTypes = DOCUMENT_QA_CHECK_TYPES.filter((type) => !current.has(type));
+    }
+    if (!checkTypes.length) return NextResponse.json({ success: true, checkTypes: [] });
+    await runSelectedDocumentQa(id, checkTypes);
+    return NextResponse.json({ success: true, checkTypes });
   }
 
   const run = await startDocumentReview(id, doc.case_file_id);

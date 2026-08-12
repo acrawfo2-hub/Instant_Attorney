@@ -88,6 +88,23 @@ export async function POST(
         { status: 409 }
       );
     }
+
+    // Structured QA is separate from citation approval. Only material,
+    // unresolved findings block (including stale findings until an affected re-run);
+    // an attorney must record remediation or deliberately waive with a reason.
+    if (secondDraft) {
+      const { data: blocking } = await db.from("document_qa_findings")
+        .select("id, check_type, title, severity, status")
+        .eq("document_id", id)
+        .eq("severity", "blocking")
+        .eq("status", "open");
+      if (blocking?.length) {
+        return NextResponse.json({
+          error: `${blocking.length} blocking QA finding${blocking.length === 1 ? " remains" : "s remain"}. Resolve or deliberately waive each before approving.`,
+          unresolvedFindings: blocking,
+        }, { status: 409 });
+      }
+    }
   }
 
   const newStatus = action === "approve" ? "approved" : "changes_requested";

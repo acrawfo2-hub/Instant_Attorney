@@ -11465,3 +11465,9 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
 .arr-delivery-preview textarea { resize: vertical; font-weight: 400; line-height: 1.5; }
 .arr-delivery-preview .arr-consult-toggle { display: flex; align-items: center; gap: 8px; }
 .arr-delivery-preview details { border: 1px solid #dbe3ec; border-radius: 7px; padding: 12px; }
+
+/* Independently addressable document QA workbench (schema-stage48). */
+.arr-qa-controls { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.arr-check-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.45rem 0.8rem; margin: 1rem 0; }
+.arr-check-option { display: flex; align-items: center; gap: 0.45rem; color: #334155; font-size: 0.86rem; text-transform: capitalize; }
+.arr-check-option input { accent-color: #1d4ed8; }
