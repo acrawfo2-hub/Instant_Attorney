@@ -15,6 +15,10 @@ import {
 import type { CaseFile, DocumentStatus, FactItem, Profile, WizardType } from "./types";
 import { placeholderFields } from "./wizard-parsing";
 import { isFullDepthState, jurisdictionFromCaseFileText, prepModeWatermarkDetail } from "./jurisdiction.ts";
+import { DOCUMENT_PROFILES, draftTextToDocumentModel, renderDocumentModel } from "./doc-layout.ts";
+import type { DocumentProfileName } from "./doc-layout.ts";
+export type { DocumentProfileName, DocumentBlock, IntermediateDocument } from "./doc-layout.ts";
+export { DOCUMENT_PROFILES, draftTextToDocumentModel, validateDocumentModel, profileForDocumentType } from "./doc-layout.ts";
 
 // Build a safe Content-Disposition value for a .docx download. HTTP headers must
 // be Latin-1, but document titles routinely contain em-dashes ("— Revised Draft")
@@ -770,116 +774,18 @@ function buildTable(rows: string[][]): Table {
 // with firm header, DRAFT watermark, and clean paragraph formatting.
 
 export async function generateDocxFromText(
-  title: string,
-  draftText: string,
-  // Nullable on purpose: the attorney download path reads the document under the
-  // attorney's session, and RLS on case_files can return null for a client's row
-  // even when the document row comes back. A null here must never crash the build.
+  title: string, draftText: string, profileName: DocumentProfileName,
   caseFile: { matter_subtype?: string | null; jurisdiction?: string | null } | null,
-  // Drives the pre-review watermark. Anything other than an attorney-approved
-  // status (including a null/unknown status) is treated as a pre-review draft and
-  // is watermarked — fail safe, never silently un-watermarked.
-  status: DocumentStatus | null = null,
-  // True when the document belongs to an attorney-user account: they are the
-  // reviewing attorney for their own client's matter, so the "not reviewed by
-  // an attorney" watermark (which implies Andrew Crawford should review it)
-  // is simply the wrong message. Never gates any other behavior.
-  isAttorneyUserDoc = false
+  status: DocumentStatus | null = null, isAttorneyUserDoc = false
 ): Promise<Buffer> {
   const approved = isAttorneyApproved(status) || isAttorneyUserDoc;
-  const lines = draftText.split("\n");
-
-  const children: (Paragraph | Table)[] = [
-    ...firmHeader(),
-    new Paragraph({
-      children: [new TextRun({ text: title, bold: true, size: 26 })],
-      alignment: AlignmentType.CENTER,
-      heading: HeadingLevel.HEADING_1,
-    }),
-    new Paragraph({ text: "" }),
-  ];
-
-  for (let i = 0; i < lines.length; i++) {
-    let trimmed = lines[i].trim();
-    if (!trimmed) {
-      children.push(new Paragraph({ text: "" }));
-      continue;
-    }
-
-    // Markdown table block → real docx table (drop the |---| separator row)
-    if (isTableRow(trimmed)) {
-      const rows: string[][] = [];
-      while (i < lines.length && isTableRow(lines[i].trim())) {
-        const cells = parseTableCells(lines[i].trim());
-        if (!isTableSeparator(cells)) rows.push(cells);
-        i++;
-      }
-      i--; // for-loop will advance past the last consumed line
-      if (rows.length) children.push(buildTable(rows));
-      continue;
-    }
-
-    // Strip Markdown blockquote markers ("> ", "> > ") — render as normal text
-    trimmed = trimmed.replace(/^(?:>\s?)+/, "");
-    if (!trimmed) {
-      children.push(new Paragraph({ text: "" }));
-      continue;
-    }
-
-    // Markdown horizontal rule (---, ***, ___) → blank line
-    if (/^([-*_])\1{2,}$/.test(trimmed)) {
-      children.push(new Paragraph({ text: "" }));
-      continue;
-    }
-
-    // Markdown ATX heading (#, ##, ###) → mapped heading levels
-    const atx = trimmed.match(/^(#{1,6})\s+(.*\S)\s*#*$/);
-    if (atx) {
-      const level = atx[1].length;
-      children.push(new Paragraph({
-        children: inlineRuns(stripWrappingEmphasis(atx[2])),
-        heading:
-          level <= 1 ? HeadingLevel.HEADING_1 : level === 2 ? HeadingLevel.HEADING_2 : HeadingLevel.HEADING_3,
-        spacing: { before: 200, after: 80 },
-      }));
-      continue;
-    }
-
-    // Section headings: ALL CAPS, "N." / "N.N" numbered, or a whole line in **bold**
-    const unwrapped = stripWrappingEmphasis(trimmed);
-    const isNumberedHeading = /^\d+(?:\.\d+)*\.?\s+\S/.test(unwrapped) && unwrapped.length < 80;
-    const isAllCapsHeading =
-      unwrapped === unwrapped.toUpperCase() && unwrapped.length < 80 && /[A-Z]{3,}/.test(unwrapped);
-    const isWrappedHeading = unwrapped !== trimmed && unwrapped.length < 80;
-
-    if (isNumberedHeading || isAllCapsHeading || isWrappedHeading) {
-      children.push(new Paragraph({
-        children: [new TextRun({ text: stripInlineMarkers(unwrapped), bold: true })],
-        heading: HeadingLevel.HEADING_2,
-        spacing: { before: 200, after: 80 },
-      }));
-      continue;
-    }
-
-    // Bullet/list items (Markdown -, *, or literal •) — keep inline formatting
-    if (/^[•]\s/.test(trimmed) || /^[-*]\s/.test(trimmed)) {
-      children.push(new Paragraph({
-        children: inlineRuns(trimmed.replace(/^[•\-*]\s+/, "")),
-        bullet: { level: 0 },
-      }));
-      continue;
-    }
-
-    // Default body paragraph — inline parser handles **bold**, *italic*, [[placeholders]]
-    children.push(new Paragraph({ children: inlineRuns(trimmed) }));
-  }
-
-  // Pre-review draft footer (removed once an attorney approves the document).
-  children.push(...draftFooterParagraphs(approved, caseFile?.jurisdiction));
-
-  const doc = new Document({
-    sections: [{ headers: draftSectionHeaders(approved, caseFile?.jurisdiction), children }],
-  });
+  const profile = DOCUMENT_PROFILES[profileName];
+  const model = draftTextToDocumentModel(title, draftText);
+  const doc = renderDocumentModel(
+    model, profileName, profile.branded ? firmHeader() : [],
+    draftFooterParagraphs(approved, caseFile?.jurisdiction),
+    { headers: draftSectionHeaders(approved, caseFile?.jurisdiction) },
+  );
   return pack(doc);
 }
 
