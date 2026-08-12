@@ -73,16 +73,21 @@ export async function POST(
   // runs and derived drafts are needed to make this decision against the exact
   // version the attorney may currently be reading.
   const primaryId = doc.parent_document_id ?? doc.id;
-  const [{ data: primary }, { data: revised }, { data: activeRun }, { data: latestRevision }] = await Promise.all([
+  const [{ data: primary }, { data: revised }, { data: activeRun }, { count: revisionCount }] = await Promise.all([
     writeDb.from("documents").select("id, status, revision_number, approved_revision, review_status").eq("id", primaryId).single(),
     writeDb.from("documents").select("id, updated_at").eq("parent_document_id", primaryId).eq("doc_type", "second_draft").maybeSingle(),
     writeDb.from("document_review_runs").select("id, status, source_revision").eq("document_id", primaryId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
-    writeDb.from("document_revisions").select("revision_number").eq("document_id", primaryId).order("revision_number", { ascending: false }).limit(1).maybeSingle(),
+    // Stage 48 replaced document_revisions' linear revision_number with a
+    // provenance/branching shape, so the old max(revision_number) fallback no
+    // longer exists. The count answers the same question — how many revisions
+    // this document already has — and documents.revision_number remains the
+    // authoritative optimistic-lock counter regardless.
+    writeDb.from("document_revisions").select("id", { count: "exact", head: true }).eq("document_id", primaryId),
   ]);
   if (!primary) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const lifecycle = placeholderFillLifecycle(primary.status);
-  const expectedRevision = primary.revision_number ?? latestRevision?.revision_number ?? 1;
+  const expectedRevision = primary.revision_number ?? revisionCount ?? 1;
   const { data: applied, error: updErr } = await writeDb.rpc("apply_document_placeholder_revision", {
     p_document_id: primaryId,
     p_expected_revision: expectedRevision,

@@ -7,17 +7,12 @@ alter table document_review_runs drop constraint if exists document_review_runs_
 alter table document_review_runs add constraint document_review_runs_status_check
   check (status in ('queued','running','awaiting_attorney','complete','failed','stale'));
 
-create table if not exists document_revisions (
-  id uuid default gen_random_uuid() primary key,
-  document_id uuid references documents(id) on delete cascade not null,
-  revision_number integer not null,
-  draft_text text not null,
-  reason text not null,
-  requires_attorney_approval boolean not null default true,
-  created_by uuid references profiles(id),
-  created_at timestamptz not null default now(),
-  unique(document_id, revision_number)
-);
+-- document_revisions was defined here originally. Stage 48 supersedes it with a
+-- richer shape (parent_revision_id for branching, author_type, source_action
+-- provenance) and now owns the table definition, so the create has been removed
+-- to leave exactly one authoritative definition in the repo. Stage 48 also
+-- rewrites apply_document_placeholder_revision below onto that shape.
+-- See schema-stage48-document-revisions.sql.
 
 -- The expected revision makes the write an optimistic transaction: an answer
 -- racing an attorney run (or another answer) cannot overwrite a newer version.
