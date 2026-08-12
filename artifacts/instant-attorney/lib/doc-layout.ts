@@ -5,7 +5,14 @@ export type DocumentBlock =
   | { type: "heading"; text: string; level: 1 | 2 | 3 }
   | { type: "paragraph"; text: string; indent: number }
   | { type: "enumerated-clause"; label: string; text: string; level: number }
-  | { type: "caption" | "signature-block" | "notary-block"; lines: string[] }
+  // Split into one member per literal rather than a single member with a
+  // union discriminant. TypeScript filters whole union members, so it can
+  // never eliminate a member whose `type` is itself a union — narrowing after
+  // the caption/signature/notary guards left the paragraph branch still typed
+  // as the lines-bearing variant, and b.text / b.indent failed to resolve.
+  | { type: "caption"; lines: string[] }
+  | { type: "signature-block"; lines: string[] }
+  | { type: "notary-block"; lines: string[] }
   | { type: "table"; rows: string[][] }
   | { type: "exhibit"; title: string }
   | { type: "page-break" };
@@ -57,7 +64,7 @@ export function renderDocumentModel(model: IntermediateDocument, name: DocumentP
     if (b.type === "heading") { children.push(new Paragraph({ children: runs(b.text), heading: b.level === 1 ? HeadingLevel.HEADING_1 : b.level === 2 ? HeadingLevel.HEADING_2 : HeadingLevel.HEADING_3 })); continue; }
     if (b.type === "enumerated-clause") { children.push(new Paragraph({ children: [new TextRun({ text: `${b.label} `, bold: true }), ...runs(b.text)], indent: { left: p.clauseIndent * b.level, hanging: 360 }, spacing: { after: p.after, line: p.line } })); continue; }
     if (b.type === "caption") { children.push(...b.lines.map(x => new Paragraph({ children: runs(x), alignment: AlignmentType.CENTER }))); continue; }
-    if (b.type === "signature-block" || b.type === "notary-block") { children.push(new Paragraph({ text: "" }), ...b.lines.map(x => new Paragraph({ children: runs(x), keepTogether: true }))); continue; }
+    if (b.type === "signature-block" || b.type === "notary-block") { children.push(new Paragraph({ text: "" }), ...b.lines.map(x => new Paragraph({ children: runs(x), keepLines: true }))); continue; }
     if (b.type === "exhibit") { children.push(new Paragraph({ pageBreakBefore: true, children: [new TextRun({ text: b.title, bold: true })], alignment: AlignmentType.CENTER })); continue; }
     children.push(new Paragraph({ children: runs(b.text), indent: b.indent ? { left: b.indent * 120 } : undefined, spacing: { after: p.after, line: p.line } }));
   }
