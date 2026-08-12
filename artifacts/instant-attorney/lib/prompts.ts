@@ -1413,30 +1413,6 @@ ${draftText}
 ---END DOCUMENT---`;
 }
 
-export function buildMergePrompt(doc: Document, reviewReport: string): string {
-  const draftText = doc.draft_text ?? "(No draft text available)";
-
-  return `You are a senior legal drafting assistant at Crawford Law PLLC. You have two inputs:
-
----ORIGINAL DRAFT---
-${draftText}
----END ORIGINAL DRAFT---
-
----ATTORNEY REVIEW REPORT---
-${reviewReport}
----END REVIEW REPORT---
-
-Your task: Apply the Priority Edit List from the review report to produce an improved draft. Instructions:
-- Follow each numbered directive in the Priority Edit List precisely
-- Maintain the original document's structure and defined terms
-- Use [[PLACEHOLDER — descriptor]] for any remaining unresolved facts
-- Do not add provisions not directed by the review report
-- Do not remove provisions unless the review report directs it
-- Keep all existing [[PLACEHOLDER]] items that are still unresolved
-
-Produce ONLY the improved draft document. No commentary, no headers, no explanation outside the document itself.`;
-}
-
 // ── Second draft (attorney refinement) ───────────────────────────────────────
 
 export const DOCUMENT_TYPE_FITNESS_SYSTEM_PROMPT = `You are a senior U.S. attorney at Crawford Law PLLC performing a rapid document-type fitness check before a refined legal draft is generated.

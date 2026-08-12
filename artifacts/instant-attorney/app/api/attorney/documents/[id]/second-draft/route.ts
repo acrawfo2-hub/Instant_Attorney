@@ -15,7 +15,6 @@ import { BYPASS_USER_ID, docTypeLabel } from "@/lib/types";
 import type { Document, CaseFile, FactItem, Attachment } from "@/lib/types";
 import { logTruncation } from "@/lib/truncation-logger";
 import { maxOutputTokensFor, maxOutputTokensForDoc, limitSignalMetadata } from "@/lib/token-limits";
-import { saveDocumentRevision } from "@/lib/document-persistence";
 
 // Two model calls (fitness + full second draft) — give the route room to finish.
 export const maxDuration = 300;
@@ -281,12 +280,9 @@ export async function POST(
 
         // The second-draft child is owned by the CLIENT (parentDoc.user_id); write it
         // with the service client to bypass RLS now that the caller is a verified attorney.
-        const child = await upsertSecondDraftChild(createServiceClient(), parentDoc, secondDraftText, secondDraftChanges);
-        if (!child) throw new Error("Second draft could not be saved");
-        const revision = await saveDocumentRevision(createServiceClient(), {
-          caseFileId: parentDoc.case_file_id, userId: parentDoc.user_id, draftText: secondDraftText,
-          persist: async () => child.id,
-        });
+        const saved = await upsertSecondDraftChild(createServiceClient(), parentDoc, secondDraftText, secondDraftChanges);
+        if (!saved) throw new Error("Second draft could not be saved");
+        const child = saved.document;
 
         const existingCj = (parentDoc.content_json as Record<string, unknown>) ?? {};
         await db.from("documents").update({
@@ -303,7 +299,7 @@ export async function POST(
           improved_draft_text: secondDraftText,
           changes: secondDraftChanges,
           truncated,
-          living_file_sync_pending: revision.syncPending,
+          living_file_sync_pending: saved.syncPending,
         });
       } catch (err) {
         console.error("[attorney/second-draft] error:", err);

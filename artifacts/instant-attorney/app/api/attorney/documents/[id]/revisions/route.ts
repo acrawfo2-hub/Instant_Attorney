@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { saveDocumentRevision } from "@/lib/document-persistence";
 
 async function attorney() {
   const db = await createClient();
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { data: source } = await db.from("document_revisions").select("*")
     .eq("id", body.revisionId).eq("document_id", id).single();
   if (!source) return NextResponse.json({ error: "Revision not found" }, { status: 404 });
-  const { data: doc } = await db.from("documents").select("title,draft_text,status").eq("id", id).single();
+  const { data: doc } = await db.from("documents").select("title,draft_text,status,case_file_id,user_id").eq("id", id).single();
   if (!doc) return NextResponse.json({ error: "Document not found" }, { status: 404 });
   if (body.action === "restore" && ["approved", "delivered"].includes(doc.status))
     return NextResponse.json({ error: "Approved and delivered documents cannot be overwritten; branch instead." }, { status: 409 });
@@ -42,8 +43,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       author_type: "attorney", attorney_id: user.id, source_action: "manual_restore_before",
       summary: `Checkpoint before restoring ${source.id}` }).select("id").single();
     parent = before?.id ?? source.id;
-    await db.from("documents").update({ draft_text: source.content, title: source.title,
-      updated_at: new Date().toISOString() }).eq("id", id);
+    // Restoring puts different text in front of the client, so it is a document
+    // save like any other and goes through the boundary. Branching does not
+    // touch the document, which is why only this arm calls it.
+    await saveDocumentRevision(db, {
+      caseFileId: doc.case_file_id,
+      userId: doc.user_id,
+      draftText: source.content,
+      persist: async () => {
+        await db.from("documents").update({ draft_text: source.content, title: source.title,
+          updated_at: new Date().toISOString() }).eq("id", id);
+        return id;
+      },
+    });
   }
   const { data: revision, error } = await db.from("document_revisions").insert({
     document_id: id, parent_revision_id: parent, content: source.content, title: source.title,

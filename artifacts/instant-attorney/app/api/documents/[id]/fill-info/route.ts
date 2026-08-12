@@ -1,12 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { applyPlaceholderAnswers, extractPlaceholders, placeholderFields } from "@/lib/wizard-parsing";
-import { syncDraftGapsToLivingFile } from "@/lib/file-parser";
+import { saveDocumentRevision } from "@/lib/document-persistence";
 import { BYPASS_USER_ID } from "@/lib/types";
 import { placeholderFillLifecycle } from "@/lib/document-revisions";
 import { startDocumentReview } from "@/lib/attorney-review";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
+
+/** What `apply_document_placeholder_revision` returns for one applied fill. */
+type PlaceholderRevisionState = {
+  revision_number: number | null;
+  status: string | null;
+  review_state: string | null;
+  requires_review: boolean | null;
+};
 
 // Fill [[placeholders]] in a document's draft with client-supplied values.
 // Deterministic text substitution only — no model call, and no character of the
@@ -88,22 +96,40 @@ export async function POST(
 
   const lifecycle = placeholderFillLifecycle(primary.status);
   const expectedRevision = primary.revision_number ?? revisionCount ?? 1;
-  const { data: applied, error: updErr } = await writeDb.rpc("apply_document_placeholder_revision", {
-    p_document_id: primaryId,
-    p_expected_revision: expectedRevision,
-    p_text: text,
-    p_actor: userId,
-  });
 
-  if (updErr) {
-    const conflict = updErr.message?.includes("revision_conflict");
-    console.error("[documents/fill-info] revision update failed:", updErr.message);
+  // The RPC is this route's document write, so it runs inside the persistence
+  // boundary like every other one. That gets it a current_revision_id, a durable
+  // sync status, and a Living File reconciliation attributed to the revision
+  // this fill produced — none of which it had while it wrote around the
+  // boundary and then synced gaps case-wide on its own.
+  const rpc: { state: PlaceholderRevisionState | null } = { state: null };
+  try {
+    await saveDocumentRevision(writeDb, {
+      caseFileId: doc.case_file_id,
+      userId: doc.user_id,
+      draftText: text,
+      persist: async () => {
+        const { data: applied, error: updErr } = await writeDb.rpc("apply_document_placeholder_revision", {
+          p_document_id: primaryId,
+          p_expected_revision: expectedRevision,
+          p_text: text,
+          p_actor: userId,
+        });
+        if (updErr) throw updErr;
+        rpc.state = (Array.isArray(applied) ? applied[0] : applied) ?? null;
+        return primaryId;
+      },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const conflict = message.includes("revision_conflict");
+    console.error("[documents/fill-info] revision update failed:", message);
     return NextResponse.json(
       { error: conflict ? "This document changed while you were answering. Refresh and try again." : "Could not save your answers" },
       { status: conflict ? 409 : 500 },
     );
   }
-  const revisionState = Array.isArray(applied) ? applied[0] : applied;
+  const revisionState = rpc.state;
   if (revisionState?.requires_review) {
     // The RPC stales the old run atomically. This creates the replacement queue
     // item and is also the attorney notification surfaced by their review list.
@@ -139,15 +165,11 @@ export async function POST(
         await writeDb.from("fact_items").insert(newFacts);
       }
     }
-
-    // Reconcile Living File gaps against the freshly-filled draft: filled blanks
-    // (now confirmed facts) drop off the outstanding list, and any still-unfilled
-    // placeholders remain tracked.
-    await syncDraftGapsToLivingFile(writeDb, doc.case_file_id, doc.user_id, text);
   } catch (e) {
-    // Fact-sync is best-effort: the document was already updated successfully, so
-    // never fail the request over a Living File write.
-    console.error("[documents/fill-info] living-file sync failed:", e);
+    // Best-effort: the document was already updated successfully, so never fail
+    // the request over a fact write. Gap reconciliation already happened inside
+    // the persistence boundary above.
+    console.error("[documents/fill-info] confirmed-fact write failed:", e);
   }
 
   return NextResponse.json({

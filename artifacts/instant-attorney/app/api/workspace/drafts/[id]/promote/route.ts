@@ -47,9 +47,18 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     // before resubmitting (notably after an attorney requests changes).
     if (linked) {
       const now = new Date().toISOString();
-      await serviceDb.from("documents").update({
-        title: draft.title, draft_text: draft.content, updated_at: now,
-      }).eq("id", linked.id).eq("user_id", ctx.userId);
+      // Copying the editor's text in is a document save, so it goes through the
+      // boundary too — the fresh-document path below already did, and this one
+      // quietly did not, which left resubmitted text out of the Living File.
+      await saveDocumentRevision(serviceDb, {
+        caseFileId: draft.case_file_id, userId: ctx.userId, draftText: draft.content,
+        persist: async () => {
+          await serviceDb.from("documents").update({
+            title: draft.title, draft_text: draft.content, updated_at: now,
+          }).eq("id", linked.id).eq("user_id", ctx.userId);
+          return linked.id;
+        },
+      }).catch((error) => { console.error("[workspace/drafts/promote] resubmit copy failed:", error); return null; });
     }
     const doc = await finalizeDocumentSubmission(serviceDb, draft.promoted_document_id, ctx.userId);
     if (doc) return NextResponse.json({ documentId: doc.id, status: doc.status, reused: true });
