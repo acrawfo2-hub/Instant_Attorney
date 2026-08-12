@@ -228,7 +228,40 @@ export async function runDocumentReview(runId: string): Promise<void> {
       await upsertSecondDraftChild(db, parentDoc, sourceText, "Working copy created; no proposed improvements applied.");
     }
 
+    // Phase 3 (#130): persist a structured memo and a client-facing delivery
+    // draft against this run's revision. Kept, but detached from #130's
+    // regenerate step below — the memo describes the improvements, not a
+    // freshly rewritten draft.
+    const { data: revision } = await db.from("documents").select("id").eq("parent_document_id", documentId).eq("doc_type", "second_draft").maybeSingle();
+    if (revision?.id) {
+      const principalChanges = improvements.map((item) => item.title);
+      const risks = improvements.filter((item) => item.kind === "risk" || item.kind === "blocking" || item.severity === "high").map((item) => item.rationale || item.title);
+      const memo = {
+        documentPurpose: `This ${parentDoc.title} gives the client a reviewed, usable document for the stated matter goals.`,
+        principalChanges,
+        risksOrConcerns: risks.length ? risks : ["No unresolved material concern was identified by the automated review; attorney judgment still controls."],
+        clientActionItems: ["Read the approved revision carefully and confirm names, dates, amounts, and other factual details before using it."],
+        consultationOffer: "Schedule a consultation if you would like to discuss the revision, risks, or next steps.",
+      };
+      const firstName = String((caseFile as CaseFile & { client_name?: string }).client_name ?? "there").split(" ")[0];
+      await db.from("document_delivery_drafts").upsert({
+        document_id: documentId,
+        revision_document_id: revision.id,
+        review_run_id: runId,
+        memo,
+        recipient: "",
+        subject: `Your reviewed ${parentDoc.title} is ready`,
+        body: `Hi ${firstName},\n\nI reviewed your ${parentDoc.title} and attached the approved revision.\n\nKey updates:\n${principalChanges.slice(0, 5).map((x) => `\u2022 ${x}`).join("\n")}\n\nPlease review all factual details before using it. Let me know if you have questions.\n\nAndrew Crawford`,
+        consultation_url: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://instant-attorney.com"}/dashboard?consult=1`,
+        consultation_enabled: true,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "document_id" });
+    }
+
     // ── Stage 3: QA the current accepted working revision ───────────────────
+    // Gated on sourceText, not on a regenerated draftText: #127 made findings
+    // proposals, so the bytes to verify are the ones the attorney has actually
+    // accepted. Verifying an auto-rewritten draft would QA text no one approved.
     if (sourceText.trim()) {
       await db.from("document_review_runs").update({ stage: "authorities", updated_at: new Date().toISOString() }).eq("id", runId);
       await runAuthoritiesGate(db, runId, parentDoc, sourceText);

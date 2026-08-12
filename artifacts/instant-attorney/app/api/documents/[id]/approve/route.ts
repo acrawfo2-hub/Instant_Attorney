@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getChildDocuments } from "@/lib/document-utils";
-import { notifyClientDocumentApproved } from "@/lib/notify";
-import { docTypeLabel } from "@/lib/types";
-import type { Document, Profile } from "@/lib/types";
 
 export async function POST(
   req: NextRequest,
@@ -131,18 +128,6 @@ export async function POST(
       status: "approved",
       updated_at: now,
     }).eq("id", secondDraft.id);
-  }
-
-  if (action === "approve" && doc.profiles) {
-    const notifyDoc = {
-      ...(doc as Document),
-      title: secondDraft
-        ? `${docTypeLabel(doc.doc_type)} (Revised)`
-        : doc.title,
-    };
-    notifyClientDocumentApproved(notifyDoc, doc.profiles as Profile).catch(
-      (err) => console.error("[approve] notify error:", err)
-    );
   }
 
   return NextResponse.json({
