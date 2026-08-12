@@ -88,19 +88,24 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
     content: (
       <>
         <p>
-          We use a <strong>single AI provider, Anthropic, PBC</strong>, to process your content to
-          deliver the services. We prohibit use of your content to train AI models.{" "}
-          <strong>Zero-data-retention (ZDR) processing will be enabled before public launch</strong>{" "}
-          so that prompt and output content is not retained by the AI provider. AI output is
-          reviewed by an attorney before being delivered as approved.
+          We use <strong>AI providers</strong> to process your content:{" "}
+          <strong>Anthropic, PBC (Claude)</strong> by default, and <strong>xAI (Grok)</strong> when
+          you select that preference (some features may still use Anthropic). We prohibit use of
+          your content to train AI models.{" "}
+          <strong>
+            Zero-data-retention (ZDR) processing will be enabled with each AI provider before that
+            provider is used for public client content
+          </strong>{" "}
+          so that prompt and output content is not retained by that provider. AI output is reviewed
+          by an attorney before being delivered as approved.
         </p>
         <p>
           See the <Link href="/legal/ai-philosophy">AI Philosophy Statement</Link> and your AI
           Consent signed at onboarding.
         </p>
         <LegalCallout>
-          <strong>Attorney review.</strong> Confirm ZDR is in place before launch. Do not publish
-          ZDR claims until enabled.
+          <strong>Attorney review.</strong> Confirm ZDR is in place for each enabled provider
+          before launch. Do not publish ZDR claims until enabled.
         </LegalCallout>
       </>
     ),
@@ -113,9 +118,10 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
         <p>We share information only as needed to provide the service or as required by law:</p>
         <ul>
           <li>
-            <strong>Service providers (our agents):</strong> AI inference (Anthropic), cloud
-            hosting and storage (Supabase), payment processing (Stripe), and transactional email
-            (Resend), each under contractual confidentiality obligations
+            <strong>Service providers (our agents):</strong> AI inference (Anthropic; xAI when
+            selected or required), cloud hosting and storage (Supabase), payment processing
+            (Stripe), and transactional email (Resend), each under contractual confidentiality
+            obligations
           </li>
           <li>
             <strong>Legal and ethical compliance:</strong> where required by law, court order, or the

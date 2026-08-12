@@ -17,12 +17,12 @@ import {
   BorderStyle,
 } from "docx";
 
-export const REPRESENTATION_AGREEMENT_VERSION = "2.0-draft";
-export const AI_CONSENT_VERSION = "2.0-draft";
+export const REPRESENTATION_AGREEMENT_VERSION = "2.1-draft";
+export const AI_CONSENT_VERSION = "2.1-draft";
 
 /** Canonical text shown at sign time — must match onboarding UI. */
 export const REPRESENTATION_AGREEMENT_TEXT = `CRAWFORD LAW PLLC — CLIENT REPRESENTATION AGREEMENT (LIMITED SCOPE)
-Draft v2.0 — pending attorney review.
+Draft v2.1 — pending attorney review.
 
 This Agreement is between Crawford Law PLLC ("Firm"), a Texas professional limited liability company, Texas Bar #24148908 (responsible attorney: Andrew Crawford, Esq.; licensed in Texas and Illinois), and the person who signs below ("Client"). Typing your name and clicking to sign creates a binding agreement and an electronic signature.
 
@@ -33,7 +33,7 @@ The Firm represents Client in limited scope through the Instant Attorney platfor
 Phase I (free) is general information only — NO attorney-client relationship and NO privilege. The attorney-client relationship forms when Client signs this Agreement, the subscription is active, and the Firm completes its conflicts check and accepts the engagement.
 
 3. AI-ASSISTED SERVICES AND ATTORNEY SUPERVISION
-The Firm uses AI tools (including models from Anthropic, PBC) under attorney supervision. AI is a tool, not your attorney. A licensed attorney reviews AI-generated documents before delivery as approved. Pre-review drafts are labeled and must not be filed, signed, or relied upon until approved. (See the AI & Privilege consent, incorporated by reference.)
+The Firm uses AI tools (including models from Anthropic, PBC and, when you select it, xAI) under attorney supervision. AI is a tool, not your attorney. A licensed attorney reviews AI-generated documents before delivery as approved. Pre-review drafts are labeled and must not be filed, signed, or relied upon until approved. (See the AI & Privilege consent, incorporated by reference.)
 
 4. FEES AND AUTOMATIC USAGE CHARGES
 These are legal fees intended to be reasonable under Tex. Disciplinary R. 1.04. (a) Subscription: $9.99/month, billed in advance, auto-renewing monthly until cancelled. (b) Automatic usage top-ups: when Client's cumulative metered AI usage since the last top-up reaches $4.75, Client authorizes an automatic one-time $8.50 charge to the payment method on file; this may recur whenever the threshold is reached. (c) Spending cap: Client sets a pre-approved monthly cap on automatic top-ups (default $25/month); automatic charging and AI features pause once a top-up would exceed the cap, until Client raises it or the month renews. (d) Declined payments pause AI features until payment succeeds. (e) Cancellation true-up: at cancellation Client authorizes a final charge for metered usage already incurred but not yet charged. Client authorizes the Firm and Stripe to store the payment method and make these charges automatically.
@@ -59,17 +59,17 @@ Except as below, you and the Firm agree that any dispute arising out of or relat
 Crawford Law PLLC · www.instant-attorney.com · Texas Bar #24148908`;
 
 export const AI_CONSENT_TEXT = `CONSENT TO AI-ASSISTED SERVICES & ATTORNEY-CLIENT PRIVILEGE NOTICE
-Draft v2.0 — pending attorney review.
+Draft v2.1 — pending attorney review.
 
 By signing, I ("Client") give informed consent to the following and acknowledge the privilege notice below.
 
 PART A — AI-ASSISTED SERVICES
-1. AI USE. Crawford Law PLLC uses AI tools, including models from Anthropic, PBC, to assist with intake, analysis, and document drafting. AI is a tool, not my attorney, and does not exercise legal judgment.
+1. AI USE. Crawford Law PLLC uses AI tools, including models from Anthropic, PBC (Claude) and, when I select it in account settings, xAI (Grok), to assist with intake, analysis, and document drafting. Some features may continue to use Anthropic even if I prefer Grok. AI is a tool, not my attorney, and does not exercise legal judgment.
 2. ATTORNEY REVIEW. A licensed attorney supervises AI use and reviews AI-generated documents before delivery as approved. Pre-review drafts must not be filed, signed, or relied upon. These practices are intended to comply with the Texas Disciplinary Rules and Texas Ethics Opinion 705.
 3. AI LIMITATIONS. AI can produce incomplete, outdated, or incorrect output (including "hallucinations"). Attorney review is the safeguard, but no process is perfect; I will raise concerns before acting on a document.
-4. CONFIDENTIALITY & DATA. The Firm treats my Phase II information as confidential under Tex. Disciplinary R. 1.05, uses a single AI provider (Anthropic, PBC), does NOT permit my content to be used to train AI models, and is enabling zero-data-retention processing before public launch so prompt/output content is not retained by the AI provider. (See Privacy Policy.)
-5. THIRD-PARTY PROVIDERS. I consent to processing by the Firm's service providers acting as its agents under confidentiality and data-protection obligations: AI inference (Anthropic), cloud hosting/storage (Supabase), payments (Stripe), and transactional email (Resend).
-6. BILLING. I acknowledge AI usage has a cost, charged via the subscription and automatic usage top-ups described in my Representation Agreement.
+4. CONFIDENTIALITY & DATA. The Firm treats my Phase II information as confidential under Tex. Disciplinary R. 1.05; uses AI providers under confidentiality and data-processing obligations (Anthropic by default; xAI when I select Grok or when a feature requires it); does NOT permit my content to be used to train AI models; and is enabling zero-data-retention (ZDR) processing with each AI provider before that provider is used for public client content so prompt/output content is not retained by that provider. (See Privacy Policy.)
+5. THIRD-PARTY PROVIDERS. I consent to processing by the Firm's service providers acting as its agents under confidentiality and data-protection obligations: AI inference (Anthropic and, when selected/required, xAI), cloud hosting/storage (Supabase), payments (Stripe), and transactional email (Resend).
+6. BILLING. I acknowledge AI usage has a cost, charged via the subscription and automatic usage top-ups described in my Representation Agreement. Different models have different underlying costs; the Firm meters usage in dollars of model cost.
 7. REVOCATION. I may revoke this consent in writing at any time. Because AI assistance is integral to the service, revocation generally ends the Firm's ability to provide platform services and may end the engagement. Revocation does not affect prior lawful processing or charges already incurred.
 
 PART B — ATTORNEY-CLIENT PRIVILEGE (READ CAREFULLY)

@@ -39,7 +39,8 @@ Required env for instant-attorney: `NEXT_PUBLIC_SUPABASE_URL`,
 `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
 `Claude_Instant_Attorney` (the Anthropic key — note the non-standard name),
 `RESEND_API_KEY`, `SESSION_SECRET`. See `.env.local.example`.
-`BYPASS_AUTH` must **never** be `true` in production.
+`BYPASS_AUTH` must **never** be `true` in production (`/admin` refuses to honour
+it there regardless). Set `ADMIN_EMAILS` so admin break-glass works.
 
 ## Stack
 
@@ -67,6 +68,7 @@ Required env for instant-attorney: `NEXT_PUBLIC_SUPABASE_URL`,
 | DB schema (source of truth) | `artifacts/instant-attorney/supabase/*.sql` |
 | Legal/statute data catalogs | `lib/*-statutes.ts`, `lib/*-instruments.ts` |
 | Client-facing legal docs | `artifacts/instant-attorney/legal/*.md` |
+| Admin console | `app/admin/` (gated once in `layout.tsx`), `lib/admin/` |
 | Design docs | `docs/` |
 | QA resources | `docs/qa/` |
 | Durable agent notes | `.agents/memory/` (indexed in `MEMORY.md`) |

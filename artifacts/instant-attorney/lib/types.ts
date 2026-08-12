@@ -184,6 +184,11 @@ export interface Profile {
   firm_name: string | null;
   /** US state code (or OTHER) for UPL / jurisdiction notices. */
   home_state?: string | null;
+  /**
+   * Preferred AI inference provider for workhorse features (`anthropic` | `xai`).
+   * Cheap/premium tiers stay on Anthropic until later phases.
+   */
+  preferred_ai_provider?: "anthropic" | "xai" | null;
   created_at: string;
   updated_at: string;
 }
