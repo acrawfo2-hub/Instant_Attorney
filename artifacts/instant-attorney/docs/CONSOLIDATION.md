@@ -110,7 +110,7 @@ routing guards by removing the second service that made shadowing possible.
 | 2 | Delete the second architecture and the guardrail it required | done |
 | 3 | One matter routing decision — fixes the defect above | done |
 | 4 | Retire the roadmap spine; confirm the guidance chain | done |
-| 5 | One drafting engine behind the orchestrator | done |
+| 5 | One drafting engine; wizard journey retired | done |
 | 6 | One attorney workbench — one associate, one thread, one accept gate | next |
 | 7 | Remove the retired `pre_warmed` state | done |
 
@@ -315,3 +315,49 @@ panel reads `client_workspace_drafts` and those rows live in `documents` — the
 artifact convergence this plan defers. Creating a document by clicking through is
 gone; editing one you already have is not, and will not be until there is one
 artifact.
+
+
+### Chunk 5, finished: the wizard is retired
+
+Three implementations of document generation existed, not two. The third was
+`app/api/documents/[id]/regenerate/route.ts`, which the first version of the
+chunk-5 guard did not catch: that guard pinned the risk gate to one *caller*, so
+a path that never called the gate at all passed it. `regenerate` ran its own
+Anthropic call with no risk gate, no pinned authority, no spec, no validator —
+and `extractDraftText(...) ?? fullResponse.trim()`, which promoted a markerless
+response to renderable `draft_text`. It writes through `saveDocumentRevision`, so
+that raw prose became a revision the client could submit for review. Folded into
+`draftInstrument`, which fixes both violations at once.
+
+The guard now looks for the **drafter prompt** rather than the gate: assembling
+`buildDrafterSystemPrompt` into a model call means you are generating a document
+and must go through the engine. Its allowlist has exactly one entry — `chat-edit`,
+which proposes and never writes — and adding to that set is how a second
+implementation gets back in.
+
+**The forum gate no longer refuses.** It used to return `blocked` and the client
+got nothing, which broke acceptance test #2. It now shapes the draft instead: the
+model is told the forum is unestablished, forbidden from naming or implying one,
+and required to write `FORUM_PLACEHOLDER` everywhere the forum would appear.
+Because that placeholder says BLOCKING, `placeholderFields` marks it required and
+the existing "information needed" form asks the client for it like any other
+missing fact — no new screen, no new concept. Never defaulting a jurisdiction and
+never abandoning a draft are both kept; the third option is to mark it.
+
+**Retired:** `app/wizard/[type]/page.tsx`, `app/api/wizard/route.ts`,
+`app/api/wizard/save-answers`, and — newly orphaned by their removal —
+`resolveWizardDocumentTarget` and `DRAFTER_SYSTEM_PROMPT`. Every capability the
+journey provided already had an orchestrator equivalent: drafting is the
+conversation, "Improve My Draft" is `open_uploaded_document`, editing is the
+drafts panel, submitting is `promote` (which calls `finalizeDocumentSubmission`,
+so it queues for the attorney), and download, placeholder-filling and regeneration
+were already reachable from the case file.
+
+`CaseDocumentsTable`'s "Continue →" resolves a promoted document back to the
+workspace draft it came from, via `promoted_document_id`, and opens that in the
+panel the client already edits in. No copy, no second artifact, and it works
+without the physical table merge this plan still defers.
+
+**Kept:** `WizardType` and `lib/wizard-parsing.ts`. The names are unfortunate but
+they are the instrument taxonomy and the placeholder parser — the engine's
+vocabulary, not the journey's.

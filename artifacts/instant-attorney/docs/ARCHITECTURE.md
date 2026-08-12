@@ -61,33 +61,37 @@ A pipeline, in order. Each stage has one module:
 
 **`lib/document-drafting.ts` owns the whole pipeline.** `draftInstrument` runs
 identity, authority, spec, risk gate, generation, refinement and validation in
-one place, and both callers use it:
+one place. Two callers, and neither owns the drafting:
 
-| Caller | Writes to | On a truncated response |
+| Caller | Produces | On a truncated response |
 |---|---|---|
-| `app/api/wizard/route.ts` | `documents` | saves the text and flags `truncated`, because a person is looking at it |
-| `lib/document-job-worker.ts` | `client_workspace_drafts` | **fails the job**, because nothing is watching |
+| `lib/document-job-worker.ts` | the orchestrator's workspace draft | **fails the job** — nothing is watching, and a half-written draft looks finished |
+| `app/api/documents/[id]/regenerate/route.ts` | a new revision of an existing document | keeps the existing draft and reports failure |
 
-That divergence is deliberate. `extractDraftText` salvages a draft block that
-opened but never closed, so a truncated run can still yield text.
-`client_workspace_drafts` has no truncation flag, so the worker saving it would
-put a half-written document in the panel looking finished — and the client can
-promote that straight into the attorney review queue. Failing keeps the visible
-shell, records the reason on the job, and leaves it retryable.
+There were three implementations before this. The wizard route had the real
+pipeline; the worker had a twelve-line Anthropic call with none of it; and
+`regenerate` had a third that skipped the risk gate **and** promoted a markerless
+response to renderable `draft_text` via `extractDraftText(...) ?? fullResponse`.
+Since `regenerate` writes through `saveDocumentRevision`, that raw prose became a
+real revision the client could submit for review.
 
-The worker used to have its own twelve-line Anthropic call with a one-sentence
-system prompt and none of the stages above — no pinned authority, no spec, **no
-risk gate**, no validator, no marker check. The orchestrator was using the
-drafting path without the legal-quality gates while the gated one was reachable
-only by clicking through the wizard. `document-drafting.test.ts` pins the risk
-gate to exactly one caller, so no new path can generate a document without
-passing it.
+`document-drafting.test.ts` pins this by looking for the **drafter prompt**, not
+the gate: any file that assembles `buildDrafterSystemPrompt` into a model call is
+generating a document and must go through `draftInstrument`. An earlier version
+pinned the risk gate to one caller, which caught a second *consumer* of the gate
+but not a path that never called it — which is exactly how `regenerate` passed.
 
 Two rules learned the hard way:
 
-- **Never default a jurisdiction.** High-risk instruments block when the
-  governing forum is unknown rather than assuming one. Removing that block has
-  been attempted twice.
+- **Never default a jurisdiction.** The model may not name, assume or imply a
+  governing forum it has not been given. Removing that has been attempted twice.
+  It does **not** mean refusing to draft: when the forum is unknown, the document
+  is still produced in full, with `FORUM_PLACEHOLDER` written everywhere the
+  forum would appear. That placeholder is BLOCKING, so `placeholderFields` marks
+  it required and the existing "information needed" form asks the client for it
+  like any other missing fact. A refusal left the client with nothing, which
+  broke the promise that every drafting request yields a visible, editable
+  artifact; a guess would have been worse. This is the third option.
 - **A markerless model response is not a draft.** If the complete
   `---DRAFT READY---`/`---END DRAFT---` block did not arrive, the output is
   recovery material, not renderable text a client can submit for review.
@@ -98,11 +102,10 @@ Two rules learned the hard way:
 text.** Every save goes through `saveDocumentRevision`, which stamps a revision
 id and drives the durable Living File sync.
 
-There are nine writers and no others:
+There are eight writers and no others:
 
 | Writer | Save |
 |---|---|
-| `app/api/wizard/route.ts` | first generation |
 | `app/api/documents/[id]/regenerate/route.ts` | regeneration in place |
 | `app/api/documents/[id]/fill-info/route.ts` | client fills placeholders |
 | `app/api/workspace/drafts/[id]/route.ts` | client edits a promoted draft |
@@ -290,9 +293,6 @@ before starting on any entry here.
 
 - ~~Four modules compute "what next"~~ — **investigated and not true.** See
   "The guidance chain" below. The two real problems it described are gone.
-- **Two client drafting journeys** — `app/wizard/[type]/page.tsx` and the
-  orchestrator. The *page* retires; `app/api/wizard/route.ts` is the generation
-  engine and stays. See CONSOLIDATION.md before touching either.
 - **Two draft records** — `client_workspace_drafts` and `documents`, bridged by
   promotion. One service and one UI model first; a physical merge only if that
   does not already remove the complexity.
@@ -301,6 +301,14 @@ before starting on any entry here.
   junior-associate goal. Combining into one case workbench.
 - **`pre_warmed`** — a retired document status that ~15 call sites must remember
   to filter out. Every query that forgets shows a document that does not exist.
+
+The wizard journey was retired in chunk 5: `app/wizard/[type]/page.tsx`,
+`app/api/wizard/route.ts` and `app/api/wizard/save-answers` are gone, along with
+`resolveWizardDocumentTarget` (which existed to safely target a caller-supplied
+document id — nothing supplies one now) and `DRAFTER_SYSTEM_PROMPT`. The engine
+survives as `lib/document-drafting.ts`. `WizardType` and `lib/wizard-parsing.ts`
+also stay: they are the instrument taxonomy and the placeholder parser, not the
+journey.
 
 Removed in chunk 2, recorded so they are not recreated: `lib/case-cta.ts` and
 `lib/document-generation-policy.ts` (both imported only by their own tests), and

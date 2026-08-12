@@ -55,7 +55,13 @@ test("puts create document in hero when strategy exists and no doc yet", () => {
     facts: [{ id: "f1", case_file_id: "file-1", user_id: "u", description: "x", status: "confirmed", created_at: "" }],
   });
   assert.equal(board.hero.activeStep, 2);
-  assert.match(board.hero.cta?.href ?? "", /\/wizard\/demand_letter/);
+  // The hero used to open the wizard. Drafting is a conversation now, and the
+  // drafting engine sits behind it — so the hero names the document and hands
+  // the request to the case chat.
+  const href = board.hero.cta?.href ?? "";
+  assert.match(href, /^\/chat\?/);
+  assert.match(href, /caseFileId=file-1/);
+  assert.match(href, /Demand\+Letter/);
 });
 
 test("surfaces fact gaps in the action queue", () => {

@@ -33,8 +33,11 @@ import type { WizardType, CaseFile, FactItem, Attachment, RequestedAttachment } 
  * Two rules from ARCHITECTURE.md are enforced here rather than trusted to
  * callers, because both have been broken before:
  *
- *   * **Never default a jurisdiction.** A high-risk instrument with no
- *     confirmed forum returns `blocked` and never reaches a model.
+ *   * **Never default a jurisdiction.** When the governing forum is unknown, the
+ *     model is forbidden from naming, assuming or implying one — but the
+ *     document is still drafted. The forum becomes a BLOCKING placeholder, so
+ *     the client gets a complete, visible, editable artifact with the gap made
+ *     unmistakable instead of a refusal. See FORUM_PLACEHOLDER below.
  *   * **A markerless response is not a draft.** `draftText` is null unless the
  *     complete `---DRAFT READY---`/`---END DRAFT---` block arrived. The raw
  *     response is still returned, as recovery material, and callers must not
@@ -64,8 +67,6 @@ export interface DraftingRequest {
 }
 
 export type DraftingResult =
-  /** The forum is unknown and the instrument is high-risk. No model was called. */
-  | { kind: "blocked"; blocking: JurisdictionBlock }
   /** The model call itself failed. Callers surface a friendly message and allow retry. */
   | { kind: "error"; message: string }
   | {
@@ -80,6 +81,12 @@ export type DraftingResult =
       truncated: boolean;
       /** Why there is no draftText, when there isn't one. */
       incompleteReason: "missing_draft_block" | "truncated_draft_block" | "empty_draft_block" | null;
+      /**
+       * Set when this instrument needed a governing forum and the file has none.
+       * The draft still exists; it carries FORUM_PLACEHOLDER wherever the forum
+       * would appear, and callers should surface this to the client.
+       */
+      forumDeficiency: JurisdictionBlock | null;
       structuredSections: StructuredDraftSection[];
       validationReport: InstrumentValidationReport | null;
       /** The raw message, so callers can meter usage against real token counts. */
@@ -91,6 +98,40 @@ const AUTHORITY_RE =
   /(?:\b\d+\s+U\.S\.C\.\s*§+\s*[\w.-]+|\b(?:Tex\.|Texas)\s+(?:Gov't|Estates|Property|Trust)\s+Code\s*§+\s*[\w.-]+)/gi;
 
 export const DRAFTING_MODEL = "claude-sonnet-4-6";
+
+/**
+ * The placeholder that stands in for an unestablished governing forum.
+ *
+ * Uses the same `[[LABEL — hint]]` convention as every other missing fact, and
+ * says BLOCKING so `placeholderFields` marks it required. That is the whole
+ * point: the forum gap travels through the machinery that already exists for
+ * missing information, rather than needing a screen of its own.
+ */
+export const FORUM_PLACEHOLDER =
+  "[[GOVERNING COURT OR JURISDICTION — BLOCKING: which state's law governs this, and which court or agency it is for]]";
+
+/** Told to the model when the forum is unknown. It drafts; it does not guess. */
+function forumDirective(block: JurisdictionBlock): string {
+  return [
+    "",
+    "=== GOVERNING FORUM NOT ESTABLISHED ===",
+    `The ${block.missing} for this ${block.category} is not confirmed on this file.`,
+    "",
+    "Draft the document IN FULL anyway. Do not refuse, and do not shorten it.",
+    "",
+    "You must NOT name, assume, or imply which state's law applies, which court or",
+    "agency it is for, or which statute governs. Do not fall back on a common or",
+    "likely jurisdiction, and do not cite authority you cannot attribute to a",
+    "confirmed forum.",
+    "",
+    "Wherever the document would name or depend on the forum — the caption, the",
+    "governing-law clause, statutory citations, filing deadlines, execution",
+    `formalities — write exactly this instead:\n${FORUM_PLACEHOLDER}`,
+    "",
+    "Everything not dependent on the forum should be drafted normally and completely.",
+    "=== END GOVERNING FORUM NOTICE ===",
+  ].join("\n");
+}
 
 /**
  * Run the generation pipeline. `client` is injected so callers share their
@@ -112,17 +153,27 @@ export async function draftInstrument(
   } = request;
 
   // ── Risk gate ────────────────────────────────────────────────────────────
-  // Before any model call, and it never assumes a forum. Removing this has been
-  // attempted twice.
+  // This used to refuse outright. It no longer does, because a refusal fails the
+  // promise that every drafting request yields a complete, visible, editable
+  // artifact — the client was left with nothing rather than something with an
+  // obvious hole in it.
+  //
+  // What it must never do is *guess*. So the gate now shapes the draft instead
+  // of blocking it: the model is told the forum is unestablished, forbidden from
+  // naming or implying one, and required to write FORUM_PLACEHOLDER everywhere
+  // the forum would otherwise appear. The placeholder is BLOCKING, so
+  // `placeholderFields` marks it required and the existing "information needed"
+  // form surfaces it to the client like any other missing fact.
   const documentLabel =
     request.instrumentLabel?.trim() || WIZARD_LABELS[wizardType];
   const riskProfile = classifyInstrumentRisk(wizardType, documentLabel);
   const confirmedFactText = facts
     .filter((fact) => fact.status === "confirmed")
     .map((fact) => fact.description);
-  if (riskProfile.risk === "high" && !hasRequiredForum(riskProfile, caseFile?.jurisdiction, confirmedFactText)) {
-    return { kind: "blocked", blocking: buildJurisdictionBlock(riskProfile) };
-  }
+  const forumDeficiency =
+    riskProfile.risk === "high" && !hasRequiredForum(riskProfile, caseFile?.jurisdiction, confirmedFactText)
+      ? buildJurisdictionBlock(riskProfile)
+      : null;
 
   // ── Identity and authority ───────────────────────────────────────────────
   // Resolved against pinned profiles. An unknown instrument produces a blocking
@@ -152,7 +203,10 @@ export async function draftInstrument(
           text: `Document being drafted: ${documentLabel}\n\n${wizardFieldGuidance(wizardType, request.instrumentKey)}\n\n${specForPrompt(wizardType)}`,
           cache_control: { type: "ephemeral" as const },
         },
-        { type: "text" as const, text: fileContext + extraContext },
+        {
+          type: "text" as const,
+          text: fileContext + extraContext + (forumDeficiency ? forumDirective(forumDeficiency) : ""),
+        },
       ],
       messages,
     });
@@ -213,6 +267,7 @@ export async function draftInstrument(
   return {
     kind: "generated",
     draftText,
+    forumDeficiency,
     fullResponse,
     renderedResponse: stripStructuredSections(fullResponse),
     truncated: message.stop_reason === "max_tokens",

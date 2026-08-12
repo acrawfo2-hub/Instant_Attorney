@@ -10,8 +10,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { DRAFTER_SYSTEM_PROMPT, wizardFieldGuidance, buildFileContext } from "@/lib/prompts";
-import { parseAndUpdateFile, extractDraftText, syncDraftGapsToLivingFile, isCompleteFileUpdate } from "@/lib/file-parser";
+import { draftInstrument } from "@/lib/document-drafting";
+import { parseAndUpdateFile, syncDraftGapsToLivingFile, isCompleteFileUpdate } from "@/lib/file-parser";
 import { saveDocumentRevision } from "@/lib/document-persistence";
 import { stampFactsSynced, isValidWizardType } from "@/lib/document-utils";
 import { loadAttachmentAsContentBlocks } from "@/lib/attachment-processor";
@@ -150,9 +150,7 @@ export async function POST(
   const facts = (factRows ?? []) as FactItem[];
   const attachments = (attachmentRows ?? []) as Attachment[];
   const requestedAttachments = (requestedRows ?? []) as RequestedAttachment[];
-  const fileContext = buildFileContext(caseFile, facts, attachments, requestedAttachments);
   const instrumentKey = doc.instrument_key ?? (doc.content_json as Record<string, unknown> | null)?.instrument_key as string | undefined;
-  const fieldHints = wizardFieldGuidance(wizardType as WizardType, instrumentKey);
 
   // For a general document the specific instrument isn't stored as its own field;
   // recover it from the saved title (drafted as "<instrument> — <date>") so the
@@ -189,39 +187,34 @@ export async function POST(
     }
   }
 
-  // Stream server-side then assemble — the SDK refuses non-streaming requests
-  // whose max_tokens risks a >10-min response (our 64k ceiling), and we never
-  // pass SSE through Replit's proxy. Return a single JSON payload.
-  let message: Anthropic.Message;
-  try {
-    const stream = anthropic.messages.stream({
-      model: "claude-sonnet-4-6",
-      max_tokens: maxOutputTokensFor("claude-sonnet-4-6"),
-      system: [
-        { type: "text" as const, text: DRAFTER_SYSTEM_PROMPT },
-        {
-          type: "text" as const,
-          text: `Document being drafted: ${documentLabel}\n\n${fieldHints}`,
-          cache_control: { type: "ephemeral" as const },
-        },
-        { type: "text" as const, text: fileContext },
-      ],
-      messages: [regenerateMessage],
-    });
-    message = await stream.finalMessage();
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Anthropic API error";
-    console.error("[documents/regenerate] Anthropic error:", msg);
+  // Regeneration is a generation, so it runs the same pipeline as every other
+  // one — lib/document-drafting.ts. It used to have its own Anthropic call that
+  // reached none of the stages, which cost it both load-bearing rules at once:
+  // no risk gate, so a high-risk instrument could be redrafted against a forum
+  // nobody had confirmed; and `extractDraftText(...) ?? fullResponse.trim()`,
+  // which promoted a markerless response to renderable draft_text — the exact
+  // fallback #111 removed. This route writes through saveDocumentRevision, so
+  // that raw prose became a real revision the client could submit for review.
+  const drafted = await draftInstrument(anthropic, {
+    wizardType: wizardType as WizardType,
+    instrumentLabel: documentLabel,
+    instrumentKey,
+    caseFile,
+    facts,
+    attachments,
+    requestedAttachments,
+    messages: [regenerateMessage],
+  });
+
+  if (drafted.kind === "error") {
     return NextResponse.json(
       { error: "We couldn't regenerate your draft just now. Please try again in a moment." },
       { status: 502 }
     );
   }
 
-  const fullResponse = message.content
-    .filter((b) => b.type === "text")
-    .map((b) => (b as Anthropic.TextBlock).text)
-    .join("");
+  const { fullResponse, truncated, draftText } = drafted;
+  const message = drafted.message;
 
   recordAiFromMessage(db, message, {
     userId,
@@ -240,7 +233,6 @@ export async function POST(
     },
   }).catch((e) => console.error("[documents/regenerate] usage record error:", e));
 
-  const truncated = message.stop_reason === "max_tokens";
   if (truncated) {
     logTruncation({
       endpoint: "documents/regenerate",
@@ -251,10 +243,15 @@ export async function POST(
     });
   }
 
-  const draftText = extractDraftText(fullResponse) ?? (fullResponse.trim() || null);
+  // No fallback to the raw response. Overwriting a saved draft with prose that
+  // never carried the draft markers replaces a real document with recovery
+  // material, in place, under the same id.
   if (!draftText) {
     return NextResponse.json(
-      { error: "We couldn't regenerate your draft just now. Please try again." },
+      {
+        error:
+          "The regenerated draft didn't come back complete, so we kept your existing one. Please try again.",
+      },
       { status: 502 }
     );
   }

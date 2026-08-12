@@ -795,9 +795,17 @@ export default function CaseDocumentsTable({
                   : doc.status === "changes_requested" ? <Pill kind="review" label="Revisions requested" />
                   : <Pill kind="stored" label={doc.status} />;
 
+                // A promoted document remembers the workspace draft it came
+                // from, so "Continue" reopens THAT draft in the panel the client
+                // already edits in — rather than a copy, or the retired wizard.
+                const originDraftId = workspaceDrafts.find((d) => d.promoted_document_id === doc.id)?.id;
+                const continueHref = originDraftId
+                  ? `/chat?caseFileId=${doc.case_file_id}&draft=${originDraftId}`
+                  : `/chat?caseFileId=${doc.case_file_id}&ask=${encodeURIComponent(`Let's keep working on my ${doc.title}.`)}`;
+
                 const primary =
                   isAttorney ? <Link className="cdt-ghost" href={`/attorney/review/${doc.id}`}>Review →</Link>
-                  : doc.status === "draft" ? <Link className="cdt-ghost" href={`/wizard/${doc.doc_type}?caseFileId=${doc.case_file_id}&docId=${doc.id}`}>Continue →</Link>
+                  : doc.status === "draft" ? <Link className="cdt-ghost" href={continueHref}>Continue →</Link>
                   : doc.draft_text ? <a className="cdt-ghost" href={`/api/documents/${doc.id}/download`}>Download</a>
                   : <span className="cdt-muted">—</span>;
 

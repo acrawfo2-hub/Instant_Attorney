@@ -4,7 +4,9 @@ import { readFile, readdir } from "node:fs/promises";
 import { placeholderFillLifecycle } from "./document-persistence.ts";
 
 const revisionWriters = [
-  "app/api/wizard/route.ts",
+  // The wizard route was the "first generation" writer and is gone with the
+  // wizard journey. A document's first revision is now written by promote, when
+  // a workspace draft the orchestrator produced becomes a reviewable document.
   "app/api/documents/[id]/regenerate/route.ts",
   "app/api/documents/[id]/fill-info/route.ts",
   "app/api/workspace/drafts/[id]/promote/route.ts",

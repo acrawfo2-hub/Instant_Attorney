@@ -1175,7 +1175,6 @@ Placeholder rules:
 Quality standard: The document must be internally consistent, use defined terms correctly, and be complete enough that an attorney can do a meaningful review rather than a structural rewrite.`;
 }
 
-export const DRAFTER_SYSTEM_PROMPT = buildDrafterSystemPrompt("client");
 
 // ── Attorney review prompts ──────────────────────────────────────────────────
 

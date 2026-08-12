@@ -54,6 +54,11 @@ export async function runDocumentGenerationJob(db: SupabaseClient, jobId: string
  * — which is the point of the durable job. Writing partial or ungated text into
  * a draft the client can submit for attorney review is the outcome worth
  * avoiding.
+ *
+ * An unestablished governing forum is NOT such a failure. The draft comes back
+ * complete, with the forum written as a BLOCKING placeholder everywhere it would
+ * have appeared, and it is saved like any other. The client sees the document
+ * and the gap in it, which is more use than an error.
  */
 async function generateJobText(db: SupabaseClient, job: Job): Promise<string> {
   const [{ data: caseFile }, { data: facts }, { data: attachments }, { data: requested }] = await Promise.all([
@@ -79,12 +84,6 @@ async function generateJobText(db: SupabaseClient, job: Job): Promise<string> {
     messages: [{ role: "user", content: `Draft the ${job.title}.` }],
   });
 
-  if (result.kind === "blocked") {
-    // The governing forum is unknown and this instrument is high-risk. Failing
-    // is correct: the alternative is assuming a jurisdiction, which is the rule
-    // this codebase has had to restore twice.
-    throw new Error(result.blocking.message ?? "The governing forum for this document is not established yet.");
-  }
   if (result.kind === "error") {
     throw new Error(result.message);
   }
