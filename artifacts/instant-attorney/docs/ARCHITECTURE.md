@@ -54,10 +54,34 @@ A pipeline, in order. Each stage has one module:
 | Authority | `lib/instruments/authority.ts` | which pinned legal source backs it |
 | Spec | `lib/document-generation-spec.ts` | what sections it needs |
 | Risk gate | `lib/document-risk.ts` | is the governing forum known |
-| Generate | `app/api/wizard/route.ts` | produce the text |
+| Generate | `lib/document-drafting.ts` | produce the text |
 | Refine | `lib/document-refinement.ts` | structured sections |
 | Validate | `lib/instruments/validator.ts` | is it ready for review |
 | Render | `lib/doc-generator.ts`, `lib/doc-layout.ts` | produce the .docx |
+
+**`lib/document-drafting.ts` owns the whole pipeline.** `draftInstrument` runs
+identity, authority, spec, risk gate, generation, refinement and validation in
+one place, and both callers use it:
+
+| Caller | Writes to | On a truncated response |
+|---|---|---|
+| `app/api/wizard/route.ts` | `documents` | saves the text and flags `truncated`, because a person is looking at it |
+| `lib/document-job-worker.ts` | `client_workspace_drafts` | **fails the job**, because nothing is watching |
+
+That divergence is deliberate. `extractDraftText` salvages a draft block that
+opened but never closed, so a truncated run can still yield text.
+`client_workspace_drafts` has no truncation flag, so the worker saving it would
+put a half-written document in the panel looking finished — and the client can
+promote that straight into the attorney review queue. Failing keeps the visible
+shell, records the reason on the job, and leaves it retryable.
+
+The worker used to have its own twelve-line Anthropic call with a one-sentence
+system prompt and none of the stages above — no pinned authority, no spec, **no
+risk gate**, no validator, no marker check. The orchestrator was using the
+drafting path without the legal-quality gates while the gated one was reachable
+only by clicking through the wizard. `document-drafting.test.ts` pins the risk
+gate to exactly one caller, so no new path can generate a document without
+passing it.
 
 Two rules learned the hard way:
 

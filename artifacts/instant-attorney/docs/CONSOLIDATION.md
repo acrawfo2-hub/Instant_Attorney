@@ -110,8 +110,8 @@ routing guards by removing the second service that made shadowing possible.
 | 2 | Delete the second architecture and the guardrail it required | done |
 | 3 | One matter routing decision — fixes the defect above | done |
 | 4 | Retire the roadmap spine; confirm the guidance chain | done |
-| 5 | One drafting surface — orchestrator meets the completion contract | **reshaped — see below** |
-| 6 | One attorney workbench — one associate, one thread, one accept gate | |
+| 5 | One drafting engine behind the orchestrator | done |
+| 6 | One attorney workbench — one associate, one thread, one accept gate | next |
 | 7 | Remove the retired `pre_warmed` state | done |
 
 ### Chunk 4 — what it turned out to be
@@ -193,7 +193,7 @@ unreachable, and route every client to the one that skips them. **The wizard
 journey cannot retire until the worker calls the real pipeline.** That is the
 actual chunk 5, and it is a build, not a deletion.
 
-Groundwork landed instead, because the investigation surfaced live defects:
+Groundwork landed first, because the investigation surfaced live defects:
 
 * the worker selected `category, fact_text, source_quote` from `fact_items`,
   which has `description, status, kind`. PostgREST rejects the whole select, so
@@ -293,3 +293,25 @@ These are complexity caused by real failure modes. Consolidation puts each in
 - ownership/role checks, RLS, audit trails, retention and legal-hold duties, and
   privileged-work-product boundaries;
 - durable ACP/document jobs and their idempotency protections.
+
+
+### Chunk 5, as built
+
+`lib/document-drafting.ts` is now the one implementation of "produce legal
+document text". `draftInstrument` runs identity, authority, spec, risk gate,
+generation, refinement and validation; the wizard route keeps its conversation
+handling, persistence and response shape, and the worker keeps its job lifecycle
+and shell. Neither owns the drafting any more.
+
+The wizard is the engine behind the orchestrator, not a place the client clicks
+through to. The six specialist pages' "draft this" buttons now hand the request
+to the case conversation with a seeded composer — `?ask=` suggests, the client
+still presses send.
+
+**What is deliberately still reachable:** `/wizard/[type]` for *continuing* an
+existing document. `next-step`, `mission-control` and `CaseDocumentsTable` link
+there with a `docId`. Those cannot move to chat yet, because the chat drafts
+panel reads `client_workspace_drafts` and those rows live in `documents` — the
+artifact convergence this plan defers. Creating a document by clicking through is
+gone; editing one you already have is not, and will not be until there is one
+artifact.

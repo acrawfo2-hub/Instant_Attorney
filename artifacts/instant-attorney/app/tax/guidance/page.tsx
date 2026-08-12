@@ -45,8 +45,14 @@ function TaxNavigatorTool() {
   );
 
   const guidance = situation ? taxGuidanceFor(situation) : null;
-  const wizardHref = (wizardType: string) =>
-    caseFileId ? `/wizard/${wizardType}?caseFileId=${caseFileId}` : `/free-chat?area=tax`;
+  // Hands the request to the orchestrator rather than opening a second
+  // drafting client. The wizard is the engine behind that conversation now
+  // (lib/document-drafting.ts), not a place the client clicks through to.
+  // `ask` only seeds the composer — she still reads it and presses send.
+  const wizardHref = (wizardType: string, label?: string) =>
+    caseFileId
+      ? `/chat?caseFileId=${caseFileId}&ask=${encodeURIComponent(`Please draft the ${label ?? wizardType.replace(/_/g, " ")} for my matter.`)}`
+      : `/free-chat?area=tax`;
   const chatHref = caseFileId ? `/chat?caseFileId=${caseFileId}` : "/chat?area=tax";
 
   return (
@@ -142,7 +148,7 @@ function TaxNavigatorTool() {
                     return (
                       <Link
                         key={key}
-                        href={wizardHref(inst.wizard_type)}
+                        href={wizardHref(inst.wizard_type, inst.label)}
                         style={{ fontSize: 13.5, fontWeight: 500, color: navy, background: gold, padding: "9px 14px", borderRadius: 8, textDecoration: "none" }}
                       >
                         {inst.label} →
