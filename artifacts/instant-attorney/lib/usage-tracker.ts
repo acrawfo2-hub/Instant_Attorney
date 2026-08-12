@@ -28,6 +28,8 @@ export type UsageFeature =
   | "attorney_pre_consult"
   | "attorney_consult_closeout"
   | "attorney_brainstorm"
+  // Retired with the roadmap UI — nothing emits this any more. Kept because
+  // historical usage rows still carry it and must stay readable.
   | "roadmap_refresh"
   | "matter_synthesis"
   | "strength_check"

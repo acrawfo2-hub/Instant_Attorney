@@ -13,7 +13,6 @@ import {
   prepModeBadgeLabel,
   stateBarReferralUrl,
 } from "@/lib/jurisdiction";
-import type { RoadmapAiOverlay } from "@/lib/roadmap-types";
 import CaseHub from "@/components/CaseHub";
 import FileTiles from "@/components/FileTiles";
 import FileAlertStrip from "@/components/FileAlertStrip";
@@ -76,7 +75,6 @@ interface ClientFileViewProps {
   hasConsultSub?: boolean;
   completedConsultWrapUp?: ConsultWrapUp | null;
   completedConsultSubmittedAt?: string | null;
-  roadmapOverlay?: RoadmapAiOverlay;
   clientDestination?: ClientDestination | null;
 }
 
@@ -96,7 +94,6 @@ export default function ClientFileView({
   hasConsultSub = false,
   completedConsultWrapUp = null,
   completedConsultSubmittedAt = null,
-  roadmapOverlay = {},
   clientDestination = null,
 }: ClientFileViewProps) {
   // A fact is "hypothetical" if explicitly tagged (kind) OR it carries the
