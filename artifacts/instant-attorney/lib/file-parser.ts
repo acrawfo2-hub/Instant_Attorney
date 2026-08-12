@@ -260,41 +260,58 @@ export async function syncDraftGapsToLivingFile(
   db: SupabaseClient,
   caseFileId: string,
   userId: string,
-  draftText: string
+  draftText: string,
+  source?: { documentId: string; revisionId: string }
 ): Promise<void> {
   const labels = placeholderFields(draftText).map((f) => f.label);
 
-  const [{ data: confirmedRows }, { data: gapRows }] = await Promise.all([
+  const [{ data: confirmedRows, error: confirmedError }, { data: gapRows, error: gapError }] = await Promise.all([
     db.from("fact_items").select("description").eq("case_file_id", caseFileId).eq("status", "confirmed"),
-    db.from("fact_items").select("id, description").eq("case_file_id", caseFileId).eq("status", "gap"),
+    db.from("fact_items").select("id, description, source_document_id, source_revision_id").eq("case_file_id", caseFileId).eq("status", "gap"),
   ]);
 
+  if (confirmedError || gapError) throw confirmedError ?? gapError;
+
   const confirmed = (confirmedRows ?? []) as { description: string }[];
-  const gaps = (gapRows ?? []) as { id: string; description: string }[];
+  const gaps = (gapRows ?? []) as { id: string; description: string; source_document_id?: string | null; source_revision_id?: string | null }[];
 
   // The "name" half of each confirmed "Label: value" fact, used to tell whether a
   // placeholder/gap has already been answered.
   const answered = new Set(confirmed.map((f) => f.description.toLowerCase().split(":")[0].trim()));
-  const existingGapDescs = new Set(gaps.map((g) => g.description.toLowerCase()));
+  const currentGaps = source
+    ? gaps.filter((g) => g.source_document_id === source.documentId && g.source_revision_id === source.revisionId)
+    : gaps;
+  const existingGapDescs = new Set(currentGaps.map((g) => g.description.toLowerCase()));
 
   const toInsert = labels
     .filter((l) => {
       const lower = l.toLowerCase();
-      return !existingGapDescs.has(lower) && !answered.has(lower);
+      // Revision-scoped placeholders are never suppressed by a same-named fact
+      // elsewhere in the case: only revising this document can reconcile them.
+      return !existingGapDescs.has(lower) && (source ? true : !answered.has(lower));
     })
     .map((description) => ({
       case_file_id: caseFileId,
       user_id: userId,
       description,
       status: "gap" as const,
+      ...(source ? { source_document_id: source.documentId, source_revision_id: source.revisionId } : {}),
     }));
-  if (toInsert.length) await db.from("fact_items").insert(toInsert);
+  if (toInsert.length) {
+    const { error } = await db.from("fact_items").insert(toInsert);
+    if (error) throw error;
+  }
 
   // Clear any gap that has now been answered.
   const staleIds = gaps
-    .filter((g) => answered.has(g.description.toLowerCase()))
+    .filter((g) => source
+      ? g.source_document_id === source.documentId && g.source_revision_id !== source.revisionId
+      : answered.has(g.description.toLowerCase()))
     .map((g) => g.id);
-  if (staleIds.length) await db.from("fact_items").delete().in("id", staleIds);
+  if (staleIds.length) {
+    const { error } = await db.from("fact_items").delete().in("id", staleIds);
+    if (error) throw error;
+  }
 }
 
 // ── ---LIVING FILE--- block ──────────────────────────────────────────────────

@@ -237,6 +237,18 @@ function lastDocCall(op: DbCall["op"]) {
   return [...recorder].reverse().find((c) => c.table === "documents" && c.op === op);
 }
 
+/**
+ * The update carrying the generated content, as distinct from the bookkeeping
+ * updates that follow it. Since #118 the revision boundary writes
+ * living_file_sync_status to `documents` after the content write, so "the last
+ * UPDATE" is no longer the one under test.
+ */
+function lastContentUpdate() {
+  return [...recorder].reverse().find((c) =>
+    c.table === "documents" && c.op === "update" &&
+    Object.prototype.hasOwnProperty.call(c.payload as object, "draft_text"));
+}
+
 // ── 1. Update target preserves an elevated lifecycle status ───────────────────
 test("update target preserves pending_review status (never knocks it back to draft)", async () => {
   target = {
@@ -251,7 +263,7 @@ test("update target preserves pending_review status (never knocks it back to dra
   const body = await res.json();
   assert.equal(body.documentId, "doc-1");
 
-  const upd = lastDocCall("update");
+  const upd = lastContentUpdate();
   assert.ok(upd, "expected a documents UPDATE");
   const payload = upd!.payload as Record<string, unknown>;
   assert.equal(payload.status, "pending_review", "must preserve pending_review");
@@ -273,7 +285,7 @@ test("update target promotes a pre_warmed suggestion to draft", async () => {
 
   const res = await POST(makeReq(validBody()));
   assert.equal(res.status, 200);
-  const payload = lastDocCall("update")!.payload as Record<string, unknown>;
+  const payload = lastContentUpdate()!.payload as Record<string, unknown>;
   assert.equal(payload.status, "draft", "pre_warmed should be promoted to draft");
 });
 
@@ -420,7 +432,7 @@ test("successful retry promotes a complete block and clears incomplete state", a
 
   const res = await POST(makeReq(validBody({ documentId: "recovery-doc" })));
   const body = await res.json();
-  const payload = lastDocCall("update")!.payload as Record<string, unknown>;
+  const payload = lastContentUpdate()!.payload as Record<string, unknown>;
   assert.equal(body.generationIncomplete, false);
   assert.equal(payload.draft_text, "Regenerated complete draft");
   assert.equal((payload.content_json as Record<string, unknown>).generation_incomplete, false);
