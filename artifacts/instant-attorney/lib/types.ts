@@ -881,6 +881,28 @@ export interface DocumentQaCitation {
   created_at: string;
 }
 
+export interface AttorneyReviewMemo {
+  documentPurpose: string;
+  principalChanges: string[];
+  risksOrConcerns: string[];
+  clientActionItems: string[];
+  consultationOffer: string;
+}
+
+export interface DocumentDeliveryDraft {
+  id: string;
+  document_id: string;
+  revision_document_id: string;
+  review_run_id: string | null;
+  memo: AttorneyReviewMemo;
+  recipient: string;
+  subject: string;
+  body: string;
+  consultation_url: string | null;
+  consultation_enabled: boolean;
+  updated_at: string;
+}
+
 /** A citation blocks approval when it is not verified and not waived. */
 export function citationBlocksApproval(c: Pick<DocumentQaCitation, "verdict" | "waived">): boolean {
   return !c.waived && c.verdict !== "verified";

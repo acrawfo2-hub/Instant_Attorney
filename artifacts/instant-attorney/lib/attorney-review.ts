@@ -252,6 +252,35 @@ export async function runDocumentReview(runId: string): Promise<void> {
       await upsertSecondDraftChild(db, parentDoc, draftText, changes);
     }
 
+    // Phase 3: persist a structured memo and a client-facing draft against the
+    // exact revision produced by this run. The attorney can freely edit the
+    // delivery draft; a later send snapshots it immutably.
+    const { data: revision } = await db.from("documents").select("id").eq("parent_document_id", documentId).eq("doc_type", "second_draft").maybeSingle();
+    if (revision?.id) {
+      const principalChanges = improvements.map((item) => item.title);
+      const risks = improvements.filter((item) => item.kind === "risk" || item.kind === "blocking" || item.severity === "high").map((item) => item.rationale || item.title);
+      const memo = {
+        documentPurpose: `This ${parentDoc.title} gives the client a reviewed, usable document for the stated matter goals.`,
+        principalChanges,
+        risksOrConcerns: risks.length ? risks : ["No unresolved material concern was identified by the automated review; attorney judgment still controls."],
+        clientActionItems: ["Read the approved revision carefully and confirm names, dates, amounts, and other factual details before using it."],
+        consultationOffer: "Schedule a consultation if you would like to discuss the revision, risks, or next steps.",
+      };
+      const firstName = String((caseFile as CaseFile & { client_name?: string }).client_name ?? "there").split(" ")[0];
+      await db.from("document_delivery_drafts").upsert({
+        document_id: documentId,
+        revision_document_id: revision.id,
+        review_run_id: runId,
+        memo,
+        recipient: "",
+        subject: `Your reviewed ${parentDoc.title} is ready`,
+        body: `Hi ${firstName},\n\nI reviewed your ${parentDoc.title} and attached the approved revision.\n\nKey updates:\n${principalChanges.slice(0, 5).map((x) => `• ${x}`).join("\n")}\n\nPlease review all factual details before using it. Let me know if you have questions.\n\nAndrew Crawford`,
+        consultation_url: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://instant-attorney.com"}/dashboard?consult=1`,
+        consultation_enabled: true,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "document_id" });
+    }
+
     // ── Stage 3: Authorities QA gate (verify every citation) ─────────────────
     // Runs on the revised draft (the version that would reach the client). A
     // gate failure is contained inside runAuthoritiesGate (marks citations as

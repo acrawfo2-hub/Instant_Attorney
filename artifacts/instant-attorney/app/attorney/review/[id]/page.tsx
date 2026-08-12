@@ -3,7 +3,7 @@
 import { use, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import type { Attachment, Document, DocumentComment, DocumentReviewRun, DocumentImprovement, DocumentQaCitation } from "@/lib/types";
+import type { Attachment, Document, DocumentComment, DocumentReviewRun, DocumentImprovement, DocumentQaCitation, DocumentDeliveryDraft } from "@/lib/types";
 import { docTypeLabel, personDisplayName, citationBlocksApproval } from "@/lib/types";
 import AccountMenu from "@/components/AccountMenu";
 import { parseDrafterResponse } from "@/lib/wizard-parsing";
@@ -154,6 +154,9 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
   const [improvements, setImprovements] = useState<DocumentImprovement[]>([]);
   const [citations, setCitations] = useState<DocumentQaCitation[]>([]);
   const [waivingId, setWaivingId] = useState<string | null>(null);
+  const [deliveryDraft, setDeliveryDraft] = useState<DocumentDeliveryDraft | null>(null);
+  const [deliveryBusy, setDeliveryBusy] = useState<"save" | "send" | "approve-send" | null>(null);
+  const [deliveryStatus, setDeliveryStatus] = useState("");
   const runStartedRef = useRef(false);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -162,6 +165,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
   useEffect(() => {
     load();
     loadReviewRun({ allowAutoStart: true });
+    loadDeliveryDraft();
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
       if (runPollRef.current) clearInterval(runPollRef.current);
@@ -192,6 +196,34 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
     if (data.run && (data.run.status === "queued" || data.run.status === "running")) {
       startRunPolling();
     }
+  }
+
+  async function loadDeliveryDraft() {
+    const res = await fetch(`/api/attorney/documents/${id}/delivery`);
+    if (res.ok) {
+      const data = await res.json() as { draft: DocumentDeliveryDraft | null };
+      setDeliveryDraft(data.draft);
+    }
+  }
+
+  async function saveDeliveryDraft(): Promise<boolean> {
+    if (!deliveryDraft) return false;
+    setDeliveryBusy("save"); setDeliveryStatus("");
+    const res = await fetch(`/api/attorney/documents/${id}/delivery`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(deliveryDraft) });
+    const data = await res.json().catch(() => ({}));
+    setDeliveryBusy(null);
+    if (!res.ok) { setDeliveryStatus(data.error ?? "Unable to save draft."); return false; }
+    setDeliveryDraft(data.draft); setDeliveryStatus("Message draft saved."); return true;
+  }
+
+  async function sendDelivery(approveAndSend: boolean) {
+    if (!deliveryDraft || deliveryBusy) return;
+    if (!await saveDeliveryDraft()) return;
+    setDeliveryBusy(approveAndSend ? "approve-send" : "send"); setDeliveryStatus("");
+    const res = await fetch(`/api/attorney/documents/${id}/delivery`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ approveAndSend }) });
+    const data = await res.json().catch(() => ({}));
+    setDeliveryBusy(null);
+    if (res.ok) setDone(true); else setDeliveryStatus(data.error ?? "Unable to send.");
   }
 
   async function startReviewRun() {
@@ -239,6 +271,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
         runPollRef.current = null;
         // Pull in the freshly-generated revised draft + critical review children.
         load();
+        loadDeliveryDraft();
       }
     }, 4000);
   }
@@ -938,6 +971,35 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
             />
           </div>
 
+          {deliveryDraft && (
+            <section className="arr-panel" aria-labelledby="delivery-composer-title">
+              <div className="arr-head"><h2 id="delivery-composer-title">Client delivery composer</h2></div>
+              <p className="atty-second-draft-hint">Preview and edit the exact message that will accompany the approved revision. Saving, approval, and sending are separate actions.</p>
+              <div className="arr-delivery-preview">
+                <p><strong>Exact attachment:</strong> <a href={`/api/documents/${deliveryDraft.revision_document_id}/download`} target="_blank" rel="noreferrer">{doc.title} — approved revision ({deliveryDraft.revision_document_id.slice(0, 8)}) ↗</a></p>
+                <label>Recipient<input value={deliveryDraft.recipient} readOnly /></label>
+                <label>Subject<input value={deliveryDraft.subject} onChange={(e) => setDeliveryDraft({ ...deliveryDraft, subject: e.target.value })} /></label>
+                <label>Message body<textarea rows={12} value={deliveryDraft.body} onChange={(e) => setDeliveryDraft({ ...deliveryDraft, body: e.target.value })} /></label>
+                <label className="arr-consult-toggle"><input type="checkbox" checked={deliveryDraft.consultation_enabled} onChange={(e) => setDeliveryDraft({ ...deliveryDraft, consultation_enabled: e.target.checked })} /> Include direct consultation scheduling CTA</label>
+                {deliveryDraft.consultation_enabled && <label>Consultation link<input value={deliveryDraft.consultation_url ?? ""} onChange={(e) => setDeliveryDraft({ ...deliveryDraft, consultation_url: e.target.value })} /></label>}
+                <details><summary>Structured attorney memo</summary>
+                  <h4>Document purpose</h4><p>{deliveryDraft.memo.documentPurpose}</p>
+                  <h4>Principal changes</h4><ul>{deliveryDraft.memo.principalChanges.map((x, i) => <li key={i}>{x}</li>)}</ul>
+                  <h4>Risks or concerns</h4><ul>{deliveryDraft.memo.risksOrConcerns.map((x, i) => <li key={i}>{x}</li>)}</ul>
+                  <h4>Client action items</h4><ul>{deliveryDraft.memo.clientActionItems.map((x, i) => <li key={i}>{x}</li>)}</ul>
+                  <h4>Consultation offer</h4><p>{deliveryDraft.memo.consultationOffer}</p>
+                </details>
+                {citations.some(citationBlocksApproval) && <div className="arr-approve-block">Outstanding warning: unresolved authorities prevent approval and delivery.</div>}
+              </div>
+              <div className="atty-review-actions">
+                <button className="atty-btn" onClick={saveDeliveryDraft} disabled={Boolean(deliveryBusy)}>{deliveryBusy === "save" ? "Saving…" : "Save message draft"}</button>
+                <button className="atty-btn atty-btn-primary" onClick={() => sendDelivery(false)} disabled={Boolean(deliveryBusy) || doc.status !== "approved" || citations.some(citationBlocksApproval)}>{deliveryBusy === "send" ? "Sending…" : "Send to client"}</button>
+                {doc.status !== "approved" && <button className="atty-btn atty-btn-approve" onClick={() => sendDelivery(true)} disabled={Boolean(deliveryBusy) || citations.some(citationBlocksApproval)}>{deliveryBusy === "approve-send" ? "Approving and sending…" : "Approve and send"}</button>}
+              </div>
+              {deliveryStatus && <p role="status">{deliveryStatus}</p>}
+            </section>
+          )}
+
           {error && <div className="atty-review-error-inline">{error}</div>}
 
           {(() => {
@@ -959,8 +1021,8 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
               {submitting
                 ? "Submitting…"
                 : secondDraft?.draft_text
-                  ? "Approve Revised Draft & Notify Client"
-                  : "Approve Draft & Notify Client"}
+                  ? "Approve Revised Draft"
+                  : "Approve Draft"}
             </button>
             <button
               className="atty-btn atty-btn-changes"
