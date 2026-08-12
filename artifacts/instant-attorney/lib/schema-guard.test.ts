@@ -143,4 +143,77 @@ test("a clean repo produces no findings", () => {
   );
   assert.deepEqual(result.collisions, []);
   assert.deepEqual(result.undefinedTables, []);
+  assert.deepEqual(result.undefinedColumns, []);
+});
+
+// ── Constraint keywords vs. column names ─────────────────────────────────────
+
+test("a column whose name starts with a constraint keyword is still a column", () => {
+  // `check_type` was being dropped as if it were a `check (...)` constraint, on
+  // both document_qa tables. A silently dropped column is worse than a noisy
+  // one: findCollisions compares column sets, so a column invisible in every
+  // definition can diverge between migrations without ever being reported.
+  const [def] = parseTableDefinitions(
+    `create table qa (
+       id uuid primary key,
+       check_type text not null check (check_type in ('a','b')),
+       unique_ref text,
+       constraint_note text,
+       like_count integer,
+       unique (id, check_type)
+     );`,
+    "m.sql",
+  );
+  assert.deepEqual(def.columns, [
+    "check_type", "constraint_note", "id", "like_count", "unique_ref",
+  ]);
+});
+
+// ── Undefined columns ────────────────────────────────────────────────────────
+
+test("reports columns the code selects that no migration defines", () => {
+  const result = runSchemaGuard(
+    [{ file: "m.sql", sql: `create table fact_items (id uuid primary key, description text);` }],
+    [`db.from("fact_items").select("description,fact_text");`],
+    { sourceNames: ["lib/worker.ts"] },
+  );
+  assert.deepEqual(result.undefinedColumns, [
+    { table: "fact_items", column: "fact_text", files: ["lib/worker.ts"] },
+  ]);
+});
+
+test("columns added by a later alter table count as defined", () => {
+  const result = runSchemaGuard(
+    [
+      { file: "a.sql", sql: `create table subscriptions (id uuid primary key);` },
+      // One statement, several columns — the shape most of this schema uses.
+      { file: "b.sql", sql: `alter table subscriptions
+          add column if not exists plan text,
+          add column if not exists consult_credits integer not null default 0;` },
+    ],
+    [`db.from("subscriptions").select("plan, consult_credits");`],
+  );
+  assert.deepEqual(result.undefinedColumns, []);
+});
+
+test("select lists the guard cannot read are skipped, not guessed at", () => {
+  const result = runSchemaGuard(
+    [{ file: "m.sql", sql: `create table documents (id uuid primary key, title text);` }],
+    [
+      `db.from("documents").select("*, revisions(id)");`,   // star + embed
+      `db.from("documents").select("name:title");`,          // alias
+      `db.from("documents").select(cols);`,                  // not a literal
+    ],
+  );
+  assert.deepEqual(result.undefinedColumns, []);
+});
+
+test("a column on a table no migration defines is reported once, as a table", () => {
+  // Otherwise an unknown table reports again for each column selected from it.
+  const result = runSchemaGuard(
+    [{ file: "m.sql", sql: `create table documents (id uuid primary key);` }],
+    [`db.from("ghost_table").select("a, b, c");`],
+  );
+  assert.deepEqual(result.undefinedTables, ["ghost_table"]);
+  assert.deepEqual(result.undefinedColumns, []);
 });

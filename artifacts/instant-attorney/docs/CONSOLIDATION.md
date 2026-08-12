@@ -110,7 +110,7 @@ routing guards by removing the second service that made shadowing possible.
 | 2 | Delete the second architecture and the guardrail it required | done |
 | 3 | One matter routing decision — fixes the defect above | done |
 | 4 | Retire the roadmap spine; confirm the guidance chain | done |
-| 5 | One drafting surface — orchestrator meets the completion contract | next |
+| 5 | One drafting surface — orchestrator meets the completion contract | **reshaped — see below** |
 | 6 | One attorney workbench — one associate, one thread, one accept gate | |
 | 7 | Remove the retired `pre_warmed` state | |
 
@@ -151,15 +151,67 @@ duplication before consolidating it. Twice now the honest finding has been "this
 is already dead" or "this is already one thing," and both were cheaper and safer
 outcomes than the rewrite that was planned.
 
-### Chunk 5 — one drafting surface
+### Chunk 5 — one drafting surface, and why it is not a deletion
 
-`app/wizard/[type]/page.tsx` (1,354 lines) is a second drafting client competing
-with the orchestrator. It retires once orchestrator drafting satisfies the
-completion contract: create a visible shell synchronously, acknowledge, generate
-durably, recover deterministically from truncation into an instrument-shaped
-fallback, mark gaps as stable placeholders plus a deficiency list, persist
-through the one boundary, open in the same editor regardless of origin, and never
-disappear on failure.
+Planned as: retire `app/wizard/[type]/page.tsx` (1,354 lines) as a second
+drafting client, once orchestrator drafting satisfies the completion contract.
+
+Investigation first, per the chunk-4 lesson. Two things came back that change the
+work:
+
+**1. The wizard journey is load-bearing.** Unlike the roadmap, it is thoroughly
+reachable: six specialist pages link to it, `CaseDocumentsTable` uses it for
+"Continue →" on a draft, and — decisively — `next-step.ts` and
+`mission-control.ts` build wizard hrefs, so **the guidance chain's own hero
+action points at it.** Retiring the journey means rewiring the primary CTA of
+the client's main surface.
+
+**2. Orchestrator drafting is a shadow pipeline, not a lesser one.**
+`lib/document-job-worker.ts` runs the durable generation job. It does create the
+draft shell before calling a model, which is the completion contract's first
+step. But `generateJobText` is a direct Anthropic call with a one-sentence system
+prompt, and it reaches **none** of the Generation stages `ARCHITECTURE.md`
+declares:
+
+| Stage | Module | Worker uses it |
+|---|---|---|
+| Identity | `lib/instruments/` | no |
+| Authority | `instruments/authority.ts` | no |
+| Spec | `document-generation-spec.ts` | no |
+| Risk gate | `document-risk.ts` | **no — so it cannot block on an unknown forum** |
+| Generate | `app/api/wizard/route.ts` | no — its own inline call |
+| Refine | `document-refinement.ts` | no |
+| Validate | `instruments/validator.ts` | no |
+
+It also does not check the `---DRAFT READY---` markers, so a truncated response
+is saved as a draft.
+
+So the audit's framing inverts. Retiring the wizard journey today would not
+consolidate two drafting paths onto the good one — it would leave the *only*
+path that applies jurisdiction gating, authority pinning and validation
+unreachable, and route every client to the one that skips them. **The wizard
+journey cannot retire until the worker calls the real pipeline.** That is the
+actual chunk 5, and it is a build, not a deletion.
+
+Groundwork landed instead, because the investigation surfaced live defects:
+
+* the worker selected `category, fact_text, source_quote` from `fact_items`,
+  which has `description, status, kind`. PostgREST rejects the whole select, so
+  the query returned an error and no rows, `facts ?? []` turned that into an
+  empty list, and **every document the worker produced was drafted with no facts
+  at all.** Nothing threw.
+* it called `messages.create` with `max_tokens: 8000`, the non-streaming form
+  that `replit.md` records as throwing and surfacing as a 502.
+* `subscriptions.consult_credits` is read by six call sites and created by no
+  migration.
+
+The guard is `schema:strict`, now extended from tables to **columns** — which is
+what makes that first class of defect visible at all. Extending it required
+fixing the guard itself: it dropped any column whose name begins with a
+constraint keyword, so `check_type` was invisible on both `document_qa` tables.
+A silently dropped column is worse than a noisy one, because collision detection
+compares column sets — a column invisible in every definition can diverge
+between two migrations without the guard ever seeing it.
 
 > **`app/api/wizard/route.ts` is not the wizard.** It is the Generate stage of
 > the pipeline and one of the declared document writers in `ARCHITECTURE.md`.

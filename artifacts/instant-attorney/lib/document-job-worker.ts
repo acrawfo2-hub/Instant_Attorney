@@ -38,14 +38,25 @@ export async function runDocumentGenerationJob(db: SupabaseClient, jobId: string
 async function generateJobText(db: SupabaseClient, job: Job): Promise<string> {
   const [{ data: file }, { data: facts }] = await Promise.all([
     db.from("case_files").select("title,summary,jurisdiction").eq("id", job.case_file_id).single(),
-    db.from("fact_items").select("category,fact_text,source_quote").eq("case_file_id", job.case_file_id).order("created_at"),
+    // fact_items holds description/status/kind. This used to select
+    // category/fact_text/source_quote — none of which exist on the table.
+    // PostgREST rejects the whole select, so `facts` came back null, `facts ??
+    // []` turned that into an empty list, and every document this worker
+    // produced was drafted from the case title and summary alone, with no facts
+    // at all. Nothing threw. `status` and `kind` come along because they change
+    // what the fact means: a 'gap' is a known hole, and a 'hypothetical' is not
+    // something to draft as true.
+    db.from("fact_items").select("description,status,kind").eq("case_file_id", job.case_file_id).order("created_at"),
   ]);
   const client = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney, maxRetries: 4 });
-  const message = await client.messages.create({
+  // Streamed, not `messages.create`. A synchronous call with a max_tokens this
+  // large throws and surfaces as a 502 — the failure mode documented in
+  // replit.md's gotchas and hit before.
+  const message = await client.messages.stream({
     model: "claude-sonnet-4-6", max_tokens: 8000,
     system: "Draft only the requested legal working document. Use [[missing fact]] placeholders rather than inventing facts. Return document text only.",
     messages: [{ role: "user", content: JSON.stringify({ documentType: job.document_type, title: job.title, caseFile: file, facts: facts ?? [] }) }],
-  });
+  }).finalMessage();
   return message.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
 }
 

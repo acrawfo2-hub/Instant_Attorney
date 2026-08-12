@@ -57,7 +57,10 @@ const codeFiles = ["app", "lib", "components"]
 const result = runSchemaGuard(
   migrations,
   codeFiles.map((f) => readFileSync(f, "utf8")),
-  { ignoreTables: IGNORE_TABLES },
+  {
+    ignoreTables: IGNORE_TABLES,
+    sourceNames: codeFiles.map((f) => f.slice(ROOT.length + 1)),
+  },
 );
 
 console.log(
@@ -65,7 +68,10 @@ console.log(
 );
 console.log(formatSchemaGuardReport(result));
 
-let failed = result.collisions.length > 0 || result.undefinedTables.length > 0;
+let failed =
+  result.collisions.length > 0 ||
+  result.undefinedTables.length > 0 ||
+  result.undefinedColumns.length > 0;
 
 if (checkApplied) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

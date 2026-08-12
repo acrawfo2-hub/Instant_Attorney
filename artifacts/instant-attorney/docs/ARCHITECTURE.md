@@ -221,12 +221,26 @@ in the current file.
 Migrations live in `supabase/`, named `schema-stageNN-<topic>.sql`. Several
 files may share a stage; that is the existing convention, not a mistake.
 
-**`npm run schema:strict` gates CI.** It fails when two migrations create the
-same table with different columns, or when code queries a table no migration
-creates. Both have happened. `create table if not exists` makes the second
-definition a silent no-op, so the losing side's code writes to columns that were
-never created — invisible to typecheck and to every unit test, because nothing
-in either touches a real database.
+**`npm run schema:strict` gates CI.** It fails on three things, all of which
+have happened here, and none of which typecheck or the unit tests can see —
+nothing in either touches a real database:
+
+| Failure | Why it is invisible otherwise |
+|---|---|
+| two migrations create the same table with different columns | `create table if not exists` makes the second a silent no-op, so the losing side's code writes to columns that were never created |
+| code queries a table no migration creates | the query fails only at runtime |
+| code selects a column no migration defines | PostgREST rejects the whole select, so the query returns an error and *no rows* — code that ignores the error reads it as "nothing found" and carries on with empty data |
+
+The column check found `lib/document-job-worker.ts` selecting
+`category, fact_text, source_quote` from `fact_items`, which has
+`description, status, kind`. Every document that worker produced was drafted
+with no facts at all. It also found `subscriptions.consult_credits`, read by six
+call sites and created by no migration.
+
+A table's column set is its `create table` body **plus** every later
+`alter table ... add column`, which is how most columns arrive here. Select
+lists the guard cannot read — a `*`, an embedded resource, a non-literal
+argument — are skipped rather than guessed at.
 
 Migrations are not applied automatically. See `supabase/APPLY-ORDER.md`.
 

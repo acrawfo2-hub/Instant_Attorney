@@ -39,6 +39,12 @@ target a table an earlier stage creates. Within a group, order does not matter.
    - `schema-stage47-message-boundary-sync.sql`
    - `schema-stage47-section-refinement.sql`
 5. `schema-stage48-review-delivery.sql` — **blocked, see below**
+6. `schema-stage49-subscription-consult-credits.sql` — adds
+   `subscriptions.consult_credits`. Safe in any order and almost certainly
+   already a no-op: six call sites read this column and stage 48's verifier
+   expects it, but no migration ever created it, so it was added by hand. The
+   file exists to make the migrations the source of truth again — see the note
+   inside it.
 
 ## Before you start
 
