@@ -84,7 +84,16 @@ but not a path that never called it — which is exactly how `regenerate` passed
 Two rules learned the hard way:
 
 - **Never default a jurisdiction.** The model may not name, assume or imply a
-  governing forum it has not been given. Removing that has been attempted twice.
+  governing forum it has not been given. Removing that has been attempted twice
+  in code, and once — undetected for far longer — in prose: two Living File
+  templates told the model to write
+  `JURISDICTION: Unconfirmed — defaulting to Texas`. That line is parsed into
+  `case_files.jurisdiction`, and `hasConfirmedForum` was anchored (`/^unconfirmed$/`),
+  so the trailing clause made it read as a **confirmed** forum. The gate was
+  defeated by prompt text while every test stayed green. Prompts are part of the
+  enforcement surface; `document-risk.test.ts` now scans them for
+  jurisdiction-defaulting language, and `hasConfirmedForum` matches a prefix so a
+  value that announces its own uncertainty is never a forum.
   It does **not** mean refusing to draft: when the forum is unknown, the document
   is still produced in full, with `FORUM_PLACEHOLDER` written everywhere the
   forum would appear. That placeholder is BLOCKING, so `placeholderFields` marks

@@ -645,7 +645,7 @@ When there IS something to record, output EXACTLY this format and nothing else:
 
 ---LIVING FILE---
 MATTER TYPE: [reactive/preventive] — [subtype]
-JURISDICTION: [State name | Unconfirmed — defaulting to Texas]
+JURISDICTION: [State name, if the client has confirmed it | Unconfirmed]
 SUMMARY:
 [2–4 sentence plain-English case summary, updated cumulatively]
 GOALS:
@@ -1298,7 +1298,7 @@ When — and only when — the two of you land on a concrete change to the Livin
 
 ---LIVING FILE---
 MATTER TYPE: [reactive/preventive] — [subtype]
-JURISDICTION: [State name | Unconfirmed — defaulting to Texas]
+JURISDICTION: [State name, if the client has confirmed it | Unconfirmed]
 SUMMARY:
 [2–4 sentence current case summary]
 GOALS:
