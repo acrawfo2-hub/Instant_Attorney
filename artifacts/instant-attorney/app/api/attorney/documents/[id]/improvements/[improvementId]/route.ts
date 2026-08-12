@@ -4,6 +4,7 @@ import { BYPASS_USER_ID } from "@/lib/types";
 import type { Document, DocumentImprovement } from "@/lib/types";
 import { affectsAuthorities, applyImprovementDiff, createImprovementDiff, locateImprovementRange, type ImprovementDiff } from "@/lib/improvement-diffs";
 import { runAuthoritiesGate } from "@/lib/attorney-review-authorities";
+import { saveDocumentRevision } from "@/lib/document-persistence";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -67,8 +68,23 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     try { draftText = applyImprovementDiff(draftText, diff); }
     catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Diff conflict" }, { status: 409 }); }
     const contentJson = { ...((working.content_json ?? {}) as Record<string, unknown>), last_improvement_id: improvementId };
-    const { error } = await svc.from("documents").update({ draft_text: draftText, content_json: contentJson, updated_at: new Date().toISOString() }).eq("id", working.id);
-    if (error) return NextResponse.json({ error: "Could not update working revision" }, { status: 500 });
+    // Accepting a finding changes the working document's text, so it goes
+    // through the persistence boundary: the accepted passage can fill or open a
+    // placeholder, and the Living File has to learn about it like any other save.
+    try {
+      await saveDocumentRevision(svc, {
+        caseFileId: working.case_file_id,
+        userId: working.user_id,
+        draftText,
+        persist: async () => {
+          const { error } = await svc.from("documents").update({ draft_text: draftText, content_json: contentJson, updated_at: new Date().toISOString() }).eq("id", working.id);
+          if (error) throw error;
+          return working.id;
+        },
+      });
+    } catch {
+      return NextResponse.json({ error: "Could not update working revision" }, { status: 500 });
+    }
     await svc.from("documents").update({ improved_draft_text: draftText, updated_at: new Date().toISOString() }).eq("id", id);
 
     // Rebase every still-open finding onto the accepted revision. Keep its

@@ -323,13 +323,12 @@ export async function POST(
       console.error("[documents/regenerate] file parser error:", parseErr);
     }
   }
+  // The lifecycle-preserving update above already wrote this text, so `persist`
+  // is a pass-through: the boundary is here for the revision id and the Living
+  // File sync. Writing draft_text a second time here was a merge artifact.
   const revision = await saveDocumentRevision(writeDb, {
     caseFileId, userId, draftText,
-    persist: async () => {
-      const { error } = await writeDb.from("documents").update({ draft_text: draftText }).eq("id", documentId);
-      if (error) throw error;
-      return documentId;
-    },
+    persist: async () => documentId,
   });
 
   // Stamp LAST (after the Living File writes above) so facts_synced_at sits

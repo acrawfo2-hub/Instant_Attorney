@@ -72,12 +72,31 @@ Two rules learned the hard way:
 
 **`lib/document-persistence.ts` is the single boundary for writing document
 text.** Every save goes through `saveDocumentRevision`, which stamps a revision
-id and drives the durable Living File sync. `lib/document-persistence.test.ts`
-asserts this and will fail if a route writes around it.
+id and drives the durable Living File sync.
 
-Consolidation of the remaining direct writers is in progress; see
-"Known duplication" below. When you touch one, route it through the boundary
-rather than adding a thirteenth path.
+There are nine writers and no others:
+
+| Writer | Save |
+|---|---|
+| `app/api/wizard/route.ts` | first generation |
+| `app/api/documents/[id]/regenerate/route.ts` | regeneration in place |
+| `app/api/documents/[id]/fill-info/route.ts` | client fills placeholders |
+| `app/api/workspace/drafts/[id]/route.ts` | client edits a promoted draft |
+| `app/api/workspace/drafts/[id]/promote/route.ts` | promotion and resubmission |
+| `app/api/attorney/documents/[id]/revision/route.ts` | attorney accepts an edit |
+| `app/api/attorney/documents/[id]/revisions/route.ts` | attorney restores a revision |
+| `.../improvements/[improvementId]/route.ts` | attorney accepts a finding |
+| `lib/document-utils.ts` | the second-draft child, for both its callers |
+
+`lib/document-persistence.test.ts` enforces two things: each writer above calls
+the boundary, and **no other file in `app/` or `lib/` writes document text at
+all**. Adding a tenth write path fails the suite with instructions. If a new
+file legitimately mentions `draft_text` without writing it, record why in that
+test's `notDocumentWrites` map.
+
+When a row already holds the text — the caller wrote it for other reasons — pass
+a pass-through `persist: async () => documentId`. The boundary is then supplying
+the revision id and the sync, not a second write.
 
 Two different things are called a "revision". Do not conflate them:
 
@@ -147,8 +166,6 @@ version is the current one.
 
 Tracked so nobody "fixes" it twice, and so nobody adds to it:
 
-- **Document writes** — the boundary exists; several routes still write
-  directly. Being migrated route by route.
 - **`lib/document-generation-policy.ts`** — real rules (3-job cap, supersession)
   that nothing calls yet. Either wire it up or delete it; do not duplicate it.
 - **`lib/case-cta.ts`** — orphaned. Nothing imports it.

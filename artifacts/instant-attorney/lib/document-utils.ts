@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { notifyAttorneyDocumentReady } from "./notify.ts";
+import { saveDocumentRevision } from "./document-persistence.ts";
 import { WIZARD_LABELS, coerceWizardType } from "./types.ts";
 import type { WizardType, Document, CaseFile, Profile } from "./types";
 
@@ -273,7 +274,15 @@ export async function upsertCriticalReviewChild(
   return data as Document;
 }
 
-/** Replace any existing second-draft child with a new standalone document row. */
+/**
+ * Replace any existing second-draft child with a new standalone document row.
+ *
+ * This owns the `saveDocumentRevision` call rather than leaving it to callers:
+ * the second draft is document text, so it must be stamped with a revision and
+ * synchronized to the Living File, and a helper that writes the text but leaves
+ * the boundary to whoever calls it is exactly the split that let earlier writes
+ * escape it. Both callers get the stamp for free.
+ */
 export async function upsertSecondDraftChild(
   db: SupabaseClient,
   parent: Document,
@@ -282,7 +291,7 @@ export async function upsertSecondDraftChild(
   // content_json (never rendered into the client-facing document) so the review
   // page can show it alongside the revised draft.
   changes?: string | null
-): Promise<Document | null> {
+): Promise<{ document: Document; syncPending: boolean } | null> {
   await db
     .from("documents")
     .delete()
@@ -309,12 +318,23 @@ export async function upsertSecondDraftChild(
     return null;
   }
 
+  const document = data as Document;
+
   await db.from("documents").update({
     improved_draft_text: draftText,
     updated_at: new Date().toISOString(),
   }).eq("id", parent.id);
 
-  return data as Document;
+  // The row already exists, so `persist` is a pass-through: the boundary is
+  // here for the revision id and the Living File sync, not for the insert.
+  const { syncPending } = await saveDocumentRevision(db, {
+    caseFileId: parent.case_file_id,
+    userId: parent.user_id,
+    draftText,
+    persist: async () => document.id,
+  });
+
+  return { document, syncPending };
 }
 
 /** Mark a primary draft submitted for attorney review and trigger downstream notifications. */
