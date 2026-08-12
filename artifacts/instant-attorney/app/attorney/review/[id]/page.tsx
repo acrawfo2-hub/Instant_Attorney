@@ -6,6 +6,7 @@ import type { Attachment, Document, DocumentComment, DocumentReviewRun, Document
 import { personDisplayName, citationBlocksApproval } from "@/lib/types";
 import AccountMenu from "@/components/AccountMenu";
 import ReviewContextPane from "@/components/attorney-review/ReviewContextPane";
+import ReviewCoverSheet from "@/components/attorney-review/ReviewCoverSheet";
 import ReviewDocumentEditor from "@/components/attorney-review/ReviewDocumentEditor";
 import ReviewPartnerChat from "@/components/attorney-review/ReviewPartnerChat";
 import type { ReviewChange, RevisionSaveState } from "@/components/attorney-review/types";
@@ -111,11 +112,13 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [aiRunning, setAiRunning] = useState(false);
   const [generatingSecondDraft, setGeneratingSecondDraft] = useState(false);
   const [aiError, setAiError] = useState("");
   const [secondDraftMessage, setSecondDraftMessage] = useState("");
+  // Feeds #123's ReviewContextPane. Auto-merge dropped this alongside #126's
+  // sidebar rewrite; the pane still referenced it, so typecheck caught it.
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [comments, setComments] = useState<DocumentComment[]>([]);
   const [newComment, setNewComment] = useState("");
   const [commentBusy, setCommentBusy] = useState(false);
@@ -573,6 +576,12 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
             submitted={new Date(doc.submitted_at ?? doc.created_at).toLocaleString()} attachments={attachments}
             onRunReview={runManualReview} running={aiRunning} hasReview={Boolean(reviewText)} error={aiError}
           />}
+          {/* #126's cover sheet, kept alongside #123's context pane rather than
+              instead of it. They do not overlap: the pane carries client,
+              matter and the review action, while this fetches the case
+              substance an attorney reviews against — confirmed facts, open
+              gaps, deadlines, existing counsel and source files. */}
+          {!collapsed.context && <ReviewCoverSheet documentId={id} fallbackCaseFileId={doc.case_files.id} />}
         </div>
         <div className="atty-review-content">
           {/* Orchestrator auto-review (schema-stage44): live run status + the
