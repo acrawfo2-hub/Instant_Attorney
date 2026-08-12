@@ -112,7 +112,7 @@ routing guards by removing the second service that made shadowing possible.
 | 4 | Retire the roadmap spine; confirm the guidance chain | done |
 | 5 | One drafting surface — orchestrator meets the completion contract | **reshaped — see below** |
 | 6 | One attorney workbench — one associate, one thread, one accept gate | |
-| 7 | Remove the retired `pre_warmed` state | |
+| 7 | Remove the retired `pre_warmed` state | done |
 
 ### Chunk 4 — what it turned out to be
 
@@ -220,12 +220,27 @@ between two migrations without the guard ever seeing it.
 > refinement, the validator, the renderers, and fallback completion all stay and
 > become orchestrator-internal. Deleting the route deletes document generation.
 
-### Chunk 7 — `pre_warmed`
+### Chunk 7 — `pre_warmed` (done)
 
-A retired status that ~15 call sites must remember to filter out is permanent
-accidental complexity. Every query that forgets shows the client a document that
-does not exist. Inventory rows first, then remove the enum value and every
-defensive filter together.
+The inventory was already done and recorded. Stage 13 retired the feature in June
+2026, promoted rows with draft text to `draft`, deleted the stranded
+placeholders, and noted the result in the migration itself: *verified on the live
+database 2026-06-19, remaining_pre_warmed = 0*. It deliberately left the CHECK
+constraint permissive so it stayed re-runnable.
+
+Leaving the state legal is what made it expensive. Nothing wrote it, but fifteen
+call sites had to remember to filter it out — four list filters, an editability
+branch, a status-badge map, the placeholder-fill lifecycle, and the wizard's
+promote-on-update branch — and every query that forgot would show a client a
+document that does not exist. All of it is gone, along with the `DocumentStatus`
+union member.
+
+Stage 49 narrows the constraint, which is what makes removing the code safe:
+without it a future insert could reintroduce a row in a state nothing handles.
+The two `apply_document_placeholder_revision` functions still carry a
+`not in ('draft', 'pre_warmed')` clause; it is now unreachable rather than wrong,
+and replacing a live function to delete a dead disjunct is more risk than the
+disjunct is worth.
 
 ## Deferred, deliberately
 

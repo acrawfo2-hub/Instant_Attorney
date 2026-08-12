@@ -207,7 +207,7 @@ export function buildConsultBriefSnapshot(input: ConsultBriefInput): ConsultBrie
       urgentNote: roadmap?.urgentNote ?? roadmap?.safetyNote ?? null,
     },
     documents: {
-      onFile: documents.filter((d) => d.draft_text || d.status !== "pre_warmed").length,
+      onFile: documents.length,
       requested: requestedAttachments.length,
       uploaded,
       waived,

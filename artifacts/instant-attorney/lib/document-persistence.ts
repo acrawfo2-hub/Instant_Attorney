@@ -23,7 +23,7 @@ export type FillLifecycle = "draft_in_place" | "review_revision" | "approval_rev
  * that runs. Do not reintroduce it; read the migration instead.
  */
 export function placeholderFillLifecycle(status: DocumentStatus): FillLifecycle {
-  if (status === "draft" || status === "pre_warmed") return "draft_in_place";
+  if (status === "draft") return "draft_in_place";
   if (status === "approved" || status === "delivered") return "approval_revision";
   return "review_revision";
 }

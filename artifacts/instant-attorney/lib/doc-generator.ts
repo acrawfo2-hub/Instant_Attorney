@@ -137,7 +137,7 @@ async function pack(doc: Document): Promise<Buffer> {
 // the document.
 
 // A document is past the watermark stage only once an attorney has approved it
-// (or it has been delivered as approved). Every earlier state — pre_warmed,
+// (or it has been delivered as approved). Every earlier state —
 // draft, pending_review, changes_requested — is a pre-review draft.
 export function isAttorneyApproved(status: DocumentStatus | null | undefined): boolean {
   return status === "approved" || status === "delivered";

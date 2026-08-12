@@ -129,9 +129,7 @@ async function getData(caseFileId: string) {
   return {
     caseFile: caseFile as CaseFile,
     facts: (facts ?? []) as FactItem[],
-    // Defensively exclude any legacy "pre_warmed" rows (the feature was retired);
-    // a one-time migration promotes/cleans them, this guards stragglers.
-    documents: allDocs.filter((d) => d.status !== "pre_warmed" && !d.parent_document_id),
+    documents: allDocs.filter((d) => !d.parent_document_id),
     childDocuments: allDocs.filter((d) => !!d.parent_document_id),
     userId,
     consultRequest: (consultRow as ConsultRequest | null) ?? null,

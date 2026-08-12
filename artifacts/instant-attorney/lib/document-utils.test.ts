@@ -108,7 +108,7 @@ test("a foreign supplied id with no primary fallback inserts a fresh document (n
 
 // ── 4. Primary-document fallback: editable → update in place (no duplicate) ───
 test("an editable primary document is updated in place instead of inserting a duplicate", async () => {
-  for (const status of ["draft", "changes_requested", "pre_warmed", null]) {
+  for (const status of ["draft", "changes_requested", null]) {
     const db = makeDb({
       reusable: null,
       primary: { id: "primary-1", status, content_json: { k: "v" }, draft_text: "d" },

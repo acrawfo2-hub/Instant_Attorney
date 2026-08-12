@@ -12,7 +12,6 @@ import { pathToFileURL } from "node:url";
 // prevent:
 //   • an "update" target issues a status-PRESERVING UPDATE (never knocks
 //     pending_review back to "draft");
-//   • a "pre_warmed" suggestion IS promoted to "draft" on first real draft;
 //   • the insert path persists a brand-new document and returns its id;
 //   • a failed persistence returns HTTP 500 with the draft text (never a silent
 //     200 + documentId:null that strands the client);
@@ -275,18 +274,18 @@ test("update target preserves pending_review status (never knocks it back to dra
   );
 });
 
-test("update target promotes a pre_warmed suggestion to draft", async () => {
+test("update target keeps an existing editable draft rather than duplicating it", async () => {
   target = {
     action: "update",
     documentId: "doc-pw",
-    existing: { status: "pre_warmed", content_json: {} },
+    existing: { status: "draft", content_json: {} },
   };
   dbConfig = baseConfig({ documents: { update: () => ({ error: null }) } });
 
   const res = await POST(makeReq(validBody()));
   assert.equal(res.status, 200);
   const payload = lastContentUpdate()!.payload as Record<string, unknown>;
-  assert.equal(payload.status, "draft", "pre_warmed should be promoted to draft");
+  assert.equal(payload.status, "draft", "an editable draft stays a draft");
 });
 
 // ── 2. Insert path persists a new document and returns its id ─────────────────

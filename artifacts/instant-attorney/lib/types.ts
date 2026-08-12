@@ -151,7 +151,6 @@ export type DerivedDocType = "critical_review" | "second_draft";
 export type DocType = WizardType | DerivedDocType;
 
 export type DocumentStatus =
-  | "pre_warmed"
   | "draft"
   | "pending_review"
   | "approved"

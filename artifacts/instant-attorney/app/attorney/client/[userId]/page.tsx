@@ -21,7 +21,6 @@ const STATUS_LABELS: Record<string, string> = {
   approved: "Approved",
   changes_requested: "Changes Requested",
   delivered: "Delivered",
-  pre_warmed: "Pre-warmed",
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -30,7 +29,6 @@ const STATUS_COLORS: Record<string, string> = {
   approved: "atty-badge-green",
   changes_requested: "atty-badge-blue",
   delivered: "atty-badge-gray",
-  pre_warmed: "atty-badge-gray",
 };
 
 export default async function ClientFilePage({

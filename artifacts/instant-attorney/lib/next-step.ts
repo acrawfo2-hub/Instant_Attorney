@@ -150,7 +150,7 @@ function planStatusForDoc(doc: Document | undefined): PlanStatus {
     case "draft":
       return hasDraftText(doc) ? "in_progress" : "not_started";
     default:
-      // pre_warmed and anything else: nothing the user has touched yet
+      // anything else: nothing the user has touched yet
       return "not_started";
   }
 }

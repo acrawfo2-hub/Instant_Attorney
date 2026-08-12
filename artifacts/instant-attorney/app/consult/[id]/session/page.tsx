@@ -126,7 +126,7 @@ export default async function ConsultSessionPage({
       notes={(noteRows ?? []) as ConsultNote[]}
       recordings={(recordingRows ?? []) as ConsultRecording[]}
       facts={(factRows ?? []) as FactItem[]}
-      documents={allDocs.filter((d) => d.status !== "pre_warmed" && !d.parent_document_id)}
+      documents={allDocs.filter((d) => !d.parent_document_id)}
       childDocuments={allDocs.filter((d) => !!d.parent_document_id)}
       requestedAttachments={(requestedRows ?? []) as RequestedAttachment[]}
       govForms={(formRows ?? []) as GovFormInstrument[]}

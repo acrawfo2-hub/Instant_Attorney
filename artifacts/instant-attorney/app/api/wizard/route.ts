@@ -388,7 +388,7 @@ export async function POST(req: NextRequest) {
       savedDocId = target.documentId;
       const existingDoc = target.existing;
       const curStatus = existingDoc.status as string | undefined;
-      const nextStatus = curStatus && curStatus !== "pre_warmed" ? curStatus : "draft";
+      const nextStatus = curStatus ?? "draft";
 
       const update: Record<string, unknown> = {
         status: nextStatus,

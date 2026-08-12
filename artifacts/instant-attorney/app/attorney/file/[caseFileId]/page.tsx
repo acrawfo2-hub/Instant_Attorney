@@ -95,7 +95,7 @@ export default async function AttorneyFilePage({
 
   const allDocs = (documents ?? []) as Document[];
   const topDocuments = allDocs.filter(
-    (d) => d.status !== "pre_warmed" && !d.parent_document_id,
+    (d) => !d.parent_document_id,
   );
   const childDocuments = allDocs.filter((d) => !!d.parent_document_id);
 

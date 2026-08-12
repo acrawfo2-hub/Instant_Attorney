@@ -139,7 +139,7 @@ export type WizardDocumentTarget =
  *      (same user_id + case_file_id), else it's dropped to prevent IDOR;
  *   2. otherwise, a reusable in-progress primary draft for this case + type;
  *   3. otherwise, the case's latest primary document of this type in ANY status:
- *      - if it's still editable (draft / changes_requested / pre_warmed / null),
+ *      - if it's still editable (draft / changes_requested / null),
  *        update it in place (never insert a duplicate primary);
  *      - if it's already finalized / in review, neither insert nor overwrite —
  *        signal "already_finalized" so the caller returns the existing document;
@@ -191,7 +191,6 @@ export async function resolveWizardDocumentTarget(
       const isEditable =
         primary.status === "draft" ||
         primary.status === "changes_requested" ||
-        primary.status === "pre_warmed" ||
         primary.status == null;
       if (isEditable) {
         return {
