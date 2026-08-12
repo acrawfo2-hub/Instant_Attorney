@@ -385,6 +385,36 @@ export async function finalizeDocumentSubmission(
 
   if (error || !doc) return null;
 
+  // Stage 48 pins every QA record to an immutable revision, and its
+  // pin_qa_to_revision trigger raises when a document has none. The migration
+  // backfills a client_submitted revision for documents that existed when it
+  // ran, but nothing created one afterwards — so a document submitted after the
+  // migration would have had its review run rejected at insert. Record the
+  // submitted baseline here, on the one path every submission goes through.
+  //
+  // Guarded so a resubmission does not stack duplicate baselines, and
+  // best-effort: a failure here must not block the submission itself.
+  const { data: baseline } = await db
+    .from("document_revisions")
+    .select("id")
+    .eq("document_id", docId)
+    .eq("source_action", "client_submitted")
+    .limit(1)
+    .maybeSingle();
+  if (!baseline) {
+    const { error: revisionError } = await db.from("document_revisions").insert({
+      document_id: docId,
+      content: (doc as Document).draft_text ?? "",
+      title: (doc as Document).title,
+      author_type: "client",
+      source_action: "client_submitted",
+      summary: "Client-submitted original",
+    });
+    if (revisionError) {
+      console.error("[document-utils] baseline revision error:", revisionError.message);
+    }
+  }
+
   notifyAttorneyDocumentReady(
     doc as Document,
     doc.case_files as CaseFile,
