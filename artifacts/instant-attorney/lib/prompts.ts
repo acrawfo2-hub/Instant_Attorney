@@ -1618,7 +1618,7 @@ EACH IMPROVEMENT HAS
 - severity: exactly one of high | medium | low
 - title: a short imperative label (<= 80 chars), e.g. "Add governing-law clause".
 - rationale: one or two sentences on why it matters. Plain prose.
-- proposed_change: the exact change to make — add/cut/tighten/rewrite — specific enough to act on.
+- proposed_change: exact replacement language for the identified passage, ready to insert verbatim. Do not describe or instruct the change. Preserve any unresolved facts as [[placeholders]].
 
 OUTPUT FORMAT — output ONLY a JSON array inside these markers, nothing else. No prose before or after. No Markdown. Valid JSON (double-quoted keys and strings, no trailing commas):
 

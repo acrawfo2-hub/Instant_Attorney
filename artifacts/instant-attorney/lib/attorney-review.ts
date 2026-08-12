@@ -2,30 +2,25 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createServiceClient } from "@/lib/supabase/server";
 import {
   REVIEW_IMPROVEMENTS_SYSTEM_PROMPT,
-  SECOND_DRAFT_SYSTEM_PROMPT,
   buildImprovementsUserMessage,
-  buildSecondDraftUserMessage,
   improvementsAsReviewText,
   parseImprovements,
-  parseSecondDraft,
-  type ParsedImprovement,
 } from "@/lib/prompts";
-import { upsertCriticalReviewChild, upsertSecondDraftChild } from "@/lib/document-utils";
+import { getSecondDraftChild, upsertCriticalReviewChild, upsertSecondDraftChild } from "@/lib/document-utils";
+import { locateImprovementRange, textHash } from "@/lib/improvement-diffs";
 import { runAuthoritiesGate } from "@/lib/attorney-review-authorities";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
-import { maxOutputTokensFor, maxOutputTokensForDoc } from "@/lib/token-limits";
-import { logTruncation } from "@/lib/truncation-logger";
+import { maxOutputTokensFor } from "@/lib/token-limits";
 import type { Document, CaseFile, FactItem, Attachment, DocumentReviewRun } from "@/lib/types";
 
 // The auto-run attorney review orchestrator (schema-stage44). Stage 1 issue-spots
-// the client draft into structured `document_improvements`; stage 2 applies them
-// to produce the revised (`second_draft`) child, reusing the tuned second-draft
-// prompt. Runs on the SERVICE client so it survives independent of any request's
+// the working draft into structured `document_improvements`; attorney decisions
+// then apply reviewed diffs one passage at a time to the working child. Runs on
+// the SERVICE client so it survives independent of any request's
 // auth, and is fired-and-forgotten from finalizeDocumentSubmission on submit.
 // See docs/attorney-review-orchestrator.md.
 
 const IMPROVEMENTS_MODEL = "claude-sonnet-4-6";
-const REVISED_DRAFT_MODEL = "claude-opus-4-8";
 
 const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney, maxRetries: 4 });
 
@@ -102,6 +97,11 @@ export async function runDocumentReview(runId: string): Promise<void> {
     const parentDoc = docRow as Document | null;
     if (!parentDoc) throw new Error("Document not found");
 
+    const { data: childRows } = await db.from("documents").select("*").eq("parent_document_id", documentId);
+    const existingWorking = getSecondDraftChild((childRows ?? []) as Document[]);
+    const sourceText = existingWorking?.draft_text ?? parentDoc.draft_text ?? "";
+    const reviewDoc = { ...parentDoc, draft_text: sourceText };
+
     const [{ data: caseFileRow }, { data: factRows }, { data: attRows }] = await Promise.all([
       db.from("case_files").select("*").eq("id", parentDoc.case_file_id).single(),
       db.from("fact_items").select("*").eq("case_file_id", parentDoc.case_file_id),
@@ -137,7 +137,7 @@ export async function runDocumentReview(runId: string): Promise<void> {
           },
         ],
         messages: [
-          { role: "user", content: buildImprovementsUserMessage(parentDoc, caseFile, facts, attachments) },
+          { role: "user", content: buildImprovementsUserMessage(reviewDoc, caseFile, facts, attachments) },
         ],
       })
       .finalMessage();
@@ -160,26 +160,33 @@ export async function runDocumentReview(runId: string): Promise<void> {
       throw new Error("Review produced no usable improvements");
     }
 
-    // Supersede any prior proposed improvements for this document, then insert
-    // this run's set with 1-based display order.
-    await db
-      .from("document_improvements")
-      .update({ status: "superseded" })
+    // Preserve prior human decisions for identical evidence. A rejected finding
+    // remains rejected until either its substance or the working revision changes.
+    const evidenceRows = improvements.map((imp) => ({
+      imp,
+      evidenceHash: textHash(`${textHash(sourceText)}|${imp.section}|${imp.title}|${imp.rationale}|${imp.proposed_change}`),
+    }));
+    const { data: priorDecisions } = await db.from("document_improvements")
+      .select("evidence_hash,status,attorney_rationale,disposition_by,disposition_at")
       .eq("document_id", documentId)
-      .eq("status", "proposed");
+      .in("status", ["rejected", "ask_partner", "needs_client_input"]);
+    const decisions = new Map((priorDecisions ?? []).map((row: Record<string, unknown>) => [row.evidence_hash, row]));
+
+    await db.from("document_improvements").update({ status: "superseded" })
+      .eq("document_id", documentId).eq("status", "proposed");
     await db.from("document_improvements").insert(
-      improvements.map((imp: ParsedImprovement, i: number) => ({
-        run_id: runId,
-        document_id: documentId,
-        seq: i + 1,
-        section: imp.section,
-        kind: imp.kind,
-        severity: imp.severity,
-        title: imp.title,
-        rationale: imp.rationale,
-        proposed_change: imp.proposed_change,
-        status: "proposed",
-      })),
+      evidenceRows.map(({ imp, evidenceHash }, i) => {
+        const prior = decisions.get(evidenceHash) as Record<string, unknown> | undefined;
+        return {
+          run_id: runId, document_id: documentId, seq: i + 1,
+          section: imp.section, kind: imp.kind, severity: imp.severity,
+          title: imp.title, rationale: imp.rationale, proposed_change: imp.proposed_change,
+          anchor: locateImprovementRange(sourceText, imp), evidence_hash: evidenceHash,
+          status: prior?.status ?? "proposed",
+          attorney_rationale: prior?.attorney_rationale ?? "",
+          disposition_by: prior?.disposition_by ?? null, disposition_at: prior?.disposition_at ?? null,
+        };
+      }),
     );
 
     // Keep the existing review page's "Critical Review" doc populated by
@@ -190,78 +197,16 @@ export async function runDocumentReview(runId: string): Promise<void> {
       `---DOCUMENT REVIEW---\n${improvementsAsReviewText(improvements)}\n---END REVIEW---`,
     );
 
-    // ── Stage 2: revised draft (applies every improvement) ──────────────────
-    await db
-      .from("document_review_runs")
-      .update({ stage: "revised_draft", updated_at: new Date().toISOString() })
-      .eq("id", runId);
-
-    const draftResp = await anthropic.messages
-      .stream({
-        model: REVISED_DRAFT_MODEL,
-        max_tokens: maxOutputTokensForDoc(REVISED_DRAFT_MODEL, parentDoc.doc_type),
-        system: [
-          {
-            type: "text" as const,
-            text: SECOND_DRAFT_SYSTEM_PROMPT,
-            cache_control: { type: "ephemeral" as const },
-          },
-        ],
-        messages: [
-          {
-            role: "user",
-            content: buildSecondDraftUserMessage(
-              parentDoc,
-              improvementsAsReviewText(improvements),
-              "",
-              caseFile,
-              facts,
-              attachments,
-            ),
-          },
-        ],
-      })
-      .finalMessage();
-
-    inputTokens += draftResp.usage.input_tokens;
-    outputTokens += draftResp.usage.output_tokens;
-    await recordAiFromMessage(db, draftResp, {
-      userId: parentDoc.user_id,
-      caseFileId: parentDoc.case_file_id,
-      feature: "attorney_review",
-      metadata: { document_id: documentId, run_id: runId, stage: "revised_draft" },
-    });
-
-    if (draftResp.stop_reason === "max_tokens") {
-      logTruncation({
-        endpoint: "attorney/review-run",
-        feature: "attorney_review",
-        documentId,
-        caseFileId: parentDoc.case_file_id,
-        userId: parentDoc.user_id,
-        outputTokens: draftResp.usage.output_tokens,
-      });
+    // ── Stage 2: initialize the working revision without applying findings ─
+    // Findings are proposals. Only the mutation endpoint may write accepted text.
+    if (!existingWorking && sourceText.trim()) {
+      await upsertSecondDraftChild(db, parentDoc, sourceText, "Working copy created; no proposed improvements applied.");
     }
 
-    const rawDraft = draftResp.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("");
-    const { draftText, changes } = parseSecondDraft(rawDraft);
-    if (draftText.trim()) {
-      await upsertSecondDraftChild(db, parentDoc, draftText, changes);
-    }
-
-    // ── Stage 3: Authorities QA gate (verify every citation) ─────────────────
-    // Runs on the revised draft (the version that would reach the client). A
-    // gate failure is contained inside runAuthoritiesGate (marks citations as
-    // "error", which blocks approval) so it never fails the whole run.
-    if (draftText.trim()) {
-      await db
-        .from("document_review_runs")
-        .update({ stage: "authorities", updated_at: new Date().toISOString() })
-        .eq("id", runId);
-      await runAuthoritiesGate(db, runId, parentDoc, draftText);
+    // ── Stage 3: QA the current accepted working revision ───────────────────
+    if (sourceText.trim()) {
+      await db.from("document_review_runs").update({ stage: "authorities", updated_at: new Date().toISOString() }).eq("id", runId);
+      await runAuthoritiesGate(db, runId, parentDoc, sourceText);
     }
 
     // ── Done ────────────────────────────────────────────────────────────────
