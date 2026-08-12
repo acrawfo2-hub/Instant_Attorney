@@ -3,14 +3,15 @@
 import { use, useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import type { Attachment, Document, DocumentComment, DocumentReviewRun, DocumentImprovement, DocumentQaCitation, DocumentDeliveryDraft } from "@/lib/types";
-import { docTypeLabel, personDisplayName, citationBlocksApproval } from "@/lib/types";
+import type { Attachment, Document, DocumentComment, DocumentReviewRun, DocumentImprovement, DocumentQaCitation, DocumentDeliveryDraft, DocumentQaFinding, DocumentQaCheckType } from "@/lib/types";
+import { DOCUMENT_QA_CHECK_TYPES, docTypeLabel, personDisplayName, citationBlocksApproval } from "@/lib/types";
 import AccountMenu from "@/components/AccountMenu";
 import ReviewContextPane from "@/components/attorney-review/ReviewContextPane";
 import ReviewCoverSheet from "@/components/attorney-review/ReviewCoverSheet";
 import ReviewDocumentEditor from "@/components/attorney-review/ReviewDocumentEditor";
 import ReviewPartnerChat from "@/components/attorney-review/ReviewPartnerChat";
 import type { ReviewChange, RevisionSaveState } from "@/components/attorney-review/types";
+import AttorneyContextHeader from "@/components/AttorneyContextHeader";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -156,6 +157,10 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
   const [editedImprovementText, setEditedImprovementText] = useState("");
   const [improvementError, setImprovementError] = useState("");
   const workingEditorRef = useRef<HTMLDivElement | null>(null);
+  const [qaFindings, setQaFindings] = useState<DocumentQaFinding[]>([]);
+  const [selectedChecks, setSelectedChecks] = useState<DocumentQaCheckType[]>([...DOCUMENT_QA_CHECK_TYPES]);
+  const [qaBusy, setQaBusy] = useState(false);
+  const [qaError, setQaError] = useState("");
   const [waivingId, setWaivingId] = useState<string | null>(null);
   const [deliveryDraft, setDeliveryDraft] = useState<DocumentDeliveryDraft | null>(null);
   const [deliveryBusy, setDeliveryBusy] = useState<"save" | "send" | "approve-send" | null>(null);
@@ -226,10 +231,12 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
       run: DocumentReviewRun | null;
       improvements: DocumentImprovement[];
       citations?: DocumentQaCitation[];
+      findings?: DocumentQaFinding[];
     };
     setReviewRun(data.run);
     setImprovements(data.improvements ?? []);
     setCitations(data.citations ?? []);
+    setQaFindings(data.findings ?? []);
 
     if (!data.run && opts.allowAutoStart && !runStartedRef.current) {
       runStartedRef.current = true;
@@ -276,6 +283,34 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
       const data = (await res.json()) as { run: DocumentReviewRun };
       setReviewRun(data.run);
       startRunPolling();
+    }
+  }
+
+  async function runQa(mode: "all" | "selected" | "affected") {
+    setQaBusy(true);
+    setQaError("");
+    try {
+      const res = await fetch(`/api/attorney/documents/${id}/review-run`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode, checkTypes: selectedChecks }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "QA checks failed");
+      await loadReviewRun();
+    } catch (err) {
+      setQaError(err instanceof Error ? err.message : "QA checks failed");
+    } finally { setQaBusy(false); }
+  }
+
+  async function updateFinding(finding: DocumentQaFinding, status: "resolved" | "waived" | "open") {
+    const resolutionNote = status === "waived" ? window.prompt("Record why you are waiving this blocking result (attorney judgment):") : undefined;
+    if (status === "waived" && !resolutionNote?.trim()) return;
+    const res = await fetch(`/api/attorney/documents/${id}/review-run/findings/${finding.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status, resolutionNote }),
+    });
+    if (res.ok) {
+      const data = await res.json() as { finding: DocumentQaFinding };
+      setQaFindings((rows) => rows.map((row) => row.id === data.finding.id ? data.finding : row));
     }
   }
 
@@ -343,10 +378,12 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
         run: DocumentReviewRun | null;
         improvements: DocumentImprovement[];
         citations?: DocumentQaCitation[];
+        findings?: DocumentQaFinding[];
       };
       setReviewRun(data.run);
       setImprovements(data.improvements ?? []);
       setCitations(data.citations ?? []);
+      setQaFindings(data.findings ?? []);
       if (!data.run || (data.run.status !== "queued" && data.run.status !== "running")) {
         if (runPollRef.current) clearInterval(runPollRef.current);
         runPollRef.current = null;
@@ -627,6 +664,15 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
 
   return (
     <div className="atty-review-shell">
+      <AttorneyContextHeader currentArea="workbench" context={{
+        documentId: doc.id, documentTitle: doc.title, documentStatus: doc.status,
+        revision: secondDraft ? "Attorney revision" : "Client draft",
+        caseFileId: doc.case_files.id, clientId: doc.user_id,
+        clientName: personDisplayName(doc.profiles, "Client"),
+        matter: doc.case_files.matter_subtype?.replaceAll("_", " ") || doc.case_files.matter_type || "Matter",
+        dirty: clientNotes !== (doc.attorney_notes ?? "") || secondDraftPrompt !== (doc.attorney_second_draft_prompt ?? ""),
+        unresolvedQa: citations.some((citation) => citationBlocksApproval(citation) && !citation.waived),
+      }} />
       <header className="atty-review-header">
         <button className="atty-back" onClick={async () => { await saveRevision(); router.push("/attorney"); }}>← Dashboard</button>
         <div className="atty-review-title">
@@ -729,6 +775,58 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
               {improvementError && <p className="arr-error">{improvementError}</p>}
             </section>
           )}
+
+          <section className="arr-panel arr-qa-workbench">
+            <div className="arr-head">
+              <div>
+                <span className="arr-status">Document QA workbench</span>
+                <p className="atty-standalone-doc-sub">Adversarial checks run against the active working revision and matter context.</p>
+              </div>
+              <div className="arr-qa-controls">
+                <button type="button" className="atty-btn" disabled={qaBusy} onClick={() => runQa("all")}>Run all</button>
+                <button type="button" className="atty-btn" disabled={qaBusy || selectedChecks.length === 0} onClick={() => runQa("selected")}>Run selected</button>
+                <button type="button" className="atty-btn" disabled={qaBusy} onClick={() => runQa("affected")}>Re-run affected</button>
+              </div>
+            </div>
+            <div className="arr-check-grid">
+              {DOCUMENT_QA_CHECK_TYPES.map((type) => (
+                <label key={type} className="arr-check-option">
+                  <input type="checkbox" checked={selectedChecks.includes(type)} onChange={() => setSelectedChecks((current) =>
+                    current.includes(type) ? current.filter((item) => item !== type) : [...current, type])} />
+                  {type.replace(/_/g, " ")}
+                </label>
+              ))}
+            </div>
+            {qaBusy && <p className="atty-ai-running">Running document-specific checks…</p>}
+            {qaError && <p className="arr-error">{qaError}</p>}
+            {qaFindings.length === 0 && !qaBusy && <p className="atty-ai-empty">No structured findings on the active review yet.</p>}
+            {qaFindings.length > 0 && (
+              <ul className="arr-cite-list">
+                {qaFindings.map((finding) => (
+                  <li key={finding.id} className={`arr-cite${finding.severity === "blocking" && finding.status === "open" ? " arr-cite-block" : ""}`}>
+                    <div className="arr-cite-head">
+                      <span className={`arr-sev arr-sev-${finding.severity === "blocking" ? "high" : finding.severity}`}>{finding.severity}</span>
+                      <span className="arr-cite-type">{finding.check_type.replace(/_/g, " ")}</span>
+                      <span className="arr-verdict">{finding.status}</span>
+                    </div>
+                    <strong>{finding.title}</strong>
+                    <p className="arr-cite-claim">Location: {finding.document_location}</p>
+                    <p className="arr-cite-evidence">{finding.evidence}</p>
+                    <p className="arr-cite-evidence">Automated analysis · revision {new Date(finding.last_run_revision).toLocaleString()}</p>
+                    <div className="arr-cite-actions">
+                      {finding.status === "open" ? <>
+                        <button type="button" className="atty-comment-link" onClick={() => updateFinding(finding, "resolved")}>Mark resolved</button>
+                        <button type="button" className="atty-comment-link" onClick={() => updateFinding(finding, "waived")}>Attorney waiver…</button>
+                      </> : (
+                        <button type="button" className="atty-comment-link" onClick={() => updateFinding(finding, "open")}>Reopen</button>
+                      )}
+                    </div>
+                    {finding.status === "waived" && <p className="arr-cite-evidence"><strong>Attorney waiver:</strong> {finding.resolution_note}</p>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
 
           {/* Authorities QA gate (schema-stage45): every citation verified, or
               approval is blocked until it's verified/removed/waived. */}

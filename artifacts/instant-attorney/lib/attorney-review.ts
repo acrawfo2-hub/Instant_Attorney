@@ -9,9 +9,11 @@ import {
 import { getSecondDraftChild, upsertCriticalReviewChild, upsertSecondDraftChild } from "@/lib/document-utils";
 import { locateImprovementRange, textHash } from "@/lib/improvement-diffs";
 import { runAuthoritiesGate } from "@/lib/attorney-review-authorities";
+import { runDocumentQaChecks } from "@/lib/attorney-review-qa";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
-import { maxOutputTokensFor } from "@/lib/token-limits";
-import type { Document, CaseFile, FactItem, Attachment, DocumentReviewRun } from "@/lib/types";
+import { maxOutputTokensFor, maxOutputTokensForDoc } from "@/lib/token-limits";
+import { logTruncation } from "@/lib/truncation-logger";
+import { DOCUMENT_QA_CHECK_TYPES, type Document, type CaseFile, type FactItem, type Attachment, type DocumentReviewRun, type DocumentQaCheckType } from "@/lib/types";
 
 // The auto-run attorney review orchestrator (schema-stage44). Stage 1 issue-spots
 // the working draft into structured `document_improvements`; attorney decisions
@@ -262,9 +264,22 @@ export async function runDocumentReview(runId: string): Promise<void> {
     // Gated on sourceText, not on a regenerated draftText: #127 made findings
     // proposals, so the bytes to verify are the ones the attorney has actually
     // accepted. Verifying an auto-rewritten draft would QA text no one approved.
+    // #128 branched before that change and still gated on draftText; both its
+    // QA checks and #127's authorities gate now run over the same accepted text.
     if (sourceText.trim()) {
       await db.from("document_review_runs").update({ stage: "authorities", updated_at: new Date().toISOString() }).eq("id", runId);
       await runAuthoritiesGate(db, runId, parentDoc, sourceText);
+
+      await db
+        .from("document_review_runs")
+        .update({ stage: "qa_checks", updated_at: new Date().toISOString() })
+        .eq("id", runId);
+      const { data: workingRow } = await db.from("documents").select("*")
+        .eq("parent_document_id", parentDoc.id).eq("doc_type", "second_draft").maybeSingle();
+      if (workingRow) await runDocumentQaChecks(db, {
+        runId, parentDoc, workingDoc: workingRow as Document, caseFile, facts, attachments,
+        checkTypes: [...DOCUMENT_QA_CHECK_TYPES],
+      });
     }
 
     // ── Done ────────────────────────────────────────────────────────────────
@@ -293,4 +308,27 @@ export async function runDocumentReview(runId: string): Promise<void> {
     await db.from("documents").update({ review_status: null, updated_at: now })
       .eq("id", documentId).eq("revision_number", run.source_revision ?? 1);
   }
+}
+
+/** Re-run selected checks without regenerating improvements or the working draft. */
+export async function runSelectedDocumentQa(documentId: string, checkTypes: DocumentQaCheckType[]): Promise<void> {
+  const db = createServiceClient();
+  const [{ data: parentRow }, { data: runRow }] = await Promise.all([
+    db.from("documents").select("*").eq("id", documentId).is("parent_document_id", null).maybeSingle(),
+    db.from("document_review_runs").select("*").eq("document_id", documentId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+  ]);
+  const parentDoc = parentRow as Document | null;
+  const run = runRow as DocumentReviewRun | null;
+  if (!parentDoc || !run) throw new Error("A document review is required before QA checks can run");
+  const [{ data: workingRow }, { data: caseFileRow }, { data: factRows }, { data: attRows }] = await Promise.all([
+    db.from("documents").select("*").eq("parent_document_id", documentId).eq("doc_type", "second_draft").maybeSingle(),
+    db.from("case_files").select("*").eq("id", parentDoc.case_file_id).single(),
+    db.from("fact_items").select("*").eq("case_file_id", parentDoc.case_file_id),
+    db.from("attachments").select("*").eq("case_file_id", parentDoc.case_file_id).eq("status", "ready"),
+  ]);
+  if (!workingRow || !caseFileRow) throw new Error("Active working revision or matter context not found");
+  await runDocumentQaChecks(db, {
+    runId: run.id, parentDoc, workingDoc: workingRow as Document, caseFile: caseFileRow as CaseFile,
+    facts: (factRows ?? []) as FactItem[], attachments: (attRows ?? []) as Attachment[], checkTypes,
+  });
 }

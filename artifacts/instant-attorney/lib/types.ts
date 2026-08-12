@@ -934,6 +934,54 @@ export function citationBlocksApproval(c: Pick<DocumentQaCitation, "verdict" | "
   return !c.waived && c.verdict !== "verified";
 }
 
+// ── Independently addressable document QA checks (schema-stage48) ──────────
+export const DOCUMENT_QA_CHECK_TYPES = [
+  "factual_consistency",
+  "completeness",
+  "defined_terms_cross_references",
+  "blanks_execution_blocks",
+  "formatting_court_requirements",
+  "client_comprehension",
+  "authorities",
+] as const;
+export type DocumentQaCheckType = (typeof DOCUMENT_QA_CHECK_TYPES)[number];
+export type DocumentQaSeverity = "blocking" | "high" | "medium" | "low";
+export type DocumentQaFindingStatus = "open" | "resolved" | "waived";
+
+export interface DocumentQaFinding {
+  id: string;
+  run_id: string;
+  document_id: string;
+  check_type: DocumentQaCheckType;
+  severity: DocumentQaSeverity;
+  document_location: string;
+  title: string;
+  evidence: string;
+  status: DocumentQaFindingStatus;
+  resolution_note: string | null;
+  resolved_by: string | null;
+  resolved_at: string | null;
+  last_run_revision: string;
+  automated: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DocumentQaCheckRun {
+  document_id: string;
+  run_id: string;
+  check_type: DocumentQaCheckType;
+  last_run_revision: string;
+  completed_at: string;
+}
+
+/** Only genuinely blocking, current-revision findings lock approval. */
+export function qaFindingBlocksApproval(
+  finding: Pick<DocumentQaFinding, "severity" | "status">,
+): boolean {
+  return finding.severity === "blocking" && finding.status === "open";
+}
+
 // The bypass user used in dev when BYPASS_AUTH=true
 export const BYPASS_USER_ID = "00000000-0000-0000-0000-000000000001";
 export const BYPASS_EMAIL = "test@instant-attorney.dev";

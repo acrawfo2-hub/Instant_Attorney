@@ -19,6 +19,9 @@ export type UsageFeature =
   | "attorney_second_draft"
   | "attorney_chat_edit"
   | "attorney_merge"
+  // #128's independently-addressable document QA checks. Each check is its own
+  // model call, so it meters separately from the attorney_review run it sits in.
+  | "attorney_review_qa"
   | "attorney_pre_consult"
   | "attorney_consult_closeout"
   | "attorney_brainstorm"

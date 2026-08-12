@@ -7,6 +7,7 @@ import type { CaseFile, Document, Attachment, Profile, IntakeMessage } from "@/l
 import DocumentPlanEditor from "./DocumentPlanEditor";
 import AccountMenu from "@/components/AccountMenu";
 import AttorneyFreestyleChat from "@/components/AttorneyFreestyleChat";
+import AttorneyContextHeader from "@/components/AttorneyContextHeader";
 
 interface CaseFileWithDocs extends CaseFile {
   documents: Document[];
@@ -112,6 +113,7 @@ export default async function ClientFilePage({
 
   return (
     <div className="atty-shell">
+      <AttorneyContextHeader currentArea="client" client={{ id: userId, name: personDisplayName(client) }} />
       <header className="atty-header">
         <div className="atty-header-inner">
           <div className="atty-brand">
