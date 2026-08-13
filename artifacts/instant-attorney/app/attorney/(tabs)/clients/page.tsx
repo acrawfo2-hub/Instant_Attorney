@@ -57,9 +57,9 @@ export default async function AttorneyClientsPage() {
                   <td>{matterLabel(cf)}</td>
                   <td>{new Date(cf.updated_at).toLocaleDateString()}</td>
                   <td style={{ whiteSpace: "nowrap" }}>
-                    <Link href={`/chat?caseFileId=${cf.id}&mode=freestyle`} className="atty-row-link">Chat</Link>
+                    <Link href={`/chat?caseFileId=${cf.id}&mode=freestyle`} className="atty-row-link atty-row-link--secondary">Ask associate</Link>
                     {" · "}
-                    <Link href={`/dashboard/${cf.id}`} className="atty-row-link">Open file</Link>
+                    <Link href={`/attorney/workbench/${cf.id}`} className="atty-row-link">Open workbench →</Link>
                   </td>
                 </tr>
               ))}

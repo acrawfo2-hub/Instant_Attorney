@@ -67,6 +67,13 @@ function RequestCard({ row }: { row: ConsultRequestRow }) {
         </div>
       )}
 
+      {row.case_file_id && (
+        <div className="atty-consult-workbench-actions">
+          <Link href={`/attorney/workbench/${row.case_file_id}?consultId=${row.id}`} className="atty-row-link">Open matter workbench →</Link>
+          {row.status === "confirmed" && <Link href={`/consult/${row.id}/session`} className="atty-row-link atty-row-link--secondary">Prepare / join consultation</Link>}
+        </div>
+      )}
+
       {row.status === "pending" && (
         <>
           <div className="atty-consult-times">
@@ -119,7 +126,8 @@ function CompletedCard({ row }: { row: ConsultRequestRow }) {
     : null;
 
   return (
-    <Link href={`/consult/${row.id}/session`} className="atty-consult-card atty-consult-card-link">
+    <div className="atty-consult-card">
+      <Link href={`/consult/${row.id}/session`} className="atty-consult-card-link">
       <div className="atty-consult-header">
         <div>
           <div className="atty-consult-client">{clientName(row)}</div>
@@ -131,7 +139,11 @@ function CompletedCard({ row }: { row: ConsultRequestRow }) {
         Held {row.confirmed_time ? fmtCST(row.confirmed_time) : "—"}
         {row.wrap_up_submitted_at && " · report sent"}
       </div>
-    </Link>
+      </Link>
+      <div className="atty-consult-workbench-actions">
+        {row.case_file_id && <Link href={`/attorney/workbench/${row.case_file_id}?consultId=${row.id}`} className="atty-row-link">Continue in workbench →</Link>}
+      </div>
+    </div>
   );
 }
 

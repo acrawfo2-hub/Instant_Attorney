@@ -95,7 +95,11 @@ export default async function AttorneyFilePage({
 
   return (
     <div className="lf-shell">
-      <AttorneyContextHeader currentArea="file" context={activeDocument ? {
+      <AttorneyContextHeader currentArea="file" workspace={{
+        caseFileId, clientId: caseFile.user_id,
+        clientName: client ? personDisplayName(client, "Client") : "Client",
+        matter: title, consultId: consult?.id,
+      }} context={activeDocument ? {
         documentId: activeDocument.id, documentTitle: activeDocument.title, documentStatus: activeDocument.status,
         revision: childDocuments.some((child) => child.parent_document_id === activeDocument.id && child.doc_type === "second_draft") ? "Attorney revision" : "Client draft",
         caseFileId, clientId: caseFile.user_id, clientName: client ? personDisplayName(client, "Client") : "Client", matter: title,
@@ -127,7 +131,7 @@ export default async function AttorneyFilePage({
             Financials
           </Link>
           <Link href="/attorney" className="lf-begin-btn">
-            Dashboard
+            Review Queue
           </Link>
           <AccountMenu />
         </div>

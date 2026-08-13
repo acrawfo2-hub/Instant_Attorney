@@ -5,6 +5,7 @@ import { personDisplayName } from "@/lib/types";
 import type { FinancialItem, SecureRefMeta } from "@/lib/types";
 import AccountMenu from "@/components/AccountMenu";
 import AttorneyFinancialReview from "@/components/AttorneyFinancialReview";
+import AttorneyContextHeader from "@/components/AttorneyContextHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -42,8 +43,14 @@ export default async function AttorneyFinancialsPage({ params }: { params: Promi
 
   return (
     <div className="lf-shell">
+      <AttorneyContextHeader currentArea="file" workspace={{
+        caseFileId,
+        clientId: caseFile.user_id,
+        clientName,
+        matter: caseFile.title || "Client file",
+      }} />
       <header className="lf-header">
-        <Link href={`/attorney/file/${caseFileId}`} className="lf-header-logo">
+        <Link href={`/attorney/workbench/${caseFileId}`} className="lf-header-logo">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 18 9 12 15 6" />
           </svg>
