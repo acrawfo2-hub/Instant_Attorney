@@ -199,6 +199,10 @@ export default async function ClientFilePage({
                     {cf.jurisdiction && ` · ${cf.jurisdiction}`}
                   </div>
                 </div>
+                <div className="atty-case-primary-actions">
+                  <Link href={`/attorney/workbench/${cf.id}`} className="atty-btn atty-btn-primary">Open matter workbench →</Link>
+                  <Link href={`/chat?caseFileId=${cf.id}&mode=freestyle`} className="atty-btn">Ask associate</Link>
+                </div>
               </div>
 
               {cf.summary && (

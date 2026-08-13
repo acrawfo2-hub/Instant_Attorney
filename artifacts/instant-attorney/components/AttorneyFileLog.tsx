@@ -31,6 +31,7 @@ export default function AttorneyFileLog({ files }: { files: FileRow[] }) {
   const [sortKey, setSortKey] = useState<SortKey>("updated");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [clientFilter, setClientFilter] = useState<{ id: string; name: string } | null>(null);
+  const [query, setQuery] = useState("");
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
@@ -44,6 +45,11 @@ export default function AttorneyFileLog({ files }: { files: FileRow[] }) {
   const rows = useMemo(() => {
     let list = files;
     if (clientFilter) list = list.filter((f) => f.user_id === clientFilter.id);
+    const normalizedQuery = query.trim().toLowerCase();
+    if (normalizedQuery) list = list.filter((f) =>
+      clientName(f).toLowerCase().includes(normalizedQuery) ||
+      matterLabel(f).toLowerCase().includes(normalizedQuery) ||
+      (f.next_action ?? "").toLowerCase().includes(normalizedQuery));
 
     const dir = sortDir === "asc" ? 1 : -1;
     return [...list].sort((a, b) => {
@@ -64,7 +70,7 @@ export default function AttorneyFileLog({ files }: { files: FileRow[] }) {
       }
       return cmp * dir;
     });
-  }, [files, clientFilter, sortKey, sortDir]);
+  }, [files, clientFilter, query, sortKey, sortDir]);
 
   function arrow(key: SortKey) {
     if (sortKey !== key) return null;
@@ -77,6 +83,10 @@ export default function AttorneyFileLog({ files }: { files: FileRow[] }) {
 
   return (
     <div className="atty-log">
+      <label className="atty-client-search">
+        <span>Search clients and matters</span>
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Client, matter, or next action…" />
+      </label>
       {clientFilter ? (
         <div className="atty-log-filter">
           Showing all files for <strong>{clientFilter.name}</strong>
@@ -107,7 +117,7 @@ export default function AttorneyFileLog({ files }: { files: FileRow[] }) {
             <tr
               key={f.id}
               className="atty-tr-link"
-              onClick={() => router.push(`/attorney/file/${f.id}`)}
+              onClick={() => router.push(`/attorney/workbench/${f.id}`)}
             >
               <td>
                 <button
@@ -132,7 +142,7 @@ export default function AttorneyFileLog({ files }: { files: FileRow[] }) {
                 })}
               </td>
               <td className="atty-td-muted">{f.goals?.length ?? 0}</td>
-              <td className="atty-td-arrow">→</td>
+              <td className="atty-td-arrow"><span className="atty-workbench-label">Open workbench</span> →</td>
             </tr>
           ))}
         </tbody>

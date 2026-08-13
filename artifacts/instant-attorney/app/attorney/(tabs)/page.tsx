@@ -58,7 +58,7 @@ function triageScore(doc: DocumentWithRelations): number {
   return overdueBoost + consultBoost + left;
 }
 
-// Pure triage: only what needs the attorney's attention right now. The full
+// Review Queue: only what needs the attorney's attention right now. The full
 // client roster lives on the Clients tab; the full consult picture (including
 // completed ones) lives on the Consults tab.
 export default async function AttorneyDashboardPage() {
@@ -102,6 +102,8 @@ export default async function AttorneyDashboardPage() {
   return (
     <>
       <section className="atty-section">
+        <h1 className="atty-page-title">Review Queue</h1>
+        <p className="atty-page-intro">Prioritized attorney work, with one-click access to either the focused review or the client&apos;s full matter workbench.</p>
         <h2 className="atty-section-title">Continue working<span className="atty-section-hint">drafts · QA · attorney action · recent</span></h2>
         <ContinueWorking actionable={actionable} />
       </section>
@@ -165,7 +167,10 @@ export default async function AttorneyDashboardPage() {
                     <td className="atty-td-muted">
                       {doc.submitted_at ? new Date(doc.submitted_at).toLocaleDateString() : "—"}
                     </td>
-                    <td className="atty-td-arrow">
+                    <td className="atty-td-arrow atty-row-actions">
+                      <Link href={`/attorney/workbench/${doc.case_file_id}?documentId=${doc.id}`} className="atty-row-link atty-row-link--secondary">
+                        Workbench
+                      </Link>
                       <Link href={`/attorney/review/${doc.id}`} className="atty-row-link">
                         Review →
                       </Link>
