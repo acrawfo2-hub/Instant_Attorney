@@ -75,10 +75,17 @@ a table an earlier stage creates. Within a group, order does not matter.
    from the code. Fails loudly if a row is still in that state.
 4. `schema-stage50-drop-retired-attorney-rooms.sql` — **optional and
    destructive.** See below.
+5. `schema-stage51-function-execute-grants.sql` — revokes EXECUTE on the
+   SECURITY DEFINER helpers from PUBLIC, then grants it back to the roles that
+   actually call each one. Found by Supabase's database linter, which nothing in
+   this repo had ever run. Read the note inside it: `revoke ... from anon` is a
+   no-op while PUBLIC still holds the grant, which is why this had gone
+   unnoticed.
 
 ## Safety
 
-Every migration through stage 49 is non-destructive: no `drop table`, no
+Stage 51 changes permissions, not data. Every other migration through stage 49
+is non-destructive: no `drop table`, no
 `truncate`, no `delete from`. Every `drop` is an idempotency guard — `drop
 policy if exists`, `drop constraint if exists`, `drop trigger if exists`.
 
