@@ -179,6 +179,7 @@ function AcpChatInner() {
   const urlCaseFileId = searchParams.get("caseFileId");
   const urlFocusDraftId = searchParams.get("draft");
   const isQuickConsult = searchParams.get("type") === "quick_consult";
+  const isNewCase = searchParams.get("newCase") === "1" && !urlCaseFileId;
   // `?ask=` seeds the composer from the file's next-step button and starter
   // chips. Deliberately NOT auto-sent: the client should see the question, be
   // able to change it, and press send herself — the file suggests, she asks.
@@ -1006,12 +1007,19 @@ function AcpChatInner() {
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <path d="M19 12H5M12 19l-7-7 7-7" />
               </svg>
-              {isQuickConsult ? "All cases" : "Your case file"}
+              {isQuickConsult || (isNewCase && !caseFileId) ? "All cases" : "Your case file"}
             </button>
           )}
           <AccountMenu onLight />
         </div>
       </header>
+
+      {isNewCase && !caseFileId && (
+        <div className="fc-new-case-banner" role="status">
+          <strong>New case</strong>
+          <span>This conversation starts a separate private file. It will not change your existing cases.</span>
+        </div>
+      )}
 
       {/* QUICK CONSULT BANNER */}
       {isQuickConsult && (

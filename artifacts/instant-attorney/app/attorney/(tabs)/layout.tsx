@@ -30,9 +30,9 @@ export default async function AttorneyTabsLayout({ children }: { children: React
   const consults = consultsCount ?? 0;
 
   const tabs = [
-    { href: "/attorney", label: "Dashboard", badge: drafts + consults },
+    { href: "/attorney", label: "Review Queue", badge: drafts },
     { href: "/attorney/clients", label: "Clients" },
-    { href: "/attorney/consults", label: "Consults", badge: consults },
+    { href: "/attorney/consults", label: "Consultations", badge: consults },
   ];
 
   return (
@@ -43,7 +43,7 @@ export default async function AttorneyTabsLayout({ children }: { children: React
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
             </svg>
-            <span>Attorney Dashboard</span>
+            <span>Attorney Workspace</span>
           </div>
           <div className="atty-header-right">
             <AccountMenu name={personDisplayName(profile)} email={profile?.email ?? ""} />

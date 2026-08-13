@@ -41,9 +41,10 @@ export default async function AttorneyConsultsPage() {
   return (
     <section className="atty-section">
       <h2 className="atty-section-title">
-        Consults
+        Consultations
         {consults.length > 0 && <span className="atty-count">{consults.length}</span>}
       </h2>
+      <p className="atty-page-intro">Respond to requests, prepare for upcoming sessions, and continue client work without losing the matter context.</p>
       <ConsultRequestQueue requests={consults} moreCompleted={moreCompleted} />
     </section>
   );

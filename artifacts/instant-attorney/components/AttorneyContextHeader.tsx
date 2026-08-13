@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { usePathname } from "next/navigation";
 
 export const ATTORNEY_WORK_STATE_KEY = "instant-attorney:work-state:v1";
 
@@ -34,13 +35,16 @@ function writeState(next: AttorneyWorkState) {
   window.dispatchEvent(new Event("attorney-work-state"));
 }
 
-export default function AttorneyContextHeader({ context, currentArea = "workbench", client }: {
+export default function AttorneyContextHeader({ context, currentArea = "workbench", client, workspace }: {
   context?: Omit<AttorneyWorkState, "openedAt" | "href"> & { href?: string };
-  currentArea?: "client" | "file" | "attachments" | "workbench";
+  currentArea?: "client" | "file" | "attachments" | "workbench" | "consult";
   client?: { id: string; name: string };
+  workspace?: { caseFileId: string; clientId: string; clientName: string; matter: string; consultId?: string };
 }) {
   const [restored, setRestored] = useState<AttorneyWorkState | null>(null);
+  const pathname = usePathname();
   const active = context ?? restored ?? undefined;
+  const matterContext = context ?? workspace ?? active;
   const stableContext = useMemo(() => context, [context?.documentId, context?.revision, context?.dirty, context?.unresolvedQa]);
 
   useEffect(() => {
@@ -68,23 +72,35 @@ export default function AttorneyContextHeader({ context, currentArea = "workbenc
     return () => { window.removeEventListener("pagehide", savePosition); savePosition(); };
   }, [stableContext, currentArea, client]);
 
-  const status = active?.documentStatus?.replaceAll("_", " ") ?? "No active document";
+  const status = active?.documentStatus?.replaceAll("_", " ") ?? (workspace ? "Matter workspace" : "No active document");
   return (
-    <header className="attorney-context" aria-label="Attorney document context">
+    <header className="attorney-context" aria-label="Attorney workspace context">
+      <nav className="attorney-context__global" aria-label="Attorney navigation">
+        <Link className={pathname === "/attorney" ? "is-active" : ""} href="/attorney">Review Queue</Link>
+        <Link className={pathname.startsWith("/attorney/client") ? "is-active" : ""} href="/attorney/clients">Clients</Link>
+        <Link className={pathname.startsWith("/attorney/consult") ? "is-active" : ""} href="/attorney/consults">Consultations</Link>
+        {matterContext && <Link className={pathname.includes("/workbench/") ? "is-active" : ""} href={`/attorney/workbench/${matterContext.caseFileId}`}>Matter Workbench</Link>}
+      </nav>
       <div className="attorney-context__crumbs">
         <Link href="/attorney">Attorney</Link><span>/</span>
         {active ? <><Link href={`/attorney/client/${active.clientId}`}>{active.clientName}</Link><span>/</span>
-          <Link href={`/attorney/file/${active.caseFileId}?documentId=${active.documentId}`}>{active.matter}</Link><span>/</span>
-          <strong>{active.documentTitle}</strong></> : client ? <Link href={`/attorney/client/${client.id}`}><strong>{client.name}</strong></Link> : <strong>Client record</strong>}
+          <Link href={`/attorney/workbench/${active.caseFileId}?documentId=${active.documentId}`}>{active.matter}</Link><span>/</span>
+          <strong>{active.documentTitle}</strong></> : workspace ? <><Link href={`/attorney/client/${workspace.clientId}`}>{workspace.clientName}</Link><span>/</span><strong>{workspace.matter}</strong></> : client ? <Link href={`/attorney/client/${client.id}`}><strong>{client.name}</strong></Link> : <strong>Client record</strong>}
       </div>
       <div className="attorney-context__meta">
         <span className="attorney-context__status">{status}</span>
         {active && <span>Active revision: <b>{active.revision}</b></span>}
       </div>
       {active && <nav className="attorney-context__nav" aria-label="Active document locations">
-        <Link className={currentArea === "file" ? "is-active" : ""} href={`/attorney/file/${active.caseFileId}?documentId=${active.documentId}`}>Living File</Link>
-        <Link className={currentArea === "attachments" ? "is-active" : ""} href={`/attorney/file/${active.caseFileId}?documentId=${active.documentId}#attachments`}>Attachments</Link>
+        <Link className={currentArea === "file" ? "is-active" : ""} href={`/attorney/workbench/${active.caseFileId}?documentId=${active.documentId}`}>Matter overview</Link>
+        <Link className={currentArea === "attachments" ? "is-active" : ""} href={`/attorney/workbench/${active.caseFileId}?documentId=${active.documentId}#attachments`}>Evidence &amp; files</Link>
         <Link className={currentArea === "workbench" ? "is-active" : ""} href={`/attorney/review/${active.documentId}`}>Review workbench</Link>
+      </nav>}
+      {!active && workspace && <nav className="attorney-context__nav" aria-label="Matter workbench locations">
+        <Link className={currentArea === "file" ? "is-active" : ""} href={`/attorney/workbench/${workspace.caseFileId}`}>Matter overview</Link>
+        <Link href={`/attorney/workbench/${workspace.caseFileId}#documents`}>Documents</Link>
+        <Link className={currentArea === "attachments" ? "is-active" : ""} href={`/attorney/workbench/${workspace.caseFileId}#attachments`}>Evidence &amp; files</Link>
+        {workspace.consultId && <Link className={currentArea === "consult" ? "is-active" : ""} href={`/consult/${workspace.consultId}/session`}>Consultation</Link>}
       </nav>}
     </header>
   );
