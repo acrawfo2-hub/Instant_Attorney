@@ -45,7 +45,12 @@ export function documentJobIdempotencyKey(caseFileId: string, identity: string, 
   return createHash("sha256").update(`${caseFileId}\0${identity}\0${revision}`).digest("hex");
 }
 
-/** Commits a bounded plan. The unique idempotency key makes this safe to retry. */
+/**
+ * Commits a bounded plan and creates the visible workspace-draft shell for each
+ * job immediately — before a worker claims it. The unique idempotency key makes
+ * the job insert safe to retry; a second dispatch of the same plan reuses the
+ * existing job and shell rather than minting another artifact.
+ */
 export async function dispatchDocumentPlan(db: SupabaseClient, args: {
   caseFileId: string; userId: string; plan: DocumentPlan;
 }): Promise<string[]> {
@@ -61,9 +66,33 @@ export async function dispatchDocumentPlan(db: SupabaseClient, args: {
     idempotency_key: documentJobIdempotencyKey(args.caseFileId, doc.identity, args.plan.revision),
   }));
   if (!rows.length) return [];
-  const { data, error } = await db.from("document_generation_jobs")
-    .upsert(rows, { onConflict: "idempotency_key", ignoreDuplicates: true })
-    .select("id");
-  if (error) throw error;
-  return (data ?? []).map((row) => row.id as string);
+
+  const { error: upsertError } = await db.from("document_generation_jobs")
+    .upsert(rows, { onConflict: "idempotency_key", ignoreDuplicates: true });
+  if (upsertError) throw upsertError;
+
+  const keys = rows.map((row) => row.idempotency_key);
+  const { data: jobs, error: selectError } = await db.from("document_generation_jobs")
+    .select("id, title, workspace_draft_id")
+    .in("idempotency_key", keys);
+  if (selectError) throw selectError;
+
+  const now = new Date().toISOString();
+  for (const job of jobs ?? []) {
+    if (job.workspace_draft_id) continue;
+    const { data: shell, error: shellError } = await db.from("client_workspace_drafts").insert({
+      case_file_id: args.caseFileId,
+      user_id: args.userId,
+      title: job.title,
+      content: "",
+      source: "assistant",
+    }).select("id").single();
+    if (shellError) throw shellError;
+    const { error: attachError } = await db.from("document_generation_jobs")
+      .update({ workspace_draft_id: shell.id, updated_at: now })
+      .eq("id", job.id);
+    if (attachError) throw attachError;
+  }
+
+  return (jobs ?? []).map((row) => row.id as string);
 }

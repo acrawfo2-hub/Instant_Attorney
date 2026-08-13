@@ -111,20 +111,45 @@ human usability test.
 
 Do these serially. Do not open a parallel agent on more than one.
 
-1. **Collapse `ChatMode`.** One assistant personality. Stop gating tools on `"freestyle"`. Stop persisting `case_files.chat_mode`. Leave the column if renaming it is a data change; stop writing it. Fix the stale `freestyle-drafts.ts` header in the same pass.
-2. **Job visibility without a second generator.** Create the workspace-draft shell at `dispatchDocumentPlan`, not at claim. A failed generate must not look like a ready empty document. Still no deterministic fake legal text — keep fail-and-retry — but the card should exist the moment drafting is promised.
-3. **Cheap Living File writer guard.** Scan `app/` and `lib/` for semantic `case_files` writers; declare administrative writes (title, legal hold, archive) exempt. Same shape as `document-persistence.test.ts`. Do not event-source.
+1. ~~**Collapse `ChatMode`.**~~ **Done (Phase 2).** Tools, pacing, and draft persistence are always on. `case_files.chat_mode` is no longer written. The column and `ChatMode` type stay (data change). `freestyle-drafts.ts` header no longer names the deleted rooms.
+2. ~~**Job visibility without a second generator.**~~ **Done (Phase 2).** `dispatchDocumentPlan` inserts the empty `client_workspace_drafts` shell and attaches it before a worker claims the job. Status, list, and cancel read `document_generation_jobs` (the live table). Fail-and-retry is unchanged — ungated text is still not saved. An empty shell is a card in progress, not a ready document: promote still rejects empty drafts, and the panel copy says so.
+3. ~~**Cheap Living File writer guard.**~~ **Done (Phase 2).** `lib/living-file-writers.test.ts` names every `case_files` mutator. Do not event-source.
 4. **Then, and only then, the #142 product decision:** keep apply-on-arrival, or restore preview-then-confirm. Until that is named, do not implement the workbench plan.
 
-Still deferred, unchanged: physical merge of `client_workspace_drafts` into `documents`; the case-event/projection rewrite; volunteer-text cross-matter contamination (routing no longer silently picks the wrong file; extraction of a volunteered new matter into the current file is still possible).
+### Calculators, inline in chat
+
+The product question that sat next to leftover 1: can the orchestrator call the
+right calculators at the right times, inline, persist the result to the file,
+and does that fit this cleanup?
+
+**Yes — it was already the tool loop; leftover 1 is what made it reachable.**
+`lib/orchestrator-tools.ts` wraps the same deterministic functions the
+specialist pages use (`run_means_test`, `estimate_child_support`,
+`screen_pi_sol`, and the rest). The prompt says: call the tool, don't compute
+in prose; after a calculator, **offer** `record_fact` ("Want me to save that to
+your file?"), don't auto-save. Auto-writing a number the client has not
+confirmed would invent a fact (north star 7). There is no `update_living_file`
+shortcut. Specialist pages stay as optional deep-dives; do not delete them in
+this pass.
+
+Case chat always needs a tool-capable provider (Anthropic today). Grok
+text-only intake on `/api/chat-acp` is gone with the mode split.
+
+`workspace_draft_jobs` is an unread leftover table. Nothing in `app/` or `lib/`
+writes it. Leave it; dropping tables is not this chunk.
+
+Still deferred, unchanged: physical merge of `client_workspace_drafts` into
+`documents`; the case-event/projection rewrite; volunteer-text cross-matter
+contamination (routing no longer silently picks the wrong file; extraction of a
+volunteered new matter into the current file is still possible).
 
 Specialist calculator pages (`/family/*`, `/bankruptcy/*`, `/personal-injury/*`, …) and `/free-chat` still exist. They are not secretly a second drafting engine. Do not delete them as "ghosts" without a named owner.
 
 ## The problem, stated once
 
 That paragraph below is the August 12 picture, kept so the chunks read as a
-sequence rather than as unexplained history. Chunks 0–7 removed it. What is
-still true is the leftover list in Phase 1.
+sequence rather than as unexplained history. Chunks 0–7 removed it. Leftovers
+1–3 closed in Phase 2. What is still in front is leftover 4 (#142).
 
 The product kernel is sound. Document text has one persistence boundary, drafts
 still complete when facts are missing, the Living File sync is durable, the

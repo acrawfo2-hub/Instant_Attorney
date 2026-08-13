@@ -17,7 +17,9 @@ export async function runDocumentGenerationJob(db: SupabaseClient, jobId: string
   if (!claimed) return false;
   const job = claimed as Job;
   try {
-    // The shell is created as soon as work starts, before any model call.
+    // The shell is created at plan dispatch, before any model call, so the
+    // client has a visible card the moment drafting is promised. Jobs dispatched
+    // before that change may still arrive here without one.
     if (!job.workspace_draft_id) {
       const { data: shell, error } = await db.from("client_workspace_drafts").insert({
         case_file_id: job.case_file_id, user_id: job.user_id, title: job.title, content: "", source: "assistant",
