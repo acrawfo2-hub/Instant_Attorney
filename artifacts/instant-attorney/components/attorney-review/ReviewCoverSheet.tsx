@@ -60,7 +60,20 @@ export default function ReviewCoverSheet({ documentId, fallbackCaseFileId }: { d
         <dl className="rcs-meta"><div><dt>Jurisdiction</dt><dd>{caseFile.jurisdiction ?? "Not confirmed"}</dd></div><div><dt>Goals</dt><dd>{caseFile.goals?.length ? caseFile.goals.join(" · ") : "Not stated"}</dd></div></dl>
       </section>
 
-      <section><h3>Facts <span>{settledFacts.length}</span></h3><ul className="rcs-list">{settledFacts.slice(0, 8).map(f => <li key={f.id}><SourceBadge source="client" />{f.description}</li>)}</ul>{settledFacts.length > 8 && <p className="rcs-muted">+ {settledFacts.length - 8} more in the Living File</p>}</section>
+      {/* The first eight facts, then the rest behind a disclosure IN PLACE.
+          This used to truncate at eight and say "+N more in the Living File",
+          which sent the attorney to another page mid-revision to read a fact
+          and then find their way back to the draft. Reading the file should
+          not cost you your place in the document. */}
+      <section><h3>Facts <span>{settledFacts.length}</span></h3>
+        <ul className="rcs-list">{settledFacts.slice(0, 8).map(f => <li key={f.id}><SourceBadge source="client" />{f.description}</li>)}</ul>
+        {settledFacts.length > 8 && (
+          <details className="rcs-more">
+            <summary>Show {settledFacts.length - 8} more fact{settledFacts.length - 8 === 1 ? "" : "s"}</summary>
+            <ul className="rcs-list">{settledFacts.slice(8).map(f => <li key={f.id}><SourceBadge source="client" />{f.description}</li>)}</ul>
+          </details>
+        )}
+      </section>
       <section className="rcs-gaps"><h3>Open gaps <span>{gaps.length}</span></h3>{gaps.length ? <ul className="rcs-list">{gaps.map(g => <li key={g.id}><SourceBadge source="ai" />{g.description}</li>)}</ul> : <p className="rcs-muted">No open fact gaps.</p>}</section>
       <section><h3>Deadlines <span>{deadlines.length}</span></h3>{deadlines.length ? deadlines.map(d => <div className={`rcs-deadline rcs-deadline-${d.urgency}`} key={d.id}><strong>{fmt(d.deadlineDate)}</strong><span>{d.label}</span><SourceBadge source="ai" /></div>) : <p className="rcs-muted">No deadlines computed from the file.</p>}</section>
 
@@ -70,6 +83,10 @@ export default function ReviewCoverSheet({ documentId, fallbackCaseFileId }: { d
       <section><h3>Source files <span>{attachments.length}</span></h3><div className="rcs-files">{attachments.map(file => <details key={file.id} className="rcs-file"><summary><span><strong>{file.file_name}</strong><small>{fmt(file.created_at)} · {file.status === "ready" ? "Extraction ready" : file.status === "processing" ? "Extracting" : "Extraction failed"}</small></span><span aria-hidden>⌄</span></summary><div><SourceBadge source="ai" /><p>{file.ai_summary ?? "No AI summary available."}</p>{file.status === "ready" && <nav><a href={`/api/attachments/${file.id}`} target="_blank" rel="noopener noreferrer">View</a><a href={`/api/attachments/${file.id}`} download>Download</a></nav>}</div></details>)}</div></section>
 
       <details className="rcs-transcript"><summary>Intake messages <span>{intakeMessages.length}</span></summary>{intakeMessages.map(message => <div key={message.id} className="rcs-message"><SourceBadge source={message.role === "user" ? "client" : "ai"} /><p>{message.content}</p><small>{fmt(message.created_at)}</small></div>)}</details>
+      {/* Still here for the whole file — documents, financials, the deck. The
+          facts, gaps, deadlines, sources and transcript above are readable
+          without leaving the draft, so this is a deliberate trip, not the only
+          way to read a fact. */}
       <Link className="rcs-full-file" href={`/attorney/file/${caseFileId}`}>Open full Living File <span>→</span></Link>
     </aside>
   );

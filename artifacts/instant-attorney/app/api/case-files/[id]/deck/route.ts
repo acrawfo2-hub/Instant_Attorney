@@ -57,7 +57,7 @@ export async function GET(
   const allDocs = (documents ?? []) as Document[];
   // Mirror the Living File's filtering so the rail and the page can never
   // disagree about what is on the matter.
-  const topDocuments = allDocs.filter((d) => d.status !== "pre_warmed" && !d.parent_document_id);
+  const topDocuments = allDocs.filter((d) => !d.parent_document_id);
   const childDocuments = allDocs.filter((d) => !!d.parent_document_id);
   const factItems = (facts ?? []) as FactItem[];
   const requestedAttachments = (requestedRows ?? []) as RequestedAttachment[];

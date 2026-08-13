@@ -13,7 +13,6 @@ import {
   prepModeBadgeLabel,
   stateBarReferralUrl,
 } from "@/lib/jurisdiction";
-import type { RoadmapAiOverlay } from "@/lib/roadmap-types";
 import CaseHub from "@/components/CaseHub";
 import FileTiles from "@/components/FileTiles";
 import FileAlertStrip from "@/components/FileAlertStrip";
@@ -22,7 +21,7 @@ import ClientCaseMemo from "@/components/ClientCaseMemo";
 import KeyDeadlines from "@/components/KeyDeadlines";
 import StrengthCheckCard from "@/components/StrengthCheckCard";
 import CaseDocumentsTable from "@/components/CaseDocumentsTable";
-import AttorneyFreestyleChat from "@/components/AttorneyFreestyleChat";
+import AttorneyStartDraft from "@/components/AttorneyStartDraft";
 import { buildMatterTasks } from "@/lib/matter-tasks";
 import { buildFileDeck } from "@/lib/file-deck";
 import type { CaseFile, FactItem, Document, Profile, ConsultRequest, ConsultWrapUp, RequestedAttachment, GovFormInstrument, Attachment, ClientWorkspaceDraft } from "@/lib/types";
@@ -76,7 +75,6 @@ interface ClientFileViewProps {
   hasConsultSub?: boolean;
   completedConsultWrapUp?: ConsultWrapUp | null;
   completedConsultSubmittedAt?: string | null;
-  roadmapOverlay?: RoadmapAiOverlay;
   clientDestination?: ClientDestination | null;
 }
 
@@ -96,7 +94,6 @@ export default function ClientFileView({
   hasConsultSub = false,
   completedConsultWrapUp = null,
   completedConsultSubmittedAt = null,
-  roadmapOverlay = {},
   clientDestination = null,
 }: ClientFileViewProps) {
   // A fact is "hypothetical" if explicitly tagged (kind) OR it carries the
@@ -145,45 +142,6 @@ export default function ClientFileView({
   const isAttorney = mode === "attorney";
   const chatHref = `/chat?caseFileId=${caseFile.id}`;
 
-  // The consumer file's single live block. Computed server-side from the
-  // deterministic task view (Mission Control + finalized records), so "Where
-  // things stand" renders instantly — no button, no per-view model call. The
-  // orchestrator keeps the underlying facts/documents current; this reads them.
-  const matterTasks = !isAttorney
-    ? buildMatterTasks({
-        caseFile,
-        facts,
-        documents,
-        requestedAttachments,
-        govForms,
-        attachments,
-        mode: "client",
-      })
-    : null;
-
-  // Everything the client-side layout renders above the fold, distilled from the
-  // same rows the sections below display in full. Pure — see lib/file-deck.ts.
-  const deck = matterTasks
-    ? buildFileDeck({
-        caseFile,
-        facts,
-        tasks: matterTasks,
-        documents,
-        childDocuments,
-        workspaceDrafts,
-        attachments,
-        requestedAttachments,
-        govForms,
-        consultRequest,
-      })
-    : null;
-
-  const hasActiveConsult =
-    Boolean(consultRequest) &&
-    consultRequest?.status !== "cancelled" &&
-    consultRequest?.status !== "completed";
-  const consultAction = getConsultAction(consultRequest, hasConsultSub);
-
   // The client has "brought in a document" once at least one upload exists that
   // didn't fail to store. Document Review only makes sense against a real
   // uploaded document, so it stays locked until then.
@@ -204,17 +162,44 @@ export default function ClientFileView({
           },
         };
 
-  const missionBoard = computeMissionControl({
-    caseFile: gatedCaseFile,
-    documents,
-    facts,
-    requestedAttachments,
-    govForms,
-    mode,
-    consultClientActions: completedConsultWrapUp?.clientActions ?? [],
-    recommendConsult: Boolean(strategy?.recommend_consult) && !hasActiveConsult,
-    hasConsultSub,
-  });
+  // The consumer file's single live block. Computed server-side from the
+  // deterministic task view (Mission Control + finalized records), so "Where
+  // things stand" renders instantly — no button, no per-view model call. The
+  // orchestrator keeps the underlying facts/documents current; this reads them.
+  const matterTasks = !isAttorney
+    ? buildMatterTasks({
+        caseFile: gatedCaseFile,
+        facts,
+        documents,
+        requestedAttachments,
+        govForms,
+        attachments,
+        mode: "client",
+      })
+    : null;
+
+  // Everything the client-side layout renders above the fold, distilled from the
+  // same rows the sections below display in full. Pure — see lib/file-deck.ts.
+  const deck = matterTasks
+    ? buildFileDeck({
+        caseFile: gatedCaseFile,
+        facts,
+        tasks: matterTasks,
+        documents,
+        childDocuments,
+        workspaceDrafts,
+        attachments,
+        requestedAttachments,
+        govForms,
+        consultRequest,
+      })
+    : null;
+
+  const hasActiveConsult =
+    Boolean(consultRequest) &&
+    consultRequest?.status !== "cancelled" &&
+    consultRequest?.status !== "completed";
+  const consultAction = getConsultAction(consultRequest, hasConsultSub);
 
   // ── Shared blocks ──────────────────────────────────────────────────────────
   // Built once, placed differently by each layout. Kept as consts (not inlined)
@@ -551,6 +536,21 @@ export default function ClientFileView({
 
   // ── Attorney layout — the full reference stack ─────────────────────────────
 
+  // The attorney's entry point into the same guidance chain the client deck
+  // reads through buildMatterTasks. Computed here, below the client return, so
+  // a client file load no longer builds a board nothing renders.
+  const missionBoard = computeMissionControl({
+    caseFile: gatedCaseFile,
+    documents,
+    facts,
+    requestedAttachments,
+    govForms,
+    mode,
+    consultClientActions: completedConsultWrapUp?.clientActions ?? [],
+    recommendConsult: Boolean(strategy?.recommend_consult) && !hasActiveConsult,
+    hasConsultSub,
+  });
+
   return (
     <div className="lf-grid">
       <MissionControlBoard
@@ -565,6 +565,15 @@ export default function ClientFileView({
           never let the attorney scroll past. */}
       <KeyDeadlines facts={facts} jurisdiction={caseFile.jurisdiction} />
 
+      {/* Reading the file is where an attorney realises what the client actually
+          needs. Acting on it used to require the client to ask first, because
+          every document began with a client submission. */}
+      {mode === "attorney" && (
+        <div className="lf-card lf-card-full">
+          <AttorneyStartDraft caseFileId={caseFile.id} />
+        </div>
+      )}
+
       {/* Strength Check — the adversarial stress test. The attorney sees the same
           stored result the client was shown. */}
       <StrengthCheckCard
@@ -573,12 +582,6 @@ export default function ClientFileView({
         isAttorney
       />
 
-      {/* Attorney parity — the same "keep working with the orchestrator" entry the
-          client has, on the file. Opens the freestyle work-product workspace
-          (privileged, not shared) right here instead of a separate page. */}
-      <div className="lf-card lf-card-full lf-atty-freestyle-entry">
-        <AttorneyFreestyleChat caseFileId={caseFile.id} />
-      </div>
 
       {clientProfile && (
         <div className="lf-card lf-card-full lf-atty-banner">

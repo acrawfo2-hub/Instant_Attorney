@@ -91,16 +91,31 @@ function hasDraftText(d: Document): boolean {
   return !!d.draft_text && d.draft_text.trim().length > 0;
 }
 
+/**
+ * Where a document action goes now: the case conversation.
+ *
+ * These used to build `/wizard/<type>?...` links. The wizard was a second
+ * drafting client; the orchestrator is the one surface, and the drafting engine
+ * (lib/document-drafting.ts) sits behind it. `ask` only seeds the composer — the
+ * client reads it and presses send.
+ */
+function documentActionHref(
+  caseFileId: string,
+  label: string,
+  opts: { docId?: string } = {},
+): string {
+  const params = new URLSearchParams({ caseFileId });
+  if (opts.docId) params.set("doc", opts.docId);
+  params.set("ask", opts.docId ? `Let's work on my ${label}.` : `Please draft my ${label}.`);
+  return `/chat?${params.toString()}`;
+}
+
 function wizardHref(
   caseFileId: string,
   wType: WizardType,
   opts: { docId?: string; instrument?: string; planKey?: string } = {},
 ): string {
-  const params = new URLSearchParams({ caseFileId });
-  if (opts.docId) params.set("docId", opts.docId);
-  if (opts.instrument) params.set("instrument", opts.instrument);
-  if (opts.planKey) params.set("planKey", opts.planKey);
-  return `/wizard/${wType}?${params.toString()}`;
+  return documentActionHref(caseFileId, opts.instrument || WIZARD_LABELS[wType], { docId: opts.docId });
 }
 
 /** Build the wizard link for a plan item. Pre-warm only applies to legacy
@@ -150,7 +165,7 @@ function planStatusForDoc(doc: Document | undefined): PlanStatus {
     case "draft":
       return hasDraftText(doc) ? "in_progress" : "not_started";
     default:
-      // pre_warmed and anything else: nothing the user has touched yet
+      // anything else: nothing the user has touched yet
       return "not_started";
   }
 }

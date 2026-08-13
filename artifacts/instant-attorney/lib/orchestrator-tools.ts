@@ -20,6 +20,7 @@ import { loadAttachmentText } from "./attachment-processor.ts";
 import { runStrengthCheck } from "./strength-check.ts";
 import { formatStrengthCheckForModel } from "./strength-check-types.ts";
 import { createServiceClient } from "./supabase/server.ts";
+import { newMatterColumns } from "./matter-routing.ts";
 import type { CaseFile, FactItem } from "./types.ts";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -927,12 +928,62 @@ const TOOLS: Record<string, ToolDef> = {
       return { forModel, urgency: undefined, raw: parsed };
     },
   },
+
+  open_new_matter: {
+    def: {
+      name: "open_new_matter",
+      description:
+        "Open a SEPARATE case file when the client raises a legal problem unrelated to the matter you are working on — they came about a will and now mention a divorce, or a landlord dispute, or a contract. " +
+        "Different matters keep different facts, documents, deadlines and strategy; mixing them corrupts both files. " +
+        "ASK FIRST and only call this after the client agrees, exactly like record_fact: say that this sounds like a separate matter, name both, and let them choose. If they say it is connected to the current matter, do not call this. " +
+        "Ask before you dig into the new problem, not after — anything they tell you first lands in the current file. " +
+        "After it returns, tell the client the new file is open and give them the link.",
+      input_schema: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Short label for the new matter, e.g. 'Divorce' or 'Non-compete dispute'." },
+        },
+        required: ["title"],
+      },
+    },
+    run: async (input, ctx) => {
+      const title = strOf(input.title);
+      if (!title) return needParams(["title"]);
+
+      const { data: profile } = await ctx.db
+        .from("profiles").select("home_state").eq("id", ctx.userId).maybeSingle();
+
+      const { data: created, error } = await ctx.db
+        .from("case_files")
+        .insert({ ...newMatterColumns(ctx.userId, { homeState: profile?.home_state ?? null }), title })
+        .select("id")
+        .single();
+
+      if (error || !created) {
+        console.error("[orchestrator-tools] open_new_matter insert error:", error);
+        return { forModel: JSON.stringify({ error: "failed", message: "Could not open a new matter." }), raw: null };
+      }
+
+      return {
+        forModel: JSON.stringify({
+          ok: true,
+          title,
+          case_file_id: created.id,
+          link: `/dashboard/${created.id}`,
+          note:
+            "The new file is empty. Do not restate what the client told you in this conversation into it — " +
+            "invite them to open it and start there, so the facts land in the right file.",
+        }),
+        raw: { caseFileId: created.id, title },
+      };
+    },
+  },
 };
 
 // Tools that mutate the client's record (or, for run_what_if, persist a client-
 // side What-If session). The attorney associate (work-product, not the client
 // channel) gets the read-only set only.
-const WRITE_TOOL_NAMES = new Set(["record_fact", "request_document", "resolve_document_request", "add_government_form", "run_what_if", "open_uploaded_document", "stress_test_position"]);
+const WRITE_TOOL_NAMES = new Set(["record_fact", "request_document", "resolve_document_request", "add_government_form", "run_what_if", "open_uploaded_document", "stress_test_position", "open_new_matter"]);
 
 /** All tool definitions — the consumer orchestrator, which may write to its own file. */
 export const ORCHESTRATOR_TOOLS: Anthropic.Tool[] = Object.values(TOOLS).map((t) => t.def);

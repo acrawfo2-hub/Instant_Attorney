@@ -1,10 +1,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
+import { placeholderFillLifecycle } from "./document-persistence.ts";
 
 const revisionWriters = [
-  "app/api/wizard/route.ts",
+  // The wizard route was the "first generation" writer and is gone with the
+  // wizard journey. A document's first revision is now written by promote, when
+  // a workspace draft the orchestrator produced becomes a reviewable document.
   "app/api/documents/[id]/regenerate/route.ts",
+  // The attorney starting a document from the client's file — the one origin
+  // that is not a client submission. It generates through draftInstrument and
+  // saves through the boundary like every other writer; what differs is who
+  // asked for it, not how it is written.
+  "app/api/attorney/case-files/[id]/draft/route.ts",
   "app/api/documents/[id]/fill-info/route.ts",
   "app/api/workspace/drafts/[id]/promote/route.ts",
   "app/api/workspace/drafts/[id]/route.ts",
@@ -98,3 +106,26 @@ test("revision-scoped gaps do not use case-wide description identity", async () 
   assert.match(parser, /source_revision_id: source\.revisionId/);
   assert.match(parser, /g\.source_document_id === source\.documentId/);
 });
+
+// ── placeholderFillLifecycle ───────────────────────────────────────────────
+// These moved here with the function, from lib/document-revisions.ts. That
+// module held three helpers; only this one had a caller. `isReviewResultCurrent`
+// had none, and `statusAfterPlaceholderFill` restated in TypeScript a rule the
+// `apply_document_placeholder_revision` RPC already enforces in SQL — so its
+// test proved the copy agreed with itself, not with the code that runs.
+
+test("an unsubmitted draft is filled in place", () => {
+  assert.equal(placeholderFillLifecycle("draft"), "draft_in_place");
+});
+
+for (const status of ["pending_review", "changes_requested"] as const) {
+  test(`${status} creates a review revision`, () => {
+    assert.equal(placeholderFillLifecycle(status), "review_revision");
+  });
+}
+
+for (const status of ["approved", "delivered"] as const) {
+  test(`${status} preserves the approved version and requires a new approval`, () => {
+    assert.equal(placeholderFillLifecycle(status), "approval_revision");
+  });
+}

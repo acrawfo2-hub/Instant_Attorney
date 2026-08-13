@@ -38,9 +38,10 @@ minimumReleaseAgeExclude:
   - eslint-config-next
 
 packages:
-  - 'artifacts/!(instant-attorney)'
-  - lib/*
-  - lib/integrations/*
+  # artifacts/instant-attorney is the product and is deliberately NOT a
+  # workspace package — it uses npm and its own lockfile. The other artifacts
+  # (api-server, mockup-sandbox) and the shared lib/* packages were a second,
+  # unused architecture and have been deleted.
   - scripts
 
 catalog:

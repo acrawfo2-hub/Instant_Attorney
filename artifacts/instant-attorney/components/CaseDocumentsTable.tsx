@@ -6,6 +6,15 @@ import { useRouter } from "next/navigation";
 import LivingFileSyncWarning from "@/components/LivingFileSyncWarning";
 import type { Attachment, Document, FactItem, ClientWorkspaceDraft } from "@/lib/types";
 import { docTypeLabel, isDocumentOutOfDate } from "@/lib/types";
+// The attorney working copy is work product until approved — the review editor
+// autosaves into it mid-edit. /api/documents/[id]/download enforces the same
+// rule; these links are hidden so a client is never offered a 409.
+import { isAttorneyApproved } from "@/lib/doc-generator";
+import { ATTORNEY_ORIGINATED } from "@/lib/types";
+
+/** A document the attorney started from the file, not one the client submitted. */
+const isAttorneyOriginated = (doc: Document) =>
+  (doc.content_json as Record<string, unknown> | null)?.source === ATTORNEY_ORIGINATED;
 import { findBlanks } from "@/lib/freestyle-drafts";
 import DocumentInfoNeeded from "@/components/DocumentInfoNeeded";
 import WorkspaceDraftInfoNeeded from "@/components/WorkspaceDraftInfoNeeded";
@@ -752,10 +761,10 @@ export default function CaseDocumentsTable({
                     )}
 
                     <div className="cdt-detail-links">
-                      {doc.draft_text && (
-                        <a href={`/api/documents/${doc.id}/download`}>Download submitted draft (.docx)</a>
+                      {doc.draft_text && (isAttorney || !isAttorneyOriginated(doc) || isAttorneyApproved(doc.status)) && (
+                        <a href={`/api/documents/${doc.id}/download`}>Download {isAttorneyOriginated(doc) ? "draft" : "submitted draft"} (.docx)</a>
                       )}
-                      {secondDraft?.draft_text && (
+                      {secondDraft?.draft_text && (isAttorney || isAttorneyApproved(secondDraft.status)) && (
                         <a href={`/api/documents/${secondDraft.id}/download`}>Download revised draft (.docx)</a>
                       )}
                     </div>
@@ -795,9 +804,17 @@ export default function CaseDocumentsTable({
                   : doc.status === "changes_requested" ? <Pill kind="review" label="Revisions requested" />
                   : <Pill kind="stored" label={doc.status} />;
 
+                // A promoted document remembers the workspace draft it came
+                // from, so "Continue" reopens THAT draft in the panel the client
+                // already edits in — rather than a copy, or the retired wizard.
+                const originDraftId = workspaceDrafts.find((d) => d.promoted_document_id === doc.id)?.id;
+                const continueHref = originDraftId
+                  ? `/chat?caseFileId=${doc.case_file_id}&draft=${originDraftId}`
+                  : `/chat?caseFileId=${doc.case_file_id}&ask=${encodeURIComponent(`Let's keep working on my ${doc.title}.`)}`;
+
                 const primary =
                   isAttorney ? <Link className="cdt-ghost" href={`/attorney/review/${doc.id}`}>Review →</Link>
-                  : doc.status === "draft" ? <Link className="cdt-ghost" href={`/wizard/${doc.doc_type}?caseFileId=${doc.case_file_id}&docId=${doc.id}`}>Continue →</Link>
+                  : doc.status === "draft" ? <Link className="cdt-ghost" href={continueHref}>Continue →</Link>
                   : doc.draft_text ? <a className="cdt-ghost" href={`/api/documents/${doc.id}/download`}>Download</a>
                   : <span className="cdt-muted">—</span>;
 
@@ -834,7 +851,7 @@ export default function CaseDocumentsTable({
                           Download {secondDraft?.draft_text ? "original draft" : "document"} (.docx)
                         </a>
                       )}
-                      {secondDraft?.draft_text && (
+                      {secondDraft?.draft_text && (isAttorney || isAttorneyApproved(secondDraft.status)) && (
                         <a href={`/api/documents/${secondDraft.id}/download`}>Download revised draft (.docx)</a>
                       )}
                     </div>

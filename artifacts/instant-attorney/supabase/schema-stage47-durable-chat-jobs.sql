@@ -24,8 +24,13 @@ create policy "users_update_own_chat_jobs" on chat_acp_jobs for update using (au
 
 -- Allocate a case sequence under an advisory transaction lock so simultaneous
 -- browser sends cannot choose the same tail.
+-- search_path pinned: a function with a mutable search_path resolves unqualified
+-- names against whatever the caller's path happens to be, which is the classic
+-- privilege-escalation surface. Stage 47 exists to fix exactly this on
+-- handle_new_user; this one was written without it and the Supabase linter
+-- caught it. SECURITY INVOKER, so it runs with the caller's rights either way.
 create or replace function create_chat_acp_job(p_id uuid, p_case_file_id uuid, p_user_id uuid)
-returns chat_acp_jobs language plpgsql security invoker as $$
+returns chat_acp_jobs language plpgsql security invoker set search_path = public, pg_temp as $$
 declare created chat_acp_jobs;
 begin
   perform pg_advisory_xact_lock(hashtextextended(p_case_file_id::text, 0));

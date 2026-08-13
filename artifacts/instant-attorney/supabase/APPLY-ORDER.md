@@ -1,97 +1,118 @@
-# Applying stages 44–48
+# Applying migrations
 
-As of 2026-08-12 the deployed database is missing **eight tables that merged
-code already writes to**. The migrations exist in this directory and were
-merged; they were simply never run. Every affected feature fails at runtime
-while typecheck, lint, and the unit tests stay green.
+**Verified against the deployed database on 2026-08-13.** Every migration in
+this directory has been applied. There is no known drift.
 
-Missing, and the migration that creates each:
+Do not trust that sentence indefinitely — re-run the check below. This file has
+been wrong before, in both directions, and a stale claim about the schema is
+worse than no claim.
 
-| Table | Migration | Feature that breaks without it |
-|---|---|---|
-| `document_review_runs` | `schema-stage44-document-review-runs.sql` | attorney review orchestrator |
-| `document_improvements` | `schema-stage44-document-review-runs.sql` | improvement proposals |
-| `document_qa_citations` | `schema-stage45-document-qa-citations.sql` | authorities QA gate |
-| `document_revisions` | `schema-stage46-document-revisions.sql` | revision history |
-| `workspace_draft_jobs` | `schema-stage46-durable-draft-jobs.sql` | durable draft status |
-| `document_generation_jobs` | `schema-stage47-document-generation-jobs.sql` | document job worker |
-| `document_sections` | `schema-stage47-section-refinement.sql` | section-aware generation |
-| `document_delivery_drafts` | `schema-stage48-review-delivery.sql` | attorney delivery composer |
-
-`schema-stage47-handle-new-user-search-path.sql` is **already applied**.
-
-## Order
-
-Dependencies come from foreign keys and from `alter table` statements that
-target a table an earlier stage creates. Within a group, order does not matter.
-
-1. `schema-stage44-document-review-runs.sql` — everything below depends on it
-2. `schema-stage45-document-qa-citations.sql` — FK to `document_review_runs`
-3. Stage 46, any order:
-   - `schema-stage46-attorney-improvement-actions.sql` — alters `document_improvements` (stage 44)
-   - `schema-stage46-document-revisions.sql` — alters a `document_review_runs` constraint (stage 44)
-   - `schema-stage46-durable-draft-jobs.sql`
-   - `schema-stage46-draft-revisions.sql`
-   - `schema-stage46-auth-access-repair.sql` — see note below
-4. Stage 47, any order:
-   - `schema-stage47-document-generation-jobs.sql`
-   - `schema-stage47-instrument-key.sql`
-   - `schema-stage47-message-boundary-sync.sql`
-   - `schema-stage47-section-refinement.sql`
-5. `schema-stage48-review-delivery.sql` — **blocked, see below**
-
-## Before you start
-
-**Stage 48 must not be applied until the `document_delivery_sends` rename has
-landed.** The version of `schema-stage48-review-delivery.sql` that shipped in
-#130 creates a table called `document_deliveries`, a name stage 27 already owns
-for a different thing — an immutable download audit that is live and holds
-rows. Because the statement is `create table if not exists`, applying it would
-do nothing at all, and every attorney send would then fail on columns that were
-never created. Confirm this file declares `document_delivery_sends` before
-running it.
-
-**Stage 46's auth repair re-asserts the signup trigger** but does not recreate
-`public.handle_new_user`, so the `search_path` pinned on that function by stage
-47 survives. Applying stage 46 after stage 47 is safe; it is only the trigger
-binding that is dropped and recreated.
-
-## Safety
-
-Audited across stages 44–48: no `drop table`, no `truncate`, no `delete from`.
-Every `drop` is an idempotency guard — `drop policy if exists`, `drop
-constraint if exists`, `drop trigger if exists`.
-
-Four migrations write data, all of them backfills guarded by `where not
-exists` or equivalent, so re-running is safe:
-
-- `schema-stage46-auth-access-repair.sql` — backfills missing `profiles` rows
-- `schema-stage46-document-revisions.sql`
-- `schema-stage47-message-boundary-sync.sql`
-- `schema-stage47-section-refinement.sql`
-
-Take a backup first regardless: this database holds real client matters
-(`case_files`, `fact_items`, `intake_messages` all have rows), and a backup is
-the only thing that makes a bad apply reversible.
-
-## Afterwards
+## How to check
 
 ```
 NEXT_PUBLIC_SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
   node scripts/check-schema.mjs --applied
 ```
 
-That reports any table the migrations define which is still missing from the
-deployed database, and is the check that would have caught this drift. It is
-deliberately not part of CI — it needs the service-role key, and drift is an
-operational fact rather than a defect in the code.
+That reports any table the migrations define which is missing from the deployed
+database. It is deliberately not in CI — it needs the service-role key, and
+drift is an operational fact rather than a defect in the code. **Which is
+exactly why it goes unrun for months at a time.** Run it after any deploy that
+includes a new migration.
 
-## Verifying applied state
+`pnpm schema:strict`, which *is* in CI, checks the other three directions:
+migrations colliding with each other, code querying a table no migration
+defines, and code selecting a column no migration defines. It cannot see whether
+a migration was actually applied.
 
-The table list above was derived from a live query. The migrations that only
-`alter` an existing table leave no new relation behind, so whether they have
-run cannot be inferred from the table list alone — check for their specific
-columns before assuming. For example:
+## What the drift turned out to be
+
+Worth recording, because the shape of it was the opposite of what this file
+previously claimed.
+
+This document used to open by saying eight tables were missing —
+`document_review_runs`, `document_improvements`, `document_qa_citations`,
+`document_revisions`, `workspace_draft_jobs`, `document_generation_jobs`,
+`document_sections`, `document_delivery_drafts` — and warned that stage 48 was
+blocked on a table-name collision. **All eight existed.** They had been applied
+at some point after this file was written, and the collision had been resolved:
+`document_delivery_sends` and `document_deliveries` are both present and
+distinct.
+
+Meanwhile five tables that live code writes to did **not** exist, and this file
+never mentioned them:
+
+| Table | What was broken |
+|---|---|
+| `chat_acp_jobs` | the durable turn queue — every client chat turn |
+| `chat_acp_acknowledgments` | the per-client delivery cursor |
+| `document_qa_findings` | the QA gate the approve route blocks on |
+| `document_qa_check_runs` | QA check bookkeeping |
+| `attorney_document_messages` | the workbench partner-chat transcript |
+
+All five are now applied. The failure mode is the one the whole schema guard
+exists for: unapplied migrations fail at runtime with PGRST205 while typecheck,
+lint and every unit test stay green, because none of them touch a database.
+
+`consults` (stage 7) is defined by a migration, absent from the database, and
+queried by no code. It is a legacy definition, not drift. Leave it.
+
+## Order, if you ever rebuild from scratch
+
+Dependencies come from foreign keys and from `alter table` statements targeting
+a table an earlier stage creates. Within a group, order does not matter.
+
+1. `schema.sql`, then `schema-stage2.sql` … in numeric order through stage 48.
+   The catch-up files (`schema-catch-up-*.sql`) restate earlier stages so a
+   fresh database can be built in one pass; they are safe to re-run and safe to
+   skip if the stages themselves have run.
+2. `schema-stage49-subscription-consult-credits.sql` — adds
+   `subscriptions.consult_credits`. Six call sites read it and stage 48's
+   verifier expects it, but no migration had ever created it: it had been added
+   by hand. This file makes the migrations the source of truth again.
+3. `schema-stage49-drop-prewarm-status.sql` — narrows `documents_status_check`
+   to the five live states, now that the retired `pre_warmed` status is gone
+   from the code. Fails loudly if a row is still in that state.
+4. `schema-stage50-drop-retired-attorney-rooms.sql` — **optional and
+   destructive.** See below.
+5. `schema-stage51-function-execute-grants.sql` — revokes EXECUTE on the
+   SECURITY DEFINER helpers from PUBLIC, then grants it back to the roles that
+   actually call each one. Found by Supabase's database linter, which nothing in
+   this repo had ever run. Read the note inside it: `revoke ... from anon` is a
+   no-op while PUBLIC still holds the grant, which is why this had gone
+   unnoticed.
+
+## Safety
+
+Stage 51 changes permissions, not data. Every other migration through stage 49
+is non-destructive: no `drop table`, no
+`truncate`, no `delete from`. Every `drop` is an idempotency guard — `drop
+policy if exists`, `drop constraint if exists`, `drop trigger if exists`.
+
+**Stage 50 is the one exception, and it is deliberate.** It drops the three
+tables behind the two retired attorney AI rooms
+(`attorney_workspace_messages`, `attorney_workspace_drafts`,
+`case_brainstorm_messages`) and two `case_files` columns. All three tables were
+verified empty before it was applied. If you are rebuilding a database that has
+real work product in them, read the note inside the file and count the rows
+first — nothing depends on this having run.
+
+Four migrations write data, all backfills guarded by `where not exists` or
+equivalent, so re-running is safe:
+
+- `schema-stage46-auth-access-repair.sql` — backfills missing `profiles` rows
+- `schema-stage46-document-revisions.sql`
+- `schema-stage47-message-boundary-sync.sql`
+- `schema-stage47-section-refinement.sql`
+
+Take a backup before any apply regardless. A backup is the only thing that makes
+a bad apply reversible.
+
+## Verifying a specific stage
+
+Migrations that only `alter` an existing table leave no new relation behind, so
+whether they have run cannot be inferred from the table list. Check for their
+specific columns:
 
 ```sql
 select column_name from information_schema.columns

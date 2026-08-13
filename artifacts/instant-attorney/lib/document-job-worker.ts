@@ -1,5 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { draftInstrument, type DraftingResult } from "./document-drafting.ts";
+import { coerceWizardType } from "./types.ts";
+import type { CaseFile, FactItem, Attachment, RequestedAttachment } from "./types.ts";
 
 type Job = { id: string; case_file_id: string; user_id: string; workspace_draft_id: string | null; document_type: string; title: string; generation_attempt: number };
 
@@ -35,18 +38,72 @@ export async function runDocumentGenerationJob(db: SupabaseClient, jobId: string
   }
 }
 
+/**
+ * Turn one job into document text, through the same pipeline the wizard route
+ * uses — `lib/document-drafting.ts`.
+ *
+ * This used to be a direct Anthropic call with a one-sentence system prompt and
+ * none of the Generation stages: no instrument identity, no pinned authority, no
+ * generation spec, no risk gate, no validator, and no marker check, so a
+ * truncated response was written to the draft as if it were finished. It also
+ * selected `category, fact_text, source_quote` from `fact_items`, none of which
+ * exist, so every document it produced was drafted with no facts at all.
+ *
+ * A failure here throws rather than saving something. The caller marks the job
+ * `failed` with the reason, the shell stays visible, and the client gets a retry
+ * — which is the point of the durable job. Writing partial or ungated text into
+ * a draft the client can submit for attorney review is the outcome worth
+ * avoiding.
+ *
+ * An unestablished governing forum is NOT such a failure. The draft comes back
+ * complete, with the forum written as a BLOCKING placeholder everywhere it would
+ * have appeared, and it is saved like any other. The client sees the document
+ * and the gap in it, which is more use than an error.
+ */
 async function generateJobText(db: SupabaseClient, job: Job): Promise<string> {
-  const [{ data: file }, { data: facts }] = await Promise.all([
-    db.from("case_files").select("title,summary,jurisdiction").eq("id", job.case_file_id).single(),
-    db.from("fact_items").select("category,fact_text,source_quote").eq("case_file_id", job.case_file_id).order("created_at"),
+  const [{ data: caseFile }, { data: facts }, { data: attachments }, { data: requested }] = await Promise.all([
+    db.from("case_files").select("*").eq("id", job.case_file_id).single(),
+    db.from("fact_items").select("*").eq("case_file_id", job.case_file_id).order("created_at"),
+    db.from("attachments").select("*").eq("case_file_id", job.case_file_id).eq("status", "ready"),
+    db.from("requested_attachments").select("*").eq("case_file_id", job.case_file_id),
   ]);
+
+  // The plan's documentType is a free-form slug the model chose, so it may not
+  // name a drafting engine. `general_document` is the honest fallback — it has a
+  // real spec and profile, where an invented type would have neither.
+  const wizardType = coerceWizardType(job.document_type) ?? "general_document";
+
   const client = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney, maxRetries: 4 });
-  const message = await client.messages.create({
-    model: "claude-sonnet-4-6", max_tokens: 8000,
-    system: "Draft only the requested legal working document. Use [[missing fact]] placeholders rather than inventing facts. Return document text only.",
-    messages: [{ role: "user", content: JSON.stringify({ documentType: job.document_type, title: job.title, caseFile: file, facts: facts ?? [] }) }],
+  const result: DraftingResult = await draftInstrument(client, {
+    wizardType,
+    instrumentLabel: job.title,
+    caseFile: (caseFile ?? null) as CaseFile | null,
+    facts: (facts ?? []) as FactItem[],
+    attachments: (attachments ?? []) as Attachment[],
+    requestedAttachments: (requested ?? []) as RequestedAttachment[],
+    messages: [{ role: "user", content: `Draft the ${job.title}.` }],
   });
-  return message.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
+
+  if (result.kind === "error") {
+    throw new Error(result.message);
+  }
+  if (!result.draftText) {
+    // A markerless response is recovery material, not a draft.
+    throw new Error(`The draft did not arrive complete (${result.incompleteReason}). Retry to regenerate it.`);
+  }
+  if (result.truncated) {
+    // extractDraftText salvages a draft block that opened but never closed, so
+    // a truncated run can still yield text. The wizard route saves that text and
+    // flags `truncated` in content_json, because a person is looking at it and
+    // can retry. Nothing here is watching: client_workspace_drafts has no
+    // truncation flag, so saving it would put a half-written document in the
+    // panel looking finished — and the client can promote that straight into the
+    // attorney review queue. Failing keeps the visible shell, records why, and
+    // leaves the job retryable, which is the same promise by the other route.
+    throw new Error("The draft was cut off before it finished. Retry to regenerate it.");
+  }
+
+  return result.draftText;
 }
 
 export async function processQueuedDocumentJobs(db: SupabaseClient, limit = 3): Promise<number> {

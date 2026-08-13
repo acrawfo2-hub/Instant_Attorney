@@ -6,7 +6,6 @@ import { buildDocumentPlan } from "@/lib/next-step";
 import type { CaseFile, Document, Attachment, Profile, IntakeMessage } from "@/lib/types";
 import DocumentPlanEditor from "./DocumentPlanEditor";
 import AccountMenu from "@/components/AccountMenu";
-import AttorneyFreestyleChat from "@/components/AttorneyFreestyleChat";
 import AttorneyContextHeader from "@/components/AttorneyContextHeader";
 
 interface CaseFileWithDocs extends CaseFile {
@@ -21,7 +20,6 @@ const STATUS_LABELS: Record<string, string> = {
   approved: "Approved",
   changes_requested: "Changes Requested",
   delivered: "Delivered",
-  pre_warmed: "Pre-warmed",
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -30,7 +28,6 @@ const STATUS_COLORS: Record<string, string> = {
   approved: "atty-badge-green",
   changes_requested: "atty-badge-blue",
   delivered: "atty-badge-gray",
-  pre_warmed: "atty-badge-gray",
 };
 
 export default async function ClientFilePage({
@@ -310,28 +307,6 @@ export default async function ClientFilePage({
                         {m.content}
                       </div>
                     ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Attorney freestyle work-product chat for this case file */}
-              <AttorneyFreestyleChat caseFileId={cf.id} />
-
-              {/* Organized digest from the last freestyle session (work-product) */}
-              {cf.attorney_workspace_summary && (
-                <div className="fs-digest">
-                  <div className="fs-digest-head">
-                    <span className="fs-digest-title">
-                      From your freestyle workspace
-                    </span>
-                    {cf.attorney_workspace_summarized_at && (
-                      <span className="fs-digest-time">
-                        {new Date(cf.attorney_workspace_summarized_at).toLocaleString()}
-                      </span>
-                    )}
-                  </div>
-                  <div className="fs-digest-body">
-                    {cf.attorney_workspace_summary}
                   </div>
                 </div>
               )}

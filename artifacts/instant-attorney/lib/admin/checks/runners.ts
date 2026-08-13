@@ -4,7 +4,6 @@ import { pricedModels, hasModelPricing } from "@/lib/usage-tracker";
 import { listAcpJobs, ACP_JOB_STUCK_MS } from "@/lib/acp-jobs";
 import { crashSummary } from "@/lib/crash-counter";
 import { PLAN_PRICE_IDS } from "@/lib/stripe";
-import { NEXT_OWNED_API_PREFIXES, SHADOW_PROBE_SUFFIX } from "@/lib/admin/api-surface";
 import type { CheckResult, CheckRunner, CheckRow } from "./types.ts";
 
 /**
@@ -133,62 +132,6 @@ const storageCheck: CheckRunner = async () => {
     status: "ok",
     summary: `${names.length} bucket${names.length === 1 ? "" : "s"} reachable.`,
     rows: names.map<CheckRow>((n) => ({ label: n, value: "present" })),
-  };
-};
-
-// ── routing.api-shadow ─────────────────────────────────────────────────────
-const shadowCheck: CheckRunner = async (ctx) => {
-  const results = await Promise.all(
-    NEXT_OWNED_API_PREFIXES.map(async (prefix) => {
-      try {
-        const res = await fetchWithTimeout(
-          `${ctx.origin}${prefix}${SHADOW_PROBE_SUFFIX}`,
-          { method: "HEAD", cache: "no-store" },
-          // Generous because `next dev` compiles each route on first request.
-          // Against a production build all prefixes answer in well under a second.
-          8000
-        );
-        const poweredBy = res.headers.get("x-powered-by") ?? "";
-        return { prefix, shadowed: /express/i.test(poweredBy), error: null as string | null };
-      } catch (e) {
-        return { prefix, shadowed: false, error: msg(e) };
-      }
-    })
-  );
-
-  const shadowed = results.filter((r) => r.shadowed);
-  const errored = results.filter((r) => r.error);
-
-  if (shadowed.length > 0) {
-    return {
-      status: "fail",
-      summary: `${shadowed.length} prefix${shadowed.length === 1 ? "" : "es"} answered by Express, not this app.`,
-      detail:
-        "The proxy hands these to the api-server, so every route under them 404s in the " +
-        "deployed artifact even though the code is present and typechecks.",
-      rows: shadowed.map<CheckRow>((r) => ({ label: r.prefix, value: "X-Powered-By: Express", bad: true })),
-      fix: "Add the prefix to .replit-artifact/artifact.toml → paths, then redeploy.",
-    };
-  }
-
-  if (errored.length === results.length) {
-    return {
-      status: "warn",
-      summary: "Could not reach this deployment to probe its own routes.",
-      detail:
-        `Every probe failed (${errored[0]?.error}). Under \`next dev\` this is usually just ` +
-        "on-demand compilation being slower than the probe timeout — the check is only " +
-        "meaningful against a real deployment, which is also the only place shadowing happens.",
-    };
-  }
-
-  return {
-    status: errored.length > 0 ? "warn" : "ok",
-    summary:
-      errored.length > 0
-        ? `${results.length - errored.length} of ${results.length} prefixes verified; ${errored.length} unreachable.`
-        : `All ${results.length} prefixes answered by this app.`,
-    rows: errored.slice(0, 10).map<CheckRow>((r) => ({ label: r.prefix, value: r.error ?? "", bad: true })),
   };
 };
 
@@ -514,7 +457,6 @@ const crashGuardCheck: CheckRunner = async () => {
 export const RUNNERS: Record<string, CheckRunner> = {
   "database.schema": schemaCheck,
   "database.storage": storageCheck,
-  "routing.api-shadow": shadowCheck,
   "integrations.anthropic": anthropicCheck,
   "integrations.resend": resendCheck,
   "integrations.stripe": stripeCheck,

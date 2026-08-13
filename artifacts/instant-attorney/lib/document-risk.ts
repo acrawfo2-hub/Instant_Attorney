@@ -63,8 +63,26 @@ export function buildJurisdictionBlock(profile: InstrumentRiskProfile): Jurisdic
   };
 }
 
+/**
+ * Is this a forum somebody actually confirmed?
+ *
+ * The match is a prefix, not an exact string, and that is the whole point. This
+ * used to be anchored — `/^(unconfirmed|unknown|...)$/` — while two prompt
+ * templates instructed the model to write the Living File line as
+ * `JURISDICTION: Unconfirmed — defaulting to Texas`. That value is parsed
+ * straight into `case_files.jurisdiction`, and because of the trailing clause it
+ * did not match the anchored pattern, so this returned **true**: the forum gate
+ * saw a confirmed forum, skipped FORUM_PLACEHOLDER, and drafted a high-risk
+ * instrument under Texas law that nobody had confirmed. Prompt text defeating a
+ * code gate, invisible to every test.
+ *
+ * The prompts are fixed. This is the belt: a value that announces its own
+ * uncertainty is not a forum, however it continues.
+ */
 export function hasConfirmedForum(jurisdiction: string | null | undefined): boolean {
-  return Boolean(jurisdiction?.trim() && !/^(unconfirmed|unknown|n\/a|not sure)$/i.test(jurisdiction.trim()));
+  const value = jurisdiction?.trim();
+  if (!value) return false;
+  return !/^(unconfirmed|unknown|undetermined|n\/a|not sure|tbd|pending)\b/i.test(value);
 }
 
 export function hasRequiredForum(

@@ -91,10 +91,18 @@ test("findCheck resolves ids and rejects unknown ones", () => {
   assert.equal(findCheck("nope.nope"), undefined);
 });
 
-test("the three invisible failure classes are all covered", () => {
+test("the invisible failure classes are all covered", () => {
   // These are the ones nothing in the product surfaces on its own. If a future
   // refactor drops one, the board silently stops earning its keep.
-  for (const id of ["database.schema", "routing.api-shadow", "config.model-pricing"]) {
+  //
+  // `routing.api-shadow` used to be listed here as a third. It probed every
+  // /api/* prefix for an `X-Powered-By: Express` answer, because the Express
+  // api-server owned bare `/api` and swallowed any prefix missing from
+  // artifact.toml. That server is gone and this app now owns `/`, so no prefix
+  // can be shadowed and the check had nothing left to detect. It was removed
+  // with the failure mode, not in spite of it — do not re-add it without
+  // re-adding a second service to the artifact.
+  for (const id of ["database.schema", "config.model-pricing"]) {
     assert.ok(findCheck(id), `${id} must stay in the catalog`);
   }
 });

@@ -3166,6 +3166,15 @@ body {
 .rcs-list li>span:last-child { display:flex; flex-direction:column; }
 .rcs-list small,.rcs-muted,.rcs-file small,.rcs-message small { color:var(--brand-text-xlt); font-size:10px; }
 .rcs-muted { margin:7px 0 0; }
+/* Overflow facts, revealed in place so reading the file never costs the
+   attorney their place in the draft. Styled as a quiet control, not a section. */
+.rcs-more { margin:10px 0 0; }
+.rcs-more summary { cursor:pointer; color:var(--brand-text-lt); font-size:11px; font-weight:700; list-style:none; padding:6px 0; }
+.rcs-more summary::-webkit-details-marker { display:none; }
+.rcs-more summary::before { content:"\203A"; display:inline-block; margin-right:6px; transition:transform .15s ease; }
+.rcs-more[open] summary::before { transform:rotate(90deg); }
+.rcs-more summary:hover { color:var(--brand-text-dk); }
+.rcs-more .rcs-list { margin-top:8px; }
 .rcs-gaps { border-left:3px solid #d49b32 !important; }
 .rcs-deadline { display:grid; grid-template-columns:auto 1fr; align-items:center; gap:4px 8px; border-left:3px solid #d49b32; padding:6px 8px; margin-top:6px; background:#fffaf0; font-size:11px; }
 .rcs-deadline .rcs-source { grid-column:2; }
@@ -11657,3 +11666,15 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
 .arr-check-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.45rem 0.8rem; margin: 1rem 0; }
 .arr-check-option { display: flex; align-items: center; gap: 0.45rem; color: #334155; font-size: 0.86rem; text-transform: capitalize; }
 .arr-check-option input { accent-color: #1d4ed8; }
+
+/* Attorney-started draft — the control on the file view. Quiet until opened;
+   the file is for reading, and this is an action taken while reading it. */
+.asd { display:flex; flex-direction:column; gap:8px; }
+.asd-hint { margin:0; color:var(--brand-text-xlt); font-size:11px; }
+.asd-open { gap:6px; }
+.asd-open label { color:var(--brand-text-lt); font-size:11px; font-weight:700; }
+.asd-open input,.asd-open textarea { width:100%; border:1px solid var(--brand-border); border-radius:var(--brand-r-md); padding:9px 11px; font:inherit; font-size:13px; color:var(--brand-text-dk); background:var(--brand-white); }
+.asd-open input:focus,.asd-open textarea:focus { outline:2px solid var(--brand-navy); outline-offset:-1px; }
+.asd-open textarea { resize:vertical; line-height:1.5; }
+.asd-actions { display:flex; gap:8px; margin-top:4px; }
+.asd-error { margin:0; color:#a3221f; font-size:12px; }

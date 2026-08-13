@@ -1,7 +1,32 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { DocumentStatus } from "./types.ts";
 import { syncDraftGapsToLivingFile } from "./file-parser.ts";
 
 export type PersistDocumentRevision = (revisionId: string) => Promise<string>;
+
+export type FillLifecycle = "draft_in_place" | "review_revision" | "approval_revision";
+
+/**
+ * Which lifecycle a placeholder fill follows, given the document's status.
+ *
+ * Lives here rather than in its own module so that document revision policy has
+ * one home alongside the write boundary it governs. It decides how the fill is
+ * *recorded* — whether the client's own draft is amended in place, or the fill
+ * produces a revision that re-enters review, or it revises text an attorney had
+ * already approved.
+ *
+ * It does not decide the resulting status. `apply_document_placeholder_revision`
+ * does, in SQL (`status = case when needs_review then 'pending_review' else
+ * 'draft' end`), and there used to be a `statusAfterPlaceholderFill` here saying
+ * the same thing in TypeScript. Nothing called it — the RPC had always owned
+ * that write — so it was a second copy of a rule that could drift from the one
+ * that runs. Do not reintroduce it; read the migration instead.
+ */
+export function placeholderFillLifecycle(status: DocumentStatus): FillLifecycle {
+  if (status === "draft") return "draft_in_place";
+  if (status === "approved" || status === "delivered") return "approval_revision";
+  return "review_revision";
+}
 
 /** The single persistence boundary for generated/revised document text. */
 export async function saveDocumentRevision(

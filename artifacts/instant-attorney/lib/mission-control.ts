@@ -86,9 +86,27 @@ function hasDraftText(d: Document): boolean {
   return !!d.draft_text && d.draft_text.trim().length > 0;
 }
 
+/**
+ * Where a document action goes now: the case conversation.
+ *
+ * These used to build `/wizard/<type>?...` links. The wizard was a second
+ * drafting client; the orchestrator is the one surface, and the drafting engine
+ * (lib/document-drafting.ts) sits behind it. `ask` only seeds the composer — the
+ * client reads it and presses send.
+ */
+function documentActionHref(
+  caseFileId: string,
+  label: string,
+  opts: { docId?: string } = {},
+): string {
+  const params = new URLSearchParams({ caseFileId });
+  if (opts.docId) params.set("doc", opts.docId);
+  params.set("ask", opts.docId ? `Let's work on my ${label}.` : `Please draft my ${label}.`);
+  return `/chat?${params.toString()}`;
+}
+
 function wizardHref(caseFileId: string, wType: WizardType, docId?: string): string {
-  const base = `/wizard/${wType}?caseFileId=${caseFileId}`;
-  return docId ? `${base}&docId=${docId}` : base;
+  return documentActionHref(caseFileId, WIZARD_LABELS[wType], { docId });
 }
 
 function pickCreateTarget(caseFile: CaseFile): WizardType {
@@ -96,10 +114,6 @@ function pickCreateTarget(caseFile: CaseFile): WizardType {
     .map(coerceWizardType)
     .filter((w): w is WizardType => w !== null);
   return recommended[0] ?? "general_document";
-}
-
-function heroHref(hero: NextStepGuide): string | undefined {
-  return hero.cta?.href ?? hero.secondary?.href;
 }
 
 function isDuplicateHref(href: string | undefined, hero: NextStepGuide): boolean {
@@ -202,7 +216,7 @@ export function computeMissionControl(input: MissionControlInput): MissionContro
       });
     }
     if (goal === "document_review") {
-      const docReviewHref = `/wizard/doc_review?caseFileId=${id}`;
+      const docReviewHref = documentActionHref(id, WIZARD_LABELS.doc_review);
       if (!isDuplicateHref(docReviewHref, hero)) {
         actions.push({
           id: "counsel:doc-review",

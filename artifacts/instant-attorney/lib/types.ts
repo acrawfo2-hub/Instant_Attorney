@@ -151,7 +151,6 @@ export type DerivedDocType = "critical_review" | "second_draft";
 export type DocType = WizardType | DerivedDocType;
 
 export type DocumentStatus =
-  | "pre_warmed"
   | "draft"
   | "pending_review"
   | "approved"
@@ -159,18 +158,6 @@ export type DocumentStatus =
   | "delivered";
 
 export type BrainstormMessageRole = "user" | "assistant";
-
-/** Attorney-only sounding-board chat scoped to a case file. Never client-visible. */
-export interface CaseBrainstormMessage {
-  id: string;
-  case_file_id: string;
-  author_id: string | null;
-  role: BrainstormMessageRole;
-  content: string;
-  /** Set once the attorney has applied this message's proposed Living File/strategy update, if any. */
-  applied_at: string | null;
-  created_at: string;
-}
 
 export interface Profile {
   id: string;
@@ -290,8 +277,6 @@ export interface CaseFile {
   jurisdiction: string | null;
   /** Organized digest of the attorney's last freestyle session (Stage 39).
    *  Attorney-facing working notes; written when they leave freestyle mode. */
-  attorney_workspace_summary?: string | null;
-  attorney_workspace_summarized_at?: string | null;
   /** Plain-language recap of the client's last freestyle session (Stage 43),
    *  distilled when they leave the mode and shown on their Living File. */
   chat_session_summary?: string | null;
@@ -555,38 +540,6 @@ export interface WorkspaceAttachmentRef {
 }
 
 /**
- * An attorney's freestyle work-product message, scoped to a client's case file
- * for context but kept OUT of the client's privileged intake_messages record.
- * Only the authoring attorney can read these rows.
- */
-export interface AttorneyWorkspaceMessage {
-  id: string;
-  case_file_id: string;
-  attorney_id: string;
-  role: MessageRole;
-  content: string;
-  /** Files the attorney attached inline to this turn (work-product). */
-  attachments?: WorkspaceAttachmentRef[];
-  created_at: string;
-}
-
-/**
- * A freestyle side-panel draft — a working document the associate produced or the
- * attorney started by hand during a freestyle session. Attorney work-product,
- * editable and downloadable in place. NOT the client's `documents` record.
- */
-export interface AttorneyWorkspaceDraft {
-  id: string;
-  case_file_id: string;
-  attorney_id: string;
-  title: string;
-  content: string;
-  source: "assistant" | "attorney";
-  created_at: string;
-  updated_at: string;
-}
-
-/**
  * The consumer-side equivalent: a working draft produced (or hand-started) in a
  * client's free-form freestyle session, editable and downloadable in the panel.
  * A potential deliverable — `promoted_document_id` is set once the client sends
@@ -758,6 +711,17 @@ export function personDisplayName(
 export function isValidWizardType(type: string): type is WizardType {
   return type in WIZARD_LABELS;
 }
+
+/**
+ * `content_json.source` for a document the ATTORNEY started from the client's
+ * file, rather than one the client submitted for review.
+ *
+ * Origin governs visibility. The row is owned by the client — it is their matter
+ * — so ownership alone would expose a draft the attorney is still thinking
+ * about. `/api/documents/[id]/download` refuses it to a non-attorney until it is
+ * approved, the same rule the attorney's working copy follows.
+ */
+export const ATTORNEY_ORIGINATED = "attorney_originated";
 
 export function coerceWizardType(raw: string | null | undefined): WizardType | null {
   if (!raw) return null;
