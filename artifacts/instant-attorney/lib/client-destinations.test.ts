@@ -12,6 +12,7 @@ const LINK_SOURCES = [
   "lib/file-deck.ts",
   "components/ClientCaseMemo.tsx",
   "components/ClientFileView.tsx",
+  "components/FileTiles.tsx",
 ];
 
 test("parseClientDestination accepts known views and rejects anything else", () => {
@@ -39,4 +40,21 @@ test("every routed destination is reachable from at least one client-facing link
     `these destinations render but nothing links to them: ${orphaned.join(", ")}. ` +
       `Either link them from a tile or the case memo, or drop them from CLIENT_DESTINATIONS.`,
   );
+});
+
+// The cover-sheet buttons must seed the composer with the param chat actually
+// reads. A prior version wrote `prompt=`, which opened a blank box.
+test("case memo seeds chat with ask=, the param the composer reads", () => {
+  const memo = readFileSync(join(ROOT, "components/ClientCaseMemo.tsx"), "utf8");
+  const chat = readFileSync(join(ROOT, "app/chat/page.tsx"), "utf8");
+  assert.match(memo, /ask=\$\{encodeURIComponent\(ask\)\}/);
+  assert.doesNotMatch(memo, /prompt=\$\{/);
+  assert.match(chat, /searchParams\.get\("ask"\)/);
+});
+
+test("client file landing actually renders the cover sheet and tile map", () => {
+  const view = readFileSync(join(ROOT, "components/ClientFileView.tsx"), "utf8");
+  assert.match(view, /<ClientCaseMemo/);
+  assert.match(view, /<FileTiles tiles=\{deck\.tiles\}/);
+  assert.match(view, /clientDestination === "documents"/);
 });

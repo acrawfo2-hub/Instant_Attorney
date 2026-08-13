@@ -10,8 +10,8 @@ import {
  * Confirms that both persistent "continue chat" entry points in the client
  * case file resolve to the correct conversation for that specific file.
  *
- * The two entry points in the client case file:
- *   1. The gold "Continue in chat →" pill in the CaseFileTabs tab bar
+ * The two entry points on the cover-sheet landing:
+ *   1. The memo's primary next-step button (`.lf-client-memo-primary`)
  *   2. The sticky "Continue legal chat" button in AskAssistantBar
  *
  * A wrong or absent caseFileId would silently drop the client into a blank
@@ -36,19 +36,16 @@ test.describe("chat shortcuts on the client case file", () => {
     if (client) await cleanupProvisionedClient(client);
   });
 
-  test("tab-bar chat pill href contains the correct caseFileId", async ({
+  test("cover-sheet next-step button href contains the correct caseFileId", async ({
     page,
   }) => {
     await page.setExtraHTTPHeaders({ Cookie: client.sessionCookie });
     await page.goto(`/dashboard/${client.caseFileId}`);
 
-    // The pill is rendered by CaseFileTabs and carries the class
-    // lf-tab-pill-chat.  Wait for it to be present; the bar only
-    // appears after the page has hydrated.
-    const pill = page.locator("a.lf-tab-pill-chat");
-    await expect(pill).toBeVisible({ timeout: 15_000 });
+    const primary = page.locator("a.lf-client-memo-primary");
+    await expect(primary).toBeVisible({ timeout: 15_000 });
 
-    const href = await pill.getAttribute("href");
+    const href = await primary.getAttribute("href");
     expect(href).toBeTruthy();
     expect(href).toContain(`caseFileId=${client.caseFileId}`);
   });
@@ -59,7 +56,6 @@ test.describe("chat shortcuts on the client case file", () => {
     await page.setExtraHTTPHeaders({ Cookie: client.sessionCookie });
     await page.goto(`/dashboard/${client.caseFileId}`);
 
-    // AskAssistantBar renders a Link with class lf-askbar-btn.
     const btn = page.locator("a.lf-askbar-btn");
     await expect(btn).toBeAttached({ timeout: 15_000 });
 
@@ -68,30 +64,30 @@ test.describe("chat shortcuts on the client case file", () => {
     expect(href).toContain(`caseFileId=${client.caseFileId}`);
   });
 
-  test("both shortcuts point to the same chat URL", async ({ page }) => {
+  test("both shortcuts open the same case conversation", async ({ page }) => {
     await page.setExtraHTTPHeaders({ Cookie: client.sessionCookie });
     await page.goto(`/dashboard/${client.caseFileId}`);
 
-    const pill = page.locator("a.lf-tab-pill-chat");
+    const primary = page.locator("a.lf-client-memo-primary");
     const btn = page.locator("a.lf-askbar-btn");
 
-    await expect(pill).toBeVisible({ timeout: 15_000 });
+    await expect(primary).toBeVisible({ timeout: 15_000 });
     await expect(btn).toBeAttached({ timeout: 15_000 });
 
-    const pillHref = await pill.getAttribute("href");
+    const primaryHref = await primary.getAttribute("href");
     const btnHref = await btn.getAttribute("href");
 
-    // Both must resolve to the same path so the client always lands in the
-    // same conversation regardless of which entry point she taps.
-    expect(pillHref).toBe(btnHref);
+    expect(primaryHref).toContain(`caseFileId=${client.caseFileId}`);
+    expect(btnHref).toContain(`caseFileId=${client.caseFileId}`);
+    expect(primaryHref).toMatch(/^\/chat\?/);
+    expect(btnHref).toMatch(/^\/chat\?/);
   });
 
-  test("following the tab-bar chat pill loads the chat page without error", async ({
+  test("following the cover-sheet next-step button loads chat without error", async ({
     page,
   }) => {
     const failedResponses: { url: string; status: number }[] = [];
     page.on("response", (res) => {
-      // Capture any document-level (navigation) response that is an error.
       if (res.status() >= 400 && res.request().resourceType() === "document") {
         failedResponses.push({ url: res.url(), status: res.status() });
       }
@@ -100,18 +96,15 @@ test.describe("chat shortcuts on the client case file", () => {
     await page.setExtraHTTPHeaders({ Cookie: client.sessionCookie });
     await page.goto(`/dashboard/${client.caseFileId}`);
 
-    const pill = page.locator("a.lf-tab-pill-chat");
-    await expect(pill).toBeVisible({ timeout: 15_000 });
+    const primary = page.locator("a.lf-client-memo-primary");
+    await expect(primary).toBeVisible({ timeout: 15_000 });
 
-    // Navigate to the chat by following the link directly (avoids needing the
-    // sticky bar to be within the viewport).
-    const href = await pill.getAttribute("href");
+    const href = await primary.getAttribute("href");
     expect(href).toBeTruthy();
 
     const response = await page.goto(href!);
     expect(response?.status()).toBeLessThan(400);
 
-    // No document-level errors during the navigation.
     expect(failedResponses).toHaveLength(0);
   });
 

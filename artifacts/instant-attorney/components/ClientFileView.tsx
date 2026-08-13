@@ -20,7 +20,7 @@ import KeyDeadlines from "@/components/KeyDeadlines";
 import StrengthCheckCard from "@/components/StrengthCheckCard";
 import CaseDocumentsTable from "@/components/CaseDocumentsTable";
 import AttorneyStartDraft from "@/components/AttorneyStartDraft";
-import CaseFileTabs from "@/components/CaseFileTabs";
+import FileTiles from "@/components/FileTiles";
 import CollapsibleText from "@/components/CollapsibleText";
 import LegalStrategyCard from "@/components/LegalStrategyCard";
 import { buildMatterTasks } from "@/lib/matter-tasks";
@@ -28,17 +28,19 @@ import { buildFileDeck } from "@/lib/file-deck";
 import type { CaseFile, FactItem, Document, Profile, ConsultRequest, ConsultWrapUp, RequestedAttachment, GovFormInstrument, Attachment, ClientWorkspaceDraft } from "@/lib/types";
 import { docTypeLabel, personDisplayName, coerceInstrumentType } from "@/lib/types";
 import { FIRM_CONTACT_EMAIL } from "@/lib/firm";
-import { getConsultAction } from "@/lib/consult-action";
 import type { ClientDestination } from "@/lib/client-destinations";
 
-// Client case file — tab-based layout, one section visible at a time.
+// Client case file — a cover sheet, not a wall of tabs.
 //
 // Client branch (if !isAttorney) renders:
-//   – optional alert strips (deadline warning, consult callout, post-consult card)
-//   – CaseFileTabs — five tabs: Documents | Case Details | Facts | Strength | Help
-//   – AskAssistantBar — sticky "Continue legal chat" bar
+//   – optional alert strips (deadline, consult, post-consult)
+//   – ClientCaseMemo — standing, facts, risks, and the next-step buttons
+//   – draft shortcuts — every current document, one tap away
+//   – FileTiles — eight stable destinations (documents, review, uploads, …)
+//   – AskAssistantBar — sticky way back into chat on phones
 //
-// Attorney branch renders Mission Control + the full reference stack.
+// Clicking a tile or a "see more" link opens that section as its own routed
+// view (?view=documents, facts, …). Attorney branch is unchanged.
 
 // ── Matter badge ─────────────────────────────────────────────────────────────
 
@@ -190,7 +192,6 @@ export default function ClientFileView({
     Boolean(consultRequest) &&
     consultRequest?.status !== "cancelled" &&
     consultRequest?.status !== "completed";
-  const consultAction = getConsultAction(consultRequest, hasConsultSub);
 
   // ── Shared blocks ──────────────────────────────────────────────────────────
   // Built once, placed differently by each layout. Kept as consts (not inlined)
@@ -414,28 +415,7 @@ export default function ClientFileView({
     </div>
   );
 
-  // ── Client layout — tab-based ─────────────────────────────────────────────
-
-  // Count items (workspace drafts + documents) that still have unfilled [[blanks]].
-  // This is the server-rendered initial value for the Documents tab badge;
-  // CaseDocumentsTable's own callout tracks the live count as blanks are filled
-  // inline (we can't mirror those client-side state updates from the server).
-  const docsBadgeCount = isAttorney ? 0 : (() => {
-    let n = 0;
-    // Non-promoted workspace drafts (promoted ones show under Drafts & documents)
-    for (const d of workspaceDrafts) {
-      if (!d.promoted_document_id && d.content && placeholderFields(d.content).length > 0) n++;
-    }
-    // All documents — prefer second-draft child over the original when both exist
-    for (const doc of documents) {
-      const secondDraft = childDocuments.find(
-        (c) => c.parent_document_id === doc.id && c.doc_type === "second_draft",
-      );
-      const target = secondDraft?.draft_text ? secondDraft : (doc.draft_text ? doc : null);
-      if (target?.draft_text && placeholderFields(target.draft_text).length > 0) n++;
-    }
-    return n;
-  })();
+  // ── Client layout — cover sheet + destinations ────────────────────────────
 
   if (!isAttorney && matterTasks && deck) {
     const helpPanel = (
@@ -460,8 +440,8 @@ export default function ClientFileView({
       </>
     );
 
-    return (
-      <div className="lf-grid">
+    const statusStrips = (
+      <>
         {prepBanner}
         {deck.pressing && <FileAlertStrip pressing={deck.pressing} chatHref={chatHref} />}
         {consultStrip}
@@ -484,30 +464,78 @@ export default function ClientFileView({
             )}
           </div>
         )}
+      </>
+    );
 
-        <CaseFileTabs
+    if (clientDestination) {
+      return (
+        <div className="lf-grid">
+          {statusStrips}
+          <Link href={`/dashboard/${caseFile.id}`} className="lf-client-detail-back">← Back to case overview</Link>
+          <div className="lf-client-detail">
+            {clientDestination === "documents" && documentsTable}
+            {clientDestination === "deadlines" && (
+              <KeyDeadlines facts={facts} jurisdiction={caseFile.jurisdiction} />
+            )}
+            {clientDestination === "case-details" && aboutBlocks}
+            {clientDestination === "facts" && factsBlocks}
+            {clientDestination === "strength" && (
+              <StrengthCheckCard
+                caseFileId={caseFile.id}
+                check={caseFile.legal_strategy?.strength_check ?? null}
+                isAttorney={false}
+              />
+            )}
+            {clientDestination === "help" && helpPanel}
+          </div>
+          <AskAssistantBar href={chatHref} />
+        </div>
+      );
+    }
+
+    return (
+      <div className="lf-grid">
+        {statusStrips}
+
+        <ClientCaseMemo
+          caseFile={caseFile}
+          confirmedFacts={confirmed}
+          deck={deck}
           chatHref={chatHref}
-          caseFileId={caseFile.id}
-          documentsBadge={docsBadgeCount > 0 ? docsBadgeCount : null}
-          documentsPanel={
-            <>
-              {documentsTable}
-              {deck.docketCount > 0 && (
-                <KeyDeadlines facts={facts} jurisdiction={caseFile.jurisdiction} />
-              )}
-            </>
-          }
-          caseDetailsPanel={aboutBlocks}
-          factsPanel={factsBlocks}
-          strengthPanel={
-            <StrengthCheckCard
-              caseFileId={caseFile.id}
-              check={caseFile.legal_strategy?.strength_check ?? null}
-              isAttorney={false}
-            />
-          }
-          helpPanel={helpPanel}
         />
+
+        <section className="lf-draft-shortcuts" aria-label="Your documents">
+          <div className="lf-draft-shortcuts-head">
+            <h2>Your documents</h2>
+            <Link href={`/dashboard/${caseFile.id}?view=documents`}>See all →</Link>
+          </div>
+          {deck.drafts.length > 0 ? (
+            <ul className="lf-draft-shortcuts-list">
+              {deck.drafts.map((d) => (
+                <li key={d.id}>
+                  <Link href={d.href} className="lf-draft-shortcut">
+                    <span className="lf-draft-shortcut-title">{d.title}</span>
+                    <span className={`lf-draft-shortcut-meta${d.needsInfo ? " lf-draft-shortcut-need" : ""}`}>
+                      {d.meta}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="lf-draft-shortcuts-empty">
+              Documents you draft in chat will show up here.{" "}
+              <Link href={chatHref}>Ask your assistant →</Link>
+            </p>
+          )}
+          {deck.moreDrafts > 0 && (
+            <Link href={`/dashboard/${caseFile.id}?view=documents`} className="lf-draft-shortcuts-more">
+              {deck.moreDrafts} more on your file →
+            </Link>
+          )}
+        </section>
+
+        <FileTiles tiles={deck.tiles} />
 
         <AskAssistantBar href={chatHref} />
       </div>
