@@ -21,7 +21,6 @@ import ClientCaseMemo from "@/components/ClientCaseMemo";
 import KeyDeadlines from "@/components/KeyDeadlines";
 import StrengthCheckCard from "@/components/StrengthCheckCard";
 import CaseDocumentsTable from "@/components/CaseDocumentsTable";
-import AttorneyFreestyleChat from "@/components/AttorneyFreestyleChat";
 import { buildMatterTasks } from "@/lib/matter-tasks";
 import { buildFileDeck } from "@/lib/file-deck";
 import type { CaseFile, FactItem, Document, Profile, ConsultRequest, ConsultWrapUp, RequestedAttachment, GovFormInstrument, Attachment, ClientWorkspaceDraft } from "@/lib/types";
@@ -573,12 +572,6 @@ export default function ClientFileView({
         isAttorney
       />
 
-      {/* Attorney parity — the same "keep working with the orchestrator" entry the
-          client has, on the file. Opens the freestyle work-product workspace
-          (privileged, not shared) right here instead of a separate page. */}
-      <div className="lf-card lf-card-full lf-atty-freestyle-entry">
-        <AttorneyFreestyleChat caseFileId={caseFile.id} />
-      </div>
 
       {clientProfile && (
         <div className="lf-card lf-card-full lf-atty-banner">

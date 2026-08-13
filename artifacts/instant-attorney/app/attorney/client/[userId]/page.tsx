@@ -6,7 +6,6 @@ import { buildDocumentPlan } from "@/lib/next-step";
 import type { CaseFile, Document, Attachment, Profile, IntakeMessage } from "@/lib/types";
 import DocumentPlanEditor from "./DocumentPlanEditor";
 import AccountMenu from "@/components/AccountMenu";
-import AttorneyFreestyleChat from "@/components/AttorneyFreestyleChat";
 import AttorneyContextHeader from "@/components/AttorneyContextHeader";
 
 interface CaseFileWithDocs extends CaseFile {
@@ -308,28 +307,6 @@ export default async function ClientFilePage({
                         {m.content}
                       </div>
                     ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Attorney freestyle work-product chat for this case file */}
-              <AttorneyFreestyleChat caseFileId={cf.id} />
-
-              {/* Organized digest from the last freestyle session (work-product) */}
-              {cf.attorney_workspace_summary && (
-                <div className="fs-digest">
-                  <div className="fs-digest-head">
-                    <span className="fs-digest-title">
-                      From your freestyle workspace
-                    </span>
-                    {cf.attorney_workspace_summarized_at && (
-                      <span className="fs-digest-time">
-                        {new Date(cf.attorney_workspace_summarized_at).toLocaleString()}
-                      </span>
-                    )}
-                  </div>
-                  <div className="fs-digest-body">
-                    {cf.attorney_workspace_summary}
                   </div>
                 </div>
               )}
