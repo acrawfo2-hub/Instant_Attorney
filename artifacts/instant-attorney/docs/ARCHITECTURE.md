@@ -11,6 +11,11 @@ The rule that prevents all of it: **one canonical implementation per
 capability**. If you are about to add a second module that does what an existing
 one already does, you are about to recreate the problem.
 
+**Flow map:** [`docs/FLOW.md`](./FLOW.md) — mermaid of how a turn, a draft, a
+review, and a Living File update actually move through the code, including the
+names that still lie on that path. Read it before writing tests that assume two
+labels mean the same object.
+
 ## What the product does
 
 An AI chatbot that questions a client the way an excellent intake attorney
