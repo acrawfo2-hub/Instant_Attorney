@@ -1,8 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { notifyAttorneyDocumentReady } from "./notify.ts";
 import { saveDocumentRevision } from "./document-persistence.ts";
-import { WIZARD_LABELS, coerceWizardType } from "./types.ts";
-import type { WizardType, Document, CaseFile, Profile } from "./types";
+import type { Document, CaseFile, Profile } from "./types";
 
 export { isValidWizardType } from "./types.ts";
 
@@ -32,16 +31,6 @@ export async function stampFactsSynced(
   } catch (err) {
     console.warn("[document-utils] facts_synced_at stamp error:", err);
   }
-}
-
-/** First recommended wizard that maps to a supported WizardType. */
-export function pickFirstValidWizard(wizards: string[] | undefined): WizardType | null {
-  if (!wizards?.length) return null;
-  for (const w of wizards) {
-    const coerced = coerceWizardType(w);
-    if (coerced) return coerced;
-  }
-  return null;
 }
 
 /** Reuse an in-progress or pre-warmed primary draft (never child documents).
@@ -118,19 +107,6 @@ export async function findPrimaryDocument(
   const { data } = await query.maybeSingle();
   return data ?? null;
 }
-
-/** Result of resolving which document a fresh wizard generation should write to. */
-export type WizardDocumentTarget =
-  | {
-      action: "update";
-      documentId: string;
-      existing: { status: string | null; content_json: unknown };
-    }
-  | { action: "insert" }
-  | {
-      action: "already_finalized";
-      document: { id: string; status: string | null; content_json: unknown; draft_text: string | null };
-    };
 
 export async function getChildDocuments(
   db: SupabaseClient,

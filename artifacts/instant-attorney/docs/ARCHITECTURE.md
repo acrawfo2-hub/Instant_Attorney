@@ -352,6 +352,24 @@ survives as `lib/document-drafting.ts`. `WizardType` and `lib/wizard-parsing.ts`
 also stay: they are the instrument taxonomy and the placeholder parser, not the
 journey.
 
+**The renderer took longer to find.** `lib/doc-generator.ts` also held
+`generateDocument({ docType, wizardData, … })` — the wizard's second .docx path,
+which switched on instrument type and hand-assembled a document from a bag of
+form answers, one template function per instrument. It outlived the journey it
+belonged to by roughly 700 lines, importing cleanly and typechecking cleanly,
+called by nothing. Deleted, along with the markdown and table helpers that only
+it used: the file went from 885 lines to 272.
+
+That is the shape this repository keeps producing, and the reason for the
+question at the top of `CLAUDE.md`. A second implementation is not detectable by
+reading it — it looks exactly like the first one. It is detectable by counting
+its callers. `lib/doc-generator.test.ts` now pins the module's export list, so a
+new renderer has to be added on purpose in a diff that says so.
+
+Two dead exports went with it — `pickFirstValidWizard` and the
+`WizardDocumentTarget` type, both leftovers of `resolveWizardDocumentTarget`.
+Removing a function is not finished until its return type goes too.
+
 Removed in chunk 2, recorded so they are not recreated: `lib/case-cta.ts` and
 `lib/document-generation-policy.ts` (both imported only by their own tests), and
 `lib/document-revisions.ts` (folded into `document-persistence.ts`, where

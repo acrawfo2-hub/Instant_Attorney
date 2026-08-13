@@ -116,10 +116,6 @@ function pickCreateTarget(caseFile: CaseFile): WizardType {
   return recommended[0] ?? "general_document";
 }
 
-function heroHref(hero: NextStepGuide): string | undefined {
-  return hero.cta?.href ?? hero.secondary?.href;
-}
-
 function isDuplicateHref(href: string | undefined, hero: NextStepGuide): boolean {
   if (!href) return true;
   return href === hero.cta?.href || href === hero.secondary?.href;
