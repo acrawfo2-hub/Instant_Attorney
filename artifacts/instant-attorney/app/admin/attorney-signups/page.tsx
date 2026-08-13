@@ -1,26 +1,12 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { BYPASS_USER_ID } from "@/lib/types";
+import { createServiceClient } from "@/lib/supabase/server";
 import AttorneySignupAdminTable, { type AttorneySignupRow } from "@/components/AttorneySignupAdminTable";
 
 export const dynamic = "force-dynamic";
 
-const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
-
 export default async function AttorneySignupsAdminPage() {
-  // Attorney gate (mirrors /admin and /admin/archives).
-  if (!BYPASS_AUTH) {
-    const db = await createClient();
-    const { data: { user } } = await db.auth.getUser();
-    if (!user) redirect("/login");
-    const { data: profile } = await db
-      .from("profiles").select("is_attorney").eq("id", user.id).single();
-    if (!profile?.is_attorney) redirect("/dashboard");
-  } else {
-    void BYPASS_USER_ID;
-  }
-
+  // Access is gated by app/admin/layout.tsx, which also honours the break-glass
+  // allowlist — re-checking profiles.is_attorney here would defeat it.
   const serviceDb = createServiceClient();
   const { data } = await serviceDb
     .from("profiles")
@@ -37,7 +23,7 @@ export default async function AttorneySignupsAdminPage() {
       </div>
       <p style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
         Attorneys signing up to use Instant Attorney as a drafting tool for their own
-        clients' matters. Nothing unlocks (no checkout, no wizards) until you approve —
+        clients&apos; matters. Nothing unlocks (no checkout, no drafting) until you approve —
         verify the bar number/firm before approving.
       </p>
       <AttorneySignupAdminTable initial={(data ?? []) as unknown as AttorneySignupRow[]} />

@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildFileContext } from "@/lib/prompts";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
 import { maxOutputTokensFor } from "@/lib/token-limits";
@@ -86,7 +87,7 @@ export interface RunStrengthCheckArgs {
  * can read this case file (owner-scoped or service). Throws on failure.
  */
 export async function runStrengthCheck(
-  db: any,
+  db: SupabaseClient,
   { caseFileId, userId, actorId }: RunStrengthCheckArgs,
 ): Promise<StrengthCheck> {
   const [{ data: caseFileRow }, { data: factRows }, { data: docRows }, { data: attRows }] =

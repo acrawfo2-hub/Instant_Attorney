@@ -12,7 +12,9 @@
     "test:e2e": "node scripts/e2e.mjs",
     "test:playwright": "playwright test",
     "test:playwright:ui": "playwright test --ui",
-    "freshness": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-legal-freshness.ts"
+    "freshness": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-legal-freshness.ts",
+    "schema": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/check-schema.mjs",
+    "schema:strict": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/check-schema.mjs --strict"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.102.0",

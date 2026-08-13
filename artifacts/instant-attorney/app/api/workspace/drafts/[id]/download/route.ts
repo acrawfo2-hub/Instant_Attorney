@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getClientContext } from "@/lib/client-workspace-auth";
+import { docxContentDisposition, generateDocxFromText } from "@/lib/doc-generator";
 import type { ClientWorkspaceDraft } from "@/lib/types";
 
-// Download a consumer freestyle draft as Markdown. The title becomes the filename.
-function safeFileName(title: string): string {
-  const base = (title || "draft").trim().replace(/[^\w\d\-. ]+/g, "").replace(/\s+/g, "-").slice(0, 80);
-  return `${base || "draft"}.md`;
+function safeDocumentTitle(title: string): string {
+  return (title || "draft")
+    .replace(/[\u0000-\u001F\u007F]/g, "")
+    .replace(/[\\/:*?"<>|]/g, "-")
+    .trim()
+    .slice(0, 80) || "draft";
 }
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -24,12 +27,28 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Draft not found" }, { status: 404 });
   }
   const draft = data as ClientWorkspaceDraft;
-  const body = `# ${draft.title}\n\n${draft.content}\n`;
+  const title = safeDocumentTitle(draft.title);
+  let buffer: Buffer;
+  try {
+    // The shared renderer converts the draft's Markdown structure into native
+    // Word headings, paragraphs, lists, and highlighted placeholder runs.
+    //
+    // #113 reshaped this signature around layout profiles, and #109 branched
+    // before that. "correspondence" is the right profile for a workspace
+    // draft: it is client-authored freestyle text with no doc_type to derive a
+    // formal instrument layout from, and it must not be dressed as a pleading
+    // or estate instrument. Status stays null so the pre-approval watermark
+    // still applies — nothing here has been through attorney review.
+    buffer = await generateDocxFromText(title, draft.content, "correspondence", null, null);
+  } catch (error) {
+    console.error("[workspace/drafts/download] docx generation error:", error);
+    return NextResponse.json({ error: "Could not build the document file" }, { status: 500 });
+  }
 
-  return new NextResponse(body, {
+  return new Response(new Uint8Array(buffer), {
     headers: {
-      "Content-Type": "text/markdown; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${safeFileName(draft.title)}"`,
+      "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "Content-Disposition": docxContentDisposition(title),
       "Cache-Control": "no-store",
     },
   });

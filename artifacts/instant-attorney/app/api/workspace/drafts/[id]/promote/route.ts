@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { getClientContext } from "@/lib/client-workspace-auth";
 import { finalizeDocumentSubmission } from "@/lib/document-utils";
 import type { ClientWorkspaceDraft } from "@/lib/types";
+import { saveDocumentRevision } from "@/lib/document-persistence";
 
 // Promote a freestyle workspace draft into the documents pipeline and submit it
 // for the 48-hour attorney review. Idempotent: a draft already linked to a
@@ -34,15 +35,41 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
 
   // Already promoted? Re-submit the existing document rather than duplicating.
   if (draft.promoted_document_id) {
+    const { data: linked } = await serviceDb.from("documents")
+      .select("id, status, content_json")
+      .eq("id", draft.promoted_document_id).eq("user_id", ctx.userId).maybeSingle();
+    if (linked?.status === "approved" || linked?.status === "delivered") {
+      return NextResponse.json({
+        error: "This version is already approved. Edit the workspace draft to create a new review revision.",
+      }, { status: 409 });
+    }
+    // Idempotent does not mean stale: always copy the editor's latest saved text
+    // before resubmitting (notably after an attorney requests changes).
+    if (linked) {
+      const now = new Date().toISOString();
+      // Copying the editor's text in is a document save, so it goes through the
+      // boundary too — the fresh-document path below already did, and this one
+      // quietly did not, which left resubmitted text out of the Living File.
+      await saveDocumentRevision(serviceDb, {
+        caseFileId: draft.case_file_id, userId: ctx.userId, draftText: draft.content,
+        persist: async () => {
+          await serviceDb.from("documents").update({
+            title: draft.title, draft_text: draft.content, updated_at: now,
+          }).eq("id", linked.id).eq("user_id", ctx.userId);
+          return linked.id;
+        },
+      }).catch((error) => { console.error("[workspace/drafts/promote] resubmit copy failed:", error); return null; });
+    }
     const doc = await finalizeDocumentSubmission(serviceDb, draft.promoted_document_id, ctx.userId);
     if (doc) return NextResponse.json({ documentId: doc.id, status: doc.status, reused: true });
     // The linked doc vanished — fall through and create a fresh one.
   }
 
   const now = new Date().toISOString();
-  const { data: inserted, error: insErr } = await serviceDb
-    .from("documents")
-    .insert({
+  const revision = await saveDocumentRevision(serviceDb, {
+    caseFileId: draft.case_file_id, userId: ctx.userId, draftText: draft.content,
+    persist: async (revisionId) => {
+      const { data: inserted, error: insErr } = await serviceDb.from("documents").insert({
       case_file_id: draft.case_file_id,
       user_id: ctx.userId,
       doc_type: "general_document",
@@ -51,16 +78,41 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       content_json: { source: "freestyle_workspace", workspace_draft_id: draft.id },
       status: "draft",
       updated_at: now,
-    })
-    .select("id")
-    .single();
+      current_revision_id: revisionId,
+    }).select("id").single();
+      if (insErr || !inserted) throw insErr ?? new Error("Could not create document");
+      return inserted.id;
+    },
+  }).catch((error) => { console.error("[workspace/drafts/promote] insert error:", error); return null; });
 
-  if (insErr || !inserted) {
-    console.error("[workspace/drafts/promote] insert error:", insErr);
+  // #118 moved the insert inside saveDocumentRevision's persist callback, so
+  // `inserted`/`insErr` are scoped to that callback now. The concurrency
+  // recovery below keys off the wrapper returning null instead — it must not be
+  // replaced by a bare 500, because losing it means a double-submit creates a
+  // duplicate document or reports a failure for a promotion that succeeded.
+  if (!revision) {
+    // A concurrent request may have inserted this exact promotion after our
+    // initial read but before this insert. The DB unique index makes it safe to
+    // recover that winner instead of creating a duplicate or returning a
+    // misleading failure.
+    const { data: winner } = await serviceDb.from("documents").select("id")
+      .eq("user_id", ctx.userId)
+      .contains("content_json", { workspace_draft_id: draft.id })
+      .maybeSingle();
+    if (winner?.id) {
+      const existingDoc = await finalizeDocumentSubmission(serviceDb, winner.id, ctx.userId);
+      if (existingDoc) {
+        await serviceDb.from("client_workspace_drafts")
+          .update({ promoted_document_id: existingDoc.id, updated_at: now })
+          .eq("id", draft.id).eq("user_id", ctx.userId);
+        return NextResponse.json({ documentId: existingDoc.id, status: existingDoc.status, reused: true });
+      }
+    }
     return NextResponse.json({ error: "Could not create the document" }, { status: 500 });
   }
+  const insertedId = revision.documentId;
 
-  const doc = await finalizeDocumentSubmission(serviceDb, inserted.id, ctx.userId);
+  const doc = await finalizeDocumentSubmission(serviceDb, insertedId, ctx.userId);
   if (!doc) {
     // Attorney-user accounts have no review queue; keep the draft as the doc's home.
     return NextResponse.json({ error: "This account cannot submit documents for review." }, { status: 400 });
@@ -72,5 +124,5 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     .eq("id", draft.id)
     .eq("user_id", ctx.userId);
 
-  return NextResponse.json({ documentId: doc.id, status: doc.status });
+  return NextResponse.json({ documentId: doc.id, status: doc.status, livingFileSyncPending: revision.syncPending });
 }

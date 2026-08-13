@@ -7,12 +7,15 @@ import AccountMenu from "@/components/AccountMenu";
 import ConsultNotepad from "@/components/ConsultNotepad";
 import ConsultRecorder from "@/components/ConsultRecorder";
 import ConsultCloseoutEditor from "@/components/ConsultCloseoutEditor";
+import ConsultAssociateChat from "@/components/ConsultAssociateChat";
 import ClientFileView from "@/components/ClientFileView";
+import { normalizeWrapUp } from "@/lib/consult-wrap-up";
 import type {
   CaseFile,
   ConsultNote,
   ConsultRecording,
   ConsultRequest,
+  ConsultWrapUp,
   Profile,
   FactItem,
   Document,
@@ -70,6 +73,8 @@ export default function ConsultSessionView({
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [workingWrapUp, setWorkingWrapUp] = useState<ConsultWrapUp | null>(consult.wrap_up_draft ?? null);
+  const [appliedSeq, setAppliedSeq] = useState(0);
 
   const backHref = mode === "client" ? "/dashboard" : caseFile ? `/attorney/file/${caseFile.id}` : "/attorney";
   const backLabel = mode === "client" ? "All Files" : "Back to file";
@@ -190,12 +195,30 @@ export default function ConsultSessionView({
         </div>
 
         {mode === "attorney" && caseFile && (
-          <div className="lf-grid" style={{ marginTop: "1.5rem" }}>
+          <div className="review-workbench-main" style={{ marginTop: "1.5rem" }}>
             <ConsultCloseoutEditor
               consultId={consult.id}
               initialWrapUp={consult.wrap_up_draft}
               alreadySent={consult.status === "completed" && !!consult.wrap_up_submitted_at}
               submittedAt={consult.wrap_up_submitted_at}
+              appliedWrapUp={workingWrapUp}
+              appliedSeq={appliedSeq}
+            />
+            <ConsultAssociateChat
+              consultId={consult.id}
+              currentWrapUp={workingWrapUp}
+              lockArtifacts={consult.status === "completed" && !!consult.wrap_up_submitted_at}
+              onWrapUp={(wrapUp) => {
+                setWorkingWrapUp(normalizeWrapUp(wrapUp));
+                setAppliedSeq((n) => n + 1);
+              }}
+              onFeeDraft={(draft) => {
+                void fetch(`/api/attorney/consult/${consult.id}/fee-estimate`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(draft),
+                });
+              }}
             />
           </div>
         )}

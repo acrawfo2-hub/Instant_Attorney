@@ -1,6 +1,6 @@
-import type { CaseFile, Document, FactItem, WizardType } from "@/lib/types";
-import { WIZARD_LABELS } from "@/lib/types";
-import { isValidWizardType } from "@/lib/types";
+import type { CaseFile, Document, FactItem, InstrumentType } from "@/lib/types";
+import { INSTRUMENT_LABELS } from "@/lib/types";
+import { isValidInstrumentType } from "@/lib/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Next-Step engine
@@ -14,7 +14,7 @@ import { isValidWizardType } from "@/lib/types";
 // instruments. We drive ONE document — the "lead" (most important) — all the way
 // to attorney approval via the 5-step spine, while a roadmap shows the user the
 // other documents in their file so they know there's more to come. The lead is
-// the AI's top-ranked wizard unless the attorney overrides it.
+// the AI's top-ranked instrument unless the attorney overrides it.
 //
 // Core principle (matches the doc generator): nothing is ever a dead end.
 // Even with no strategy and no facts, the user always gets a way to move
@@ -54,10 +54,10 @@ export type PlanStatus =
 
 /** One document in the file's overall strategy, with its current status. */
 export interface PlanItem {
-  /** Stable identity — the PlanEntry.key (or the wizard type on the legacy path). */
+  /** Stable identity — the PlanEntry.key (or the instrument type on the legacy path). */
   key: string;
   /** Drafting engine — selects interview hints / formatting only. */
-  wizard: WizardType;
+  engine: InstrumentType;
   /** Display name (the document's real title). */
   label: string;
   /** Instrument name to pass to a general_document draft, if applicable. */
@@ -91,19 +91,34 @@ function hasDraftText(d: Document): boolean {
   return !!d.draft_text && d.draft_text.trim().length > 0;
 }
 
-function wizardHref(
+/**
+ * Where a document action goes now: the case conversation.
+ *
+ * These used to build `/wizard/<type>?...` links. The wizard was a second
+ * drafting client; the orchestrator is the one surface, and the drafting engine
+ * (lib/document-drafting.ts) sits behind it. `ask` only seeds the composer — the
+ * client reads it and presses send.
+ */
+function documentActionHref(
   caseFileId: string,
-  wType: WizardType,
-  opts: { docId?: string; instrument?: string; planKey?: string } = {},
+  label: string,
+  opts: { docId?: string } = {},
 ): string {
   const params = new URLSearchParams({ caseFileId });
-  if (opts.docId) params.set("docId", opts.docId);
-  if (opts.instrument) params.set("instrument", opts.instrument);
-  if (opts.planKey) params.set("planKey", opts.planKey);
-  return `/wizard/${wType}?${params.toString()}`;
+  if (opts.docId) params.set("doc", opts.docId);
+  params.set("ask", opts.docId ? `Let's work on my ${label}.` : `Please draft my ${label}.`);
+  return `/chat?${params.toString()}`;
 }
 
-/** Build the wizard link for a plan item. Pre-warm only applies to legacy
+function instrumentActionHref(
+  caseFileId: string,
+  wType: InstrumentType,
+  opts: { docId?: string; instrument?: string; planKey?: string } = {},
+): string {
+  return documentActionHref(caseFileId, opts.instrument || INSTRUMENT_LABELS[wType], { docId: opts.docId });
+}
+
+/** Build the draft-request link for a plan item. Pre-warm only applies to legacy
  *  engine-keyed items (a pre-warmed draft has no plan key, so it can't be
  *  safely attached to a specific named instrument). */
 function planItemHref(
@@ -111,8 +126,8 @@ function planItemHref(
   item: PlanItem,
   preWarmedByType: Record<string, string>,
 ): string {
-  const preWarm = item.key === item.wizard ? preWarmedByType[item.wizard] : undefined;
-  return wizardHref(caseFileId, item.wizard, {
+  const preWarm = item.key === item.engine ? preWarmedByType[item.engine] : undefined;
+  return instrumentActionHref(caseFileId, item.engine, {
     docId: item.docId ?? preWarm,
     instrument: item.instrument,
     planKey: item.key,
@@ -129,10 +144,10 @@ export function effectiveLeadKey(caseFile: CaseFile): string | null {
 }
 
 /** The effective lead document type (legacy, recommended_wizards path only). */
-export function effectiveLeadWizard(caseFile: CaseFile): WizardType | null {
-  const recommended = (caseFile.legal_strategy?.recommended_wizards ?? []).filter(isValidWizardType);
+export function effectiveLeadEngine(caseFile: CaseFile): InstrumentType | null {
+  const recommended = (caseFile.legal_strategy?.recommended_wizards ?? []).filter(isValidInstrumentType);
   const override = caseFile.legal_strategy?.lead_override;
-  if (override && isValidWizardType(override)) return override;
+  if (override && isValidInstrumentType(override)) return override;
   return recommended[0] ?? null;
 }
 
@@ -150,7 +165,7 @@ function planStatusForDoc(doc: Document | undefined): PlanStatus {
     case "draft":
       return hasDraftText(doc) ? "in_progress" : "not_started";
     default:
-      // pre_warmed and anything else: nothing the user has touched yet
+      // anything else: nothing the user has touched yet
       return "not_started";
   }
 }
@@ -159,6 +174,11 @@ function planStatusForDoc(doc: Document | undefined): PlanStatus {
 function docPlanKey(doc: Document): string | undefined {
   const k = (doc.content_json as Record<string, unknown> | null)?.plan_key;
   return typeof k === "string" ? k : undefined;
+}
+
+function docInstrumentKey(doc: Document): string | undefined {
+  const metadataKey = (doc.content_json as Record<string, unknown> | null)?.instrument_key;
+  return doc.instrument_key ?? (typeof metadataKey === "string" ? metadataKey : undefined) ?? undefined;
 }
 
 /**
@@ -186,13 +206,14 @@ export function buildDocumentPlan(caseFile: CaseFile, documents: Document[]): Pl
       // Match by stamped plan_key; fall back to a legacy doc of the same typed
       // engine that was never stamped (best-effort for files mid-migration).
       const doc =
+        topLevel.find((d) => docInstrumentKey(d) === entry.instrument_key) ??
         topLevel.find((d) => docPlanKey(d) === entry.key) ??
         (entry.engine !== "general_document"
           ? topLevel.find((d) => d.doc_type === entry.engine && !docPlanKey(d))
           : undefined);
       return {
         key: entry.key,
-        wizard: entry.engine,
+        engine: entry.engine,
         label: entry.title,
         instrument: entry.engine === "general_document" ? entry.title : undefined,
         priority: i + 1,
@@ -204,40 +225,40 @@ export function buildDocumentPlan(caseFile: CaseFile, documents: Document[]): Pl
   }
 
   // ── Legacy path: derive from the deprecated recommended_wizards list ─────────
-  const recommended = (caseFile.legal_strategy?.recommended_wizards ?? []).filter(isValidWizardType);
+  const recommended = (caseFile.legal_strategy?.recommended_wizards ?? []).filter(isValidInstrumentType);
   if (!recommended.length) return [];
 
-  const lead = effectiveLeadWizard(caseFile);
-  const orderedWizards: WizardType[] = [];
-  if (lead) orderedWizards.push(lead);
+  const lead = effectiveLeadEngine(caseFile);
+  const orderedEngines: InstrumentType[] = [];
+  if (lead) orderedEngines.push(lead);
   for (const w of recommended) {
-    if (!orderedWizards.includes(w)) orderedWizards.push(w);
+    if (!orderedEngines.includes(w)) orderedEngines.push(w);
   }
 
-  return orderedWizards.map((wizard, i) => {
-    const doc = topLevel.find((d) => d.doc_type === wizard);
+  return orderedEngines.map((engine, i) => {
+    const doc = topLevel.find((d) => d.doc_type === engine);
     return {
-      key: wizard,
-      wizard,
-      label: WIZARD_LABELS[wizard],
+      key: engine,
+      engine,
+      label: INSTRUMENT_LABELS[engine],
       priority: i + 1,
       status: planStatusForDoc(doc),
       docId: doc?.id,
-      isLead: wizard === lead,
+      isLead: engine === lead,
     };
   });
 }
 
 /**
  * Pick the document type to offer when the user is starting fresh and there is
- * no ranked plan. Prefers the attorney-recommended lead wizard; otherwise falls
+ * no ranked plan. Prefers the attorney-recommended lead instrument; otherwise falls
  * back to a general legal document so the path is NEVER blocked.
  */
 function pickCreateTarget(
   caseFile: CaseFile,
   preWarmedByType: Record<string, string>,
-): { wType: WizardType; docId?: string } {
-  const wType = effectiveLeadWizard(caseFile) ?? "general_document";
+): { wType: InstrumentType; docId?: string } {
+  const wType = effectiveLeadEngine(caseFile) ?? "general_document";
   return { wType, docId: preWarmedByType[wType] };
 }
 
@@ -247,7 +268,7 @@ function pickCreateTarget(
  * @param caseFile          the file
  * @param documents         top-level (non pre-warmed, non-child) documents
  * @param facts             fact items for the file
- * @param preWarmedByType   map of wizardType -> pre-warmed document id
+ * @param preWarmedByType   map of instrumentType -> pre-warmed document id
  */
 export function computeNextStep(
   caseFile: CaseFile,
@@ -365,7 +386,7 @@ export function computeNextStep(
 
   // ── Pre-strategy path: no ranked plan yet, never a dead end ───────────────────
   const canCreate =
-    (caseFile.legal_strategy?.recommended_wizards ?? []).some(isValidWizardType) ||
+    (caseFile.legal_strategy?.recommended_wizards ?? []).some(isValidInstrumentType) ||
     (caseFile.legal_strategy?.instruments?.length ?? 0) > 0;
 
   const draftDoc = documents.find((d) => d.status === "draft" && hasDraftText(d));
@@ -396,20 +417,20 @@ export function computeNextStep(
     title = "Review your draft and send it to your attorney";
     body =
       "Your document is drafted and waiting. Look it over, fill in any blanks you can, then send it to Andrew. It's completely fine to leave blanks — he'll finish them for you.";
-    cta = { label: "Open my draft →", href: wizardHref(id, draftDoc.doc_type as WizardType, { docId: draftDoc.id }) };
+    cta = { label: "Open my draft →", href: instrumentActionHref(id, draftDoc.doc_type as InstrumentType, { docId: draftDoc.id }) };
   } else if (changesDoc) {
     activeStep = 3;
     title = "Your attorney suggested some changes";
     body =
       "Andrew reviewed your document and asked for a few updates. Open it to see what he suggested and send it back when you're ready.";
-    cta = { label: "See the changes →", href: wizardHref(id, changesDoc.doc_type as WizardType, { docId: changesDoc.id }) };
+    cta = { label: "See the changes →", href: instrumentActionHref(id, changesDoc.doc_type as InstrumentType, { docId: changesDoc.id }) };
   } else if (canCreate && !anyDocCreated) {
     const { wType, docId } = pickCreateTarget(caseFile, preWarmedByType);
     activeStep = 2;
     title = "Create your first document";
     body =
       "We have enough to start. Click below and we'll write a complete first draft for you in under two minutes — even if some details are still missing, we'll mark those spots so you (or Andrew) can fill them in later.";
-    cta = { label: "Create my document →", href: wizardHref(id, wType, { docId }) };
+    cta = { label: "Create my document →", href: instrumentActionHref(id, wType, { docId }) };
   } else if (pendingDoc) {
     activeStep = 4;
     tone = "waiting";
@@ -419,7 +440,7 @@ export function computeNextStep(
     if (canCreate) {
       secondary = (() => {
         const { wType, docId } = pickCreateTarget(caseFile, preWarmedByType);
-        return { label: "Start another document", href: wizardHref(id, wType, { docId }) };
+        return { label: "Start another document", href: instrumentActionHref(id, wType, { docId }) };
       })();
     }
   } else if (approvedDoc) {
@@ -435,7 +456,7 @@ export function computeNextStep(
     title = "Create your next document";
     body =
       "We'll write a complete first draft for you in under two minutes. Missing details are never a problem — we mark those spots and your attorney fills them in.";
-    cta = { label: "Create a document →", href: wizardHref(id, wType, { docId }) };
+    cta = { label: "Create a document →", href: instrumentActionHref(id, wType, { docId }) };
   } else {
     activeStep = 1;
     title = "Tell us a little more about your situation";
@@ -444,7 +465,7 @@ export function computeNextStep(
     cta = { label: "Continue my chat →", href: `/chat?caseFileId=${id}` };
     secondary = {
       label: "Or create a document now",
-      href: wizardHref(id, "general_document"),
+      href: instrumentActionHref(id, "general_document"),
     };
   }
 

@@ -2,8 +2,8 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { requireViewer } from "@/lib/auth/require-attorney";
 import ClientFileView from "@/components/ClientFileView";
-import CaseBrainstormChat from "@/components/CaseBrainstormChat";
 import AccountMenu from "@/components/AccountMenu";
+import AttorneyContextHeader from "@/components/AttorneyContextHeader";
 import type {
   CaseFile,
   FactItem,
@@ -12,8 +12,8 @@ import type {
   RequestedAttachment,
   GovFormInstrument,
   ConsultRequest,
-  CaseBrainstormMessage,
 } from "@/lib/types";
+import { personDisplayName } from "@/lib/types";
 
 // Attorney view of a single client case file. Renders the exact same Living
 // File the client sees (legal strategy, instruments, fact cards, gov forms,
@@ -28,11 +28,10 @@ export default async function AttorneyFilePage({
   searchParams,
 }: {
   params: Promise<{ caseFileId: string }>;
-  searchParams: Promise<{ view?: string }>;
+  searchParams: Promise<{ view?: string; documentId?: string }>;
 }) {
   const { caseFileId } = await params;
-  const { view } = await searchParams;
-  const isBrainstorm = view === "brainstorm";
+  const { view, documentId } = await searchParams;
 
   const { db, isAttorney } = await requireViewer();
   if (!isAttorney) redirect("/dashboard");
@@ -81,23 +80,14 @@ export default async function AttorneyFilePage({
 
   const consult = (consultRow as ConsultRequest | null) ?? null;
 
-  let brainstormMessages: CaseBrainstormMessage[] = [];
-  if (isBrainstorm) {
-    const { data: messageRows } = await db
-      .from("case_brainstorm_messages")
-      .select("*")
-      .eq("case_file_id", caseFileId)
-      .order("created_at", { ascending: true });
-    brainstormMessages = (messageRows ?? []) as CaseBrainstormMessage[];
-  }
-
   const allDocs = (documents ?? []) as Document[];
   const topDocuments = allDocs.filter(
-    (d) => d.status !== "pre_warmed" && !d.parent_document_id,
+    (d) => !d.parent_document_id,
   );
   const childDocuments = allDocs.filter((d) => !!d.parent_document_id);
 
   const client = (clientProfile as Profile | null) ?? undefined;
+  const activeDocument = topDocuments.find((document) => document.id === documentId);
   const title =
     caseFile.title ||
     (caseFile.matter_subtype ? caseFile.matter_subtype.replace(/_/g, " ") : null) ||
@@ -105,6 +95,11 @@ export default async function AttorneyFilePage({
 
   return (
     <div className="lf-shell">
+      <AttorneyContextHeader currentArea="file" context={activeDocument ? {
+        documentId: activeDocument.id, documentTitle: activeDocument.title, documentStatus: activeDocument.status,
+        revision: childDocuments.some((child) => child.parent_document_id === activeDocument.id && child.doc_type === "second_draft") ? "Attorney revision" : "Client draft",
+        caseFileId, clientId: caseFile.user_id, clientName: client ? personDisplayName(client, "Client") : "Client", matter: title,
+      } : undefined} />
       <header className="lf-header">
         <Link href={`/attorney/client/${caseFile.user_id}`} className="lf-header-logo">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -138,37 +133,17 @@ export default async function AttorneyFilePage({
         </div>
       </header>
 
-      <nav className="lf-view-tabs">
-        <Link href={`/attorney/file/${caseFileId}`} className={`lf-view-tab${!isBrainstorm ? " lf-view-tab-active" : ""}`}>
-          Living File
-        </Link>
-        <Link
-          href={`/attorney/file/${caseFileId}?view=brainstorm`}
-          className={`lf-view-tab${isBrainstorm ? " lf-view-tab-active" : ""}`}
-        >
-          Brainstorm
-        </Link>
-      </nav>
-
       <main className="lf-main">
-        {isBrainstorm ? (
-          <div className="lf-grid">
-            <div className="lf-card lf-card-full">
-              <CaseBrainstormChat caseFileId={caseFileId} initialMessages={brainstormMessages} />
-            </div>
-          </div>
-        ) : (
-          <ClientFileView
-            caseFile={caseFile}
-            facts={(facts ?? []) as FactItem[]}
-            documents={topDocuments}
-            childDocuments={childDocuments}
-            requestedAttachments={(requestedRows ?? []) as RequestedAttachment[]}
-            govForms={(formRows ?? []) as GovFormInstrument[]}
-            mode="attorney"
-            clientProfile={client}
-          />
-        )}
+        <ClientFileView
+          caseFile={caseFile}
+          facts={(facts ?? []) as FactItem[]}
+          documents={topDocuments}
+          childDocuments={childDocuments}
+          requestedAttachments={(requestedRows ?? []) as RequestedAttachment[]}
+          govForms={(formRows ?? []) as GovFormInstrument[]}
+          mode="attorney"
+          clientProfile={client}
+        />
       </main>
     </div>
   );

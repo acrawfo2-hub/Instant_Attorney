@@ -14,13 +14,15 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = process.cwd();
 const EXTENSIONS = ["", ".ts", ".tsx", ".js", ".mjs", ".json"];
 
-// `next/server` relies on Next's bundler export conditions and won't resolve
-// under plain `node --test`; route tests only need NextResponse/NextRequest, so
-// map it to a local stub.
+// `next/server` and `next/headers` are declared through conditional package
+// exports that plain `node --test` does not satisfy, so both fail to resolve
+// even though the files exist. Route tests only need NextResponse/NextRequest,
+// and `next/headers` is reached transitively (usage-tracker -> supabase/server
+// -> cookies()), so both map to local stubs.
+const STUB_DIR = dirname(fileURLToPath(import.meta.url));
 const STUB_SPECIFIERS = {
-  "next/server": pathToFileURL(
-    join(dirname(fileURLToPath(import.meta.url)), "next-server-stub.mjs")
-  ).href,
+  "next/server": pathToFileURL(join(STUB_DIR, "next-server-stub.mjs")).href,
+  "next/headers": pathToFileURL(join(STUB_DIR, "next-headers-stub.mjs")).href,
 };
 
 function resolveAlias(specifier) {

@@ -3,9 +3,9 @@
 //
 // A separate, OPTIONAL tool that helps a user pressure-test their goals against
 // scenarios the law has dealt with many times before. It is intentionally
-// decoupled from the document wizards:
+// decoupled from document drafting:
 //   • it NEVER writes legal_strategy.recommended_wizards / instruments, so it
-//     cannot change which wizards the Living File surfaces;
+//     cannot change which instruments the Living File surfaces;
 //   • its scenario output lives in its own store (what_if_sessions);
 //   • the only thing it writes into the shared Living File is new fact_items
 //     (per the product decision "auto-write facts, not strategy").
@@ -31,8 +31,8 @@ export interface WhatIfScenario {
   fact_label: string;
   /**
    * Optional soft, read-only nudge ("you may want a document that…"). This is
-   * deliberately a plain sentence, NOT a wizard token — the What-If Game must
-   * never drive the wizards.
+   * deliberately a plain sentence, NOT an instrument token — the What-If Game
+   * must never drive drafting.
    */
   doc_nudge?: string;
 }
@@ -148,7 +148,7 @@ export function parseWhatIfResponse(raw: string): WhatIfResult {
  * Map answered scenarios to clean {label, value} fact pairs.
  *
  * Empty answers are dropped. Labels are prefixed with "What-if" so these facts
- * are recognizable in the Living File and never collide with wizard-written
+ * are recognizable in the Living File and never collide with drafter-written
  * facts that share a bare label. Dedupe-by-prefix on the write side then keeps
  * one fact per scenario even across repeated plays.
  */

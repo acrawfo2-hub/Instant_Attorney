@@ -2,7 +2,7 @@
 //
 // The documents a family-law matter actually needs don't map cleanly onto a
 // generic "demand letter." This catalog defines family-law instruments as
-// PRESETS over the existing wizard types (no new DocType / DB enum value, so it
+// PRESETS over the existing instrument types (no new DocType / DB enum value, so it
 // never disturbs the published document pipeline). Each preset carries recipient
 // guidance, required fields, a response/answer-deadline default, and the Texas
 // Family Code statutes it leans on, so the drafter produces a family-shaped
@@ -16,7 +16,7 @@
 // and an attorney/safety hand-off — never auto-draft an adversarial filing that
 // could escalate danger. The intake prompt enforces this.
 
-import type { WizardType } from "./types.ts";
+import type { InstrumentType } from "./types.ts";
 import { matchFamilyStatutesByText, type FamilyStatuteKey } from "./family-statutes.ts";
 
 export interface FamilyInstrument {
@@ -26,8 +26,8 @@ export interface FamilyInstrument {
   label: string;
   /** What this instrument accomplishes for the client. */
   purpose: string;
-  /** Which existing wizard type drafts it. */
-  wizard_type: WizardType;
+  /** Which drafting engine produces it. */
+  engine: InstrumentType;
   /** Who the document should be addressed to / filed with. */
   recipient_guidance: string;
   /** Fields the drafter should gather / confirm for this instrument. */
@@ -48,7 +48,7 @@ export const FAMILY_INSTRUMENTS: FamilyInstrument[] = [
     label: "Original Petition for Divorce",
     purpose:
       "Open a divorce case: identify the parties and any children, state the grounds, and request the relief sought (property division, conservatorship, support).",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Filed with the district clerk in the county of residence; the respondent spouse is then served. Caption it for the proper district/family court.",
     required_fields: [
@@ -72,7 +72,7 @@ export const FAMILY_INSTRUMENTS: FamilyInstrument[] = [
     label: "Waiver of Service / Respondent's Answer",
     purpose:
       "Respond to a divorce or SAPCR petition — either by waiving formal service (uncontested) or filing a general-denial answer to preserve the respondent's rights.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Filed with the district clerk under the existing cause number; a waiver must be signed before a notary after the petition is on file.",
     required_fields: [
@@ -91,7 +91,7 @@ export const FAMILY_INSTRUMENTS: FamilyInstrument[] = [
     label: "Final Decree of Divorce",
     purpose:
       "Memorialize the final terms of the divorce — property division, debts, conservatorship, possession schedule, and child/spousal support — for the judge to sign.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Prepared for the court's signature under the cause number; in an agreed divorce both parties (and counsel, if any) sign as to form and substance.",
     required_fields: [
@@ -117,7 +117,7 @@ export const FAMILY_INSTRUMENTS: FamilyInstrument[] = [
     label: "SAPCR Petition (Custody / Support — Unmarried Parents)",
     purpose:
       "Open a Suit Affecting the Parent-Child Relationship to establish conservatorship, possession, and child support outside of a divorce.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Filed with the district clerk in the child's home county; the other parent is then served. Confirm parentage is or will be established first.",
     required_fields: [
@@ -142,7 +142,7 @@ export const FAMILY_INSTRUMENTS: FamilyInstrument[] = [
     label: "Proposed Parenting Plan / Possession Schedule",
     purpose:
       "Set out a concrete, child-centered possession and access schedule (weekends, holidays, summer) and the allocation of parental rights, starting from the Standard Possession Order.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Exchanged with the other parent or their counsel and offered to the court; designed to be incorporated into a decree or SAPCR order.",
     required_fields: [
@@ -162,7 +162,7 @@ export const FAMILY_INSTRUMENTS: FamilyInstrument[] = [
     label: "Proposed Child Support Order / Worksheet",
     purpose:
       "Document a guideline child-support calculation — net resources, number of children, and the resulting amount and medical/dental support — for agreement or court.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Exchanged with the other parent or their counsel; incorporated into the decree/SAPCR order and useful for the Office of the Attorney General Child Support Division.",
     required_fields: [
@@ -181,7 +181,7 @@ export const FAMILY_INSTRUMENTS: FamilyInstrument[] = [
     label: "Premarital (Prenuptial) Agreement",
     purpose:
       "Draft a premarital agreement (signed BEFORE marriage, effective on marriage) defining each party's separate property, how property and debts acquired during marriage are characterized, and any spousal-support terms.",
-    wizard_type: "draft_contract",
+    engine: "draft_contract",
     recipient_guidance:
       "A written contract between the two spouses-to-be, signed before the wedding. To maximize enforceability, attach a fair-and-reasonable disclosure of each party's assets and debts, and give each party the opportunity for independent counsel before signing.",
     required_fields: [
@@ -206,7 +206,7 @@ export const FAMILY_INSTRUMENTS: FamilyInstrument[] = [
     label: "Marital (Postnuptial) Property Agreement — Partition or Exchange",
     purpose:
       "Draft a postnuptial agreement for spouses who are ALREADY married — partitioning or exchanging community property into each spouse's separate property, and/or making future income from separate property separate.",
-    wizard_type: "draft_contract",
+    engine: "draft_contract",
     recipient_guidance:
       "A written contract between the two married spouses, signed during the marriage. Like a premarital agreement, fair disclosure of each party's assets/debts and the opportunity for independent counsel strengthen enforceability under the same voluntariness/unconscionability standard.",
     required_fields: [
@@ -231,7 +231,7 @@ export const FAMILY_INSTRUMENTS: FamilyInstrument[] = [
     label: "Motion to Modify (Custody or Support)",
     purpose:
       "Ask the court to change an existing conservatorship, possession, or support order based on a material and substantial change in circumstances.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Filed under the original cause number in the court of continuing jurisdiction; the other party is served or waives service.",
     required_fields: [
@@ -250,7 +250,7 @@ export const FAMILY_INSTRUMENTS: FamilyInstrument[] = [
     label: "Motion to Enforce (Support or Possession)",
     purpose:
       "Enforce a final order when the other parent fails to pay support or denies court-ordered possession, seeking judgment for arrears, contempt, and fees.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Filed under the original cause number; must identify each violation specifically (dates, amounts, missed periods) to support contempt.",
     required_fields: [
@@ -270,7 +270,7 @@ export const FAMILY_INSTRUMENTS: FamilyInstrument[] = [
     label: "Application for Protective Order (Family Violence)",
     purpose:
       "Seek a protective order — including an emergency temporary ex parte order — for a victim of family violence and any children in the household.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Filed with the district/county clerk at no fee to the applicant; coordinate with local law enforcement and a family-violence advocate. TIME-SENSITIVE and SAFETY-CRITICAL.",
     required_fields: [
@@ -290,7 +290,7 @@ export const FAMILY_INSTRUMENTS: FamilyInstrument[] = [
     label: "Petition to Establish Parentage (Paternity)",
     purpose:
       "Establish legal parentage so an unmarried parent can pursue custody, possession, and support — by acknowledgment or court order, with genetic testing if needed.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Filed with the district clerk in the child's home county; the alleged parent is served. Often paired with a SAPCR for custody and support.",
     required_fields: [
@@ -322,11 +322,11 @@ export function isKnownFamilyInstrumentKey(key: string): boolean {
 export function familyInstrumentsForPrompt(): string {
   return FAMILY_INSTRUMENTS.map(
     (i) =>
-      `• ${i.key} (drafts via ${i.wizard_type})${i.high_stakes ? " [HIGH-STAKES — recommend consult]" : ""} — ${i.label}: ${i.purpose}`
+      `• ${i.key} (drafts via ${i.engine})${i.high_stakes ? " [HIGH-STAKES — recommend consult]" : ""} — ${i.label}: ${i.purpose}`
   ).join("\n");
 }
 
-/** Field-hint text for the drafter, shaped like WIZARD_FIELD_HINTS entries. */
+/** Field-hint text for the drafter, shaped like INSTRUMENT_FIELD_HINTS entries. */
 export function familyInstrumentFieldHint(key: string): string | null {
   const inst = BY_KEY.get(key);
   if (!inst) return null;

@@ -5,9 +5,9 @@ import type {
   FactItem,
   GovFormInstrument,
   RequestedAttachment,
-  WizardType,
+  InstrumentType,
 } from "./types.ts";
-import { WIZARD_LABELS, coerceWizardType } from "./types.ts";
+import { INSTRUMENT_LABELS, coerceInstrumentType } from "./types.ts";
 import { computeNextStep, type NextStepGuide } from "./next-step.ts";
 import {
   isPrepMode,
@@ -86,20 +86,34 @@ function hasDraftText(d: Document): boolean {
   return !!d.draft_text && d.draft_text.trim().length > 0;
 }
 
-function wizardHref(caseFileId: string, wType: WizardType, docId?: string): string {
-  const base = `/wizard/${wType}?caseFileId=${caseFileId}`;
-  return docId ? `${base}&docId=${docId}` : base;
+/**
+ * Where a document action goes now: the case conversation.
+ *
+ * These used to build `/wizard/<type>?...` links. The wizard was a second
+ * drafting client; the orchestrator is the one surface, and the drafting engine
+ * (lib/document-drafting.ts) sits behind it. `ask` only seeds the composer — the
+ * client reads it and presses send.
+ */
+function documentActionHref(
+  caseFileId: string,
+  label: string,
+  opts: { docId?: string } = {},
+): string {
+  const params = new URLSearchParams({ caseFileId });
+  if (opts.docId) params.set("doc", opts.docId);
+  params.set("ask", opts.docId ? `Let's work on my ${label}.` : `Please draft my ${label}.`);
+  return `/chat?${params.toString()}`;
 }
 
-function pickCreateTarget(caseFile: CaseFile): WizardType {
+function instrumentActionHref(caseFileId: string, wType: InstrumentType, docId?: string): string {
+  return documentActionHref(caseFileId, INSTRUMENT_LABELS[wType], { docId });
+}
+
+function pickCreateTarget(caseFile: CaseFile): InstrumentType {
   const recommended = (caseFile.legal_strategy?.recommended_wizards ?? [])
-    .map(coerceWizardType)
-    .filter((w): w is WizardType => w !== null);
+    .map(coerceInstrumentType)
+    .filter((w): w is InstrumentType => w !== null);
   return recommended[0] ?? "general_document";
-}
-
-function heroHref(hero: NextStepGuide): string | undefined {
-  return hero.cta?.href ?? hero.secondary?.href;
 }
 
 function isDuplicateHref(href: string | undefined, hero: NextStepGuide): boolean {
@@ -202,7 +216,7 @@ export function computeMissionControl(input: MissionControlInput): MissionContro
       });
     }
     if (goal === "document_review") {
-      const docReviewHref = `/wizard/doc_review?caseFileId=${id}`;
+      const docReviewHref = documentActionHref(id, INSTRUMENT_LABELS.doc_review);
       if (!isDuplicateHref(docReviewHref, hero)) {
         actions.push({
           id: "counsel:doc-review",
@@ -256,29 +270,29 @@ export function computeMissionControl(input: MissionControlInput): MissionContro
     });
   }
   const canCreate =
-    (caseFile.legal_strategy?.recommended_wizards ?? []).some((w) => coerceWizardType(w) !== null) ||
+    (caseFile.legal_strategy?.recommended_wizards ?? []).some((w) => coerceInstrumentType(w) !== null) ||
     (caseFile.legal_strategy?.instruments?.length ?? 0) > 0;
 
   // ── Tier 1: Additional document instruments (when not the hero) ─────────────
   const recommended = (caseFile.legal_strategy?.recommended_wizards ?? [])
-    .map(coerceWizardType)
-    .filter((w): w is WizardType => w !== null);
+    .map(coerceInstrumentType)
+    .filter((w): w is InstrumentType => w !== null);
 
   for (let i = 1; i < recommended.length; i++) {
     const wType = recommended[i];
-    const href = wizardHref(id, wType);
+    const href = instrumentActionHref(id, wType);
     if (isDuplicateHref(href, hero)) continue;
     const existing = documents.find((d) => d.doc_type === wType && hasDraftText(d));
     if (existing?.status === "approved" || existing?.status === "delivered") continue;
 
     actions.push({
-      id: `doc-wizard:${wType}`,
+      id: `doc:${wType}`,
       kind: "document",
       status: existing ? "in_progress" : "open",
       priority: 12,
       title: existing
-        ? `Continue your ${WIZARD_LABELS[wType]}`
-        : `Create your ${WIZARD_LABELS[wType]}`,
+        ? `Continue your ${INSTRUMENT_LABELS[wType]}`
+        : `Create your ${INSTRUMENT_LABELS[wType]}`,
       cta: isAttorney
         ? undefined
         : { label: existing ? "Continue →" : "Start →", href },
@@ -290,14 +304,14 @@ export function computeMissionControl(input: MissionControlInput): MissionContro
   const pendingDoc = documents.find((d) => d.status === "pending_review");
   if (pendingDoc && canCreate && hero.tone === "waiting") {
     const wType = pickCreateTarget(caseFile);
-    const href = wizardHref(id, wType);
+    const href = instrumentActionHref(id, wType);
     if (!isDuplicateHref(href, hero)) {
       actions.push({
         id: `doc-another:${wType}`,
         kind: "document",
         status: "open",
         priority: 14,
-        title: `Start another document (${WIZARD_LABELS[wType]})`,
+        title: `Start another document (${INSTRUMENT_LABELS[wType]})`,
         reason: "Optional — while your first document is in review",
         cta: isAttorney ? undefined : { label: "Start →", href },
         jumpTo: "#documents",

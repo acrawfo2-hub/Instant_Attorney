@@ -20,6 +20,7 @@ import { loadAttachmentText } from "./attachment-processor.ts";
 import { runStrengthCheck } from "./strength-check.ts";
 import { formatStrengthCheckForModel } from "./strength-check-types.ts";
 import { createServiceClient } from "./supabase/server.ts";
+import { newMatterColumns } from "./matter-routing.ts";
 import type { CaseFile, FactItem } from "./types.ts";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -33,15 +34,16 @@ export interface ToolContext {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Orchestrator tools (plan Phase 2). The freestyle assistant can CALL these
-// instead of the user hunting for a calculator page. Every tool is a thin wrapper
-// over a pure, unit-tested lib function: the model decides WHEN to call and with
-// WHAT params; the server runs the real deterministic function and returns the
+// Orchestrator tools. The case assistant calls these instead of sending the
+// client to a calculator page. Every tool is a thin wrapper over a pure,
+// unit-tested lib function: the model decides WHEN to call and with WHAT
+// params; the server runs the real deterministic function and returns the
 // result. The model never re-derives a calculation in prose.
 //
-// Phase 2 is READ-ONLY: tools compute and return, with no side effects. Writing
-// results into the Living File is a separate, gated tool (update_living_file,
-// Phase 4). Adding a calculator is one entry here — see the map below.
+// Calculators are read-only. Writing a result into the Living File is
+// `record_fact`, which must ask the client first — a number the model (or the
+// client) has not confirmed is not a fact. There is no `update_living_file`
+// shortcut that skips that gate.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface ToolResult {
@@ -579,8 +581,8 @@ const TOOLS: Record<string, ToolDef> = {
     },
   },
 
-  // ── Write tools (Phase 4) — these change the client's file. The prompt requires
-  // the model to CONFIRM with the user before calling them; never speculative. ──
+  // ── Write tools — these change the client's file. The prompt requires the
+  // model to CONFIRM with the user before calling them; never speculative. ──
   record_fact: {
     def: {
       name: "record_fact",
@@ -743,7 +745,7 @@ const TOOLS: Record<string, ToolDef> = {
       }
 
       // Service client for the storage read: the download bypasses RLS the same
-      // way the "Improve My Draft" wizard does, while the query inside stays
+      // way the "Improve My Draft" engine does, while the query inside stays
       // scoped to this case + user. Avoids any SSR-client storage-auth edge.
       const loaded = await loadAttachmentText(createServiceClient(), match.id, ctx.caseFileId, ctx.userId);
       if (!loaded) {
@@ -764,30 +766,33 @@ const TOOLS: Record<string, ToolDef> = {
       const title = loaded.fileName.replace(/\.[a-z0-9]+$/i, "").trim() || "Uploaded document";
       const { data: existing } = await ctx.db
         .from("client_workspace_drafts")
-        .select("id")
+        .select("id, source, content, promoted_document_id")
         .eq("case_file_id", ctx.caseFileId)
         .eq("user_id", ctx.userId)
         .eq("title", title)
         .order("updated_at", { ascending: false })
         .limit(1)
         .maybeSingle();
-      if (existing?.id) {
+      let draftId = existing?.id as string | undefined;
+      if (draftId) {
         await ctx.db.from("client_workspace_drafts")
           .update({ content: loaded.text, source: "client", updated_at: new Date().toISOString() })
-          .eq("id", existing.id);
+          .eq("id", draftId);
       } else {
-        const { error } = await ctx.db.from("client_workspace_drafts").insert({
-          case_file_id: ctx.caseFileId, user_id: ctx.userId, title, content: loaded.text, source: "client",
-        });
+        const { data: inserted, error } = await ctx.db.from("client_workspace_drafts")
+          .insert({ case_file_id: ctx.caseFileId, user_id: ctx.userId, title, content: loaded.text, source: "client" })
+          .select("id")
+          .single();
         if (error) {
           console.error("[orchestrator-tools] open_uploaded_document insert error:", error);
           return { forModel: JSON.stringify({ error: "failed", message: "Could not open the document as a draft." }), raw: null };
         }
+        draftId = inserted?.id;
       }
 
       const forModel =
         `Opened "${loaded.fileName}" as an editable draft titled "${title}" in the client's side panel. ` +
-        `Its full text is below so you can propose specific revisions. To change it, emit the revised document as a ---DRAFT: ${title}--- block (reuse this exact title so it updates the same panel draft in place). Tell the client it's open and ask what they'd like to change.\n\n` +
+        `Its full text is below so you can propose specific revisions. To change it, emit the revised document as a ---DRAFT: ${title}${draftId ? ` [draft-id: ${draftId}]` : ""}--- block. Tell the client it's open and ask what they'd like to change.\n\n` +
         `--- FULL TEXT OF ${loaded.fileName} ---\n${loaded.text}`;
       return { forModel, raw: { opened: title, file_name: loaded.fileName, chars: loaded.text.length } };
     },
@@ -924,12 +929,62 @@ const TOOLS: Record<string, ToolDef> = {
       return { forModel, urgency: undefined, raw: parsed };
     },
   },
+
+  open_new_matter: {
+    def: {
+      name: "open_new_matter",
+      description:
+        "Open a SEPARATE case file when the client raises a legal problem unrelated to the matter you are working on — they came about a will and now mention a divorce, or a landlord dispute, or a contract. " +
+        "Different matters keep different facts, documents, deadlines and strategy; mixing them corrupts both files. " +
+        "ASK FIRST and only call this after the client agrees, exactly like record_fact: say that this sounds like a separate matter, name both, and let them choose. If they say it is connected to the current matter, do not call this. " +
+        "Ask before you dig into the new problem, not after — anything they tell you first lands in the current file. " +
+        "After it returns, tell the client the new file is open and give them the link.",
+      input_schema: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Short label for the new matter, e.g. 'Divorce' or 'Non-compete dispute'." },
+        },
+        required: ["title"],
+      },
+    },
+    run: async (input, ctx) => {
+      const title = strOf(input.title);
+      if (!title) return needParams(["title"]);
+
+      const { data: profile } = await ctx.db
+        .from("profiles").select("home_state").eq("id", ctx.userId).maybeSingle();
+
+      const { data: created, error } = await ctx.db
+        .from("case_files")
+        .insert({ ...newMatterColumns(ctx.userId, { homeState: profile?.home_state ?? null }), title })
+        .select("id")
+        .single();
+
+      if (error || !created) {
+        console.error("[orchestrator-tools] open_new_matter insert error:", error);
+        return { forModel: JSON.stringify({ error: "failed", message: "Could not open a new matter." }), raw: null };
+      }
+
+      return {
+        forModel: JSON.stringify({
+          ok: true,
+          title,
+          case_file_id: created.id,
+          link: `/dashboard/${created.id}`,
+          note:
+            "The new file is empty. Do not restate what the client told you in this conversation into it — " +
+            "invite them to open it and start there, so the facts land in the right file.",
+        }),
+        raw: { caseFileId: created.id, title },
+      };
+    },
+  },
 };
 
 // Tools that mutate the client's record (or, for run_what_if, persist a client-
 // side What-If session). The attorney associate (work-product, not the client
 // channel) gets the read-only set only.
-const WRITE_TOOL_NAMES = new Set(["record_fact", "request_document", "resolve_document_request", "add_government_form", "run_what_if", "open_uploaded_document", "stress_test_position"]);
+const WRITE_TOOL_NAMES = new Set(["record_fact", "request_document", "resolve_document_request", "add_government_form", "run_what_if", "open_uploaded_document", "stress_test_position", "open_new_matter"]);
 
 /** All tool definitions — the consumer orchestrator, which may write to its own file. */
 export const ORCHESTRATOR_TOOLS: Anthropic.Tool[] = Object.values(TOOLS).map((t) => t.def);

@@ -2,11 +2,18 @@ import type Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceClient } from "@/lib/supabase/server";
 import { accrueUsage } from "@/lib/topup";
+import { computeAiCostUsd } from "@/lib/ai/pricing";
+
+export { computeAiCostUsd } from "@/lib/ai/pricing";
 
 /** Known AI features — used for cost attribution and future billing dashboards. */
 export type UsageFeature =
   | "free_chat"
   | "chat_acp"
+  // Client-initiated document drafting. The value is written to the indexed
+  // `usage_events.feature` column, so it keeps the name it was logged under
+  // for the life of that history — renaming it would split every cost query
+  // across two labels for no gain.
   | "wizard"
   | "what_if"
   | "title_generator"
@@ -19,9 +26,15 @@ export type UsageFeature =
   | "attorney_second_draft"
   | "attorney_chat_edit"
   | "attorney_merge"
+  // #128's independently-addressable document QA checks. Each check is its own
+  // model call, so it meters separately from the attorney_review run it sits in.
+  | "attorney_review_qa"
   | "attorney_pre_consult"
   | "attorney_consult_closeout"
+  | "attorney_consult_associate"
   | "attorney_brainstorm"
+  // Retired with the roadmap UI — nothing emits this any more. Kept because
+  // historical usage rows still carry it and must stay readable.
   | "roadmap_refresh"
   | "matter_synthesis"
   | "strength_check"
@@ -39,6 +52,16 @@ const MODEL_PRICING_USD_PER_M: Record<string, { input: number; output: number }>
 };
 
 const DEFAULT_MODEL_PRICING = MODEL_PRICING_USD_PER_M["claude-sonnet-4-6"];
+
+/** Models with an explicit pricing entry. Anything else silently bills at Sonnet's rate. */
+export function pricedModels(): string[] {
+  return Object.keys(MODEL_PRICING_USD_PER_M);
+}
+
+/** Does this model have real pricing, or would its cost fall back to Sonnet's? */
+export function hasModelPricing(model: string | null | undefined): boolean {
+  return !!model && model in MODEL_PRICING_USD_PER_M;
+}
 
 /** Amortized monthly storage cost per GB (Supabase overage ~$0.021/GB/mo). */
 function storageUsdPerGbMonth(): number {
@@ -65,23 +88,6 @@ export interface UsageEventInput {
   outputTokens?: number | null;
   bytes?: number | null;
   metadata?: Record<string, unknown>;
-}
-
-export function computeAiCostUsd(
-  model: string,
-  inputTokens: number,
-  outputTokens: number,
-  costMultiplier = 1,
-  cacheCreationTokens = 0,
-  cacheReadTokens = 0
-): number {
-  const pricing = MODEL_PRICING_USD_PER_M[model] ?? DEFAULT_MODEL_PRICING;
-  const inputCost = (inputTokens / 1_000_000) * pricing.input;
-  // Anthropic prompt caching: writes cost 1.25x input, reads cost 0.1x input.
-  const cacheWriteCost = (cacheCreationTokens / 1_000_000) * pricing.input * 1.25;
-  const cacheReadCost = (cacheReadTokens / 1_000_000) * pricing.input * 0.1;
-  const outputCost = (outputTokens / 1_000_000) * pricing.output;
-  return roundUsd((inputCost + cacheWriteCost + cacheReadCost + outputCost) * costMultiplier);
 }
 
 /** One month of storage cost attributed at upload time (bytes × $/GB/mo). */

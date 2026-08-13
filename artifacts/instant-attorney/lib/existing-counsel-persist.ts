@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CounselEngagementGoal } from "./types.ts";
 import { counselContextFactLine, isValidCounselGoal } from "./existing-counsel.ts";
 
@@ -42,9 +43,8 @@ export function buildCounselContextPatch(input: CounselContextInput): CounselCon
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function persistCounselContext(
-  db: any,
+  db: SupabaseClient,
   caseFileId: string,
   userId: string,
   patch: CounselContextPatch,

@@ -4,7 +4,7 @@ Living spec for moving the attorney document-review flow from a fixed button
 "rail" to an orchestrator-driven, auto-running pipeline that produces structured,
 individually-actionable artifacts and hard QA guarantees.
 
-Status: **Phases 1–2 landed.** This document is the reference for the whole
+Status: **Phases 1–2 and independently addressable QA checks landed.** This document is the reference for the whole
 multi-phase build; each phase ships independently.
 
 ---
@@ -109,6 +109,18 @@ idempotent (replace children + improvements for the run).
 4. **One-click questions loop.**
 5. **Formatting/court-requirements gate + side-by-side diff workspace.**
 
+### Structured QA checks (schema-stage48)
+
+The active `second_draft` revision can now be checked independently for factual
+consistency, completeness, defined terms/cross-references, blanks/execution,
+formatting/court requirements, client comprehension, and authorities. Findings
+record type, severity, location, evidence, disposition, and revision. Clean check
+runs are recorded separately so **Re-run affected** also works when a prior check
+had no findings. Curated formatting standards are preferred; missing registry
+coverage invokes official-source web search and is explicitly reported as
+unvalidated when the controlling rule cannot be established. Automated results
+and reasoned attorney waivers remain distinct audit events.
+
 ### Phase 2 as built (Authorities gate, schema-stage45)
 
 - Runs as **stage 3** of the auto-run (`runAuthoritiesGate`), on a **low-cost model
@@ -141,3 +153,19 @@ idempotent (replace children + improvements for the run).
   existing manual controls (retired in later phases as the workspace lands).
 
 Not in Phase 1: QA gates, questions loop, memo/email, the three-pane diff UI.
+
+## Actionable improvement decisions (Stage 46)
+
+Each improvement is anchored to a revision hash, stable `section_id`, character
+range, and exact quote. `POST …/improvements/[iid]` persists a proposed diff but
+never edits the working revision. `PATCH …/improvements/[iid]` records one of
+`accepted`, `rejected`, `ask_partner`, or `needs_client_input`, plus an optional
+attorney rationale. Acceptance is rejected unless a still-current proposed diff
+exists; only then is its replacement written to the `second_draft` working copy.
+Open anchors are rebased after an accepted edit while retaining their stable
+section IDs.
+
+Rejected/deferred findings retain an evidence hash tied to the working revision,
+so an orchestrator re-run carries the disposition forward when the evidence is
+unchanged. Accepted authority-affecting passages invalidate and rerun the
+Authorities gate; unrelated passage edits retain its prior QA result.

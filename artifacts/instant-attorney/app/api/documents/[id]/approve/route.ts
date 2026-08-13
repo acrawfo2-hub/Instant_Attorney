@@ -1,16 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getChildDocuments } from "@/lib/document-utils";
-import { notifyClientDocumentApproved } from "@/lib/notify";
-import { docTypeLabel } from "@/lib/types";
-import type { Document, Profile } from "@/lib/types";
+import {
+  decideApprovalOverride,
+  informedOverrideStamp,
+  loadApprovalBlockers,
+  withInformedOverride,
+} from "@/lib/approval-override";
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const { action, attorney_notes } = await req.json();
+  const { action, attorney_notes, accept_repaired_incomplete, override_rationale } = await req.json();
 
   if (!action || !["approve", "request_changes"].includes(action)) {
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
@@ -32,8 +35,38 @@ export async function POST(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // Approval/request-changes is publication of review output. Bind it to the
+  // exact revision reviewed so an in-flight client answer wins the race.
+  const [{ data: sourceDoc }, { data: reviewRun }] = await Promise.all([
+    db.from("documents").select("revision_number").eq("id", id).is("parent_document_id", null).single(),
+    db.from("document_review_runs").select("id, status, source_revision").eq("document_id", id)
+      .order("created_at", { ascending: false }).limit(1).maybeSingle(),
+  ]);
+  if (reviewRun && (
+    reviewRun.status === "stale" ||
+    (reviewRun.source_revision ?? 1) !== (sourceDoc?.revision_number ?? 1)
+  )) {
+    return NextResponse.json(
+      { error: "The client submitted a newer revision. Review it before publishing a decision.", review_state: "stale" },
+      { status: 409 },
+    );
+  }
+
   const children = await getChildDocuments(db, id);
   const secondDraft = children.find((c) => c.doc_type === "second_draft");
+
+  const { data: approvalCandidate } = await db
+    .from("documents")
+    .select("content_json")
+    .eq("id", id)
+    .single();
+  const incomplete = (approvalCandidate?.content_json as Record<string, unknown> | null)?.generation_incomplete === true;
+  if (action === "approve" && incomplete && accept_repaired_incomplete !== true) {
+    return NextResponse.json(
+      { error: "This generation is incomplete. Repair it and explicitly accept the repaired text before approval." },
+      { status: 409 }
+    );
+  }
 
   if (action === "approve" && secondDraft && !secondDraft.draft_text) {
     return NextResponse.json(
@@ -42,29 +75,59 @@ export async function POST(
     );
   }
 
-  // Authorities gate (schema-stage45): a mis-identified case must never reach the
-  // client. Block approval while any citation on this document is unverified,
-  // unsupported, or errored and has not been explicitly waived by the attorney.
+  // Dirty file (unverified citations / open blocking findings): Approve stays
+  // available, but the attorney must record why. That stamp is an informed
+  // override, not a waiver — the findings stay dirty.
+  let overrideJson: Record<string, unknown> | null = null;
   if (action === "approve") {
-    const { data: unresolved } = await db
-      .from("document_qa_citations")
-      .select("id, raw, verdict")
-      .eq("document_id", id)
-      .eq("waived", false)
-      .neq("verdict", "verified");
-    if (unresolved && unresolved.length > 0) {
+    const blockers = await loadApprovalBlockers(db, id);
+    const decision = decideApprovalOverride(blockers, override_rationale);
+    if (!decision.ok) {
       return NextResponse.json(
         {
-          error: `${unresolved.length} citation${unresolved.length === 1 ? "" : "s"} could not be verified. Verify, remove, or waive each one before approving.`,
-          unresolvedCitations: unresolved,
+          error: decision.error,
+          requiresOverride: true,
+          unresolvedCitations: decision.blockers.citations,
+          unresolvedFindings: decision.blockers.findings,
         },
-        { status: 409 }
+        { status: 409 },
+      );
+    }
+    if (decision.rationale) {
+      overrideJson = withInformedOverride(
+        (approvalCandidate?.content_json as Record<string, unknown> | null) ?? {},
+        informedOverrideStamp({
+          rationale: decision.rationale,
+          by: user.id,
+          at: new Date().toISOString(),
+          revision_number: sourceDoc?.revision_number ?? 1,
+          blockers,
+        }),
       );
     }
   }
 
   const newStatus = action === "approve" ? "approved" : "changes_requested";
   const now = new Date().toISOString();
+  const nextContentJson = overrideJson
+    ? incomplete && accept_repaired_incomplete === true
+      ? {
+          ...overrideJson,
+          generation_incomplete: false,
+          generation_state: "attorney_repaired_and_accepted",
+          repaired_accepted_by: user.id,
+          repaired_accepted_at: now,
+        }
+      : overrideJson
+    : incomplete && accept_repaired_incomplete === true
+      ? {
+          ...((approvalCandidate?.content_json as Record<string, unknown>) ?? {}),
+          generation_incomplete: false,
+          generation_state: "attorney_repaired_and_accepted",
+          repaired_accepted_by: user.id,
+          repaired_accepted_at: now,
+        }
+      : null;
 
   const { data: doc, error: updateErr } = await db
     .from("documents")
@@ -74,8 +137,10 @@ export async function POST(
       reviewed_by: user.id,
       reviewed_at: now,
       updated_at: now,
+      ...(nextContentJson ? { content_json: nextContentJson } : {}),
     })
     .eq("id", id)
+    .eq("revision_number", sourceDoc?.revision_number ?? 1)
     .is("parent_document_id", null)
     .select("*, profiles!documents_user_id_fkey(*)")
     .single();
@@ -89,18 +154,6 @@ export async function POST(
       status: "approved",
       updated_at: now,
     }).eq("id", secondDraft.id);
-  }
-
-  if (action === "approve" && doc.profiles) {
-    const notifyDoc = {
-      ...(doc as Document),
-      title: secondDraft
-        ? `${docTypeLabel(doc.doc_type)} (Revised)`
-        : doc.title,
-    };
-    notifyClientDocumentApproved(notifyDoc, doc.profiles as Profile).catch(
-      (err) => console.error("[approve] notify error:", err)
-    );
   }
 
   return NextResponse.json({

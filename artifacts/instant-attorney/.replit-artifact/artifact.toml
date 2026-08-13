@@ -11,32 +11,20 @@ version = "1.0.0"
 
 [[services]]
 name = "web"
-paths = [
-  "/",
-  "/api/chat",
-  "/api/chat-acp",
-  "/api/wizard",
-  "/api/what-if",
-  "/api/attachments",
-  "/api/documents",
-  "/api/gov-forms",
-  "/api/auth",
-  "/api/attorney",
-  "/api/subscriptions",
-  "/api/billing",
-  "/api/agreements",
-  "/api/consult",
-  "/api/case-files",
-  "/api/financials",
-  "/api/account",
-  "/api/usage",
-  "/api/admin",
-  "/api/family",
-  "/api/bankruptcy",
-  "/api/personal-injury",
-  "/api/roadmap",
-  "/consult",
-]
+# This app is the only service, so it owns every path. There used to be an
+# Express api-server here holding the bare `/api` prefix, which forced this list
+# to enumerate all 26 `/api/*` prefixes: the proxy matches most-specific first,
+# so any prefix missing from the list fell through to Express and 404'd while
+# typecheck and tests stayed green. That bit `/api/attorney`, `/api/workspace`,
+# `/api/assess-matter`, and `/api/dropbox-sign` — the last three caught by a
+# test written after the second incident.
+#
+# api-server served exactly one route (`GET /api/healthz`). Deleting it retires
+# the whole failure mode rather than guarding it: with nothing else claiming a
+# prefix, `/` catches everything and a new route under `app/api/` needs no
+# registration anywhere. Do not reintroduce a second service on this domain
+# without restoring the enumeration and its guard test.
+paths = ["/"]
 localPort = 21203
 
 [services.development]

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getChildDocuments } from "@/lib/document-utils";
-import { placeholderFields } from "@/lib/wizard-parsing";
+import { placeholderFields } from "@/lib/placeholder-parsing";
 import { BYPASS_USER_ID } from "@/lib/types";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";

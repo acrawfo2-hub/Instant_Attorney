@@ -14,7 +14,7 @@ import { BYPASS_USER_ID } from "@/lib/types";
 // facts, not strategy" rule: when tied to a case it writes ONE confirmed fact
 // (kind='fact') into the shared Living File, so a Child Support Order / decree
 // drafted later seeds from the computed number. It never writes legal_strategy
-// and never changes which wizards are recommended, so the document pipeline is
+// and never changes which instruments are recommended, so the document pipeline is
 // untouched.
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 

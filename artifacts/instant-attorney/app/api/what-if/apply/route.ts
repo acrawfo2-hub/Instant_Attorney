@@ -8,12 +8,12 @@ import { BYPASS_USER_ID } from "@/lib/types";
 // Per the product decision "auto-write facts, not strategy":
 //   • answers are written into the SHARED Living File as fact_items (the only
 //     thing the game writes into shared data the drafter reads);
-//   • legal_strategy is NEVER touched, so the wizards are unaffected;
+//   • legal_strategy is NEVER touched, so the recommended instruments are unaffected;
 //   • the full scenario+answer session is also stored in what_if_sessions
 //     (its own store) on a best-effort basis.
 //
 // Facts are saved FIRST and independently of anything fragile, mirroring the
-// wizard save-answers rule, so a user's thinking is never lost.
+// draft-answer rule, so a user's thinking is never lost.
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
 export async function POST(req: NextRequest) {

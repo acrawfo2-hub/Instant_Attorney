@@ -140,6 +140,10 @@ union all select 'profiles.home_state', case when exists (
   select 1 from information_schema.columns
   where table_schema = 'public' and table_name = 'profiles' and column_name = 'home_state'
 ) then 'OK' else 'MISSING' end
+union all select 'profiles.preferred_ai_provider', case when exists (
+  select 1 from information_schema.columns
+  where table_schema = 'public' and table_name = 'profiles' and column_name = 'preferred_ai_provider'
+) then 'OK' else 'MISSING' end
 union all select 'form_instruments.pdf_status', case when exists (
   select 1 from information_schema.columns
   where table_schema = 'public' and table_name = 'form_instruments' and column_name = 'pdf_status'
@@ -215,5 +219,9 @@ union all select 'document_improvements', case when exists (
 ) then 'OK' else 'MISSING' end
 union all select 'document_qa_citations', case when exists (
   select 1 from information_schema.tables where table_schema = 'public' and table_name = 'document_qa_citations'
+) then 'OK' else 'MISSING' end
+union all select 'documents.instrument_key', case when exists (
+  select 1 from information_schema.columns
+  where table_schema = 'public' and table_name = 'documents' and column_name = 'instrument_key'
 ) then 'OK' else 'MISSING' end
 order by object;

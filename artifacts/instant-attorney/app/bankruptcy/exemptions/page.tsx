@@ -9,7 +9,7 @@ import { ASSET_CATEGORIES, type AssetCategory } from "@/lib/bankruptcy-exemption
 // Texas exemptions — "what would I keep?" A free tool. Calls
 // /api/bankruptcy/exemptions (pure compute, no AI, no token spend). When opened
 // from a file (?caseFileId=), the result is saved as a confirmed fact. It never
-// changes which wizards run.
+// changes which instruments are recommended.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const navy = "var(--brand-navy)";

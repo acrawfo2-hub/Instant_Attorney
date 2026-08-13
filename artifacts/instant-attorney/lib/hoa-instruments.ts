@@ -2,7 +2,7 @@
 //
 // The documents an HOA dispute actually needs don't map cleanly onto a generic
 // "demand letter." This catalog defines HOA-specific instruments as PRESETS over
-// the existing wizard types (no new DocType / DB enum value, so it never disturbs
+// the existing instrument types (no new DocType / DB enum value, so it never disturbs
 // the published document pipeline). Each preset carries the recipient guidance,
 // required fields, response-deadline default, and the Texas statutes it leans on,
 // so the drafter produces an HOA-shaped document instead of a generic one.
@@ -10,7 +10,7 @@
 // `relevant_statutes` reference keys in lib/hoa-statutes.ts; a cross-check test
 // asserts every referenced key resolves.
 
-import type { WizardType } from "./types.ts";
+import type { InstrumentType } from "./types.ts";
 import type { HoaStatuteKey } from "./hoa-statutes.ts";
 
 export interface HoaInstrument {
@@ -20,8 +20,8 @@ export interface HoaInstrument {
   label: string;
   /** What this instrument accomplishes for the homeowner. */
   purpose: string;
-  /** Which existing wizard type drafts it. */
-  wizard_type: WizardType;
+  /** Which drafting engine produces it. */
+  engine: InstrumentType;
   /** Who the document should be addressed to and copied on. */
   recipient_guidance: string;
   /** Fields the drafter should gather / confirm for this instrument. */
@@ -40,7 +40,7 @@ export const HOA_INSTRUMENTS: HoaInstrument[] = [
     label: "Response to HOA Violation Notice / Request for Hearing",
     purpose:
       "Respond to a covenant-violation notice, contest the violation or assert a cure, and demand the statutory hearing before the board.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Address to the board of directors c/o the managing agent; copy the association's registered agent when fines or foreclosure are threatened.",
     required_fields: [
@@ -59,7 +59,7 @@ export const HOA_INSTRUMENTS: HoaInstrument[] = [
     label: "HOA Books-and-Records Request",
     purpose:
       "Make a statutory written request to inspect and copy the association's books and records.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Address to the association c/o the managing agent at the address in the recorded management certificate.",
     required_fields: [
@@ -78,7 +78,7 @@ export const HOA_INSTRUMENTS: HoaInstrument[] = [
     label: "Appeal / Dispute of HOA Fine or Assessment",
     purpose:
       "Dispute a levied fine or assessment, challenge how a payment was applied, and request correction of the ledger.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Address to the board c/o the managing agent; copy any third-party collector currently handling the account.",
     required_fields: [
@@ -97,7 +97,7 @@ export const HOA_INSTRUMENTS: HoaInstrument[] = [
     label: "Reasonable Accommodation Request (Fair Housing)",
     purpose:
       "Request a reasonable accommodation or modification to a covenant or rule on the basis of disability under the Fair Housing Act.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Address to the board c/o the managing agent; mark as a Fair Housing Act reasonable-accommodation request.",
     required_fields: [
@@ -116,7 +116,7 @@ export const HOA_INSTRUMENTS: HoaInstrument[] = [
     label: "Architectural (ACC) Request or Denial Appeal",
     purpose:
       "Submit or appeal an architectural-control request (modification, improvement, solar, landscaping) and challenge an unreasonable denial.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Address to the architectural control committee c/o the managing agent; reference the governing-document approval procedure.",
     required_fields: [
@@ -135,7 +135,7 @@ export const HOA_INSTRUMENTS: HoaInstrument[] = [
     label: "Request for Alternative Payment Schedule",
     purpose:
       "Request an installment payment plan for delinquent assessments under the association's payment-plan policy.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Address to the board c/o the managing agent before the account is referred to an attorney or collector.",
     required_fields: [
@@ -153,7 +153,7 @@ export const HOA_INSTRUMENTS: HoaInstrument[] = [
     label: "Demand to Cease Selective Enforcement",
     purpose:
       "Demand that the association stop enforcing a covenant selectively or unreasonably against the owner.",
-    wizard_type: "demand_letter",
+    engine: "demand_letter",
     recipient_guidance:
       "Address to the board c/o the managing agent; copy the registered agent.",
     required_fields: [
@@ -172,7 +172,7 @@ export const HOA_INSTRUMENTS: HoaInstrument[] = [
     label: "Response to Lien / Foreclosure Notice",
     purpose:
       "Respond to an assessment-lien or foreclosure notice, demand an itemized payoff, and assert statutory limits on foreclosure.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Address to the association and its foreclosure counsel; copy the registered agent. Time-sensitive.",
     required_fields: [
@@ -203,11 +203,11 @@ export function isKnownHoaInstrumentKey(key: string): boolean {
 /** Compact catalog for injection into the intake system prompt. */
 export function hoaInstrumentsForPrompt(): string {
   return HOA_INSTRUMENTS.map(
-    (i) => `• ${i.key} (drafts via ${i.wizard_type}) — ${i.label}: ${i.purpose}`
+    (i) => `• ${i.key} (drafts via ${i.engine}) — ${i.label}: ${i.purpose}`
   ).join("\n");
 }
 
-/** Field-hint text for the drafter, shaped like WIZARD_FIELD_HINTS entries. */
+/** Field-hint text for the drafter, shaped like INSTRUMENT_FIELD_HINTS entries. */
 export function hoaInstrumentFieldHint(key: string): string | null {
   const inst = BY_KEY.get(key);
   if (!inst) return null;

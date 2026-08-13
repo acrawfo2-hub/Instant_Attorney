@@ -1,0 +1,51 @@
+-- Instant Attorney — Stage 47: pin the search_path on handle_new_user()
+-- Paste this ENTIRE file into Supabase → SQL Editor → Run.
+-- Idempotent: safe to re-run.
+--
+-- public.handle_new_user() is the SECURITY DEFINER trigger behind
+-- on_auth_user_created: it runs with definer rights on every insert into
+-- auth.users and writes the matching public.profiles row.
+--
+-- It had no search_path set. A SECURITY DEFINER function with a mutable
+-- search_path is the classic privilege-escalation surface — unqualified object
+-- references can be resolved against a schema someone else controls, and the
+-- function runs them with the definer's rights. Supabase's database linter
+-- flags this as `function_search_path_mutable` (lint 0011).
+--
+-- Exposure here was limited, because the body already fully qualifies
+-- public.profiles, but pinning the path removes the whole class of problem.
+-- The sibling function public.is_attorney() already had search_path=public.
+--
+-- Notes on the fix:
+--
+--   * pg_temp is listed LAST, never first. If the temporary schema were
+--     searched first, a session could create an object there that shadows a
+--     real one and have the definer execute it.
+--   * pg_catalog is searched implicitly ahead of both, so the built-ins the
+--     body relies on (coalesce, text) keep resolving normally.
+--   * ALTER FUNCTION ... SET changes only the function's configuration. The
+--     body, the OID, and therefore the on_auth_user_created trigger binding on
+--     auth.users are all left intact — this does not drop and recreate
+--     anything, so signup is not interrupted.
+--
+-- Verified after applying: proconfig reads {search_path=public, pg_temp}, the
+-- on_auth_user_created trigger is still bound and enabled, and the
+-- function_search_path_mutable advisory no longer appears.
+
+ALTER FUNCTION public.handle_new_user() SET search_path = public, pg_temp;
+
+
+-- ── Verification ────────────────────────────────────────────────────────────
+-- Expect one row: prosecdef = true, proconfig = {search_path=public, pg_temp}
+--
+--   select p.proname, p.prosecdef, p.proconfig
+--   from pg_proc p
+--   join pg_namespace n on n.oid = p.pronamespace
+--   where n.nspname = 'public' and p.proname = 'handle_new_user';
+--
+-- Expect the trigger to still exist and be enabled ('O'):
+--
+--   select t.tgname, t.tgenabled
+--   from pg_trigger t
+--   where not t.tgisinternal
+--     and t.tgfoid = 'public.handle_new_user'::regproc;

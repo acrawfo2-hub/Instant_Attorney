@@ -7,10 +7,10 @@ import { useSearchParams } from "next/navigation";
 // ─────────────────────────────────────────────────────────────────────────────
 // The What-If Game — a standalone, OPTIONAL strategy tool.
 //
-// It is intentionally NOT part of any wizard. It helps a user pressure-test
+// It is intentionally NOT part of document drafting. It helps a user pressure-test
 // their goals against scenarios the law has seen many times, then (optionally)
 // saves their answers into their Living File as facts. It never changes their
-// documents or which wizards are recommended.
+// documents or which instruments are recommended.
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface Scenario {
@@ -147,7 +147,7 @@ function WhatIfGame() {
         {phase === "intro" && (
           <section>
             <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "rgba(200,169,110,0.14)", color: "var(--brand-text-md)", padding: "6px 12px", borderRadius: 999, fontSize: 12.5, marginBottom: 20 }}>
-              <Shield size={14} color={gold} /> Optional strategy tool · won't change your documents
+              <Shield size={14} color={gold} /> Optional strategy tool · won&apos;t change your documents
             </div>
             <h1 style={{ fontFamily: serif, fontSize: 34, lineHeight: 1.15, margin: "0 0 14px" }}>
               Think a few steps ahead
@@ -155,7 +155,7 @@ function WhatIfGame() {
             <p style={{ fontSize: 16, lineHeight: 1.6, color: textMd, margin: "0 0 14px" }}>
               You have goals — but the law has seen these situations play out many times. This is a
               quick, no-pressure way to think through <em>&ldquo;what if…&rdquo;</em> possibilities you
-              may not have considered, so your strategy gets sharper. It's completely optional, and it
+              may not have considered, so your strategy gets sharper. It&apos;s completely optional, and it
               will never change your documents.
             </p>
             <p style={{ fontSize: 14.5, lineHeight: 1.6, color: textLt, margin: "0 0 22px" }}>
@@ -300,16 +300,16 @@ function WhatIfGame() {
                     >
                       {saveState === "saving" ? "Saving…" : `Save ${answeredCount} note${answeredCount === 1 ? "" : "s"} to my file`}
                     </button>
-                    {saveState === "error" && <p style={{ color: "#b4341f", fontSize: 14, marginTop: 10 }}>Couldn't save just now — please try again.</p>}
+                    {saveState === "error" && <p style={{ color: "#b4341f", fontSize: 14, marginTop: 10 }}>Couldn&apos;t save just now — please try again.</p>}
                     <p style={{ fontSize: 12.5, color: textLt, marginTop: 10 }}>
-                      Saving adds these as notes to your Living File only. It won't alter or generate any documents.
+                      Saving adds these as notes to your Living File only. It won&apos;t alter or generate any documents.
                     </p>
                   </>
                 )
               ) : (
                 <div style={{ background: "rgba(200,169,110,0.14)", borderRadius: 10, padding: 18 }}>
                   <p style={{ margin: "0 0 6px", fontSize: 14.5, color: textDk }}>
-                    Want to keep these notes? Open the What-If Game from one of your files and we'll save your answers there.
+                    Want to keep these notes? Open the What-If Game from one of your files and we&apos;ll save your answers there.
                   </p>
                   <Link href="/dashboard" style={{ color: navy, fontWeight: 500, fontSize: 14.5 }}>Go to my files →</Link>
                 </div>

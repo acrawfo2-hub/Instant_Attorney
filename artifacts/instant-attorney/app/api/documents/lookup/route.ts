@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { isValidWizardType } from "@/lib/document-utils";
+import { isValidInstrumentType } from "@/lib/document-utils";
 import { BYPASS_USER_ID } from "@/lib/types";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "caseFileId and docType required" }, { status: 400 });
   }
 
-  if (!isValidWizardType(docType)) {
+  if (!isValidInstrumentType(docType)) {
     return NextResponse.json({ error: "Invalid doc type" }, { status: 400 });
   }
 

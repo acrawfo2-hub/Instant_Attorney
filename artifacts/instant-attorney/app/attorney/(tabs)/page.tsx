@@ -3,6 +3,8 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { docTypeLabel, personDisplayName } from "@/lib/types";
 import type { Document, CaseFile, Profile, LegalStrategy } from "@/lib/types";
 import ConsultRequestQueue, { type ConsultRequestRow } from "@/components/ConsultRequestQueue";
+import ContinueWorking from "@/components/ContinueWorking";
+import type { AttorneyWorkState } from "@/components/AttorneyContextHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -62,7 +64,7 @@ function triageScore(doc: DocumentWithRelations): number {
 export default async function AttorneyDashboardPage() {
   const db = createServiceClient();
 
-  const [{ data: documents }, { data: consultRequests }] = await Promise.all([
+  const [{ data: documents }, { data: consultRequests }, { data: qaRows }] = await Promise.all([
     db
       .from("documents")
       .select("*, case_files(*), profiles!documents_user_id_fkey(*)")
@@ -75,15 +77,34 @@ export default async function AttorneyDashboardPage() {
       .select("*, profiles!consult_requests_user_id_fkey(*), case_files(*)")
       .in("status", ["pending", "attorney_proposed", "confirmed"])
       .order("created_at", { ascending: false }),
+    db.from("document_qa_citations").select("document_id").eq("waived", false).neq("verdict", "verified"),
   ]);
 
   const pending = ([...(documents ?? [])] as DocumentWithRelations[]).sort(
     (a, b) => triageScore(a) - triageScore(b),
   );
   const consults = (consultRequests ?? []) as ConsultRequestRow[];
+  const qaIds = [...new Set((qaRows ?? []).map((row) => row.document_id as string))];
+  const { data: qaDocuments } = qaIds.length
+    ? await db.from("documents").select("*, case_files(*), profiles!documents_user_id_fkey(*)").in("id", qaIds).is("parent_document_id", null)
+    : { data: [] };
+  const continueDocs = ([...pending, ...((qaDocuments ?? []) as DocumentWithRelations[])]).filter(
+    (doc, index, all) => all.findIndex((candidate) => candidate.id === doc.id) === index,
+  );
+  const actionable: AttorneyWorkState[] = continueDocs.map((doc) => ({
+    documentId: doc.id, documentTitle: doc.title, documentStatus: doc.status,
+    revision: "Client draft", caseFileId: doc.case_file_id, clientId: doc.user_id,
+    clientName: personDisplayName(doc.profiles), matter: matterLabel(doc.case_files),
+    href: `/attorney/review/${doc.id}`, openedAt: doc.updated_at || doc.created_at,
+    unresolvedQa: qaIds.includes(doc.id),
+  }));
 
   return (
     <>
+      <section className="atty-section">
+        <h2 className="atty-section-title">Continue working<span className="atty-section-hint">drafts · QA · attorney action · recent</span></h2>
+        <ContinueWorking actionable={actionable} />
+      </section>
       <section className="atty-section">
         <h2 className="atty-section-title">
           Drafts to Review
@@ -123,13 +144,18 @@ export default async function AttorneyDashboardPage() {
                       <ReviewClock submittedAt={doc.submitted_at ?? null} />
                     </td>
                     <td className="atty-td-flags">
+                      {typeof doc.content_json?.workspace_revision === "number" && doc.content_json.workspace_revision > 1 && (
+                        <span className="atty-flag atty-flag--consult" title="Client edited this document after submission">
+                          Revised v{doc.content_json.workspace_revision}
+                        </span>
+                      )}
                       {overdue && <span className="atty-flag atty-flag--overdue">Overdue</span>}
                       {consultRec && (
                         <span className="atty-flag atty-flag--consult" title="Living File recommends a consult">
                           Consult rec.
                         </span>
                       )}
-                      {!overdue && !consultRec && <span className="atty-td-muted">—</span>}
+                      {!overdue && !consultRec && !(typeof doc.content_json?.workspace_revision === "number" && doc.content_json.workspace_revision > 1) && <span className="atty-td-muted">—</span>}
                     </td>
                     <td>{personDisplayName(doc.profiles)}</td>
                     <td className="atty-td-doc">

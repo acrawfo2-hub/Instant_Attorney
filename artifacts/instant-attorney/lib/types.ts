@@ -2,7 +2,7 @@ export type SubscriptionStatus = "active" | "canceled" | "past_due" | "trialing"
 export type SubscriptionPlan = "phase2" | "consult" | "attorney_pro";
 /**
  * A profile's persona. `client` is the ordinary lay user. `attorney_user` is
- * an external/small-firm attorney using the drafting wizards as a
+ * an external/small-firm attorney using the drafting engines as a
  * professional tool for their OWN clients' matters — separate from
  * `Profile.is_attorney`, which means "Andrew Crawford, the firm's own
  * reviewing attorney" and must never be conflated with this.
@@ -134,8 +134,12 @@ export interface ConsultRecording {
   transcribed_at: string | null;
 }
 
-// All supported wizard types — add new ones here as wizards are built
-export type WizardType =
+// The instrument taxonomy: which drafting engine produces a document.
+// Selects the generation spec, the instrument profile and the risk
+// classification. Add a member only when a document genuinely needs a
+// different engine — not for every new instrument, which is what
+// instrument_key is for.
+export type InstrumentType =
   | "demand_letter"
   | "complaint_letter"
   | "draft_contract"
@@ -145,13 +149,12 @@ export type WizardType =
   | "general_document"
   | "improve_draft";
 
-/** Child documents created during attorney review (not wizard-generated). */
+/** Child documents created during attorney review (not drafted from an instrument). */
 export type DerivedDocType = "critical_review" | "second_draft";
 
-export type DocType = WizardType | DerivedDocType;
+export type DocType = InstrumentType | DerivedDocType;
 
 export type DocumentStatus =
-  | "pre_warmed"
   | "draft"
   | "pending_review"
   | "approved"
@@ -159,18 +162,6 @@ export type DocumentStatus =
   | "delivered";
 
 export type BrainstormMessageRole = "user" | "assistant";
-
-/** Attorney-only sounding-board chat scoped to a case file. Never client-visible. */
-export interface CaseBrainstormMessage {
-  id: string;
-  case_file_id: string;
-  author_id: string | null;
-  role: BrainstormMessageRole;
-  content: string;
-  /** Set once the attorney has applied this message's proposed Living File/strategy update, if any. */
-  applied_at: string | null;
-  created_at: string;
-}
 
 export interface Profile {
   id: string;
@@ -184,6 +175,11 @@ export interface Profile {
   firm_name: string | null;
   /** US state code (or OTHER) for UPL / jurisdiction notices. */
   home_state?: string | null;
+  /**
+   * Preferred AI inference provider for workhorse features (`anthropic` | `xai`).
+   * Cheap/premium tiers stay on Anthropic until later phases.
+   */
+  preferred_ai_provider?: "anthropic" | "xai" | null;
   created_at: string;
   updated_at: string;
 }
@@ -210,8 +206,10 @@ export interface PlanEntry {
   key: string;
   /** Human-readable document name shown to the user (e.g. "LLC Operating Agreement"). */
   title: string;
-  /** Which wizard engine drafts/formats this document. */
-  engine: WizardType;
+  /** Which drafting engine produces/formats this document. */
+  engine: InstrumentType;
+  /** Stable legal-instrument profile; independent of the rendering engine and display title. */
+  instrument_key: string;
   /** One-line reason this document matters / why its priority. */
   rationale?: string;
 }
@@ -224,18 +222,24 @@ export interface LegalStrategy {
   /**
    * @deprecated Superseded by `document_plan`. Still derived (unique engines, in
    * order) for back-compat readers; new code should read `document_plan`.
+   *
+   * The name is wire format, not vocabulary: this is a key inside the
+   * `case_files.legal_strategy` JSONB that live rows already carry, and the
+   * orchestrator emits a matching `RECOMMENDED WIZARDS:` block that
+   * `lib/file-parser.ts` parses. Renaming it needs a migration and a backfill,
+   * so it did not move when `WizardType` became `InstrumentType`.
    */
-  recommended_wizards: WizardType[];
+  recommended_wizards: InstrumentType[];
   recommend_consult?: boolean;
   /** Ordered list of the file's planned documents — the source of truth for tracking. */
   document_plan?: PlanEntry[];
   /** Attorney's override of the lead document, by PlanEntry.key. null = AI's pick. */
   lead_key_override?: string | null;
   /**
-   * @deprecated Legacy lead override by wizard type, used only on the pre-
+   * @deprecated Legacy lead override by instrument type, used only on the pre-
    * `document_plan` path. `lead_key_override` supersedes it.
    */
-  lead_override?: WizardType | null;
+  lead_override?: InstrumentType | null;
   /** One-line rationale for why the lead document is the priority. */
   lead_rationale?: string;
   /** Client-facing adversarial stress test (lib/strength-check.ts). Stored here
@@ -264,6 +268,8 @@ export interface CaseFile {
   /** created_at of the last intake message the Living File extractor has folded
    *  into the file. The background sweep reads only messages newer than this. */
   last_file_synced_at?: string | null;
+  /** UUID tie-breaker paired with last_file_synced_at for a stable cursor. */
+  last_file_synced_message_id?: string | null;
   /** True when the reviewing attorney created this file to onboard a client from
    *  their own practice (file is owned by the attorney's account). */
   created_by_attorney?: boolean;
@@ -281,8 +287,6 @@ export interface CaseFile {
   jurisdiction: string | null;
   /** Organized digest of the attorney's last freestyle session (Stage 39).
    *  Attorney-facing working notes; written when they leave freestyle mode. */
-  attorney_workspace_summary?: string | null;
-  attorney_workspace_summarized_at?: string | null;
   /** Plain-language recap of the client's last freestyle session (Stage 43),
    *  distilled when they leave the mode and shown on their Living File. */
   chat_session_summary?: string | null;
@@ -425,7 +429,7 @@ export interface FactItem {
 // ── Government form instruments ──────────────────────────────────────────────
 // A government form detected in chat that the client needs to complete. These are
 // surfaced as "legal instruments to complete" and guided by the gov-form tool
-// (distinct from the document-generation wizard). See lib/government-forms.ts.
+// (distinct from the document-generation engines). See lib/government-forms.ts.
 export type GovFormStatus = "needed" | "in_progress" | "completed" | "dismissed";
 
 /** How an instrument's form definition is sourced. "registry" forms are curated
@@ -546,38 +550,6 @@ export interface WorkspaceAttachmentRef {
 }
 
 /**
- * An attorney's freestyle work-product message, scoped to a client's case file
- * for context but kept OUT of the client's privileged intake_messages record.
- * Only the authoring attorney can read these rows.
- */
-export interface AttorneyWorkspaceMessage {
-  id: string;
-  case_file_id: string;
-  attorney_id: string;
-  role: MessageRole;
-  content: string;
-  /** Files the attorney attached inline to this turn (work-product). */
-  attachments?: WorkspaceAttachmentRef[];
-  created_at: string;
-}
-
-/**
- * A freestyle side-panel draft — a working document the associate produced or the
- * attorney started by hand during a freestyle session. Attorney work-product,
- * editable and downloadable in place. NOT the client's `documents` record.
- */
-export interface AttorneyWorkspaceDraft {
-  id: string;
-  case_file_id: string;
-  attorney_id: string;
-  title: string;
-  content: string;
-  source: "assistant" | "attorney";
-  created_at: string;
-  updated_at: string;
-}
-
-/**
  * The consumer-side equivalent: a working draft produced (or hand-started) in a
  * client's free-form freestyle session, editable and downloadable in the panel.
  * A potential deliverable — `promoted_document_id` is set once the client sends
@@ -591,8 +563,13 @@ export interface ClientWorkspaceDraft {
   content: string;
   source: "assistant" | "client";
   promoted_document_id: string | null;
+  revision_of_draft_id?: string | null;
   created_at: string;
   updated_at: string;
+  /** Returned after a post-submission save so the editor can explain its disposition. */
+  revision_action?: "unpromoted" | "revise_in_place" | "create_revision";
+  attorney_review_pending?: boolean;
+  revision_notice?: string;
 }
 
 export interface Document {
@@ -601,6 +578,11 @@ export interface Document {
   user_id: string;
   parent_document_id: string | null;
   doc_type: DocType;
+  /**
+   * Stable instrument identity: unlike the title, it survives renames and
+   * regeneration. Optional because rows created before the migration have none.
+   */
+  instrument_key?: string | null;
   title: string;
   status: DocumentStatus;
   content_json: Record<string, unknown>;
@@ -625,6 +607,13 @@ export interface Document {
    * runs or before a draft has been (re)generated.
    */
   facts_synced_at?: string | null;
+  revision_number?: number;
+  approved_text?: string | null;
+  approved_revision?: number | null;
+  current_revision_id?: string | null;
+  living_file_sync_status?: "pending" | "synced" | "failed";
+  living_file_sync_error?: string | null;
+  living_file_synced_at?: string | null;
 }
 
 /**
@@ -683,8 +672,8 @@ export function isDocumentOutOfDate(
   return latest !== null && latest > synced;
 }
 
-// Human-readable labels for wizard types
-export const WIZARD_LABELS: Record<WizardType, string> = {
+// Human-readable labels for instrument types
+export const INSTRUMENT_LABELS: Record<InstrumentType, string> = {
   demand_letter: "Demand Letter",
   complaint_letter: "Complaint Letter",
   draft_contract: "Draft Contract",
@@ -701,7 +690,7 @@ export const DERIVED_DOC_LABELS: Record<DerivedDocType, string> = {
 };
 
 export function docTypeLabel(docType: string): string {
-  if (docType in WIZARD_LABELS) return WIZARD_LABELS[docType as WizardType];
+  if (docType in INSTRUMENT_LABELS) return INSTRUMENT_LABELS[docType as InstrumentType];
   if (docType in DERIVED_DOC_LABELS) return DERIVED_DOC_LABELS[docType as DerivedDocType];
   return docType.replace(/_/g, " ");
 }
@@ -724,19 +713,30 @@ export function personDisplayName(
 }
 
 /**
- * Normalize a possibly-annotated recommendation to a clean WizardType.
+ * Normalize a possibly-annotated recommendation to a clean InstrumentType.
  * The model sometimes emits bullets like `draft_contract — ready to proceed`
  * or `RECOMMEND_CONSULT: true`; we take the leading identifier token and
- * keep it only if it maps to a real wizard type. Returns null otherwise.
+ * keep it only if it maps to a real instrument type. Returns null otherwise.
  */
-export function isValidWizardType(type: string): type is WizardType {
-  return type in WIZARD_LABELS;
+export function isValidInstrumentType(type: string): type is InstrumentType {
+  return type in INSTRUMENT_LABELS;
 }
 
-export function coerceWizardType(raw: string | null | undefined): WizardType | null {
+/**
+ * `content_json.source` for a document the ATTORNEY started from the client's
+ * file, rather than one the client submitted for review.
+ *
+ * Origin governs visibility. The row is owned by the client — it is their matter
+ * — so ownership alone would expose a draft the attorney is still thinking
+ * about. `/api/documents/[id]/download` refuses it to a non-attorney until it is
+ * approved, the same rule the attorney's working copy follows.
+ */
+export const ATTORNEY_ORIGINATED = "attorney_originated";
+
+export function coerceInstrumentType(raw: string | null | undefined): InstrumentType | null {
   if (!raw) return null;
   const token = raw.trim().split(/[^a-zA-Z_]/)[0]?.toLowerCase();
-  return token && token in WIZARD_LABELS ? (token as WizardType) : null;
+  return token && token in INSTRUMENT_LABELS ? (token as InstrumentType) : null;
 }
 
 export function isPrimaryDraft(doc: Pick<Document, "parent_document_id">): boolean {
@@ -821,7 +821,8 @@ export type ReviewRunStatus =
   | "running"
   | "awaiting_attorney"
   | "complete"
-  | "failed";
+  | "failed"
+  | "stale";
 
 export interface DocumentReviewRun {
   id: string;
@@ -835,6 +836,7 @@ export interface DocumentReviewRun {
   created_at: string;
   updated_at: string;
   completed_at: string | null;
+  source_revision?: number | null;
 }
 
 export type ImprovementKind =
@@ -845,7 +847,7 @@ export type ImprovementKind =
   | "compliance"
   | "citation";
 export type ImprovementSeverity = "high" | "medium" | "low";
-export type ImprovementStatus = "proposed" | "accepted" | "rejected" | "superseded";
+export type ImprovementStatus = "proposed" | "accepted" | "rejected" | "ask_partner" | "needs_client_input" | "superseded";
 
 export interface DocumentImprovement {
   id: string;
@@ -859,7 +861,14 @@ export interface DocumentImprovement {
   rationale: string;
   proposed_change: string;
   status: ImprovementStatus;
+  anchor: import("@/lib/improvement-diffs").DocumentAnchor | null;
+  proposed_diff: import("@/lib/improvement-diffs").ImprovementDiff | null;
+  attorney_rationale: string;
+  disposition_by: string | null;
+  disposition_at: string | null;
+  evidence_hash: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 // ── Authorities QA gate (schema-stage45) ────────────────────────────────────
@@ -881,9 +890,79 @@ export interface DocumentQaCitation {
   created_at: string;
 }
 
+export interface AttorneyReviewMemo {
+  documentPurpose: string;
+  principalChanges: string[];
+  risksOrConcerns: string[];
+  clientActionItems: string[];
+  consultationOffer: string;
+}
+
+export interface DocumentDeliveryDraft {
+  id: string;
+  document_id: string;
+  revision_document_id: string;
+  review_run_id: string | null;
+  memo: AttorneyReviewMemo;
+  recipient: string;
+  subject: string;
+  body: string;
+  consultation_url: string | null;
+  consultation_enabled: boolean;
+  updated_at: string;
+}
+
 /** A citation blocks approval when it is not verified and not waived. */
 export function citationBlocksApproval(c: Pick<DocumentQaCitation, "verdict" | "waived">): boolean {
   return !c.waived && c.verdict !== "verified";
+}
+
+// ── Independently addressable document QA checks (schema-stage48) ──────────
+export const DOCUMENT_QA_CHECK_TYPES = [
+  "factual_consistency",
+  "completeness",
+  "defined_terms_cross_references",
+  "blanks_execution_blocks",
+  "formatting_court_requirements",
+  "client_comprehension",
+  "authorities",
+] as const;
+export type DocumentQaCheckType = (typeof DOCUMENT_QA_CHECK_TYPES)[number];
+export type DocumentQaSeverity = "blocking" | "high" | "medium" | "low";
+export type DocumentQaFindingStatus = "open" | "resolved" | "waived";
+
+export interface DocumentQaFinding {
+  id: string;
+  run_id: string;
+  document_id: string;
+  check_type: DocumentQaCheckType;
+  severity: DocumentQaSeverity;
+  document_location: string;
+  title: string;
+  evidence: string;
+  status: DocumentQaFindingStatus;
+  resolution_note: string | null;
+  resolved_by: string | null;
+  resolved_at: string | null;
+  last_run_revision: string;
+  automated: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DocumentQaCheckRun {
+  document_id: string;
+  run_id: string;
+  check_type: DocumentQaCheckType;
+  last_run_revision: string;
+  completed_at: string;
+}
+
+/** Only genuinely blocking, current-revision findings lock approval. */
+export function qaFindingBlocksApproval(
+  finding: Pick<DocumentQaFinding, "severity" | "status">,
+): boolean {
+  return finding.severity === "blocking" && finding.status === "open";
 }
 
 // The bypass user used in dev when BYPASS_AUTH=true

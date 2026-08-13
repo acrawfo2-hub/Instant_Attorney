@@ -72,8 +72,14 @@ function Assess() {
   const set = (patch: Partial<DefamationInput>) => setInput((p) => ({ ...p, ...patch }));
   const a = submitted ? assessDefamation(input) : null;
 
-  const wizardHref = (wizardType: string) =>
-    caseFileId ? `/wizard/${wizardType}?caseFileId=${caseFileId}` : "/free-chat?area=defamation";
+  // Hands the request to the orchestrator rather than opening a second
+  // drafting client. Drafting happens inside that conversation now
+  // (lib/document-drafting.ts), not on a page the client clicks through.
+  // `ask` only seeds the composer — she still reads it and presses send.
+  const instrumentActionHref = (instrumentType: string, label?: string) =>
+    caseFileId
+      ? `/chat?caseFileId=${caseFileId}&ask=${encodeURIComponent(`Please draft the ${label ?? instrumentType.replace(/_/g, " ")} for my matter.`)}`
+      : "/free-chat?area=defamation";
 
   const row = (label: string, control: React.ReactNode) => (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 180px", gap: 12, alignItems: "center", padding: "9px 0", borderBottom: `1px solid ${border}` }}>
@@ -218,7 +224,7 @@ function Assess() {
                       const inst = getDefamationInstrument(key);
                       if (!inst) return null;
                       return (
-                        <Link key={key} href={wizardHref(inst.wizard_type)} style={{ fontSize: 13.5, fontWeight: 500, color: navy, background: gold, padding: "9px 14px", borderRadius: 8, textDecoration: "none" }}>
+                        <Link key={key} href={instrumentActionHref(inst.engine, inst.label)} style={{ fontSize: 13.5, fontWeight: 500, color: navy, background: gold, padding: "9px 14px", borderRadius: 8, textDecoration: "none" }}>
                           {inst.label} →
                         </Link>
                       );

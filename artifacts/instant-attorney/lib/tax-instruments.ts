@@ -2,20 +2,20 @@
 //
 // The documents a tax *legal* matter actually needs — notice responses, CDP
 // requests, installment proposals, innocent spouse relief, identity-theft
-// affidavits — mapped as PRESETS over existing wizard types. This is NOT tax
+// affidavits — mapped as PRESETS over existing instrument types. This is NOT tax
 // return preparation.
 //
 // `relevant_statutes` reference keys in lib/tax-statutes.ts; a cross-check test
 // asserts every referenced key resolves.
 
-import type { WizardType } from "./types.ts";
+import type { InstrumentType } from "./types.ts";
 import { matchTaxStatutesByText, type TaxStatuteKey } from "./tax-statutes.ts";
 
 export interface TaxInstrument {
   key: string;
   label: string;
   purpose: string;
-  wizard_type: WizardType;
+  engine: InstrumentType;
   recipient_guidance: string;
   required_fields: string[];
   relevant_statutes: TaxStatuteKey[];
@@ -31,7 +31,7 @@ export const TAX_INSTRUMENTS: TaxInstrument[] = [
     label: "IRS Notice Response Letter",
     purpose:
       "Respond in writing to an IRS notice — agreeing, disagreeing, or requesting more time — with a clear explanation and supporting facts.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Mail to the IRS address on the notice (or fax if the notice allows). Keep proof of mailing. Use the notice number, tax year, and your taxpayer identification on every page.",
     required_fields: [
@@ -50,7 +50,7 @@ export const TAX_INSTRUMENTS: TaxInstrument[] = [
     label: "Collection Due Process Hearing Request",
     purpose:
       "Request a CDP hearing within 30 days of a Final Notice of Intent to Levy to challenge collection and propose alternatives before a levy.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "File using Form 12153 (or equivalent written request) at the address on the Final Notice. The 30-day deadline is strict — missing it usually forfeits CDP rights for that notice.",
     required_fields: [
@@ -70,7 +70,7 @@ export const TAX_INSTRUMENTS: TaxInstrument[] = [
     label: "Installment Agreement Request",
     purpose:
       "Propose a monthly payment plan when you cannot pay the full balance immediately.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Submit via IRS online payment agreement tool when eligible, or mail Form 9465 with your proposal. Be realistic — the IRS expects a plan you can actually maintain.",
     required_fields: [
@@ -89,7 +89,7 @@ export const TAX_INSTRUMENTS: TaxInstrument[] = [
     label: "Offer in Compromise — Preliminary Inquiry",
     purpose:
       "Frame a preliminary request or inquiry about settling tax debt for less than the full amount — a complex, disclosure-heavy process that usually needs professional help.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "An OIC requires Form 656 plus detailed financial disclosures (433-A/OIC). Recommend a tax attorney or enrolled agent before filing — approval is discretionary and mistakes can delay relief.",
     required_fields: [
@@ -108,7 +108,7 @@ export const TAX_INSTRUMENTS: TaxInstrument[] = [
     label: "Innocent Spouse Relief Request",
     purpose:
       "Request relief from liability for a spouse's or ex-spouse's understatement on a joint return under IRC § 6015.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "File Form 8857 (or a detailed written request) with the IRS. Timing and facts matter — gather divorce decrees, financial records, and evidence you did not know about the understatement.",
     required_fields: [
@@ -128,7 +128,7 @@ export const TAX_INSTRUMENTS: TaxInstrument[] = [
     label: "Identity Theft Affidavit (Form 14039)",
     purpose:
       "Report to the IRS that someone filed a fraudulent return or used your identity for tax purposes.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Complete IRS Form 14039 and mail or fax per IRS identity-theft instructions. Also file at IdentityTheft.gov and consider a police report. Do not e-file your real return until the IRS clears the fraudulent one.",
     required_fields: [
@@ -147,7 +147,7 @@ export const TAX_INSTRUMENTS: TaxInstrument[] = [
     label: "Penalty Abatement Request",
     purpose:
       "Ask the IRS to reduce or remove penalties based on reasonable cause or first-time penalty abatement eligibility.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Write to the IRS office on your notice or call to request abatement. Explain the specific reasonable cause (illness, disaster, reliance on a professional, etc.) with documentation.",
     required_fields: [
@@ -166,7 +166,7 @@ export const TAX_INSTRUMENTS: TaxInstrument[] = [
     label: "IRS Power of Attorney (Form 2848)",
     purpose:
       "Authorize a tax attorney, CPA, or enrolled agent to represent you before the IRS on specified matters.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Complete IRS Form 2848 with your representative's information and the tax matters/years covered. Your representative signs and files with the IRS.",
     required_fields: [
@@ -198,11 +198,11 @@ export function isKnownTaxInstrumentKey(key: string): boolean {
 export function taxInstrumentsForPrompt(): string {
   return TAX_INSTRUMENTS.map(
     (i) =>
-      `• ${i.key} (drafts via ${i.wizard_type})${i.high_stakes ? " [HIGH-STAKES — time-critical, recommend consult]" : ""} — ${i.label}: ${i.purpose}`
+      `• ${i.key} (drafts via ${i.engine})${i.high_stakes ? " [HIGH-STAKES — time-critical, recommend consult]" : ""} — ${i.label}: ${i.purpose}`
   ).join("\n");
 }
 
-/** Field-hint text for the drafter, shaped like WIZARD_FIELD_HINTS entries. */
+/** Field-hint text for the drafter, shaped like INSTRUMENT_FIELD_HINTS entries. */
 export function taxInstrumentFieldHint(key: string): string | null {
   const inst = BY_KEY.get(key);
   if (!inst) return null;

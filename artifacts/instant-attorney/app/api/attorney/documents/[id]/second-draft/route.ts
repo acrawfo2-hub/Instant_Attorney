@@ -280,7 +280,9 @@ export async function POST(
 
         // The second-draft child is owned by the CLIENT (parentDoc.user_id); write it
         // with the service client to bypass RLS now that the caller is a verified attorney.
-        const child = await upsertSecondDraftChild(createServiceClient(), parentDoc, secondDraftText, secondDraftChanges);
+        const saved = await upsertSecondDraftChild(createServiceClient(), parentDoc, secondDraftText, secondDraftChanges);
+        if (!saved) throw new Error("Second draft could not be saved");
+        const child = saved.document;
 
         const existingCj = (parentDoc.content_json as Record<string, unknown>) ?? {};
         await db.from("documents").update({
@@ -297,6 +299,7 @@ export async function POST(
           improved_draft_text: secondDraftText,
           changes: secondDraftChanges,
           truncated,
+          living_file_sync_pending: saved.syncPending,
         });
       } catch (err) {
         console.error("[attorney/second-draft] error:", err);

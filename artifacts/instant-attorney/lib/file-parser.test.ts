@@ -141,6 +141,17 @@ test("parseDocumentPlan defaults an unknown engine to general_document", () => {
   assert.equal(plan[0].engine, "general_document");
 });
 
+test("parseDocumentPlan keeps instrument identity separate from a shared engine and title", () => {
+  const plan = parseDocumentPlan(`DOCUMENT PLAN:
+1. Records from EPA | general_document | federal records | federal_foia_request
+2. Records from Austin | general_document | state records | texas_public_information_request`);
+  assert.equal(plan[0].engine, "general_document");
+  assert.equal(plan[1].engine, "general_document");
+  assert.equal(plan[0].instrument_key, "federal_foia_request");
+  assert.equal(plan[1].instrument_key, "texas_public_information_request");
+  assert.notEqual(plan[0].instrument_key, plan[1].instrument_key);
+});
+
 test("parseDocumentPlan reuses a prior key for the same title (stable identity)", () => {
   const first = parseDocumentPlan(PLAN_BLOCK);
   const opKey = first[0].key;

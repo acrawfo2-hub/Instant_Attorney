@@ -11,7 +11,7 @@ import { useSearchParams } from "next/navigation";
 // shows a guideline estimate. When opened from a file (?caseFileId=), the
 // estimate is saved into the Living File as a confirmed fact, so a Child Support
 // Order or decree drafted later seeds from the number. It never changes which
-// wizards are recommended — same "add value, don't disturb the pipeline" rule
+// instruments are recommended — same "add value, don't disturb the pipeline" rule
 // the What-If Game follows.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -116,7 +116,7 @@ function Estimator() {
 
       <main style={{ maxWidth: 680, margin: "0 auto", padding: "32px 20px 80px" }}>
         <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "rgba(200,169,110,0.14)", color: textMd, padding: "6px 12px", borderRadius: 999, fontSize: 12.5, marginBottom: 20 }}>
-          <Shield size={14} color={gold} /> Free estimate · no account charge · won't change your documents
+          <Shield size={14} color={gold} /> Free estimate · no account charge · won&apos;t change your documents
         </div>
 
         <h1 style={{ fontFamily: serif, fontSize: 34, lineHeight: 1.15, margin: "0 0 14px" }}>

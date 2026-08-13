@@ -46,6 +46,7 @@ export async function POST(
     .single();
 
   if (!doc) return NextResponse.json({ error: "Document not found" }, { status: 404 });
+  const sourceRevision = doc.revision_number ?? 1;
 
   const [{ data: caseFileRow }, { data: factRows }, { data: attRows }] = await Promise.all([
     db.from("case_files").select("*").eq("id", doc.case_file_id).single(),
@@ -58,7 +59,7 @@ export async function POST(
   await db.from("documents").update({
     review_status: "reviewing",
     updated_at: new Date().toISOString(),
-  }).eq("id", id);
+  }).eq("id", id).eq("revision_number", sourceRevision);
 
   const userMessage = buildDocReviewUserMessage(
     doc as Document,
@@ -71,7 +72,7 @@ export async function POST(
     // Stream server-side and assemble the final message. A non-streaming request
     // at our full 64k token ceiling is rejected by the SDK ("Streaming is
     // required…") before it leaves the server — the same failure that 502'd the
-    // client wizard. Consuming the stream here keeps the JSON response contract.
+    // client-facing chat. Consuming the stream here keeps the JSON response contract.
     const response = await anthropic.messages.stream({
       model: "claude-sonnet-4-6",
       max_tokens: maxOutputTokensFor("claude-sonnet-4-6"),
@@ -121,26 +122,33 @@ export async function POST(
     // The child review document is owned by the CLIENT (parent.user_id), so the
     // insert must bypass RLS — write it with the service client now that the
     // caller is verified as an attorney.
-    const child = await upsertCriticalReviewChild(createServiceClient(), doc as Document, reviewReport);
+    const serviceDb = createServiceClient();
+    const { data: current } = await serviceDb.from("documents").select("revision_number").eq("id", id).single();
+    if ((current?.revision_number ?? 1) !== sourceRevision) {
+      return NextResponse.json({ error: "Document changed during review; this result is stale", review_state: "stale" }, { status: 409 });
+    }
+    const child = await upsertCriticalReviewChild(serviceDb, doc as Document, reviewReport);
 
     const existingCj = (doc.content_json as Record<string, unknown>) ?? {};
     await db.from("documents").update({
       review_status: "review_ready",
       content_json: truncated ? { ...existingCj, truncated: true } : existingCj,
       updated_at: new Date().toISOString(),
-    }).eq("id", id);
+    }).eq("id", id).eq("revision_number", sourceRevision);
 
     return NextResponse.json({
       review_report: reviewReport,
       critical_review_document_id: child?.id ?? null,
       truncated,
+      revision: sourceRevision,
+      review_state: "review_ready",
     });
   } catch (err) {
     console.error("[attorney/review] error:", err);
     await db.from("documents").update({
       review_status: null,
       updated_at: new Date().toISOString(),
-    }).eq("id", id);
+    }).eq("id", id).eq("revision_number", sourceRevision);
     return NextResponse.json({ error: "Review generation failed" }, { status: 500 });
   }
 }

@@ -3,8 +3,18 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import LivingFileSyncWarning from "@/components/LivingFileSyncWarning";
 import type { Attachment, Document, FactItem, ClientWorkspaceDraft } from "@/lib/types";
 import { docTypeLabel, isDocumentOutOfDate } from "@/lib/types";
+// The attorney working copy is work product until approved — the review editor
+// autosaves into it mid-edit. /api/documents/[id]/download enforces the same
+// rule; these links are hidden so a client is never offered a 409.
+import { isAttorneyApproved } from "@/lib/doc-generator";
+import { ATTORNEY_ORIGINATED } from "@/lib/types";
+
+/** A document the attorney started from the file, not one the client submitted. */
+const isAttorneyOriginated = (doc: Document) =>
+  (doc.content_json as Record<string, unknown> | null)?.source === ATTORNEY_ORIGINATED;
 import { findBlanks } from "@/lib/freestyle-drafts";
 import DocumentInfoNeeded from "@/components/DocumentInfoNeeded";
 import WorkspaceDraftInfoNeeded from "@/components/WorkspaceDraftInfoNeeded";
@@ -13,6 +23,7 @@ import RegenerateDocButton from "@/components/RegenerateDocButton";
 import CancelDocButton from "@/components/CancelDocButton";
 import ReviewSlaClock from "@/components/ReviewSlaClock";
 import ScanToPdfModal from "@/components/ScanToPdfModal";
+import type { DraftGenerationJob } from "@/lib/draft-generation-status";
 
 // One concise table for everything on the file: suggested uploads (still needed),
 // attachments already added, and the documents drafted with the assistant. Each
@@ -29,6 +40,7 @@ const FINALIZED = new Set(["approved", "delivered"]);
 // kick one off from chat in another tab).
 const DRAFT_POLL_ACTIVE_MS = 5000;
 const DRAFT_POLL_IDLE_MS = 20000;
+const REVISION_POLL_MS = 15000;
 
 // Government form detected in chat, enriched by /api/gov-forms with registry
 // detail + completion progress (same shape GovFormInstruments consumed).
@@ -178,6 +190,8 @@ export default function CaseDocumentsTable({
   const [promotingId, setPromotingId] = useState<string | null>(null);
   const [draftNotice, setDraftNotice] = useState("");
   const [draftInProgress, setDraftInProgress] = useState(false);
+  const [updatedJustNow, setUpdatedJustNow] = useState(false);
+  const [draftJobs, setDraftJobs] = useState<Array<DraftGenerationJob & { label: string; active: boolean }>>([]);
   const draftPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Local content overrides for workspace drafts filled inline — avoids a full
   // network reload just to rerender the snippet after blanks are filled.
@@ -208,10 +222,70 @@ export default function CaseDocumentsTable({
     if (draftRes.ok) {
       const data = await draftRes.json();
       setWorkspaceDrafts(data.drafts ?? []);
+      if (Array.isArray(data.generationJobs)) {
+        setDraftJobs(data.generationJobs as Array<DraftGenerationJob & { label: string; active: boolean }>);
+      }
     }
   }, [caseFileId]);
 
   useEffect(() => { load(); }, [load]);
+
+  // The revision endpoint covers every source that can change the Living File,
+  // including another tab and background attachment/review workers. Poll only
+  // while visible; an immediate visibility poll provides catch-up/reconnect.
+  // router.refresh preserves this client component's state, including expanded
+  // rows and any uncontrolled/local form edits in its descendants.
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let lastRevision: string | null = null;
+    let noticeTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const schedule = () => {
+      if (!cancelled && !document.hidden) timer = setTimeout(check, REVISION_POLL_MS);
+    };
+    async function check() {
+      if (cancelled || document.hidden) return;
+      try {
+        const res = await fetch(`/api/case-files/revision?caseFileId=${caseFileId}`, { cache: "no-store" });
+        if (res.ok) {
+          const { revision } = await res.json() as { revision?: string };
+          if (revision && lastRevision && revision !== lastRevision) {
+            lastRevision = revision;
+            await load();
+            if (!cancelled) {
+              router.refresh();
+              setUpdatedJustNow(true);
+              if (noticeTimer) clearTimeout(noticeTimer);
+              noticeTimer = setTimeout(() => setUpdatedJustNow(false), 8000);
+            }
+          } else if (revision) {
+            lastRevision = revision;
+          }
+        }
+      } catch {
+        // The next scheduled request is the recovery path after disconnection.
+      } finally {
+        schedule();
+      }
+    }
+    const onVisibility = () => {
+      if (document.hidden) {
+        if (timer) clearTimeout(timer);
+      } else {
+        if (timer) clearTimeout(timer);
+        void check();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    void check();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      if (noticeTimer) clearTimeout(noticeTimer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [caseFileId, load, router]);
 
   useEffect(() => {
     if (!attachments.some((a) => a.status === "processing")) return;
@@ -233,6 +307,7 @@ export default function CaseDocumentsTable({
     // value (always false) and the running -> finished transition below would
     // never fire.
     const wasRunning = { current: false };
+    const observedStates = new Map<string, string>();
     // Set while the tab is backgrounded and we stop looking. On return we can no
     // longer tell whether a turn came and went, so we revalidate once.
     let missedWhileHidden = false;
@@ -252,7 +327,7 @@ export default function CaseDocumentsTable({
         return;
       }
       try {
-        const res = await fetch(`/api/chat-acp/status?caseFileId=${caseFileId}`);
+        const res = await fetch(`/api/workspace/drafts/status?caseFileId=${caseFileId}`);
         if (cancelled) return;
         if (!res.ok) {
           rearm(DRAFT_POLL_IDLE_MS);
@@ -261,16 +336,25 @@ export default function CaseDocumentsTable({
         const data = await res.json();
         if (cancelled) return;
 
-        if (data.running) {
+        const jobs = (data.jobs ?? []) as Array<DraftGenerationJob & { label: string; active: boolean }>;
+        setDraftJobs(jobs);
+        // Refresh on each document's own ready edge. Do this before considering
+        // active siblings so an out-of-order completion is never held hostage
+        // by the slowest job in the plan.
+        const hasNewReady = jobs.some((job) => job.state === "ready" && observedStates.get(job.id) !== "ready");
+        for (const job of jobs) observedStates.set(job.id, job.state);
+        if (hasNewReady) {
+          await load();
+          if (!cancelled) router.refresh();
+        }
+        if (jobs.some((job) => job.active)) {
           wasRunning.current = true;
           // We're watching live again; the completion edge below will catch it.
           missedWhileHidden = false;
-          setDraftInProgress(true);
           rearm(DRAFT_POLL_ACTIVE_MS);
           return;
         }
 
-        setDraftInProgress(false);
         // Refresh on the running -> finished EDGE, or after a blind stretch in
         // the background. Keying off data.done instead would re-fire on every
         // mount while a finished job is still in the registry (15-min TTL, see
@@ -279,7 +363,8 @@ export default function CaseDocumentsTable({
           wasRunning.current = false;
           missedWhileHidden = false;
           await load();
-          if (!cancelled) router.refresh();
+          // The revision watcher performs the RSC refresh only if persisted file
+          // data actually changed. This local fetch clears the progress UI now.
         }
         rearm(DRAFT_POLL_IDLE_MS);
       } catch {
@@ -436,12 +521,14 @@ export default function CaseDocumentsTable({
 
   return (
     <section className="cdt lf-anchor" id="documents">
+      <span id="uploads" className="lf-anchor" aria-hidden="true" />
       <div className="cdt-head">
         <div>
           <h2 className="cdt-title">Documents &amp; attachments</h2>
           <p className="cdt-sub">
             {isAttorney ? "Everything on this client's file" : "Everything on your file"} — what&apos;s needed, what&apos;s in, and what you&apos;ve drafted.
           </p>
+          {updatedJustNow && <span className="cdt-updated" role="status">Updated just now</span>}
         </div>
         {!isAttorney && (
           <button type="button" className="cdt-add" onClick={() => { setAdding((v) => !v); setPendingFile(null); setUploadError(""); }}>
@@ -453,12 +540,16 @@ export default function CaseDocumentsTable({
 
       {/* Draft-in-progress indicator — appears while a background chat turn is
           generating a document, disappears (and refreshes the list) when done. */}
-      {draftInProgress && (
-        <div className="cdt-draft-progress" role="status" aria-live="polite">
+      {draftJobs.length > 0 && <div className="cdt-draft-jobs" aria-label="Draft generation status">
+        {draftJobs.map((job) => <div className={`cdt-draft-progress draft-job-${job.state}`} role="status" aria-live="polite" key={job.id}>
           <span className="cdt-draft-progress-dot" aria-hidden="true" />
-          <span className="cdt-draft-progress-text">A draft is being written — check back in a couple of minutes.</span>
-        </div>
-      )}
+          <span className="cdt-draft-progress-text"><strong>{job.title}</strong> — {job.label}
+            {job.missing_fact_labels.length > 0 && <> · Needed: {job.missing_fact_labels.join(", ")}</>}
+            {job.latest_revision > 0 && <> · Revision {job.latest_revision}</>}
+            {job.state === "failed" && <> · {job.failure_message ?? "Generation failed"}</>}
+          </span>
+        </div>)}
+      </div>}
 
       {/* Blanks attention callout — shown to clients only, when ≥ 1 document or
           workspace draft still has unfilled [[blanks]]. Disappears automatically
@@ -558,6 +649,10 @@ export default function CaseDocumentsTable({
         </div>
       )}
 
+      <span id="drafted-documents" className="lf-anchor" aria-hidden="true" />
+      {documents.filter((d) => d.living_file_sync_status && d.living_file_sync_status !== "synced")
+        .map((d) => <LivingFileSyncWarning key={`sync-${d.id}`} documentId={d.id} />)}
+      {total === 0 && <span id="attorney-review" className="lf-anchor" aria-hidden="true" />}
       {total === 0 ? (
         <p className="cdt-empty">Nothing on the file yet. Attachments you upload and documents you draft with your assistant will appear here.</p>
       ) : (
@@ -643,7 +738,7 @@ export default function CaseDocumentsTable({
                       />
                     )}
                     <div className="cdt-detail-links">
-                      <a href={`/api/workspace/drafts/${d.id}/download`}>Download draft</a>
+                      <a href={`/api/workspace/drafts/${d.id}/download`}>Download draft (.docx)</a>
                     </div>
                   </Row>
                 );
@@ -743,6 +838,7 @@ export default function CaseDocumentsTable({
           )}
 
           {/* ── WITH YOUR ATTORNEY (pending review) ── */}
+          <span id="attorney-review" className="lf-anchor" aria-hidden="true" />
           {reviewDocs.length > 0 && (
             <>
               <div className="cdt-band cdt-band-review">
@@ -787,10 +883,10 @@ export default function CaseDocumentsTable({
                     )}
 
                     <div className="cdt-detail-links">
-                      {doc.draft_text && (
-                        <a href={`/api/documents/${doc.id}/download`}>Download submitted draft (.docx)</a>
+                      {doc.draft_text && (isAttorney || !isAttorneyOriginated(doc) || isAttorneyApproved(doc.status)) && (
+                        <a href={`/api/documents/${doc.id}/download`}>Download {isAttorneyOriginated(doc) ? "draft" : "submitted draft"} (.docx)</a>
                       )}
-                      {secondDraft?.draft_text && (
+                      {secondDraft?.draft_text && (isAttorney || isAttorneyApproved(secondDraft.status)) && (
                         <a href={`/api/documents/${secondDraft.id}/download`}>Download revised draft (.docx)</a>
                       )}
                     </div>
@@ -831,9 +927,17 @@ export default function CaseDocumentsTable({
                   : doc.status === "changes_requested" ? <Pill kind="review" label="Revisions requested" />
                   : <Pill kind="stored" label={doc.status} />;
 
+                // A promoted document remembers the workspace draft it came
+                // from, so "Continue" reopens THAT draft in the panel the client
+                // already edits in — rather than a copy, or the retired wizard.
+                const originDraftId = workspaceDrafts.find((d) => d.promoted_document_id === doc.id)?.id;
+                const continueHref = originDraftId
+                  ? `/chat?caseFileId=${doc.case_file_id}&draft=${originDraftId}`
+                  : `/chat?caseFileId=${doc.case_file_id}&ask=${encodeURIComponent(`Let's keep working on my ${doc.title}.`)}`;
+
                 const primary =
                   isAttorney ? <Link className="cdt-ghost" href={`/attorney/review/${doc.id}`}>Review →</Link>
-                  : doc.status === "draft" ? <Link className="cdt-ghost" href={`/wizard/${doc.doc_type}?caseFileId=${doc.case_file_id}&docId=${doc.id}`}>Continue →</Link>
+                  : doc.status === "draft" ? <Link className="cdt-ghost" href={continueHref}>Continue →</Link>
                   : doc.draft_text ? <a className="cdt-ghost" href={`/api/documents/${doc.id}/download`}>Download</a>
                   : <span className="cdt-muted">—</span>;
 
@@ -870,7 +974,7 @@ export default function CaseDocumentsTable({
                           Download {secondDraft?.draft_text ? "original draft" : "document"} (.docx)
                         </a>
                       )}
-                      {secondDraft?.draft_text && (
+                      {secondDraft?.draft_text && (isAttorney || isAttorneyApproved(secondDraft.status)) && (
                         <a href={`/api/documents/${secondDraft.id}/download`}>Download revised draft (.docx)</a>
                       )}
                     </div>

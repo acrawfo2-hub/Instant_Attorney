@@ -1,0 +1,481 @@
+# Architecture: what this product is, and where each thing lives
+
+Read this before opening a pull request. It exists because this codebase was
+built by several AI agents working in parallel from the same commit, none able
+to see the others' work. That produced real damage — three separate PRs tried to
+make the same route write documents, four carried back a fix a newer PR had just
+made, and three created the same database table with incompatible columns. Every
+one of them passed its own tests.
+
+The rule that prevents all of it: **one canonical implementation per
+capability**. If you are about to add a second module that does what an existing
+one already does, you are about to recreate the problem.
+
+**Flow map:** [`docs/FLOW.md`](./FLOW.md) — mermaid of how a turn, a draft, a
+review, and a Living File update actually move through the code, including the
+names that still lie on that path. Read it before writing tests that assume two
+labels mean the same object.
+
+## What the product does
+
+An AI chatbot that questions a client the way an excellent intake attorney
+would, and from those answers:
+
+1. **Intake** — asks the legal questions that matter, in a sensible order.
+2. **Generation** — produces one or more documents from what it learned.
+3. **Findability** — those documents stay easy to find and edit, always.
+4. **Attorney review** — hands them to the attorney, who can still find and
+   edit them easily, then resolves the matter or schedules a consult.
+5. **Living File** — a cover sheet explaining the client's situation to them,
+   updated on every input.
+
+Findability and editability are not features among others. They are the point:
+a document the client cannot locate or change has failed, however well drafted.
+
+## The five capabilities and who owns them
+
+### 1. Intake
+
+| | |
+|---|---|
+| Entry point | `app/api/chat-acp/route.ts` |
+| Tools | `lib/orchestrator-tools.ts` |
+| Prompts | `lib/prompts.ts` |
+| Jobs | `lib/acp-jobs.ts` — durable, survives a restart |
+
+There is one assistant personality. Orchestrator tools — including the
+deterministic calculators — are always attached. A posted `mode` from older
+clients is ignored; `case_files.chat_mode` is no longer written. Calculators
+are read-only; a result becomes a file fact only when the client confirms and
+the model calls `record_fact`. Specialist calculator pages remain optional
+deep-dives, not a second engine.
+
+Generation is **not** done here. When a client asks for documents, this route
+commits a bounded plan (`lib/document-plan.ts`), creates the visible empty
+shell, and **kicks the worker immediately** (`kickDocumentGenerationJobs`) so
+drafting starts in a separate invocation — not on the archival cron. The
+retention script (`scripts/archival-cron.mjs`) archives and destroys records;
+it must never call `/api/document-jobs/process`. Do not emit full document text
+into the conversation — that rule is load-bearing and has been reverted once
+already.
+
+### 2. Generation
+
+A pipeline, in order. Each stage has one module:
+
+| Stage | Module | Answers |
+|---|---|---|
+| Plan | `lib/document-plan.ts` | which documents, in what order; creates the visible empty shell |
+| Identity | `lib/instruments/` | what instrument this is, what it must contain |
+| Authority | `lib/instruments/authority.ts` | which pinned legal source backs it |
+| Spec | `lib/document-generation-spec.ts` | what sections it needs |
+| Risk gate | `lib/document-risk.ts` | is the governing forum known |
+| Generate | `lib/document-drafting.ts` | produce the text |
+| Refine | `lib/document-refinement.ts` | structured sections |
+| Validate | `lib/instruments/validator.ts` | is it ready for review |
+| Render | `lib/doc-generator.ts`, `lib/doc-layout.ts` | produce the .docx |
+
+**`lib/document-drafting.ts` owns the whole pipeline.** `draftInstrument` runs
+identity, authority, spec, risk gate, generation, refinement and validation in
+one place. Two callers, and neither owns the drafting:
+
+| Caller | Produces | On a truncated response |
+|---|---|---|
+| `lib/document-job-worker.ts` | the orchestrator's workspace draft | **fails the job** — nothing is watching, and a half-written draft looks finished |
+| `app/api/documents/[id]/regenerate/route.ts` | a new revision of an existing document | keeps the existing draft and reports failure |
+| `app/api/attorney/case-files/[id]/draft/route.ts` | a document the attorney started from the file | reports failure; nothing is created |
+
+The worker is kicked from `chat-acp` (and the drafts-panel status poll as a
+backup) via `kickDocumentGenerationJobs`. `/api/document-jobs/process` is that
+kick's landing zone and a drain for stranded `queued` rows — not a daily cron
+the client waits on. `scripts/archival-cron.mjs` is retention only.
+
+There were three implementations before this. The wizard route had the real
+pipeline; the worker had a twelve-line Anthropic call with none of it; and
+`regenerate` had a third that skipped the risk gate **and** promoted a markerless
+response to renderable `draft_text` via `extractDraftText(...) ?? fullResponse`.
+Since `regenerate` writes through `saveDocumentRevision`, that raw prose became a
+real revision the client could submit for review.
+
+`document-drafting.test.ts` pins this by looking for the **drafter prompt**, not
+the gate: any file that assembles `buildDrafterSystemPrompt` into a model call is
+generating a document and must go through `draftInstrument`. An earlier version
+pinned the risk gate to one caller, which caught a second *consumer* of the gate
+but not a path that never called it — which is exactly how `regenerate` passed.
+
+Two rules learned the hard way:
+
+- **Never default a jurisdiction.** The model may not name, assume or imply a
+  governing forum it has not been given. Removing that has been attempted twice
+  in code, and once — undetected for far longer — in prose: two Living File
+  templates told the model to write
+  `JURISDICTION: Unconfirmed — defaulting to Texas`. That line is parsed into
+  `case_files.jurisdiction`, and `hasConfirmedForum` was anchored (`/^unconfirmed$/`),
+  so the trailing clause made it read as a **confirmed** forum. The gate was
+  defeated by prompt text while every test stayed green. Prompts are part of the
+  enforcement surface; `document-risk.test.ts` now scans them for
+  jurisdiction-defaulting language, and `hasConfirmedForum` matches a prefix so a
+  value that announces its own uncertainty is never a forum.
+  It does **not** mean refusing to draft: when the forum is unknown, the document
+  is still produced in full, with `FORUM_PLACEHOLDER` written everywhere the
+  forum would appear. That placeholder is BLOCKING, so `placeholderFields` marks
+  it required and the existing "information needed" form asks the client for it
+  like any other missing fact. A refusal left the client with nothing, which
+  broke the promise that every drafting request yields a visible, editable
+  artifact; a guess would have been worse. This is the third option.
+- **A markerless model response is not a draft.** If the complete
+  `---DRAFT READY---`/`---END DRAFT---` block did not arrive, the output is
+  recovery material, not renderable text a client can submit for review.
+
+### 3. Findability — the document write path
+
+**`lib/document-persistence.ts` is the single boundary for writing document
+text.** Every save goes through `saveDocumentRevision`, which stamps a revision
+id and drives the durable Living File sync.
+
+There are nine writers and no others:
+
+| Writer | Save |
+|---|---|
+| `app/api/documents/[id]/regenerate/route.ts` | regeneration in place |
+| `app/api/attorney/case-files/[id]/draft/route.ts` | the attorney starts a document from the file |
+| `app/api/documents/[id]/fill-info/route.ts` | client fills placeholders |
+| `app/api/workspace/drafts/[id]/route.ts` | client edits a promoted draft |
+| `app/api/workspace/drafts/[id]/promote/route.ts` | promotion and resubmission |
+| `app/api/attorney/documents/[id]/revision/route.ts` | attorney accepts an edit |
+| `app/api/attorney/documents/[id]/revisions/route.ts` | attorney restores a revision |
+| `.../improvements/[improvementId]/route.ts` | attorney accepts a finding |
+| `lib/document-utils.ts` | the second-draft child, for both its callers |
+
+`lib/document-persistence.test.ts` enforces two things: each writer above calls
+the boundary, and **no other file in `app/` or `lib/` writes document text at
+all**. Adding a tenth write path fails the suite with instructions. If a new
+file legitimately mentions `draft_text` without writing it, record why in that
+test's `notDocumentWrites` map.
+
+When a row already holds the text — the caller wrote it for other reasons — pass
+a pass-through `persist: async () => documentId`. The boundary is then supplying
+the revision id and the sync, not a second write.
+
+Two different things are called a "revision". Do not conflate them:
+
+| | |
+|---|---|
+| `document_revisions` | immutable content history — provenance, branching, append-only |
+| `documents.current_revision_id` | a sync marker for Living File idempotency. Not a foreign key |
+
+### 4. Attorney review
+
+| | |
+|---|---|
+| Orchestrator | `lib/attorney-review.ts` |
+| QA checks | `lib/attorney-review-qa.ts` |
+| Authorities gate | `lib/attorney-review-authorities.ts` |
+| Workbench UI | `app/attorney/review/[id]/page.tsx` |
+
+**One attorney write path, and one approval.** The attorney's working copy is a
+`second_draft` child of the submitted document. Everything that changes it —
+typing in the editor, or an edit from the associate — goes through
+`app/api/attorney/documents/[id]/revision/route.ts`, which carries
+`saveDocumentRevision`: a revision id, an immutable `document_revisions` row, and
+the durable Living File sync.
+
+`chat-edit` still does not write, and the reason is worth keeping. The review
+page applies its change set to the working buffer the moment it arrives and
+autosaves through that one path, so a write here would give the same text two
+writers racing while the attorney types. Three PRs have tried to add one; the
+answer is still no, for a better reason than before.
+
+The associate is an aggressive teammate: a discussion turn that finds a problem
+also returns the fix. Empty change sets are valid when nothing needs rewriting.
+Specialists (adversarial review, QA, placeholders, formatting, authorities) are
+the existing services, invoked from chat or from shortcut buttons — not a
+second implementation. The associate must never approve, waive, or send.
+
+Approve is always available. Unverified citations and open blocking findings
+stay on the file; proceeding requires one recorded reason (`informed_overrides`
+on `documents.content_json`). That is an informed override, not a waiver and
+not a silent clean. Delivery after an already-approved revision does not ask
+again.
+
+What *did* change is the accept step. The associate's edits used to stack up as
+proposals needing a second click each, which made every sentence a negotiation
+with a junior. They now apply directly. Changes whose passage moved under them
+fall back to the accept buttons rather than being dropped. The attorney's undo is
+the revision history.
+
+**Documents have two origins.** A client submits one for review, or the
+attorney starts one from the file — reading a matter is where you realise what
+the client actually needs. An attorney-originated document is marked
+`content_json.source = "attorney_originated"`, stays `status: "draft"` with
+`submitted_at` null so it never enters the attorney's own review queue, and is
+generated and saved through the same engine and boundary as everything else.
+
+**The client never sees the working copy — or an attorney-originated draft —
+until it is approved.** It carries the
+client's `user_id`, so ownership alone let them download it mid-edit;
+`/api/documents/[id]/download` refuses an unapproved `second_draft` to a
+non-attorney, and refuses an unapproved attorney-originated draft the same way —
+that row is owned by the client, so ownership alone would have exposed a draft
+they never asked for. The links are hidden to match. Approval is the one explicit act, and
+delivery is separate from it again — `/approve` sets the status, the delivery
+composer sends. See `work-product.test.ts`.
+
+QA verifies the revision the attorney actually accepted, never a regenerated
+draft. Verifying an auto-rewrite certifies text nobody approved.
+
+**Consult uses the same associate.** `/consult/[id]/session` (attorney) and the
+consult workspace on `/attorney/consults` share one thread
+(`attorney_consult_messages`). Shortcuts call the existing brief, fee,
+closeout, and pre-consult memo services. Wrap-up patches apply on arrival
+through `PATCH /api/attorney/consult/[id]/wrap-up`. The associate must never
+start or end the session, and never submit wrap-up — send stays the attorney's
+click. `chat` still does not write `wrap_up_draft`; closeout generate that
+persists remains the existing one-shot route.
+
+### 5. Living File
+
+| | |
+|---|---|
+| Parse and apply | `lib/file-parser.ts` |
+| Extract | `lib/living-file-extractor.ts` |
+| Ordering | `lib/message-cursor.ts` — sync at message boundaries |
+
+Updated on every input, as the product promises. The client-facing surface is
+the case memo and the tile map in `components/ClientFileView.tsx`.
+
+`lib/living-file-writers.test.ts` names every production file that mutates
+`case_files`. Administrative writes (title, archive, legal hold, opening a
+matter) are listed, not forbidden. The coverage is not event-complete —
+workspace-draft generation still writes `client_workspace_drafts.content`
+without going through `saveDocumentRevision` — and that is still deferred. Do
+not event-source to close it.
+
+## The guidance chain — "what should this client do next?"
+
+One chain answers it. Each layer consumes the one below, so they cannot
+disagree:
+
+```
+lib/next-step.ts        computeNextStep         the hero action
+  ↓                     mission-control is its only caller
+lib/mission-control.ts  computeMissionControl   the ranked board
+  ↓                     matter-tasks wraps the board
+lib/matter-tasks.ts     buildMatterTasks        doable-now / blocked buckets
+  ↓                     file-deck ranks the tasks
+lib/file-deck.ts        buildFileDeck           tiles, pressing deadline, memo
+```
+
+Two surfaces read it at different heights, because they serve different people:
+
+| Reader | Enters at | Renders |
+|---|---|---|
+| client — `ClientFileView`, and the chat rail via `/api/case-files/[id]/deck` | `buildFileDeck` | tiles, case hub, memo |
+| attorney — `ClientFileView`'s second layout | `computeMissionControl` | `MissionControlBoard` |
+
+That is one engine with two presentations, which is the target shape. **It was
+not rewritten into a `CaseGuidance` result**, because there was no defect to fix
+by doing so — the consolidation audit had read these as four peers that could
+disagree. Two of the four were real and are gone: `case-cta.ts` was orphaned
+(deleted in chunk 2), and the roadmap was a genuinely competing spine that turned
+out to be unreachable (deleted in chunk 4a). What remained was already a
+pipeline. Rewriting a working pipeline for the shape of it is the change this
+codebase keeps being damaged by.
+
+`guidance-chain.test.ts` pins two things: `computeNextStep` has exactly one
+caller, so a new surface cannot grow a second opinion about the next action; and
+no layer imports one above it, so the chain only ever reaches downward.
+
+## Which matter — the routing decision
+
+**`lib/matter-routing.ts` decides which `case_files` row a piece of work belongs
+to, and it is the only thing that decides.**
+
+A client can have many matters at once. That has always been true — `user_id` is
+one-to-many, ten active per client, and every document, message, fact,
+attachment and job keys off `case_file_id`. What was missing was an owner for
+"which one is this?", so `chat-acp` answered it by taking the most recently
+opened file. A client with an open will matter who pressed the dashboard's own
+"Start another case" button was attached to the will — the button did the
+opposite of its label — and everything they said about the new problem was
+extracted into the wrong Living File.
+
+There is no default now:
+
+| Caller | Result |
+|---|---|
+| passes `caseFileId` | that matter, after ownership is verified |
+| passes nothing | a **new** matter |
+
+Bare `/chat` means *new*, because every resume path in the UI passes an id —
+`/dashboard/[id]`, the case cards, the attorney client list, the drafts table.
+Ownership is checked here rather than left to RLS: RLS refuses by returning no
+rows, which reads downstream as "a matter with no facts" rather than as a
+refusal.
+
+`matter-routing.test.ts` fails any file in `app/`, `lib/` or `components/` that
+pairs `order("opened_at")` with `limit(1)` — the signature of picking a working
+matter by recency. Listing matters for the switcher orders the same way but
+takes all of them, which is why the pair is what the guard looks for. Do not add
+a file to an allowlist to make it pass.
+
+The client's second matter is also a product action, not just navigation: the
+`open_new_matter` orchestrator tool opens a separate file when the client
+confirms one is warranted. Like `record_fact`, it must **ask first** — and it
+must ask *before* exploring the new problem, because anything said first lands
+in the current file.
+
+> **Known gap.** Asking early is prompt guidance, not an enforced boundary. If
+> the client volunteers a paragraph about the new matter before the assistant
+> can ask, `parseAndUpdateFile` still extracts it into the current file. Closing
+> that needs the case-event boundary in `CONSOLIDATION.md`, which is
+> deliberately deferred. The routing seam and the tool remove the silent,
+> systematic version of this bug; they do not make cross-matter contamination
+> impossible.
+
+## Database
+
+Migrations live in `supabase/`, named `schema-stageNN-<topic>.sql`. Several
+files may share a stage; that is the existing convention, not a mistake.
+
+**`npm run schema:strict` gates CI.** It fails on three things, all of which
+have happened here, and none of which typecheck or the unit tests can see —
+nothing in either touches a real database:
+
+| Failure | Why it is invisible otherwise |
+|---|---|
+| two migrations create the same table with different columns | `create table if not exists` makes the second a silent no-op, so the losing side's code writes to columns that were never created |
+| code queries a table no migration creates | the query fails only at runtime |
+| code selects a column no migration defines | PostgREST rejects the whole select, so the query returns an error and *no rows* — code that ignores the error reads it as "nothing found" and carries on with empty data |
+
+The column check found `lib/document-job-worker.ts` selecting
+`category, fact_text, source_quote` from `fact_items`, which has
+`description, status, kind`. Every document that worker produced was drafted
+with no facts at all. It also found `subscriptions.consult_credits`, read by six
+call sites and created by no migration.
+
+A table's column set is its `create table` body **plus** every later
+`alter table ... add column`, which is how most columns arrive here. Select
+lists the guard cannot read — a `*`, an embedded resource, a non-literal
+argument — are skipped rather than guessed at.
+
+Migrations are not applied automatically. See `supabase/APPLY-ORDER.md`.
+
+## Dead code, and the two guards that find it
+
+This repository's characteristic failure is not a bug. It is a second
+implementation that survives the thing it belonged to, keeps compiling, keeps
+passing its own tests, and reads to the next agent as a feature to preserve.
+Three were found in one session, all downstream of the same retirement:
+
+| What | How it hid |
+|---|---|
+| `generateDocument` + 7 templates, ~700 lines | a dead export inside a *live* module |
+| `lib/starter-fold.ts` | a whole module with nine passing tests and no importer |
+| `lib/workspace-auth.ts` | orphaned when its `/api/attorney/workspace/*` routes were deleted |
+
+Two different failures, so two different guards:
+
+- **`lib/component-reachability.test.ts`** walks the import graph from `app/`,
+  `components/`, `scripts/` and `middleware.ts`, and fails on any component or
+  `lib/` module nothing reaches. That is the whole-module case.
+- **Pinned export lists** in `lib/doc-generator.test.ts` and
+  `lib/placeholder-parsing.test.ts` fail when the module's public surface
+  changes. That is the dead-export-in-a-live-module case, which reachability
+  cannot see.
+
+Neither is a style rule. Adding an export is allowed; adding one by accident is
+what these stop.
+
+**Counting callers is the check — reading the code is not.** Dead code and live
+code are indistinguishable by inspection. Both of the modules above carried
+careful header comments explaining what they were for, and one of those comments
+("Guarantee a usable first draft even when the AI call fails") described a safety
+net that had never been wired to anything.
+
+## Before you open a pull request
+
+CI runs typecheck, unit tests, lint, build, and the schema guard. All must pass.
+
+Then ask the question that catches the failure mode this codebase is prone to:
+
+> **What does this change that already existed?**
+
+Not "does it work" — every dangerous change here worked. The damaging ones
+compiled cleanly, passed their tests, and quietly reversed a decision made in a
+PR the author had never seen. If your branch is more than a few days behind
+`main`, rebase and re-read the code you are changing before assuming your
+version is the current one.
+
+## Known duplication, being consolidated
+
+Tracked so nobody "fixes" it twice, and so nobody adds to it. The order of
+removal and the reasoning behind it are in **`CONSOLIDATION.md`** — read that
+before starting on any entry here.
+
+- ~~Four modules compute "what next"~~ — **investigated and not true.** See
+  "The guidance chain" below. The two real problems it described are gone.
+- **Two draft records** — `client_workspace_drafts` and `documents`, bridged by
+  promotion. One service and one UI model first; a physical merge only if that
+  does not already remove the complexity. The workspace-draft **shell** is
+  created at `dispatchDocumentPlan`, not when a worker claims the job. Status
+  cards read `document_generation_jobs`. `workspace_draft_jobs` is an unread
+  leftover table; do not drop it in a cleanup pass that is not about schema.
+- ~~`ChatMode` intake/freestyle split~~ — **done as behavior.** Tools, pacing,
+  and draft persistence no longer depend on a posted mode. The `ChatMode` type
+  and `case_files.chat_mode` column stay; renaming them is a data change.
+- ~~Five attorney AI rooms~~ — **done.** The freestyle workspace and the case
+  brainstorm are deleted with their routes, prompts and tables; the review
+  workbench is the one place the attorney talks to the associate. Consult
+  generators (brief, fee estimate, pre-consult memo, closeout) stay as
+  services the associate may call — they were never rooms. #143's separate
+  consult cockpit was closed without merging.
+- ~~`pre_warmed`~~ — **done.** The status is gone from the code and the
+  `documents_status_check` constraint no longer permits it.
+
+The wizard journey was retired in chunk 5: `app/wizard/[type]/page.tsx`,
+`app/api/wizard/route.ts` and `app/api/wizard/save-answers` are gone, along with
+`resolveWizardDocumentTarget` (which existed to safely target a caller-supplied
+document id — nothing supplies one now) and `DRAFTER_SYSTEM_PROMPT`. The engine
+survives as `lib/document-drafting.ts`. The instrument taxonomy and the
+placeholder parser stay — they are the engine's vocabulary, not the journey — and
+have since been renamed to say so: `WizardType` → `InstrumentType`,
+`WIZARD_LABELS` → `INSTRUMENT_LABELS`, `lib/wizard-parsing.ts` →
+`lib/placeholder-parsing.ts`.
+
+**Three names deliberately did not move, because they are wire format rather than
+vocabulary.** Renaming any of them is a data change, not a rename:
+
+| Name | Why it stays |
+|---|---|
+| `legal_strategy.recommended_wizards` | a key in live `case_files` JSONB |
+| the `RECOMMENDED WIZARDS:` output block | a parsing contract between the area prompts and `lib/file-parser.ts`; and `RECOMMENDED INSTRUMENTS` would collide with the existing `SUGGESTED INSTRUMENTS` block |
+| `usage_events.feature = "wizard"` | an indexed column with history; renaming splits every cost query across two labels |
+| `ChatMode` / `case_files.chat_mode` | a column and a type; the behavior split is gone |
+
+There is no `documents.wizard_type` column — that name was only ever a field on
+the in-memory instrument presets (now `engine`, matching `PlanEntry.engine`) and
+a write-only breadcrumb in `content_json.metadata` that nothing reads.
+
+**The renderer took longer to find.** `lib/doc-generator.ts` also held
+`generateDocument({ docType, wizardData, … })` — the wizard's second .docx path,
+which switched on instrument type and hand-assembled a document from a bag of
+form answers, one template function per instrument. It outlived the journey it
+belonged to by roughly 700 lines, importing cleanly and typechecking cleanly,
+called by nothing. Deleted, along with the markdown and table helpers that only
+it used: the file went from 885 lines to 272.
+
+That is the shape this repository keeps producing, and the reason for the
+question at the top of `CLAUDE.md`. A second implementation is not detectable by
+reading it — it looks exactly like the first one. It is detectable by counting
+its callers. `lib/doc-generator.test.ts` now pins the module's export list, so a
+new renderer has to be added on purpose in a diff that says so.
+
+Two dead exports went with it — `pickFirstValidWizard` and the
+`WizardDocumentTarget` type, both leftovers of `resolveWizardDocumentTarget`.
+Removing a function is not finished until its return type goes too.
+
+Removed in chunk 2, recorded so they are not recreated: `lib/case-cta.ts` and
+`lib/document-generation-policy.ts` (both imported only by their own tests), and
+`lib/document-revisions.ts` (folded into `document-persistence.ts`, where
+revision policy now lives beside the write it governs).

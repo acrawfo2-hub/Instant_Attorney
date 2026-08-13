@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { logTruncation } from "@/lib/truncation-logger";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
@@ -7,32 +7,40 @@ import { buildAcpSystemPrompt, buildFileContext, ORCHESTRATOR_TOOLS_GUIDANCE } f
 import { ORCHESTRATOR_TOOLS, dispatchTool } from "@/lib/orchestrator-tools";
 import { detectAcpAreasFromContext } from "@/lib/acp-area-router";
 import { parseAndUpdateFile, isCompleteFileUpdate } from "@/lib/file-parser";
-import { syncLivingFile } from "@/lib/living-file-extractor";
+import { markLivingFileSyncedThrough, syncLivingFile, type MessageCursor } from "@/lib/living-file-extractor";
 import { triggerPendingLookups } from "@/lib/gov-form-lookup";
 import { generateCaseTitle } from "@/lib/title-generator";
 import { toAnthropicBlock, processAttachment } from "@/lib/attachment-processor";
-import { parseDrafts } from "@/lib/freestyle-drafts";
+import { parseDrafts, planAssistantDraftPersistence } from "@/lib/freestyle-drafts";
+import { persistDrafts } from "@/lib/draft-persistence";
 import { stripToolMarkers } from "@/lib/tool-markers";
-import { createAcpJob, getAcpJob, getPredecessorChain, emitAcpChunk, finishAcpJob } from "@/lib/acp-jobs";
-import { recordAiFromMessage, recordStorageUpload } from "@/lib/usage-tracker";
+import { dispatchDocumentPlan, parseDocumentPlan } from "@/lib/document-plan";
+import { kickDocumentGenerationJobs } from "@/lib/document-job-worker";
+import { createDurableAcpJob, getAcpJob, getPredecessorChain, emitAcpChunk, finishDurableAcpJob } from "@/lib/acp-jobs";
+import { recordAiFromMessage, recordAiUsage, recordStorageUpload } from "@/lib/usage-tracker";
 import { getBillingGate } from "@/lib/topup";
 import { maxOutputTokensFor, limitSignalMetadata } from "@/lib/token-limits";
 import { BYPASS_USER_ID } from "@/lib/types";
 import type { CaseFile, FactItem, Attachment, RequestedAttachment, CounselEngagementGoal } from "@/lib/types";
 import { buildCounselContextPatch, persistCounselContext } from "@/lib/existing-counsel-persist";
+import { resolveMatter } from "@/lib/matter-routing";
 import {
   jurisdictionFromCaseFileText,
   normalizeStateCode,
   stateName,
 } from "@/lib/jurisdiction";
+import { getAnthropicClient, isXaiConfigured } from "@/lib/ai/clients";
+import { resolveModel } from "@/lib/ai/models";
+import { parseAiProvider } from "@/lib/ai/providers";
+import { joinSystemBlocks, streamXaiChat } from "@/lib/ai/xai-chat";
 
-const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney, maxRetries: 4 });
+const anthropic = getAnthropicClient();
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 // Cap on model↔tool round-trips per user turn, so a tool loop can't run away.
 const MAX_TOOL_ITERATIONS = 5;
 
 // Anthropic server-side web tools, offered alongside the custom orchestrator
-// tools in freestyle. They let the assistant actually LOOK at a client's live
+// tools. They let the assistant actually LOOK at a client's live
 // website (or an official source) instead of guessing — Anthropic executes them
 // inline within the same stream. max_uses caps the per-turn server-tool fee, and
 // max_content_tokens keeps a fetched page from blowing out the context window.
@@ -47,7 +55,7 @@ const WEB_TOOLS = [
 export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
-  const { messages, caseFileId, pendingAttachment, fileType, counselContext, mode } = await req.json() as {
+  const { messages, caseFileId, pendingAttachment, fileType, counselContext } = await req.json() as {
     messages: Array<{ role: string; content: string }>;
     caseFileId?: string;
     fileType?: "standard" | "quick_consult";
@@ -112,47 +120,27 @@ export async function POST(req: NextRequest) {
   }
 
   // Ensure case file exists — seed jurisdiction from the client's home_state.
+  // Also load AI provider preference for the workhorse model resolver.
   const { data: homeStateRow } = await db
     .from("profiles")
-    .select("home_state")
+    .select("home_state, preferred_ai_provider")
     .eq("id", userId)
     .maybeSingle();
   const profileHomeState = normalizeStateCode(homeStateRow?.home_state ?? null);
+  const preferredAiProvider = parseAiProvider(homeStateRow?.preferred_ai_provider);
 
-  if (!resolvedCaseFileId) {
-    const { data: existing } = await db
-      .from("case_files")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("status", "open")
-      .order("opened_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (existing) {
-      resolvedCaseFileId = existing.id;
-    } else {
-      const newFileData: Record<string, unknown> = { user_id: userId };
-      if (fileType === "quick_consult") {
-        newFileData.file_type = "quick_consult";
-        newFileData.archive_at = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-      }
-      if (profileHomeState && profileHomeState !== "OTHER") {
-        newFileData.jurisdiction = stateName(profileHomeState);
-      } else if (profileHomeState === "OTHER") {
-        newFileData.jurisdiction = "Outside the United States";
-      }
-      const { data: created, error } = await db
-        .from("case_files")
-        .insert(newFileData)
-        .select("id")
-        .single();
-      if (error || !created) {
-        return NextResponse.json({ error: "Failed to create case file" }, { status: 500 });
-      }
-      resolvedCaseFileId = created.id;
-    }
+  // Which matter this turn belongs to — the one place that decides. An explicit
+  // caseFileId is verified and used; no caseFileId opens a new matter. It never
+  // falls back to the client's most recent file. See lib/matter-routing.ts.
+  const routed = await resolveMatter(db, userId, {
+    caseFileId: resolvedCaseFileId || undefined,
+    fileType,
+    homeState: homeStateRow?.home_state ?? null,
+  });
+  if (!routed.ok) {
+    return NextResponse.json({ error: routed.error }, { status: routed.status });
   }
+  resolvedCaseFileId = routed.caseFileId;
 
   // Apply counsel intake from the pre-chat modal when the file has not recorded it yet.
   if (counselContext && resolvedCaseFileId) {
@@ -174,14 +162,6 @@ export async function POST(req: NextRequest) {
         );
       }
     }
-  }
-
-  // Persist the client's chosen chat mode so reopening the file resumes it.
-  // Fire-and-forget — a failed write never blocks the reply, and the mode used
-  // for THIS turn comes from the request body regardless.
-  if (mode === "freestyle" || mode === "intake") {
-    db.from("case_files").update({ chat_mode: mode }).eq("id", resolvedCaseFileId)
-      .then(undefined, (err) => console.error("[chat-acp] chat_mode persist error:", err));
   }
 
   // Load current file state + attachments for context injection
@@ -245,7 +225,7 @@ export async function POST(req: NextRequest) {
   // (after the stream) needs its id; the stream's finally awaits this promise
   // before the response closes, so persistence is still guaranteed.
   const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
-  const userMessagePromise: Promise<string | null> = lastUserMsg
+  const userMessagePromise: Promise<(MessageCursor & { id: string }) | null> = lastUserMsg
     ? (async () => {
         try {
           const { data } = await db
@@ -258,9 +238,9 @@ export async function POST(req: NextRequest) {
                 ? `[${pendingAttachment.fileName}]\n${lastUserMsg.content}`
                 : lastUserMsg.content,
             })
-            .select("id")
+            .select("id, created_at")
             .single();
-          return data?.id ?? null;
+          return data ? { id: data.id, createdAt: data.created_at } : null;
         } catch (err) {
           console.error("[chat-acp] failed to persist user message:", err);
           return null;
@@ -288,21 +268,26 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const chatMode = mode === "freestyle" ? "freestyle" : "intake";
   const acpSystemPrompt = buildAcpSystemPrompt(detectedAreas, acpPersona, {
     homeState: profileHomeState,
     jurisdiction: effectiveJurisdiction,
-    mode: chatMode,
   });
 
-  // Orchestrator tools are available only in freestyle. The system blocks and the
-  // agentic loop below are shared by both modes: with no tools, the loop runs
-  // exactly once and behaves like the previous single-stream path.
-  const useTools = mode === "freestyle";
+  // One assistant: calculators, record_fact, and document planning are always
+  // available. That means this route always needs a tool-capable provider
+  // (Anthropic today). A posted `mode` from older clients is ignored.
+  const requiresAnthropicCapabilities = true;
+  const resolved = resolveModel({
+    tier: "workhorse",
+    preference: preferredAiProvider,
+    requiresAnthropicCapabilities,
+    xaiConfigured: isXaiConfigured(),
+  });
+  const useXai = resolved.provider === "xai";
   const systemBlocks = [
     { type: "text" as const, text: acpSystemPrompt, cache_control: { type: "ephemeral" as const } },
     ...(fileContext ? [{ type: "text" as const, text: fileContext }] : []),
-    ...(useTools ? [{ type: "text" as const, text: ORCHESTRATOR_TOOLS_GUIDANCE }] : []),
+    { type: "text" as const, text: ORCHESTRATOR_TOOLS_GUIDANCE },
   ];
 
   const encoder = new TextEncoder();
@@ -312,7 +297,7 @@ export async function POST(req: NextRequest) {
   // queues it behind any still-unfinished turn for this case; waiting on the
   // immediate predecessor is transitive (that predecessor waits on ITS
   // predecessor before it starts), so turns execute strictly in order.
-  const job = createAcpJob(resolvedCaseFileId, userId);
+  const job = await createDurableAcpJob(db, resolvedCaseFileId, userId);
   const waitForPrev = job.predecessorId ? getAcpJob(job.predecessorId) : null;
   // Never wait forever on a predecessor — if it somehow never finishes (crash
   // before finish, swept as stale), proceed without its reply.
@@ -328,16 +313,70 @@ export async function POST(req: NextRequest) {
       let runError: string | null = null;
       // The last model turn's final message — used below for truncation/usage.
       let finalMsg: Anthropic.Message | null = null;
+      let assistantMessageId: string | null = null;
+      let xaiFinishReason: string | null = null;
+      let xaiOutputTokens = 0;
+      // #87 declared loopMessages here; it is an executeTurn parameter now, so
+      // the local shadow would break the detached-execution contract.
       const toolDb = createServiceClient();
 
       try {
-        for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
+        if (useXai) {
+          const xaiMessages = [
+            { role: "system" as const, content: joinSystemBlocks(systemBlocks) },
+            ...messages
+              .filter((m) => m.role === "user" || m.role === "assistant")
+              .map((m) => ({
+                role: m.role as "user" | "assistant",
+                content: m.content,
+              })),
+          ];
+          const xaiResult = await streamXaiChat({
+            model: resolved.modelId,
+            messages: xaiMessages,
+            maxTokens: maxOutputTokensFor(resolved.modelId),
+            onTextDelta: (delta) => {
+              fullResponse += delta;
+              // #87 wrote straight to the response controller. Execution is
+              // detached from the HTTP response now, so deltas fan out through
+              // the job's listeners — otherwise an xAI turn would stream
+              // nowhere once the browser disconnects.
+              emitAcpChunk(job, delta);
+            },
+          });
+          xaiFinishReason = xaiResult.finishReason;
+          xaiOutputTokens = xaiResult.usage?.completion_tokens ?? 0;
+          if (xaiResult.usage) {
+            await recordAiUsage(db, {
+              userId,
+              actorId: userId,
+              caseFileId: resolvedCaseFileId,
+              feature: "chat_acp",
+              model: xaiResult.model || resolved.modelId,
+              inputTokens: xaiResult.usage.prompt_tokens,
+              outputTokens: xaiResult.usage.completion_tokens,
+              cacheReadTokens: xaiResult.usage.prompt_tokens_details?.cached_tokens ?? 0,
+              metadata: {
+                ...limitSignalMetadata({
+                  model: xaiResult.model || resolved.modelId,
+                  outputTokens: xaiResult.usage.completion_tokens,
+                  priorLimit: 4000,
+                  stopReason: xaiResult.finishReason,
+                }),
+                provider: "xai",
+                resolve_reason: resolved.reason,
+                preferred_ai_provider: preferredAiProvider,
+                x_zero_data_retention: xaiResult.zeroDataRetention,
+              },
+            });
+          }
+        } else for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
           const turn = anthropic.messages.stream({
-            model: "claude-sonnet-4-6",
-            max_tokens: maxOutputTokensFor("claude-sonnet-4-6"),
+            model: resolved.modelId,
+            max_tokens: maxOutputTokensFor(resolved.modelId),
             system: systemBlocks,
             messages: loopMessages,
-            ...(useTools ? { tools: [...ORCHESTRATOR_TOOLS, ...WEB_TOOLS] } : {}),
+            ...( { tools: [...ORCHESTRATOR_TOOLS, ...WEB_TOOLS] } ),
           });
 
           for await (const event of turn) {
@@ -367,6 +406,9 @@ export async function POST(req: NextRequest) {
                   priorLimit: 4000,
                   stopReason: finalMsg.stop_reason,
                 }),
+                provider: "anthropic",
+                resolve_reason: resolved.reason,
+                preferred_ai_provider: preferredAiProvider,
                 ...(serverToolUse
                   ? {
                       server_tools: true,
@@ -437,48 +479,86 @@ export async function POST(req: NextRequest) {
         // off time-to-first-token; await it here so its id is available for the
         // screenshot path below and persistence is flushed before the response
         // closes.
-        const userMessageId = await userMessagePromise;
+        const userMessageCursor = await userMessagePromise;
+        const userMessageId = userMessageCursor?.id ?? null;
 
         if (fullResponse) {
-          await db.from("intake_messages").insert({
+          const { data: assistantMessage } = await db.from("intake_messages").insert({
             case_file_id: resolvedCaseFileId,
             user_id: userId,
             role: "assistant",
             content: fullResponse,
-          });
+          }).select("id").single();
+          assistantMessageId = assistantMessage?.id ?? null;
 
-          // Freestyle split-screen: land any ---DRAFT--- blocks in the drafts
-          // panel. A matching title updates that draft in place; a new title
-          // creates a fresh one. Only in freestyle — guided intake keeps drafts
-          // inline in the transcript.
-          if (mode === "freestyle") {
-            for (const draft of parseDrafts(fullResponse)) {
+          // Land planned documents and ---DRAFT--- blocks in the drafts panel.
+          // Stable protocol ids update their draft; a title is only a fallback
+          // when it resolves unambiguously.
+          {
+            const plan = parseDocumentPlan(fullResponse);
+            if (plan) {
               try {
-                const { data: existing } = await db
-                  .from("client_workspace_drafts")
-                  .select("id")
-                  .eq("case_file_id", resolvedCaseFileId)
-                  .eq("user_id", userId)
-                  .eq("title", draft.title)
-                  .order("updated_at", { ascending: false })
-                  .limit(1)
-                  .maybeSingle();
-                if (existing?.id) {
-                  await db.from("client_workspace_drafts")
-                    .update({ content: draft.content, source: "assistant", updated_at: new Date().toISOString() })
-                    .eq("id", existing.id);
-                } else {
-                  await db.from("client_workspace_drafts").insert({
-                    case_file_id: resolvedCaseFileId,
-                    user_id: userId,
-                    title: draft.title,
-                    content: draft.content,
-                    source: "assistant",
-                  });
+                const jobIds = await dispatchDocumentPlan(toolDb, { caseFileId: resolvedCaseFileId, userId, plan });
+                // Kick now, in a separate invocation when possible. The archival
+                // cron is retention-only and must not be what fills this shell.
+                if (jobIds.length) {
+                  after(() => { kickDocumentGenerationJobs(toolDb, jobIds); });
                 }
               } catch (err) {
-                console.error("[chat-acp] persist draft error:", err);
+                console.error("[chat-acp] document-plan dispatch error:", err);
               }
+            }
+            // Legacy inline drafts remain supported, but planned documents are
+            // only enqueued here and are generated by the durable worker.
+            //
+            // #108's retry harness drives the loop; the callbacks keep #105's
+            // semantics. Using #108's own callbacks would have matched on title
+            // alone and updated unconditionally, dropping the two guards #105
+            // exists for: never touch a draft the client has edited
+            // (source <> 'assistant') and never touch one already promoted to a
+            // document.
+            const completedDrafts = parseDrafts(fullResponse);
+            job.draftPersistence = await persistDrafts(completedDrafts, {
+              find: async (draft) => {
+                let query = db
+                  .from("client_workspace_drafts")
+                  .select("id, source, content, promoted_document_id, title")
+                  .eq("case_file_id", resolvedCaseFileId)
+                  .eq("user_id", userId);
+                query = draft.draftId ? query.eq("id", draft.draftId) : query.eq("title", draft.title);
+                const { data: matches, error } = await query
+                  .order("updated_at", { ascending: false })
+                  .limit(draft.draftId ? 1 : 2);
+                if (error) return { id: null, error };
+                const action = planAssistantDraftPersistence(draft, matches ?? []);
+                // A null id routes the harness to insert(), which is what the
+                // planner means by "do not overwrite this one".
+                return { id: action.kind === "update" ? action.id : null, error: null };
+              },
+              update: async (id, draft) => {
+                const { error } = await db.from("client_workspace_drafts")
+                  .update({ content: draft.content, source: "assistant", updated_at: new Date().toISOString() })
+                  .eq("id", id)
+                  .eq("source", "assistant")
+                  .is("promoted_document_id", null);
+                return { error };
+              },
+              insert: async (draft) => {
+                const action = planAssistantDraftPersistence(draft, []);
+                const { data, error } = await db.from("client_workspace_drafts").insert({
+                  case_file_id: resolvedCaseFileId,
+                  user_id: userId,
+                  title: action.kind === "insert" ? action.title : draft.title,
+                  content: draft.content,
+                  source: "assistant",
+                  revision_of_draft_id: action.kind === "insert" ? action.revisionOfDraftId ?? null : null,
+                }).select("id").single();
+                return { id: data?.id ?? null, error };
+              },
+            });
+            if (job.draftPersistence.failed.length > 0) {
+              runError = "One or more generated drafts still need to be saved.";
+              console.error("[chat-acp] draft persistence exhausted retries", job.draftPersistence.failed);
             }
           }
 
@@ -508,14 +588,8 @@ export async function POST(req: NextRequest) {
               // doesn't reprocess these same messages and produce near-duplicate
               // facts (upsertFacts only dedupes exact matches). Incomplete blocks
               // are left un-watermarked so the extractor still catches them.
-              if (hasLivingFile && fullResponse.includes("---END FILE---")) {
-                await db
-                  .from("case_files")
-                  .update({ last_file_synced_at: new Date().toISOString() })
-                  .eq("id", resolvedCaseFileId)
-                  .then(undefined, (err) =>
-                    console.error("[chat-acp] inline watermark advance error:", err)
-                  );
+              if (hasLivingFile && fullResponse.includes("---END FILE---") && userMessageCursor) {
+                await markLivingFileSyncedThrough(db, resolvedCaseFileId, userMessageCursor);
               }
 
               // Kick off grounded web lookups for any newly-detected forms that
@@ -606,17 +680,21 @@ export async function POST(req: NextRequest) {
         // the file stays current even when this turn emitted no inline block.
         // Fire-and-forget, same lifetime as the other post-stream background
         // tasks above.
-        syncLivingFile(anthropic, db, resolvedCaseFileId, userId).catch(
+        syncLivingFile(anthropic, db, resolvedCaseFileId, userId,
+          userMessageCursor ? { through: userMessageCursor } : {}).catch(
           (err) => console.error("[chat-acp] living file sync error:", err)
         );
 
-        if (finalMsg?.stop_reason === "max_tokens") {
+        const truncated =
+          finalMsg?.stop_reason === "max_tokens" ||
+          xaiFinishReason === "length";
+        if (truncated) {
           logTruncation({
             endpoint: "chat-acp",
             feature: "chat_acp",
             userId,
             caseFileId: resolvedCaseFileId,
-            outputTokens: finalMsg.usage.output_tokens,
+            outputTokens: finalMsg?.usage.output_tokens ?? xaiOutputTokens,
           });
         }
         } catch (persistErr) {
@@ -626,10 +704,11 @@ export async function POST(req: NextRequest) {
           console.error("[chat-acp] post-processing error:", persistErr);
           runError = runError ?? "Post-processing failed.";
         } finally {
-          finishAcpJob(job, {
+          await finishDurableAcpJob(db, job, {
             finalText: fullResponse,
             truncated: finalMsg?.stop_reason === "max_tokens",
             error: runError,
+            assistantMessageId,
           });
         }
       }
@@ -662,6 +741,9 @@ export async function POST(req: NextRequest) {
       emitAcpChunk(job, "\x02TOOL:previous_turn:done\x02");
     }
 
+    await db.from("chat_acp_jobs").update({ state: "running", updated_at: new Date().toISOString() })
+      .eq("id", job.id).eq("user_id", userId);
+
     // The client's history can't contain replies it never received — splice
     // every finished predecessor reply that's missing from the history in
     // ahead of the new user message (oldest first) so the model sees a
@@ -690,7 +772,7 @@ export async function POST(req: NextRequest) {
   void runTurn().catch((err) => {
     console.error("[chat-acp] turn failed to start:", err);
     if (!job.done) {
-      finishAcpJob(job, { finalText: "", truncated: false, error: "The turn failed to start." });
+      void finishDurableAcpJob(db, job, { finalText: "", truncated: false, error: "The turn failed to start." });
     }
   });
 

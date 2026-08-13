@@ -38,7 +38,7 @@ export async function GET(
 
   const { data: doc, error: docErr } = await db
     .from("documents")
-    .select("id, user_id, title, doc_type, status, content_json")
+    .select("id, user_id, title, doc_type, status, instrument_key, content_json")
     .eq("id", id)
     .single();
 
@@ -60,7 +60,9 @@ export async function GET(
   }
 
   const planKey =
-    typeof (doc.content_json as Record<string, unknown> | null)?.plan_key === "string"
+    typeof doc.instrument_key === "string" && doc.instrument_key.trim()
+      ? doc.instrument_key.trim()
+      : typeof (doc.content_json as Record<string, unknown> | null)?.plan_key === "string"
       ? ((doc.content_json as Record<string, unknown>).plan_key as string)
       : null;
 

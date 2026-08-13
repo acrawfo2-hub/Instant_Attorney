@@ -10,7 +10,7 @@ import {
   looksLikeDebtMatter,
 } from "./debt-instruments.ts";
 import { isKnownDebtStatuteKey } from "./debt-statutes.ts";
-import { WIZARD_LABELS } from "./types.ts";
+import { INSTRUMENT_LABELS } from "./types.ts";
 
 test("registry is non-empty with complete core fields", () => {
   assert.ok(DEBT_INSTRUMENTS.length >= 1);
@@ -26,8 +26,8 @@ test("instrument keys are unique", () => {
   assert.equal(new Set(keys).size, keys.length);
 });
 
-test("every instrument routes through a real wizard type (no new DocType/enum)", () => {
-  for (const i of DEBT_INSTRUMENTS) assert.ok(i.wizard_type in WIZARD_LABELS, `${i.key} ${i.wizard_type}`);
+test("every instrument routes through a real instrument type (no new DocType/enum)", () => {
+  for (const i of DEBT_INSTRUMENTS) assert.ok(i.engine in INSTRUMENT_LABELS, `${i.key} ${i.engine}`);
 });
 
 test("every referenced statute key resolves", () => {

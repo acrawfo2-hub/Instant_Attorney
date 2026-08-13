@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { applyPlaceholderAnswers, extractPlaceholders, placeholderFields } from "@/lib/wizard-parsing";
-import { syncDraftGapsToLivingFile } from "@/lib/file-parser";
+import { applyPlaceholderAnswers, extractPlaceholders, placeholderFields } from "@/lib/placeholder-parsing";
+import { placeholderFillLifecycle, saveDocumentRevision } from "@/lib/document-persistence";
 import { BYPASS_USER_ID } from "@/lib/types";
+import { startDocumentReview } from "@/lib/attorney-review";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
+
+/** What `apply_document_placeholder_revision` returns for one applied fill. */
+type PlaceholderRevisionState = {
+  revision_number: number | null;
+  status: string | null;
+  review_state: string | null;
+  requires_review: boolean | null;
+};
 
 // Fill [[placeholders]] in a document's draft with client-supplied values.
 // Deterministic text substitution only — no model call, and no character of the
@@ -40,7 +49,7 @@ export async function POST(
 
   const { data: doc, error: docErr } = await db
     .from("documents")
-    .select("id, user_id, case_file_id, draft_text, status")
+    .select("id, user_id, case_file_id, parent_document_id, draft_text, status, revision_number, approved_revision, review_status")
     .eq("id", id)
     .single();
 
@@ -66,20 +75,65 @@ export async function POST(
     return NextResponse.json({ filled: 0, remaining: extractPlaceholders(text).length, draft_text: doc.draft_text });
   }
 
-  // Persist via the service client. The fill is authorized above, and we touch
-  // only draft_text — status and lifecycle are deliberately left unchanged so a
-  // completed/approved document is not knocked back a step by filling a blank.
   const writeDb = BYPASS_AUTH ? db : createServiceClient();
-  const { error: updErr } = await writeDb
-    .from("documents")
-    .update({ draft_text: text, updated_at: new Date().toISOString() })
-    .eq("id", id);
+  // Load the complete lifecycle context before writing. In particular, review
+  // runs and derived drafts are needed to make this decision against the exact
+  // version the attorney may currently be reading.
+  const primaryId = doc.parent_document_id ?? doc.id;
+  const [{ data: primary }, { data: revised }, { data: activeRun }, { count: revisionCount }] = await Promise.all([
+    writeDb.from("documents").select("id, status, revision_number, approved_revision, review_status").eq("id", primaryId).single(),
+    writeDb.from("documents").select("id, updated_at").eq("parent_document_id", primaryId).eq("doc_type", "second_draft").maybeSingle(),
+    writeDb.from("document_review_runs").select("id, status, source_revision").eq("document_id", primaryId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    // Stage 48 replaced document_revisions' linear revision_number with a
+    // provenance/branching shape, so the old max(revision_number) fallback no
+    // longer exists. The count answers the same question — how many revisions
+    // this document already has — and documents.revision_number remains the
+    // authoritative optimistic-lock counter regardless.
+    writeDb.from("document_revisions").select("id", { count: "exact", head: true }).eq("document_id", primaryId),
+  ]);
+  if (!primary) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  if (updErr) {
-    console.error("[documents/fill-info] update failed:", updErr.message);
-    return NextResponse.json({ error: "Could not save your answers" }, { status: 500 });
+  const lifecycle = placeholderFillLifecycle(primary.status);
+  const expectedRevision = primary.revision_number ?? revisionCount ?? 1;
+
+  // The RPC is this route's document write, so it runs inside the persistence
+  // boundary like every other one. That gets it a current_revision_id, a durable
+  // sync status, and a Living File reconciliation attributed to the revision
+  // this fill produced — none of which it had while it wrote around the
+  // boundary and then synced gaps case-wide on its own.
+  const rpc: { state: PlaceholderRevisionState | null } = { state: null };
+  try {
+    await saveDocumentRevision(writeDb, {
+      caseFileId: doc.case_file_id,
+      userId: doc.user_id,
+      draftText: text,
+      persist: async () => {
+        const { data: applied, error: updErr } = await writeDb.rpc("apply_document_placeholder_revision", {
+          p_document_id: primaryId,
+          p_expected_revision: expectedRevision,
+          p_text: text,
+          p_actor: userId,
+        });
+        if (updErr) throw updErr;
+        rpc.state = (Array.isArray(applied) ? applied[0] : applied) ?? null;
+        return primaryId;
+      },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const conflict = message.includes("revision_conflict");
+    console.error("[documents/fill-info] revision update failed:", message);
+    return NextResponse.json(
+      { error: conflict ? "This document changed while you were answering. Refresh and try again." : "Could not save your answers" },
+      { status: conflict ? 409 : 500 },
+    );
   }
-
+  const revisionState = rpc.state;
+  if (revisionState?.requires_review) {
+    // The RPC stales the old run atomically. This creates the replacement queue
+    // item and is also the attorney notification surfaced by their review list.
+    await startDocumentReview(primaryId, doc.case_file_id);
+  }
   // The Living File must always absorb new key facts as they become available.
   // Each filled blank is a confirmed fact — write it (deduped) so the next draft,
   // review, and any sibling document can use it without re-asking.
@@ -110,20 +164,23 @@ export async function POST(
         await writeDb.from("fact_items").insert(newFacts);
       }
     }
-
-    // Reconcile Living File gaps against the freshly-filled draft: filled blanks
-    // (now confirmed facts) drop off the outstanding list, and any still-unfilled
-    // placeholders remain tracked.
-    await syncDraftGapsToLivingFile(writeDb, doc.case_file_id, doc.user_id, text);
   } catch (e) {
-    // Fact-sync is best-effort: the document was already updated successfully, so
-    // never fail the request over a Living File write.
-    console.error("[documents/fill-info] living-file sync failed:", e);
+    // Best-effort: the document was already updated successfully, so never fail
+    // the request over a fact write. Gap reconciliation already happened inside
+    // the persistence boundary above.
+    console.error("[documents/fill-info] confirmed-fact write failed:", e);
   }
 
   return NextResponse.json({
     filled,
     remaining: extractPlaceholders(text).length,
     draft_text: text,
+    revision: revisionState?.revision_number ?? expectedRevision + 1,
+    status: revisionState?.status ?? (lifecycle === "draft_in_place" ? "draft" : "pending_review"),
+    review_state: revisionState?.review_state ?? (lifecycle === "draft_in_place" ? "not_required" : "queued"),
+    requires_attorney_review: lifecycle !== "draft_in_place",
+    forwarded_for_review: lifecycle !== "draft_in_place",
+    prior_review_stale: Boolean(activeRun && lifecycle !== "draft_in_place"),
+    revised_document_id: revised?.id ?? null,
   });
 }

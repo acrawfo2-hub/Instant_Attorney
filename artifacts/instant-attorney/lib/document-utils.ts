@@ -1,9 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { notifyAttorneyDocumentReady } from "./notify.ts";
-import { WIZARD_LABELS, coerceWizardType } from "./types.ts";
-import type { WizardType, Document, CaseFile, Profile } from "./types";
+import { saveDocumentRevision } from "./document-persistence.ts";
+import type { Document, CaseFile, Profile } from "./types";
 
-export { isValidWizardType } from "./types.ts";
+export { isValidInstrumentType } from "./types.ts";
 
 /**
  * Best-effort: record that document `docId` was just generated/regenerated
@@ -33,26 +33,18 @@ export async function stampFactsSynced(
   }
 }
 
-/** First recommended wizard that maps to a supported WizardType. */
-export function pickFirstValidWizard(wizards: string[] | undefined): WizardType | null {
-  if (!wizards?.length) return null;
-  for (const w of wizards) {
-    const coerced = coerceWizardType(w);
-    if (coerced) return coerced;
-  }
-  return null;
-}
-
 /** Reuse an in-progress or pre-warmed primary draft (never child documents).
- *  When a planKey is given it is the document's stable identity — match on it
+ *  When a planKey is given it is the document's stable identity — match on the
+ *  dedicated column (rather than mutable JSON metadata)
  *  so two documents sharing the general_document engine stay distinct. Without
  *  a planKey (legacy / typed engines) fall back to matching by doc_type. */
 export async function findReusableDocument(
   db: SupabaseClient,
   caseFileId: string,
-  wizardType: string,
+  instrumentType: string,
   userId?: string,
-  planKey?: string
+  planKey?: string,
+  instrumentKey?: string
 ): Promise<{ id: string } | null> {
   let query = db
     .from("documents")
@@ -63,10 +55,12 @@ export async function findReusableDocument(
     .order("updated_at", { ascending: false })
     .limit(1);
 
-  if (planKey) {
+  if (instrumentKey) {
+    query = query.eq("instrument_key", instrumentKey);
+  } else if (planKey) {
     query = query.eq("content_json->>plan_key", planKey);
   } else {
-    query = query.eq("doc_type", wizardType);
+    query = query.eq("doc_type", instrumentType);
   }
 
   if (userId) {
@@ -85,9 +79,10 @@ export async function findReusableDocument(
 export async function findPrimaryDocument(
   db: SupabaseClient,
   caseFileId: string,
-  wizardType: string,
+  instrumentType: string,
   userId?: string,
-  planKey?: string
+  planKey?: string,
+  instrumentKey?: string
 ): Promise<{ id: string; status: string | null; content_json: unknown; draft_text: string | null } | null> {
   let query = db
     .from("documents")
@@ -97,10 +92,12 @@ export async function findPrimaryDocument(
     .order("updated_at", { ascending: false })
     .limit(1);
 
-  if (planKey) {
+  if (instrumentKey) {
+    query = query.eq("instrument_key", instrumentKey);
+  } else if (planKey) {
     query = query.eq("content_json->>plan_key", planKey);
   } else {
-    query = query.eq("doc_type", wizardType);
+    query = query.eq("doc_type", instrumentType);
   }
 
   if (userId) {
@@ -109,96 +106,6 @@ export async function findPrimaryDocument(
 
   const { data } = await query.maybeSingle();
   return data ?? null;
-}
-
-/** Result of resolving which document a fresh wizard generation should write to. */
-export type WizardDocumentTarget =
-  | {
-      action: "update";
-      documentId: string;
-      existing: { status: string | null; content_json: unknown };
-    }
-  | { action: "insert" }
-  | {
-      action: "already_finalized";
-      document: { id: string; status: string | null; content_json: unknown; draft_text: string | null };
-    };
-
-/**
- * Decide which document a fresh wizard draft should land on, enforcing the
- * selection precedence the wizard route relies on:
- *   1. a caller-supplied documentId — but ONLY if it belongs to this caller
- *      (same user_id + case_file_id), else it's dropped to prevent IDOR;
- *   2. otherwise, a reusable in-progress primary draft for this case + type;
- *   3. otherwise, the case's latest primary document of this type in ANY status:
- *      - if it's still editable (draft / changes_requested / pre_warmed / null),
- *        update it in place (never insert a duplicate primary);
- *      - if it's already finalized / in review, neither insert nor overwrite —
- *        signal "already_finalized" so the caller returns the existing document;
- *   4. otherwise, insert a brand-new document.
- *
- * Note: a reusable draft is only looked up when NO documentId was supplied — a
- * supplied-but-foreign id is dropped straight to the primary-document fallback,
- * matching the route's original control flow exactly. `db` must be the same
- * client the route uses for these reads/writes (the service client).
- */
-export async function resolveWizardDocumentTarget(
-  db: SupabaseClient,
-  params: {
-    caseFileId: string;
-    wizardType: string;
-    userId: string;
-    suppliedDocumentId?: string;
-    planKey?: string;
-  }
-): Promise<WizardDocumentTarget> {
-  const { caseFileId, wizardType, userId, suppliedDocumentId, planKey } = params;
-  let savedDocId: string | undefined = suppliedDocumentId;
-
-  if (!savedDocId) {
-    const reusable = await findReusableDocument(db, caseFileId, wizardType, userId, planKey);
-    savedDocId = reusable?.id;
-  }
-
-  // Ownership check. `db` (service client) bypasses RLS, so any candidate id —
-  // including a caller-supplied one — must be scoped to this caller. A foreign or
-  // stale id returns nothing and is dropped, falling through to the fallback.
-  let existingDoc: { status: string | null; content_json: unknown } | null = null;
-  if (savedDocId) {
-    const { data } = await db
-      .from("documents")
-      .select("status, content_json")
-      .eq("id", savedDocId)
-      .eq("user_id", userId)
-      .eq("case_file_id", caseFileId)
-      .maybeSingle();
-    existingDoc = (data as { status: string | null; content_json: unknown } | null) ?? null;
-    if (!existingDoc) savedDocId = undefined;
-  }
-
-  if (!savedDocId) {
-    const primary = await findPrimaryDocument(db, caseFileId, wizardType, userId, planKey);
-    if (primary) {
-      const isEditable =
-        primary.status === "draft" ||
-        primary.status === "changes_requested" ||
-        primary.status === "pre_warmed" ||
-        primary.status == null;
-      if (isEditable) {
-        return {
-          action: "update",
-          documentId: primary.id,
-          existing: { status: primary.status, content_json: primary.content_json },
-        };
-      }
-      return { action: "already_finalized", document: primary };
-    }
-  }
-
-  if (savedDocId && existingDoc) {
-    return { action: "update", documentId: savedDocId, existing: existingDoc };
-  }
-  return { action: "insert" };
 }
 
 export async function getChildDocuments(
@@ -219,7 +126,9 @@ export function getCriticalReviewChild(children: Document[]): Document | null {
 }
 
 export function getSecondDraftChild(children: Document[]): Document | null {
-  return children.find((d) => d.doc_type === "second_draft") ?? null;
+  return children
+    .filter((d) => d.doc_type === "second_draft")
+    .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at))[0] ?? null;
 }
 
 /** Replace any existing critical-review child with a new standalone document row. */
@@ -263,7 +172,15 @@ export async function upsertCriticalReviewChild(
   return data as Document;
 }
 
-/** Replace any existing second-draft child with a new standalone document row. */
+/**
+ * Replace any existing second-draft child with a new standalone document row.
+ *
+ * This owns the `saveDocumentRevision` call rather than leaving it to callers:
+ * the second draft is document text, so it must be stamped with a revision and
+ * synchronized to the Living File, and a helper that writes the text but leaves
+ * the boundary to whoever calls it is exactly the split that let earlier writes
+ * escape it. Both callers get the stamp for free.
+ */
 export async function upsertSecondDraftChild(
   db: SupabaseClient,
   parent: Document,
@@ -272,7 +189,7 @@ export async function upsertSecondDraftChild(
   // content_json (never rendered into the client-facing document) so the review
   // page can show it alongside the revised draft.
   changes?: string | null
-): Promise<Document | null> {
+): Promise<{ document: Document; syncPending: boolean } | null> {
   await db
     .from("documents")
     .delete()
@@ -299,12 +216,23 @@ export async function upsertSecondDraftChild(
     return null;
   }
 
+  const document = data as Document;
+
   await db.from("documents").update({
     improved_draft_text: draftText,
     updated_at: new Date().toISOString(),
   }).eq("id", parent.id);
 
-  return data as Document;
+  // The row already exists, so `persist` is a pass-through: the boundary is
+  // here for the revision id and the Living File sync, not for the insert.
+  const { syncPending } = await saveDocumentRevision(db, {
+    caseFileId: parent.case_file_id,
+    userId: parent.user_id,
+    draftText,
+    persist: async () => document.id,
+  });
+
+  return { document, syncPending };
 }
 
 /** Mark a primary draft submitted for attorney review and trigger downstream notifications. */
@@ -315,7 +243,7 @@ export async function finalizeDocumentSubmission(
 ): Promise<Document | null> {
   // Attorney-user documents never enter Andrew Crawford's review queue — an
   // attorney-user is the reviewing attorney for their own client's matter, so
-  // there is no one to submit to. Belt-and-suspenders: the wizard UI never
+  // there is no one to submit to. Belt-and-suspenders: the client UI never
   // calls this for attorney-user accounts, but reject here too in case
   // something calls this path directly.
   const { data: profile } = await db
@@ -375,6 +303,36 @@ export async function finalizeDocumentSubmission(
 
   if (error || !doc) return null;
 
+  // Stage 48 pins every QA record to an immutable revision, and its
+  // pin_qa_to_revision trigger raises when a document has none. The migration
+  // backfills a client_submitted revision for documents that existed when it
+  // ran, but nothing created one afterwards — so a document submitted after the
+  // migration would have had its review run rejected at insert. Record the
+  // submitted baseline here, on the one path every submission goes through.
+  //
+  // Guarded so a resubmission does not stack duplicate baselines, and
+  // best-effort: a failure here must not block the submission itself.
+  const { data: baseline } = await db
+    .from("document_revisions")
+    .select("id")
+    .eq("document_id", docId)
+    .eq("source_action", "client_submitted")
+    .limit(1)
+    .maybeSingle();
+  if (!baseline) {
+    const { error: revisionError } = await db.from("document_revisions").insert({
+      document_id: docId,
+      content: (doc as Document).draft_text ?? "",
+      title: (doc as Document).title,
+      author_type: "client",
+      source_action: "client_submitted",
+      summary: "Client-submitted original",
+    });
+    if (revisionError) {
+      console.error("[document-utils] baseline revision error:", revisionError.message);
+    }
+  }
+
   notifyAttorneyDocumentReady(
     doc as Document,
     doc.case_files as CaseFile,
@@ -390,4 +348,3 @@ export async function finalizeDocumentSubmission(
 
   return doc as Document;
 }
-

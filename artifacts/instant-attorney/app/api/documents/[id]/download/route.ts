@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { generateDocxFromText, docxContentDisposition, isAttorneyApproved } from "@/lib/doc-generator";
+import { generateDocxFromText, docxContentDisposition, isAttorneyApproved, profileForDocumentType } from "@/lib/doc-generator";
 import { recordDocumentDelivery } from "@/lib/document-delivery";
-import { BYPASS_USER_ID } from "@/lib/types";
+import { ATTORNEY_ORIGINATED, BYPASS_USER_ID } from "@/lib/types";
 import type { CaseFile } from "@/lib/types";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
@@ -44,6 +44,48 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // The attorney's working copy is a second_draft CHILD of the submitted
+  // document, and it is privileged work product until it is approved. The
+  // review editor autosaves into it on every pause and on unload, so while the
+  // attorney is still working, its text is whatever the last keystroke or model
+  // edit left behind — a half-applied instruction, a clause under
+  // consideration, a version that would have been reverted.
+  //
+  // The client owns the parent, so ownership alone let them fetch this child.
+  // Approval is what makes it theirs to read.
+  if (
+    doc.parent_document_id &&
+    doc.doc_type === "second_draft" &&
+    !profile?.is_attorney &&
+    !isAttorneyApproved(doc.status)
+  ) {
+    return NextResponse.json(
+      { error: "This revision is still with the attorney and has not been approved yet." },
+      { status: 409 }
+    );
+  }
+
+  // Same rule, other origin: a document the ATTORNEY started from the client's
+  // file. The row is owned by the client, so the ownership check above passes —
+  // but the client never asked for it and has not been shown it. It is the
+  // attorney's work until they approve it.
+  if (
+    (doc.content_json as Record<string, unknown> | null)?.source === ATTORNEY_ORIGINATED &&
+    !profile?.is_attorney &&
+    !isAttorneyApproved(doc.status)
+  ) {
+    return NextResponse.json(
+      { error: "This draft is still with the attorney and has not been approved yet." },
+      { status: 409 }
+    );
+  }
+  if ((doc.content_json as Record<string, unknown> | null)?.generation_incomplete === true) {
+    return NextResponse.json(
+      { error: "This generation is incomplete. Regenerate or have an attorney repair and accept it before downloading." },
+      { status: 409 }
+    );
+  }
+
   // Every renderable doc type keeps its text in draft_text (the critical-review
   // and second-draft children do too); fall back to the legacy columns just in
   // case an older row only populated those.
@@ -72,7 +114,7 @@ export async function GET(
     // drops the watermark once an attorney has approved the document (AI
     // Philosophy §4.2, Terms §7). A child (critical_review/second_draft) carries
     // its own status, set to "approved" alongside its parent on approval.
-    buffer = await generateDocxFromText(doc.title, text, (caseFile as CaseFile) ?? null, doc.status, isAttorneyUserDoc);
+    buffer = await generateDocxFromText(doc.title, text, profileForDocumentType(doc.doc_type), (caseFile as CaseFile) ?? null, doc.status, isAttorneyUserDoc);
   } catch (err) {
     console.error("[documents/download] docx generation error:", err);
     return NextResponse.json({ error: "Could not build the document file" }, { status: 500 });

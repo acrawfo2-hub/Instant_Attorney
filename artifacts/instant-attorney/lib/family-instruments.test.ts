@@ -10,7 +10,7 @@ import {
   looksLikeFamilyMatter,
 } from "./family-instruments.ts";
 import { isKnownFamilyStatuteKey } from "./family-statutes.ts";
-import { WIZARD_LABELS } from "./types.ts";
+import { INSTRUMENT_LABELS } from "./types.ts";
 
 test("registry is non-empty with complete core fields", () => {
   assert.ok(FAMILY_INSTRUMENTS.length >= 1);
@@ -26,9 +26,9 @@ test("instrument keys are unique", () => {
   assert.equal(new Set(keys).size, keys.length);
 });
 
-test("every instrument routes through a real wizard type (no new DocType/enum)", () => {
+test("every instrument routes through a real instrument type (no new DocType/enum)", () => {
   for (const i of FAMILY_INSTRUMENTS) {
-    assert.ok(i.wizard_type in WIZARD_LABELS, `${i.key} wizard_type ${i.wizard_type}`);
+    assert.ok(i.engine in INSTRUMENT_LABELS, `${i.key} engine ${i.engine}`);
   }
 });
 

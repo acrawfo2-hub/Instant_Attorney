@@ -1,13 +1,49 @@
-// Parsing helpers for the freestyle side-panel draft protocol. The associate
-// wraps standalone deliverables in ---DRAFT: <title>--- ... ---END DRAFT--- blocks
-// (see ATTORNEY_FREESTYLE_HEAD in prompts.ts). The chat route persists them to
-// attorney_workspace_drafts; the UI strips them from the message body and shows
-// a chip instead, so the document lives in the editable right-hand panel rather
-// than scrolling away in chat.
+// Parsing helpers for the chat drafts-panel protocol. The assistant wraps
+// standalone deliverables in ---DRAFT: <title>--- ... ---END DRAFT--- blocks.
+// The chat route persists them to `client_workspace_drafts`; the UI strips them
+// from the message body and shows a chip instead, so the document lives in the
+// editable right-hand panel rather than scrolling away in chat.
 
 export interface ParsedDraft {
   title: string;
   content: string;
+  /** Stable workspace identity, when the draft protocol supplied one. */
+  draftId?: string;
+}
+
+export interface ExistingWorkspaceDraft {
+  id: string;
+  source: string;
+  content: string;
+  promoted_document_id: string | null;
+  title?: string;
+}
+
+export type AssistantDraftAction =
+  | { kind: "update"; id: string }
+  | { kind: "insert"; title: string; revisionOfDraftId?: string };
+
+/**
+ * Decide whether assistant output can safely replace an existing workspace row.
+ * Title is only a legacy fallback: it is usable when it identifies exactly one
+ * untouched assistant draft. Ambiguous titles always create another document.
+ */
+export function planAssistantDraftPersistence(
+  draft: ParsedDraft,
+  matches: ExistingWorkspaceDraft[],
+): AssistantDraftAction {
+  const exact = draft.draftId ? matches.find((row) => row.id === draft.draftId) : undefined;
+  const candidate = exact ?? (!draft.draftId && matches.length === 1 ? matches[0] : undefined);
+
+  if (!candidate) return { kind: "insert", title: draft.title };
+  if (candidate.source === "client" || candidate.promoted_document_id) {
+    return {
+      kind: "insert",
+      title: `${draft.title} (Assistant revision)`,
+      revisionOfDraftId: candidate.id,
+    };
+  }
+  return { kind: "update", id: candidate.id };
 }
 
 // A [[placeholder — descriptor]] the drafter left for a still-unknown value.
@@ -37,14 +73,17 @@ export function findBlanks(text: string): DraftBlank[] {
 // drafts each match their own ---END DRAFT---.
 const DRAFT_BLOCK = /---DRAFT:[ \t]*(.*?)[ \t]*---\r?\n([\s\S]*?)\r?\n?---END DRAFT---/g;
 const DRAFT_OPEN = /---DRAFT:[ \t]*(.*?)[ \t]*---/;
+const DRAFT_ID_SUFFIX = /[ \t]+\[draft-id:[ \t]*([0-9a-f-]{36})\][ \t]*$/i;
 
 /** Pull every completed draft block out of an assistant message. */
 export function parseDrafts(text: string): ParsedDraft[] {
   const drafts: ParsedDraft[] = [];
   for (const m of text.matchAll(DRAFT_BLOCK)) {
-    const title = (m[1] || "").trim() || "Untitled draft";
+    const rawTitle = (m[1] || "").trim();
+    const idMatch = rawTitle.match(DRAFT_ID_SUFFIX);
+    const title = rawTitle.replace(DRAFT_ID_SUFFIX, "").trim() || "Untitled draft";
     const content = (m[2] || "").trim();
-    if (content) drafts.push({ title, content });
+    if (content) drafts.push({ title, content, ...(idMatch ? { draftId: idMatch[1] } : {}) });
   }
   return drafts;
 }

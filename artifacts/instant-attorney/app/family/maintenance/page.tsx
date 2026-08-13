@@ -9,7 +9,7 @@ import { useSearchParams } from "next/navigation";
 // tool. Calls /api/family/maintenance (pure compute, no AI, no token spend).
 // When opened from a file (?caseFileId=), the screen is saved as a confirmed
 // fact, so a decree's maintenance terms seed from it. It never changes which
-// wizards are recommended.
+// instruments are recommended.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const navy = "var(--brand-navy)";

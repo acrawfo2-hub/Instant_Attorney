@@ -10,6 +10,7 @@ import {
 } from "@/lib/dropbox-sign";
 import {
   generateDocxFromText,
+  profileForDocumentType,
   isAttorneyApproved,
 } from "@/lib/doc-generator";
 
@@ -72,6 +73,9 @@ export async function POST(
   if (doc.user_id !== userId) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  if ((doc.content_json as Record<string, unknown> | null)?.generation_incomplete === true) {
+    return NextResponse.json({ error: "An incomplete generation cannot be signed." }, { status: 409 });
+  }
   if (!isAttorneyApproved(doc.status)) {
     return NextResponse.json(
       { error: "Document must be attorney-approved before signing" },
@@ -80,7 +84,9 @@ export async function POST(
   }
 
   const planKey =
-    typeof (doc.content_json as Record<string, unknown> | null)?.plan_key === "string"
+    typeof doc.instrument_key === "string" && doc.instrument_key.trim()
+      ? doc.instrument_key.trim()
+      : typeof (doc.content_json as Record<string, unknown> | null)?.plan_key === "string"
       ? ((doc.content_json as Record<string, unknown>).plan_key as string)
       : null;
 
@@ -197,6 +203,7 @@ export async function POST(
     const buffer = await generateDocxFromText(
       doc.title,
       String(doc.draft_text ?? ""),
+      profileForDocumentType(doc.doc_type),
       caseFile,
       doc.status
     );

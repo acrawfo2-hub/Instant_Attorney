@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { placeholderFields } from "@/lib/wizard-parsing";
+import { placeholderFields } from "@/lib/placeholder-parsing";
 
 // Client-facing "Information needed" panel. Lists the [[blanks]] still open in a
 // document as labeled inputs; saving fills them directly into the document text
@@ -48,7 +48,9 @@ export default function DocumentInfoNeeded({
         return;
       }
       setMessage(
-        data.remaining > 0
+        data.forwarded_for_review
+          ? `Saved as revision ${data.revision} and forwarded to your attorney for review.${data.remaining > 0 ? ` ${data.remaining} item${data.remaining === 1 ? "" : "s"} still open.` : ""}`
+          : data.remaining > 0
           ? `Saved. ${data.filled} item${data.filled === 1 ? "" : "s"} added — ${data.remaining} still open.`
           : `Saved. Everything we needed is now in your document.`
       );

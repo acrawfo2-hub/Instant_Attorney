@@ -5,7 +5,7 @@
 // here is where you are" — so the unknown becomes navigable. It is decoupled and
 // read-only: it derives the stages and a best-effort "current stage" from the
 // matter subtype, the matter text, the Living File facts, and documents on file.
-// It writes nothing and changes no document or wizard.
+// It writes nothing and changes no document and no recommendation.
 //
 // Path detection prefers the structured matter_subtype field (set by the AI when
 // it classifies the intake) over free-text keyword scanning, so a user who says

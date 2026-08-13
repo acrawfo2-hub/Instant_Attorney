@@ -8,9 +8,9 @@ import { normalizeWrapUp } from "@/lib/consult-wrap-up";
 import ClientFileView from "@/components/ClientFileView";
 import AccountMenu from "@/components/AccountMenu";
 import MatterSwitcher from "@/components/MatterSwitcher";
-import { parseRoadmapOverlay } from "@/lib/roadmap-snapshot";
-import type { RoadmapAiOverlay } from "@/lib/roadmap-types";
 import { toMatterSwitcherItem } from "@/lib/matter-switcher";
+import { getConsultAction } from "@/lib/consult-action";
+import { parseClientDestination } from "@/lib/client-destinations";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
@@ -29,7 +29,7 @@ async function getData(caseFileId: string) {
     userId = user.id;
   }
 
-  const [{ data: caseFile }, { data: facts }, { data: documents }, { data: consultRow }, { data: completedConsultRow }, { data: subRow }, { data: requestedRows }, { data: formRows }, { data: attachmentRows }, { data: roadmapSnap }, { data: siblingRows }, { data: profileRow }, { data: draftRows }] = await Promise.all([
+  const [{ data: caseFile }, { data: facts }, { data: documents }, { data: consultRow }, { data: completedConsultRow }, { data: subRow }, { data: requestedRows }, { data: formRows }, { data: attachmentRows }, { data: siblingRows }, { data: profileRow }, { data: draftRows }] = await Promise.all([
     db.from("case_files")
       .select("*")
       .eq("id", caseFileId)
@@ -81,11 +81,6 @@ async function getData(caseFileId: string) {
       .eq("case_file_id", caseFileId)
       .order("created_at", { ascending: true }),
     db
-      .from("roadmap_snapshots")
-      .select("ai_overlay")
-      .eq("case_file_id", caseFileId)
-      .maybeSingle(),
-    db
       .from("case_files")
       .select("id, title, matter_subtype, matter_type, file_type, next_action, updated_at, status")
       .eq("user_id", userId)
@@ -134,9 +129,7 @@ async function getData(caseFileId: string) {
   return {
     caseFile: caseFile as CaseFile,
     facts: (facts ?? []) as FactItem[],
-    // Defensively exclude any legacy "pre_warmed" rows (the feature was retired);
-    // a one-time migration promotes/cleans them, this guards stragglers.
-    documents: allDocs.filter((d) => d.status !== "pre_warmed" && !d.parent_document_id),
+    documents: allDocs.filter((d) => !d.parent_document_id),
     childDocuments: allDocs.filter((d) => !!d.parent_document_id),
     userId,
     consultRequest: (consultRow as ConsultRequest | null) ?? null,
@@ -148,7 +141,6 @@ async function getData(caseFileId: string) {
     requestedAttachments: (requestedRows ?? []) as RequestedAttachment[],
     govForms: (formRows ?? []) as GovFormInstrument[],
     attachments: (attachmentRows ?? []) as Attachment[],
-    roadmapOverlay: parseRoadmapOverlay(roadmapSnap?.ai_overlay) as RoadmapAiOverlay,
     workspaceDrafts: (draftRows ?? []) as ClientWorkspaceDraft[],
     openMatters,
     isAttorneyUser: profileRow?.account_type === "attorney_user",
@@ -157,26 +149,31 @@ async function getData(caseFileId: string) {
 
 export default async function FileDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ view?: string }>;
 }) {
   const { id } = await params;
+  const clientDestination = parseClientDestination((await searchParams).view);
   const hdrs = await headers();
   const isBypass = hdrs.get("x-bypass-auth") === "true" || BYPASS_AUTH;
 
   const result = await getData(id);
   if (!result) notFound();
 
-  const { caseFile, facts, documents, childDocuments, consultRequest, hasConsultSub, completedConsultWrapUp, completedConsultSubmittedAt, requestedAttachments, govForms, attachments, roadmapOverlay, workspaceDrafts, openMatters, isAttorneyUser } = result;
+  const { caseFile, facts, documents, childDocuments, consultRequest, hasConsultSub, completedConsultWrapUp, completedConsultSubmittedAt, requestedAttachments, govForms, attachments, workspaceDrafts, openMatters, isAttorneyUser } = result;
 
-  // The header action now points to the orchestrator rather than a computed
+  // The header action points to the orchestrator rather than a computed
   // next-step path — figuring out (and doing) what's next is a conversation with
-  // the assistant that knows the whole file. computeNextStep/getCaseHeaderCta are
-  // kept in the codebase (still used by the attorney/legacy surfaces).
+  // the assistant that knows the whole file. getCaseHeaderCta computed this link
+  // before that change and nothing picked it up afterwards, so lib/case-cta.ts
+  // has been deleted; computeNextStep is still live on other surfaces.
   const headerCta = {
     href: `/chat?caseFileId=${caseFile.id}&mode=freestyle`,
     label: "Legal chat",
   };
+  const consultAction = getConsultAction(consultRequest, hasConsultSub);
 
   return (
     <div className="lf-shell">
@@ -207,6 +204,11 @@ export default async function FileDetailPage({
               Money &amp; property
             </Link>
           )}
+          {!isAttorneyUser && (
+            <Link href={consultAction.href} className="lf-header-consult-btn">
+              {consultAction.label}
+            </Link>
+          )}
           <Link href={headerCta.href} className="lf-begin-btn">
             {headerCta.label}
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -233,7 +235,7 @@ export default async function FileDetailPage({
           hasConsultSub={hasConsultSub}
           completedConsultWrapUp={completedConsultWrapUp}
           completedConsultSubmittedAt={completedConsultSubmittedAt}
-          roadmapOverlay={roadmapOverlay}
+          clientDestination={clientDestination}
         />
       </main>
     </div>
