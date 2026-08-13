@@ -28,7 +28,10 @@ function unique(items: string[]): string[] {
 
 function actionHref(chatHref: string, ask: string): string {
   const separator = chatHref.includes("?") ? "&" : "?";
-  return `${chatHref}${separator}prompt=${encodeURIComponent(ask)}`;
+  // Chat reads `ask=` (and deliberately does not auto-send). `prompt=` was a
+  // leftover name the composer never looked at, so the cover-sheet buttons
+  // opened a blank box.
+  return `${chatHref}${separator}ask=${encodeURIComponent(ask)}`;
 }
 
 export default function ClientCaseMemo({ caseFile, confirmedFacts, deck, chatHref }: ClientCaseMemoProps) {

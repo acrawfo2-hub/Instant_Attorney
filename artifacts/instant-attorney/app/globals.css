@@ -11062,6 +11062,154 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
 
 /* Tone colors the tile; it never changes the tile's place in the grid. */
 
+.lf-tiles {
+  grid-column: 1 / -1;
+  display: grid;
+  /* Four across, so the eight destinations sit as two even rows rather than
+     a six-and-two remainder that moves the last tiles out of learned places. */
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+@media (max-width: 900px) { .lf-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.lf-tile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  min-height: 58px;
+  border-radius: var(--brand-r-lg);
+  border: 1px solid var(--brand-border);
+  background: var(--brand-white);
+  text-decoration: none;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease, transform 0.12s ease;
+}
+.lf-tile:hover {
+  border-color: var(--brand-navy);
+  box-shadow: 0 6px 18px -10px rgba(12, 25, 41, 0.55);
+  transform: translateY(-2px);
+}
+.lf-tile:focus-visible { outline: 2px solid var(--brand-navy); outline-offset: 2px; }
+.lf-tile-icon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--brand-cream);
+  color: var(--brand-text-md);
+}
+.lf-tile-icon svg { width: 16px; height: 16px; }
+.lf-tile-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.lf-tile-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--brand-text-dk);
+  line-height: 1.2;
+}
+.lf-tile-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--brand-cream-dk);
+  color: var(--brand-text-md);
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.lf-tile-status {
+  font-size: 11.5px;
+  line-height: 1.25;
+  color: var(--brand-text-lt);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+.lf-tile-chev { flex: 0 0 auto; width: 15px; height: 15px; color: var(--brand-text-xlt); }
+.lf-tile-urgent { border-color: #fecaca; background: #fef6f5; }
+.lf-tile-urgent .lf-tile-icon { background: #fee2e2; color: #b91c1c; }
+.lf-tile-urgent .lf-tile-count { background: #fecaca; color: #8b1f16; }
+.lf-tile-urgent .lf-tile-status { color: #a4302a; }
+.lf-tile-attention { border-color: #fde68a; background: #fffdf5; }
+.lf-tile-attention .lf-tile-icon { background: #fef3c7; color: #a16207; }
+.lf-tile-attention .lf-tile-count { background: #fde68a; color: #854d0e; }
+.lf-tile-attention .lf-tile-status { color: #92702a; }
+.lf-tile-calm .lf-tile-icon { background: rgba(46, 125, 91, 0.12); color: #2e7d5b; }
+.lf-tile-calm .lf-tile-status { color: #4a7a63; }
+
+.lf-draft-shortcuts {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 1.1rem 1.25rem;
+  border: 1px solid var(--brand-border);
+  border-radius: var(--brand-r-lg);
+  background: var(--brand-surface);
+}
+.lf-draft-shortcuts-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.lf-draft-shortcuts-head h2 {
+  margin: 0;
+  color: var(--brand-navy);
+  font-family: var(--font-cormorant, Georgia, serif);
+  font-size: 1.35rem;
+}
+.lf-draft-shortcuts-head a,
+.lf-draft-shortcuts-more {
+  color: var(--brand-gold-dk);
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+.lf-draft-shortcuts-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.lf-draft-shortcut {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 8px;
+  text-decoration: none;
+}
+.lf-draft-shortcut:hover { background: var(--brand-cream); }
+.lf-draft-shortcut-title {
+  color: var(--brand-navy);
+  font-size: 0.92rem;
+  font-weight: 650;
+}
+.lf-draft-shortcut-meta {
+  color: var(--brand-text-lt);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+.lf-draft-shortcut-need { color: #a16207; font-weight: 650; }
+.lf-draft-shortcuts-empty {
+  margin: 0;
+  color: var(--brand-text);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+.lf-draft-shortcuts-empty a { color: var(--brand-gold-dk); font-weight: 650; }
+.lf-draft-shortcuts-more { align-self: flex-start; }
+
 /* ── Sticky "Continue legal chat" bar — mobile and desktop ───────────────── */
 /* On mobile it bleeds edge-to-edge; on desktop it's contained within the
    max-width content column and the button is centered at a readable width.  */
@@ -11470,7 +11618,7 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
 .lf-client-memo-secondary a { color: var(--brand-gold-dk); font-size: .82rem; font-weight: 600; }
 .lf-client-detail-back { grid-column: 1 / -1; color: var(--brand-gold-dk); font-size: .84rem; font-weight: 650; }
 .lf-client-detail { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--lf-gap); }
-.lf-client-detail > .lf-card-full, .lf-client-detail > .lf-facts-panel, .lf-client-detail > .lf-documents { grid-column: 1 / -1; }
+.lf-client-detail > .lf-card-full, .lf-client-detail > .lf-facts-panel, .lf-client-detail > .lf-documents, .lf-client-detail > .cdt, .lf-client-detail > .lf-pair { grid-column: 1 / -1; }
 @media (max-width: 700px) {
   .lf-client-memo-grid { grid-template-columns: 1fr; }
   .lf-client-memo-section, .lf-client-memo-section:nth-child(odd), .lf-client-memo-section:nth-last-child(-n+2) { border-right: 0; border-bottom: 1px solid var(--brand-border); }
