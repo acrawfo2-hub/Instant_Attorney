@@ -185,13 +185,21 @@ export async function POST(
     typeof change.before === "string" && change.before.length > 0 &&
     typeof change.after === "string" && baseText.includes(change.before)
   ).map((change, index) => ({ id: `${Date.now()}-${index}`, before: change.before!, after: change.after!, summary: change.summary?.trim() || "Proposed edit" }));
-  if (!changes.length) return NextResponse.json({ error: "No applicable changes were proposed. Try describing the passage more precisely." }, { status: 422 });
+  if (!changes.length) return NextResponse.json({ error: "No change could be matched to the draft. Try naming the passage more precisely." }, { status: 422 });
 
-  // #118 auto-merged a saveDocumentRevision write-through here. Dropped: this
-  // route proposes and never writes, so serviceDb/draftText/childId do not
-  // exist on this path. The document write — and therefore the Living File
-  // sync #118 wants to make durable — happens when the attorney accepts a
-  // change, not when the partner suggests one.
+  // This route still does not write, and that is deliberate — but the reason
+  // changed, so read this before "fixing" it.
+  //
+  // The change set is applied by the review page the moment it arrives, then
+  // autosaved through /api/attorney/documents/[id]/revision, which is the one
+  // attorney write path and already carries saveDocumentRevision: a revision id,
+  // an immutable document_revisions row, and the durable Living File sync. There
+  // is nothing here for a second write to add, and adding one would give the
+  // working copy two writers racing on the same text while the attorney types.
+  //
+  // What is gone is the accept step, not the revision trail. The attorney's undo
+  // is the revision history, and the working copy stays privileged until it is
+  // approved (see work-product.test.ts).
 
   recordAiFromMessage(db, message, {
     userId: parent.user_id,
@@ -212,7 +220,7 @@ export async function POST(
   // #124's persisted transcript, restored: #118's merge of this file dropped it.
   // Failures are logged, not surfaced — the proposals are already computed, and
   // losing a transcript row should not cost the attorney the response.
-  const partnerReply = proposal.message?.trim() || `${changes.length} change${changes.length === 1 ? "" : "s"} proposed.`;
+  const partnerReply = proposal.message?.trim() || `${changes.length} change${changes.length === 1 ? "" : "s"} applied.`;
   const lastAttorneyTurn = [...body.messages].reverse().find((m) => m.role === "user");
   const { error: transcriptError } = await createServiceClient()
     .from("attorney_document_messages")

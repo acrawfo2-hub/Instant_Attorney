@@ -111,7 +111,7 @@ routing guards by removing the second service that made shadowing possible.
 | 3 | One matter routing decision — fixes the defect above | done |
 | 4 | Retire the roadmap spine; confirm the guidance chain | done |
 | 5 | One drafting engine; wizard journey retired | done |
-| 6 | One attorney workbench — one associate, one thread, one accept gate | next |
+| 6 | One attorney workbench — one associate, edits that apply | done |
 | 7 | Remove the retired `pre_warmed` state | done |
 
 ### Chunk 4 — what it turned out to be
@@ -361,3 +361,41 @@ without the physical table merge this plan still defers.
 **Kept:** `WizardType` and `lib/wizard-parsing.ts`. The names are unfortunate but
 they are the instrument taxonomy and the placeholder parser — the engine's
 vocabulary, not the journey's.
+
+
+### Chunk 6, as built
+
+**Five attorney AI rooms became one.** AttorneyFreestyleChat and CaseBrainstormChat
+are deleted with their routes, prompts and the whole `/api/attorney/workspace`
+surface — which took out `attorney_workspace_drafts`, a fourth draft store. The
+consult generators stay: they produce one-shot artifacts and are not rooms.
+`/attorney/review/[id]` is the workbench.
+
+**The associate's edits apply.** They used to stack as proposals needing a click
+each. The review page now applies the change set on arrival and autosaves through
+`/revision`, the one attorney write path, which already writes an immutable
+revision per save. Changes whose passage moved fall back to the accept buttons
+instead of being dropped. `chat-edit` still does not write — a second writer
+would race the editor's autosave on the same text.
+
+**A confidentiality leak, found while designing that.** The attorney's working
+copy is a `second_draft` child carrying the client's `user_id`, and the download
+route's ownership check is `doc.user_id !== userId` — so the client could
+download it at any moment, mid-edit, and `CaseDocumentsTable` offered the link
+outright at both render sites. The editor autosaves on every pause and on unload,
+so this was continuous, not occasional. Now a 409 server-side and hidden links,
+pinned by `work-product.test.ts`.
+
+**Approve-then-send was already built.** `/approve` sets the status behind review
+and QA gates; the delivery composer is separate and requires approval;
+`delivered` means executed. Nothing to build — the fourth time this program's
+verification step changed the answer.
+
+**The file is readable without leaving the draft.** `ReviewCoverSheet` already
+carried facts, gaps, deadlines, counsel, source files and the intake transcript,
+but truncated facts at eight with "+N more in the Living File" — sending the
+attorney to another page mid-revision to read one fact. The overflow now opens in
+place.
+
+Still open, and deliberately not built: attorney-originated drafts. Every
+`documents` row still starts from a client submission.

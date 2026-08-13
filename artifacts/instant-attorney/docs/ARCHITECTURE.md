@@ -150,11 +150,31 @@ Two different things are called a "revision". Do not conflate them:
 | Authorities gate | `lib/attorney-review-authorities.ts` |
 | Workbench UI | `app/attorney/review/[id]/page.tsx` |
 
-The model here is **propose, then accept**. `chat-edit` returns proposed
-changes; it never writes the document. The write happens when the attorney
-accepts, in `app/api/attorney/documents/[id]/revision/route.ts`. Three separate
-PRs have tried to make `chat-edit` write directly — if you find yourself adding
-a document update there, stop.
+**One attorney write path, and one approval.** The attorney's working copy is a
+`second_draft` child of the submitted document. Everything that changes it —
+typing in the editor, or an edit from the associate — goes through
+`app/api/attorney/documents/[id]/revision/route.ts`, which carries
+`saveDocumentRevision`: a revision id, an immutable `document_revisions` row, and
+the durable Living File sync.
+
+`chat-edit` still does not write, and the reason is worth keeping. The review
+page applies its change set to the working buffer the moment it arrives and
+autosaves through that one path, so a write here would give the same text two
+writers racing while the attorney types. Three PRs have tried to add one; the
+answer is still no, for a better reason than before.
+
+What *did* change is the accept step. The associate's edits used to stack up as
+proposals needing a second click each, which made every sentence a negotiation
+with a junior. They now apply directly. Changes whose passage moved under them
+fall back to the accept buttons rather than being dropped. The attorney's undo is
+the revision history.
+
+**The client never sees the working copy until it is approved.** It carries the
+client's `user_id`, so ownership alone let them download it mid-edit;
+`/api/documents/[id]/download` now refuses an unapproved `second_draft` to a
+non-attorney, and the links are hidden. Approval is the one explicit act, and
+delivery is separate from it again — `/approve` sets the status, the delivery
+composer sends. See `work-product.test.ts`.
 
 QA verifies the revision the attorney actually accepted, never a regenerated
 draft. Verifying an auto-rewrite certifies text nobody approved.

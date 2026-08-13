@@ -685,9 +685,37 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
         return;
       }
       setChatInput("");
-      const reply = data.message ?? "Changes proposed.";
+
+      // The associate's edits go straight into the working copy. This used to
+      // stack them up as proposals for a second click, which made every
+      // sentence a two-step negotiation with a junior — not the loop an
+      // attorney wants when iterating on a draft. Nothing is lost by applying
+      // them: editRevision autosaves through /revision, which writes an
+      // immutable document_revisions row per save, and the working copy stays
+      // privileged until it is approved. Undo is the revision history.
+      let next = revisionRef.current;
+      const unapplied: ReviewChange[] = [];
+      for (const change of (data.changes ?? []) as ReviewChange[]) {
+        // A passage can move under us — the second-draft pipeline rewrites the
+        // whole document, and the attorney may be typing. Those changes are not
+        // dropped silently; they fall back to the accept buttons so the
+        // attorney can place them.
+        if (next.includes(change.before)) next = next.replace(change.before, change.after);
+        else unapplied.push(change);
+      }
+      if (next !== revisionRef.current) editRevision(next);
+      if (unapplied.length) setProposedChanges((prev) => [...prev, ...unapplied]);
+
+      const appliedCount = ((data.changes ?? []) as ReviewChange[]).length - unapplied.length;
+      const reply = data.message
+        ?? (appliedCount ? `${appliedCount} change${appliedCount === 1 ? "" : "s"} applied.` : "No changes applied.");
       setChatMessages((prev) => [...prev, { role: "assistant", content: reply }]);
-      setProposedChanges((prev) => [...prev, ...(data.changes as ReviewChange[])]);
+      if (unapplied.length) {
+        setChatError(
+          `${unapplied.length} change${unapplied.length === 1 ? "" : "s"} could not be placed automatically — ` +
+            `the passage moved. Review ${unapplied.length === 1 ? "it" : "them"} in the editor.`
+        );
+      }
     } catch {
       setChatMessages(chatMessages);
       setChatError("Network error — please try again.");

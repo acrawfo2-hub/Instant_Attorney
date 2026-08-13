@@ -3166,6 +3166,15 @@ body {
 .rcs-list li>span:last-child { display:flex; flex-direction:column; }
 .rcs-list small,.rcs-muted,.rcs-file small,.rcs-message small { color:var(--brand-text-xlt); font-size:10px; }
 .rcs-muted { margin:7px 0 0; }
+/* Overflow facts, revealed in place so reading the file never costs the
+   attorney their place in the draft. Styled as a quiet control, not a section. */
+.rcs-more { margin:10px 0 0; }
+.rcs-more summary { cursor:pointer; color:var(--brand-text-lt); font-size:11px; font-weight:700; list-style:none; padding:6px 0; }
+.rcs-more summary::-webkit-details-marker { display:none; }
+.rcs-more summary::before { content:"\203A"; display:inline-block; margin-right:6px; transition:transform .15s ease; }
+.rcs-more[open] summary::before { transform:rotate(90deg); }
+.rcs-more summary:hover { color:var(--brand-text-dk); }
+.rcs-more .rcs-list { margin-top:8px; }
 .rcs-gaps { border-left:3px solid #d49b32 !important; }
 .rcs-deadline { display:grid; grid-template-columns:auto 1fr; align-items:center; gap:4px 8px; border-left:3px solid #d49b32; padding:6px 8px; margin-top:6px; background:#fffaf0; font-size:11px; }
 .rcs-deadline .rcs-source { grid-column:2; }
