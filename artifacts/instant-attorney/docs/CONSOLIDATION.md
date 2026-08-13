@@ -4,9 +4,39 @@
 and in what order, so the sequence stops being re-derived — and re-argued — by
 every session that opens the repo.
 
-Source: `docs/simplification-audit-2026-08-12.md` (PR #139), read critically.
-Most of it is adopted. Where it is not, the disagreement is recorded here rather
-than left for someone to rediscover.
+Source: `docs/simplification-audit-2026-08-12.md` (landed from PR #139), read
+critically. Most of it is adopted. Where it is not, the disagreement is recorded
+here rather than left for someone to rediscover.
+
+The August 13 verification file in the same PR is **not** a verdict on current
+`main`. It inspected commit `a7ee109` on a branch named `work` that is not in
+this repository. Chunks 2–7 landed after that snapshot. The file is kept next to
+the source audit with a superseded banner so it is not rediscovered as a to-do
+list. Do not re-open its P0 findings.
+
+## Parked, do not integrate yet
+
+Attorney-side feature specs opened after consolidation. They stay as pull
+requests until a named chunk in this document is ready for them — they are new
+product work, not cleanup, and one of them conflicts with a decision already
+shipped.
+
+| PR | What | Why parked |
+|---|---|---|
+| [#142](https://github.com/acrawfo2-hub/Instant_Attorney/pull/142) | Junior associate workbench build plan | Chunk 6 already made associate edits apply on arrival (undo is revision history). #142 wants preview-then-confirm. That is a product decision, not an integration. |
+| [#143](https://github.com/acrawfo2-hub/Instant_Attorney/pull/143) | Consult workflow build plan | New feature. Out of scope until leftover consolidation items are the next named chunk. |
+
+## Closed without merging
+
+Inspected once during Phase 0 branch hygiene, then the leftover remote branch
+was deleted. GitHub keeps the closed PR.
+
+| PR | What | Why the branch went |
+|---|---|---|
+| [#100](https://github.com/acrawfo2-hub/Instant_Attorney/pull/100) | Revisioned, dependency-aware workspace-draft generation | Closed 2026-08-12 during the merge wave. Superseded by the revisions model (`schema-stage46` / `schema-stage48`) and `draftInstrument`. |
+
+Merged-PR leftover branches (the parallel-agent wave) were deleted in the same
+pass. Open PR branches are left alone.
 
 ## The problem, stated once
 
