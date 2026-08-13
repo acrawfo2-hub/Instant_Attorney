@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { logTruncation } from "@/lib/truncation-logger";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
@@ -15,6 +15,7 @@ import { parseDrafts, planAssistantDraftPersistence } from "@/lib/freestyle-draf
 import { persistDrafts } from "@/lib/draft-persistence";
 import { stripToolMarkers } from "@/lib/tool-markers";
 import { dispatchDocumentPlan, parseDocumentPlan } from "@/lib/document-plan";
+import { kickDocumentGenerationJobs } from "@/lib/document-job-worker";
 import { createDurableAcpJob, getAcpJob, getPredecessorChain, emitAcpChunk, finishDurableAcpJob } from "@/lib/acp-jobs";
 import { recordAiFromMessage, recordAiUsage, recordStorageUpload } from "@/lib/usage-tracker";
 import { getBillingGate } from "@/lib/topup";
@@ -497,7 +498,12 @@ export async function POST(req: NextRequest) {
             const plan = parseDocumentPlan(fullResponse);
             if (plan) {
               try {
-                await dispatchDocumentPlan(toolDb, { caseFileId: resolvedCaseFileId, userId, plan });
+                const jobIds = await dispatchDocumentPlan(toolDb, { caseFileId: resolvedCaseFileId, userId, plan });
+                // Kick now, in a separate invocation when possible. The archival
+                // cron is retention-only and must not be what fills this shell.
+                if (jobIds.length) {
+                  after(() => { kickDocumentGenerationJobs(toolDb, jobIds); });
+                }
               } catch (err) {
                 console.error("[chat-acp] document-plan dispatch error:", err);
               }

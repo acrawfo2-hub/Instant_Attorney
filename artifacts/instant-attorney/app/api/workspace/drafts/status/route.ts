@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getClientWorkspaceContext } from "@/lib/client-workspace-auth";
+import { kickDocumentGenerationJobs } from "@/lib/document-job-worker";
 import {
   DRAFT_JOB_LABELS,
   draftJobFromGenerationRow,
@@ -22,10 +23,17 @@ export async function GET(req: NextRequest) {
     .order("created_at", { ascending: true });
   if (error) return NextResponse.json({ error: "Failed to load draft status" }, { status: 500 });
 
-  const jobs = ((data ?? []) as DocumentGenerationJobRow[]).map((row) => {
+  const rows = (data ?? []) as DocumentGenerationJobRow[];
+  const jobs = rows.map((row) => {
     const job = draftJobFromGenerationRow(row);
     return { ...job, label: DRAFT_JOB_LABELS[job.state], active: isActiveDraftJob(job.state) };
   });
+  // Backup kick: if chat-acp's fan-out missed, the open panel is watching.
+  // Claim is idempotent — a job already `drafting` is a no-op.
+  const queuedIds = rows.filter((row) => row.status === "queued").map((row) => row.id);
+  if (queuedIds.length) {
+    after(() => { kickDocumentGenerationJobs(createServiceClient(), queuedIds); });
+  }
   return NextResponse.json({ caseFileId, jobs });
 }
 

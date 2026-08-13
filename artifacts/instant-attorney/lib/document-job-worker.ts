@@ -108,11 +108,94 @@ async function generateJobText(db: SupabaseClient, job: Job): Promise<string> {
   return result.draftText;
 }
 
+/** Jobs left `drafting` after this have almost certainly lost their worker. */
+const STALE_DRAFTING_MS = 8 * 60 * 1000;
+
 export async function processQueuedDocumentJobs(db: SupabaseClient, limit = 3): Promise<number> {
+  await requeueStaleDocumentJobs(db);
   const bounded = Math.max(1, Math.min(3, Math.floor(limit)));
   const { data, error } = await db.from("document_generation_jobs").select("id").eq("status", "queued")
     .order("priority", { ascending: false }).order("created_at").limit(bounded);
   if (error) throw error;
   const results = await Promise.all((data ?? []).map((row) => runDocumentGenerationJob(db, row.id)));
   return results.filter(Boolean).length;
+}
+
+/**
+ * A serverless freeze after claim leaves the row `drafting` forever — the drain
+ * only looks at `queued`. Put those back so a later kick can finish them.
+ */
+export async function requeueStaleDocumentJobs(db: SupabaseClient): Promise<number> {
+  const cutoff = new Date(Date.now() - STALE_DRAFTING_MS).toISOString();
+  const now = new Date().toISOString();
+  const { data, error } = await db.from("document_generation_jobs")
+    .update({ status: "queued", error: "Worker did not finish; retrying.", updated_at: now })
+    .eq("status", "drafting")
+    .lt("started_at", cutoff)
+    .select("id");
+  if (error) throw error;
+  return data?.length ?? 0;
+}
+
+export async function runDocumentGenerationJobs(db: SupabaseClient, jobIds: string[]): Promise<number> {
+  const ids = [...new Set(jobIds.filter(Boolean))];
+  if (!ids.length) return 0;
+  await requeueStaleDocumentJobs(db);
+  const results = await Promise.all(ids.map((id) => runDocumentGenerationJob(db, id)));
+  return results.filter(Boolean).length;
+}
+
+/**
+ * Where the request-driven kick fans out so drafting gets its own timeout
+ * budget. `APP_URL` is the public origin; `VERCEL_URL` covers preview deploys.
+ * Missing either piece means local/dev — run in this process instead.
+ *
+ * This is not the archival cron. Retention (`scripts/archival-cron.mjs`) must
+ * never become the thing that fills a draft.
+ */
+type JobKickEnv = {
+  CRON_SECRET?: string;
+  APP_URL?: string;
+  VERCEL_URL?: string;
+  [key: string]: string | undefined;
+};
+
+export function documentJobProcessTarget(env: JobKickEnv = process.env): { url: string; secret: string } | null {
+  const secret = env.CRON_SECRET;
+  if (!secret) return null;
+  const base = (env.APP_URL || (env.VERCEL_URL ? `https://${env.VERCEL_URL}` : "")).replace(/\/$/, "");
+  if (!base) return null;
+  return { url: `${base}/api/document-jobs/process`, secret };
+}
+
+/**
+ * Start filling the shells `dispatchDocumentPlan` just created.
+ *
+ * Prefers a new HTTP invocation of `/api/document-jobs/process` so drafting
+ * does not share the chat turn's 300s budget. Falls back to this process when
+ * there is no origin/secret (Next dev) or the fan-out fails to start.
+ */
+export function kickDocumentGenerationJobs(db: SupabaseClient, jobIds: string[]): void {
+  const ids = [...new Set(jobIds.filter(Boolean))];
+  if (!ids.length) return;
+  const target = documentJobProcessTarget();
+  if (target) {
+    void fetch(target.url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${target.secret}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ jobIds: ids }),
+    }).catch((err) => {
+      console.error("[document-jobs] fan-out failed; running in this process:", err);
+      void runDocumentGenerationJobs(db, ids).catch((runErr) => {
+        console.error("[document-jobs] in-process fallback failed:", runErr);
+      });
+    });
+    return;
+  }
+  void runDocumentGenerationJobs(db, ids).catch((err) => {
+    console.error("[document-jobs] in-process kick failed:", err);
+  });
 }
