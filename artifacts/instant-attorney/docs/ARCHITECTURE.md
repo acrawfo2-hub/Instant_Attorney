@@ -172,6 +172,18 @@ autosaves through that one path, so a write here would give the same text two
 writers racing while the attorney types. Three PRs have tried to add one; the
 answer is still no, for a better reason than before.
 
+The associate is an aggressive teammate: a discussion turn that finds a problem
+also returns the fix. Empty change sets are valid when nothing needs rewriting.
+Specialists (adversarial review, QA, placeholders, formatting, authorities) are
+the existing services, invoked from chat or from shortcut buttons — not a
+second implementation. The associate must never approve, waive, or send.
+
+Approve is always available. Unverified citations and open blocking findings
+stay on the file; proceeding requires one recorded reason (`informed_overrides`
+on `documents.content_json`). That is an informed override, not a waiver and
+not a silent clean. Delivery after an already-approved revision does not ask
+again.
+
 What *did* change is the accept step. The associate's edits used to stack up as
 proposals needing a second click each, which made every sentence a negotiation
 with a junior. They now apply directly. Changes whose passage moved under them

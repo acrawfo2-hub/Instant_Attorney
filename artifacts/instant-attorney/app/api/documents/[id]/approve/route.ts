@@ -1,13 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getChildDocuments } from "@/lib/document-utils";
+import {
+  decideApprovalOverride,
+  informedOverrideStamp,
+  loadApprovalBlockers,
+  withInformedOverride,
+} from "@/lib/approval-override";
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const { action, attorney_notes, accept_repaired_incomplete } = await req.json();
+  const { action, attorney_notes, accept_repaired_incomplete, override_rationale } = await req.json();
 
   if (!action || !["approve", "request_changes"].includes(action)) {
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
@@ -69,46 +75,59 @@ export async function POST(
     );
   }
 
-  // Authorities gate (schema-stage45): a mis-identified case must never reach the
-  // client. Block approval while any citation on this document is unverified,
-  // unsupported, or errored and has not been explicitly waived by the attorney.
+  // Dirty file (unverified citations / open blocking findings): Approve stays
+  // available, but the attorney must record why. That stamp is an informed
+  // override, not a waiver — the findings stay dirty.
+  let overrideJson: Record<string, unknown> | null = null;
   if (action === "approve") {
-    const { data: unresolved } = await db
-      .from("document_qa_citations")
-      .select("id, raw, verdict")
-      .eq("document_id", id)
-      .eq("waived", false)
-      .neq("verdict", "verified");
-    if (unresolved && unresolved.length > 0) {
+    const blockers = await loadApprovalBlockers(db, id);
+    const decision = decideApprovalOverride(blockers, override_rationale);
+    if (!decision.ok) {
       return NextResponse.json(
         {
-          error: `${unresolved.length} citation${unresolved.length === 1 ? "" : "s"} could not be verified. Verify, remove, or waive each one before approving.`,
-          unresolvedCitations: unresolved,
+          error: decision.error,
+          requiresOverride: true,
+          unresolvedCitations: decision.blockers.citations,
+          unresolvedFindings: decision.blockers.findings,
         },
-        { status: 409 }
+        { status: 409 },
       );
     }
-
-    // Structured QA is separate from citation approval. Only material,
-    // unresolved findings block (including stale findings until an affected re-run);
-    // an attorney must record remediation or deliberately waive with a reason.
-    if (secondDraft) {
-      const { data: blocking } = await db.from("document_qa_findings")
-        .select("id, check_type, title, severity, status")
-        .eq("document_id", id)
-        .eq("severity", "blocking")
-        .eq("status", "open");
-      if (blocking?.length) {
-        return NextResponse.json({
-          error: `${blocking.length} blocking QA finding${blocking.length === 1 ? " remains" : "s remain"}. Resolve or deliberately waive each before approving.`,
-          unresolvedFindings: blocking,
-        }, { status: 409 });
-      }
+    if (decision.rationale) {
+      overrideJson = withInformedOverride(
+        (approvalCandidate?.content_json as Record<string, unknown> | null) ?? {},
+        informedOverrideStamp({
+          rationale: decision.rationale,
+          by: user.id,
+          at: new Date().toISOString(),
+          revision_number: sourceDoc?.revision_number ?? 1,
+          blockers,
+        }),
+      );
     }
   }
 
   const newStatus = action === "approve" ? "approved" : "changes_requested";
   const now = new Date().toISOString();
+  const nextContentJson = overrideJson
+    ? incomplete && accept_repaired_incomplete === true
+      ? {
+          ...overrideJson,
+          generation_incomplete: false,
+          generation_state: "attorney_repaired_and_accepted",
+          repaired_accepted_by: user.id,
+          repaired_accepted_at: now,
+        }
+      : overrideJson
+    : incomplete && accept_repaired_incomplete === true
+      ? {
+          ...((approvalCandidate?.content_json as Record<string, unknown>) ?? {}),
+          generation_incomplete: false,
+          generation_state: "attorney_repaired_and_accepted",
+          repaired_accepted_by: user.id,
+          repaired_accepted_at: now,
+        }
+      : null;
 
   const { data: doc, error: updateErr } = await db
     .from("documents")
@@ -118,17 +137,7 @@ export async function POST(
       reviewed_by: user.id,
       reviewed_at: now,
       updated_at: now,
-      ...(incomplete && accept_repaired_incomplete === true
-        ? {
-            content_json: {
-              ...((approvalCandidate?.content_json as Record<string, unknown>) ?? {}),
-              generation_incomplete: false,
-              generation_state: "attorney_repaired_and_accepted",
-              repaired_accepted_by: user.id,
-              repaired_accepted_at: now,
-            },
-          }
-        : {}),
+      ...(nextContentJson ? { content_json: nextContentJson } : {}),
     })
     .eq("id", id)
     .eq("revision_number", sourceDoc?.revision_number ?? 1)

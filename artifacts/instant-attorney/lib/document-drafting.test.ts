@@ -26,12 +26,8 @@ const DRAFTING_ENGINE = "lib/document-drafting.ts";
 
 /**
  * The one file allowed to build the drafter prompt without being a generation
- * path. `chat-edit` PROPOSES changes to an existing document and never writes
- * one — the propose-then-accept rule in ARCHITECTURE.md, which three PRs have
- * tried to break. It produces a diff for the attorney to accept, not a document.
- *
- * Keep this set at one entry. Adding to it to make the test pass is how the
- * second implementation gets back in.
+ * path. `chat-edit` returns focused replacements (or none) for the review page
+ * to apply; it never writes a document. Keep this set at one entry.
  */
 const NOT_DRAFTING = new Set(["app/api/attorney/documents/[id]/chat-edit/route.ts"]);
 

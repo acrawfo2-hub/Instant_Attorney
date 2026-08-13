@@ -14,17 +14,11 @@ this repository. Chunks 2–7 landed after that snapshot. The file is kept next 
 the source audit with a superseded banner so it is not rediscovered as a to-do
 list. Do not re-open its P0 findings.
 
-## Parked, do not integrate yet
+## Parked attorney-feature PRs
 
-Attorney-side feature specs opened after consolidation. They stay as pull
-requests until a named chunk in this document is ready for them — they are new
-product work, not cleanup, and one of them conflicts with a decision already
-shipped.
-
-| PR | What | Why parked |
-|---|---|---|
-| [#142](https://github.com/acrawfo2-hub/Instant_Attorney/pull/142) | Junior associate workbench build plan | Chunk 6 already made associate edits apply on arrival (undo is revision history). #142 wants preview-then-confirm. That is a product decision, not an integration. |
-| [#143](https://github.com/acrawfo2-hub/Instant_Attorney/pull/143) | Consult workflow build plan | New feature. Out of scope until leftover consolidation items are the next named chunk. |
+None. #142 and #143 were closed without merging (see below). Consult stays a
+one-shot generator until a future named product chunk writes a new decision.
+Do not revive those plans as written.
 
 ## Closed without merging
 
@@ -34,6 +28,8 @@ was deleted. GitHub keeps the closed PR.
 | PR | What | Why the branch went |
 |---|---|---|
 | [#100](https://github.com/acrawfo2-hub/Instant_Attorney/pull/100) | Revisioned, dependency-aware workspace-draft generation | Closed 2026-08-12 during the merge wave. Superseded by the revisions model (`schema-stage46` / `schema-stage48`) and `draftInstrument`. |
+| [#142](https://github.com/acrawfo2-hub/Instant_Attorney/pull/142) | Junior associate workbench build plan | Closed 2026-08-13. Leftover 4 (#147) named and implemented apply-on-arrival, aggressive teammate, and informed override. Do not restore preview-then-confirm. |
+| [#143](https://github.com/acrawfo2-hub/Instant_Attorney/pull/143) | Consult workflow build plan | Closed 2026-08-13. Chunk 6 kept consult pages as one-shot generators on purpose. Not leftover cleanup; not the next named chunk. |
 
 Merged-PR leftover branches (the parallel-agent wave) were deleted in the same
 pass. Open PR branches are left alone.
@@ -85,7 +81,7 @@ human usability test.
 | 2 | Every draft request yields a complete, visible, editable artifact | **Held on generation; leftover job/shell gaps** | The worker, regenerate, and attorney-originated draft all call `draftInstrument`. Markerless and truncated output is not saved as a draft. An unknown forum becomes `FORUM_PLACEHOLDER` (BLOCKING), not a refusal. Remaining: `dispatchDocumentPlan` inserts jobs only — the editable shell is created when a worker *claims* the job, so a queued job has status and no artifact id; a failed generate leaves that shell empty; there is no deterministic outline fallback. Failure-and-retry was a deliberate trade against saving ungated text. |
 | 3 | Find every current document from the case workspace | **Held as aggregation; two identities** | The file deck and document table read both `client_workspace_drafts` and `documents`. Promotion still creates a second row. Physical merge remains deferred. |
 | 4 | Edit without losing history | **Held after promotion** | Canonical `documents.draft_text` writes go through `saveDocumentRevision`. Unpromoted workspace drafts update the same row; immutable history starts at promote. That is the deferred two-record design, not a new bug. |
-| 5 | Case-aware junior associate | **Held as one review workbench** | Freestyle and brainstorm rooms are gone. `/attorney/review/[id]` is the associate. `chat-edit` still does not write — the review page applies the change set and autosaves through `/revision`. Consult pages remain separate one-shot generators, which chunk 6 kept on purpose. Analysis-only turns (a question that must not produce a fake edit) are the #142 product decision, not missing cleanup. |
+| 5 | Case-aware junior associate | **Held as one review workbench** | Freestyle and brainstorm rooms are gone. `/attorney/review/[id]` is the associate. `chat-edit` still does not write — the review page applies the change set and autosaves through `/revision`. Consult pages remain separate one-shot generators, which chunk 6 kept on purpose. Empty change sets are valid (leftover 4). #142 and #143 were closed without merging. |
 | 6 | Living File updates on accepted inputs | **Held for chat and canonical document writes; not event-complete** | Chat parses inline blocks and runs the extractor sweep. `saveDocumentRevision` queues Living File sync. Workspace-draft generation writes `client_workspace_drafts.content` directly and does not call that boundary. The cheap `case_files` writer-set guard (prerequisite for the deferred event contract) has not been built. `living-file-boundary.test.ts` pins message-cursor watermarks, not the writer set. |
 | 7 | Never invent forum, authority, facts, or completion | **Held on the drafting engine** | The August 13 "worker bypasses the pipeline" finding is false here. `document-drafting.test.ts` fails any file that assembles `buildDrafterSystemPrompt` outside the engine (`chat-edit` is the one allowed non-writer). `document-risk.test.ts` scans prompts for jurisdiction-defaulting language. `input_fact_revision` is stored on the job and never read before save — a stale-plan check that does not exist, not a second generator. |
 
@@ -107,14 +103,15 @@ human usability test.
 | Intake/freestyle mode split | **Still true as code, hidden in the UI.** Tools are off unless the turn is posted as freestyle. |
 | `lib/freestyle-drafts.ts` header still names `attorney_workspace_drafts` and `ATTORNEY_FREESTYLE_HEAD` | **Stale comment on a live module.** The parsers are used by client chat drafts. The rooms they name are gone. Do not resurrect the rooms to make the comment true. |
 
-### Leftover list — the only cleanup still in front of product work
+### Leftover list — closed
 
-Do these serially. Do not open a parallel agent on more than one.
+Nothing in this list is still in front of product work. Do not open a parallel
+agent to "finish" the deferred items below; they are not leftovers.
 
 1. ~~**Collapse `ChatMode`.**~~ **Done (Phase 2).** Tools, pacing, and draft persistence are always on. `case_files.chat_mode` is no longer written. The column and `ChatMode` type stay (data change). `freestyle-drafts.ts` header no longer names the deleted rooms.
 2. ~~**Job visibility without a second generator.**~~ **Done (Phase 2).** `dispatchDocumentPlan` inserts the empty `client_workspace_drafts` shell and attaches it before a worker claims the job. Status, list, and cancel read `document_generation_jobs` (the live table). Fail-and-retry is unchanged — ungated text is still not saved. An empty shell is a card in progress, not a ready document: promote still rejects empty drafts, and the panel copy says so.
 3. ~~**Cheap Living File writer guard.**~~ **Done (Phase 2).** `lib/living-file-writers.test.ts` names every `case_files` mutator. Do not event-source.
-4. **Then, and only then, the #142 product decision:** keep apply-on-arrival, or restore preview-then-confirm. Until that is named, do not implement the workbench plan.
+4. ~~**Then, and only then, the #142 product decision.**~~ **Named (Phase 3), implemented in #147.** Keep apply-on-arrival. The associate is an aggressive teammate: discuss **and** fix in the same turn. The client still sees nothing until one attorney Approve. A dirty file (unverified citations / open blocking QA) does not disable Approve — it forces one recorded reason (informed override, not a waiver). Specialists are existing review/QA services the associate may call; shortcut buttons are the same calls. Do **not** restore preview-then-confirm. #142 was closed without merging. Its remaining workstreams are deferred (see below), not leftover cleanup.
 
 ### Calculators, inline in chat
 
@@ -135,13 +132,10 @@ this pass.
 Case chat always needs a tool-capable provider (Anthropic today). Grok
 text-only intake on `/api/chat-acp` is gone with the mode split.
 
-`workspace_draft_jobs` is an unread leftover table. Nothing in `app/` or `lib/`
-writes it. Leave it; dropping tables is not this chunk.
-
-Still deferred, unchanged: physical merge of `client_workspace_drafts` into
-`documents`; the case-event/projection rewrite; volunteer-text cross-matter
-contamination (routing no longer silently picks the wrong file; extraction of a
-volunteered new matter into the current file is still possible).
+The items that used to sit next to this list — volunteer-text leaking into the
+current Living File, formatting-uncertainty labels, QA shortcuts that need an
+existing review run, the adversarial Accept-button queue, dropping
+`workspace_draft_jobs` — are **deferred**, not leftovers. See below.
 
 Specialist calculator pages (`/family/*`, `/bankruptcy/*`, `/personal-injury/*`, …) and `/free-chat` still exist. They are not secretly a second drafting engine. Do not delete them as "ghosts" without a named owner.
 
@@ -149,7 +143,8 @@ Specialist calculator pages (`/family/*`, `/bankruptcy/*`, `/personal-injury/*`,
 
 That paragraph below is the August 12 picture, kept so the chunks read as a
 sequence rather than as unexplained history. Chunks 0–7 removed it. Leftovers
-1–3 closed in Phase 2. What is still in front is leftover 4 (#142).
+1–3 closed in Phase 2. Leftover 4 named and implemented in Phase 3:
+apply-on-arrival, one approve, informed override. The leftover list is empty.
 
 The product kernel is sound. Document text has one persistence boundary, drafts
 still complete when facts are missing, the Living File sync is durable, the
@@ -406,6 +401,26 @@ slice 6, and it already says to decide this last. Expose both through one servic
 and one UI model in chunks 4–5 first. If a stable artifact ID has removed the
 complexity, do not migrate for tidiness.
 
+**Volunteer-text cross-matter contamination** — routing no longer silently picks
+the wrong file. Asking before exploring a new matter is prompt guidance, not an
+enforced boundary: a volunteered paragraph can still extract into the current
+Living File. Closing that needs the deferred case-event contract. Not leftover
+cleanup.
+
+**Formatting-uncertainty labels as first-class findings** — a #142 workstream.
+Closed with that PR. Revisit only with a named product chunk.
+
+**QA shortcuts that need an existing review run** — `runSelectedDocumentQa`
+requires a review run / working `second_draft`. The associate wraps that
+existing service; it is not a second engine. Not leftover cleanup.
+
+**Adversarial per-item Accept buttons** — leftover of preview-then-confirm. The
+main loop is chat apply-on-arrival. Leave the buttons; do not delete them as
+cleanup.
+
+**Dropping `workspace_draft_jobs`** — unread leftover table. Nothing in `app/`
+or `lib/` writes it. Do not drop it in a pass that is not about schema.
+
 ## Where this plan departs from the audit
 
 - **`artifacts/api-server` was not dead.** The audit listed it as unused with no
@@ -431,7 +446,10 @@ These are complexity caused by real failure modes. Consolidation puts each in
 - placeholder/deficiency behavior, so an incomplete request never becomes no
   document;
 - jurisdiction and authority gates for high-risk instruments;
-- attorney propose-then-accept semantics, and QA against the *accepted* revision;
+- associate edits apply on arrival and autosave through `/revision`; the client
+  sees nothing until Approve; a dirty file requires one recorded informed
+  override, not a waiver; QA against the working revision the attorney actually
+  has;
 - ownership/role checks, RLS, audit trails, retention and legal-hold duties, and
   privileged-work-product boundaries;
 - durable ACP/document jobs and their idempotency protections.

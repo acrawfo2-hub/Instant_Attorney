@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { notifyClientDocumentDelivery } from "@/lib/notify";
+import {
+  decideApprovalOverride,
+  informedOverrideStamp,
+  loadApprovalBlockers,
+  withInformedOverride,
+} from "@/lib/approval-override";
 
 async function context(id: string) {
   const db = await createClient();
@@ -46,17 +52,40 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   const ctx = await context(id);
   if (ctx.error) return ctx.error;
-  const { approveAndSend = false } = await req.json().catch(() => ({}));
+  const { approveAndSend = false, override_rationale } = await req.json().catch(() => ({}));
   const { data: draft } = await ctx.db.from("document_delivery_drafts").select("*").eq("document_id", id).single();
   if (!draft?.subject.trim() || !draft?.body.trim()) return NextResponse.json({ error: "Save a complete message draft before sending." }, { status: 409 });
 
-  const { data: unresolved } = await ctx.db.from("document_qa_citations").select("id").eq("document_id", id).eq("waived", false).neq("verdict", "verified");
-  if (unresolved?.length) return NextResponse.json({ error: "Resolve all outstanding authority warnings before sending." }, { status: 409 });
-  if (ctx.doc.status !== "approved" && !approveAndSend) return NextResponse.json({ error: "Approve the revision before sending, or use Approve and send." }, { status: 409 });
+  if (ctx.doc.status !== "approved" && !approveAndSend) {
+    return NextResponse.json({ error: "Approve the revision before sending, or use Approve and send." }, { status: 409 });
+  }
 
   const now = new Date().toISOString();
   if (ctx.doc.status !== "approved") {
-    await ctx.db.from("documents").update({ status: "approved", reviewed_by: ctx.user.id, reviewed_at: now, updated_at: now }).in("id", [id, draft.revision_document_id]);
+    const blockers = await loadApprovalBlockers(ctx.db, id);
+    const decision = decideApprovalOverride(blockers, override_rationale);
+    if (!decision.ok) {
+      return NextResponse.json({
+        error: decision.error,
+        requiresOverride: true,
+        unresolvedCitations: decision.blockers.citations,
+        unresolvedFindings: decision.blockers.findings,
+      }, { status: 409 });
+    }
+    const patch: Record<string, unknown> = { status: "approved", reviewed_by: ctx.user.id, reviewed_at: now, updated_at: now };
+    if (decision.rationale) {
+      patch.content_json = withInformedOverride(
+        (ctx.doc.content_json as Record<string, unknown> | null) ?? {},
+        informedOverrideStamp({
+          rationale: decision.rationale,
+          by: ctx.user.id,
+          at: now,
+          revision_number: ctx.doc.revision_number ?? 1,
+          blockers,
+        }),
+      );
+    }
+    await ctx.db.from("documents").update(patch).in("id", [id, draft.revision_document_id]);
   }
   const consultationUrl = draft.consultation_enabled ? draft.consultation_url : null;
   const fileName = `${ctx.doc.title} - approved.docx`;
