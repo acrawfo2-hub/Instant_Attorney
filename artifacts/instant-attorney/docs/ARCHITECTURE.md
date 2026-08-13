@@ -242,7 +242,12 @@ persists remains the existing one-shot route.
 | Ordering | `lib/message-cursor.ts` — sync at message boundaries |
 
 Updated on every input, as the product promises. The client-facing surface is
-the case memo and the tile map in `components/ClientFileView.tsx`.
+the one-page cover sheet (`lib/cover-sheet.ts` + `ClientCaseMemo`) and a
+nine-tile map in `components/ClientFileView.tsx`. The Living File tile opens
+the full stored record (`?view=living-file`; old `?view=case-details`
+bookmarks alias). The cover sheet is attorney judgment — caption, next step,
+one goal, posture from `case_files.summary` only, one catch — never more than
+two pages, ideally one. It is not a dump of whatever the model wrote first.
 
 `lib/living-file-writers.test.ts` names every production file that mutates
 `case_files`. Administrative writes (title, archive, legal hold, opening a

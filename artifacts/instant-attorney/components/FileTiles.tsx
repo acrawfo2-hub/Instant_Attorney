@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import type { FileTile, TileIcon } from "@/lib/file-deck";
 
-// The map of the file. Eight stable buttons, each with its own focused target,
+// The map of the file. Nine stable buttons, each with its own focused target,
 // naming a thing a client came here to find and showing its live state. The
 // detail behind each one is still on the file — it just lives behind its own
 // destination instead of being poured onto the landing page at once.
@@ -13,6 +13,15 @@ import type { FileTile, TileIcon } from "@/lib/file-deck";
 // band within the documents table.
 
 const ICONS: Record<TileIcon, ReactNode> = {
+  file: (
+    <>
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+      <line x1="8" y1="7" x2="16" y2="7" />
+      <line x1="8" y1="11" x2="16" y2="11" />
+      <line x1="8" y1="15" x2="13" y2="15" />
+    </>
+  ),
   draft: (
     <>
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
