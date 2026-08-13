@@ -38,16 +38,103 @@ was deleted. GitHub keeps the closed PR.
 Merged-PR leftover branches (the parallel-agent wave) were deleted in the same
 pass. Open PR branches are left alone.
 
+## Phase 1 — current `main`, verified 2026-08-13
+
+This is the re-audit of **this tree**, at `d062367`, with dependencies
+installed. It is a delta, not a third 700-line audit. The August 13
+verification file's P0 list is scored below so it stops being re-opened.
+
+**What ran** (from `artifacts/instant-attorney`):
+
+| Check | Result |
+|---|---|
+| `pnpm typecheck` | pass |
+| `pnpm test` | 809 pass, 0 fail |
+| `pnpm schema:strict` | 90 table definitions OK |
+| `pnpm lint` | pass (warnings only; none are new architecture) |
+
+`pnpm build` was not re-run here. CI still requires it. The August 13 file's
+excuse — "dependencies are not installed, so nothing could run" — does not
+apply to this checkout.
+
+**Size vs the August 12 audit snapshot** (same roots: `app`, `components`, `lib`):
+
+| Measure | Aug 12 audit | This tree |
+|---|---:|---:|
+| TypeScript/TSX files | 590 | 546 |
+| Lines | 90,134 | 82,937 |
+| API route handlers | 130 | 118 |
+| Unit-test files under `lib` | 120 | 116 |
+| SQL files at the migration root | 75 | 79 |
+
+Counts moved because chunks 2–7 deleted journeys, not because a rewrite
+landed. SQL went up because later stages added tables and narrowed
+constraints; that is expected.
+
+Method: count callers, then read the guards that already pin them. Dead code
+in this repo looks live. A comment is not evidence.
+
+### North-star scores
+
+Code-path existence plus the existing guards. Not a live-database proof, not a
+human usability test.
+
+| # | Test | Score | Why |
+|---|---|---|---|
+| 1 | Incomplete story, patient intake | **Held, latent split** | Durable ACP jobs and Living File extraction are in the one chat route. The UI hardcodes `mode: "freestyle"`. The route still gates orchestrator tools on `mode === "freestyle"`, so a stored or posted `"intake"` turn is a different, weaker assistant. The client should never see those words; internally they still change behavior. |
+| 2 | Every draft request yields a complete, visible, editable artifact | **Held on generation; leftover job/shell gaps** | The worker, regenerate, and attorney-originated draft all call `draftInstrument`. Markerless and truncated output is not saved as a draft. An unknown forum becomes `FORUM_PLACEHOLDER` (BLOCKING), not a refusal. Remaining: `dispatchDocumentPlan` inserts jobs only — the editable shell is created when a worker *claims* the job, so a queued job has status and no artifact id; a failed generate leaves that shell empty; there is no deterministic outline fallback. Failure-and-retry was a deliberate trade against saving ungated text. |
+| 3 | Find every current document from the case workspace | **Held as aggregation; two identities** | The file deck and document table read both `client_workspace_drafts` and `documents`. Promotion still creates a second row. Physical merge remains deferred. |
+| 4 | Edit without losing history | **Held after promotion** | Canonical `documents.draft_text` writes go through `saveDocumentRevision`. Unpromoted workspace drafts update the same row; immutable history starts at promote. That is the deferred two-record design, not a new bug. |
+| 5 | Case-aware junior associate | **Held as one review workbench** | Freestyle and brainstorm rooms are gone. `/attorney/review/[id]` is the associate. `chat-edit` still does not write — the review page applies the change set and autosaves through `/revision`. Consult pages remain separate one-shot generators, which chunk 6 kept on purpose. Analysis-only turns (a question that must not produce a fake edit) are the #142 product decision, not missing cleanup. |
+| 6 | Living File updates on accepted inputs | **Held for chat and canonical document writes; not event-complete** | Chat parses inline blocks and runs the extractor sweep. `saveDocumentRevision` queues Living File sync. Workspace-draft generation writes `client_workspace_drafts.content` directly and does not call that boundary. The cheap `case_files` writer-set guard (prerequisite for the deferred event contract) has not been built. `living-file-boundary.test.ts` pins message-cursor watermarks, not the writer set. |
+| 7 | Never invent forum, authority, facts, or completion | **Held on the drafting engine** | The August 13 "worker bypasses the pipeline" finding is false here. `document-drafting.test.ts` fails any file that assembles `buildDrafterSystemPrompt` outside the engine (`chat-edit` is the one allowed non-writer). `document-risk.test.ts` scans prompts for jurisdiction-defaulting language. `input_fact_revision` is stored on the job and never read before save — a stale-plan check that does not exist, not a second generator. |
+
+### August 13 P0 list, against this tree
+
+| Claim | Status |
+|---|---|
+| Worker is a raw Anthropic call that skips the legal pipeline | **Gone.** `lib/document-job-worker.ts` calls `draftInstrument`. |
+| Wizard journey still live | **Gone.** No `app/wizard`. Guards mention it in the past tense. |
+| Five attorney AI rooms | **Gone.** Freestyle and brainstorm deleted; review is the room. Consult generators stay. |
+| Roadmap spine competing with next-step | **Gone as UI.** `roadmap-build.ts` remains because consult briefs use it — that is the internal-adapter disposition, not a ghost. |
+| `pre_warmed` still in application code | **Gone** from `.ts`/`.tsx`. Historical SQL only. |
+| `case-cta.ts` / `document-generation-policy.ts` orphans | **Gone.** |
+| Unused `api-server` / mockup scaffold | **Gone.** `pnpm-workspace.yaml` records the deletion. |
+| Two document systems | **Still true, deferred.** One logical service first; no physical merge. |
+| Living File coverage is not event-complete | **Still true, deferred.** Cheap writer-set guard is the next move if anything is done here. |
+| `input_fact_revision` unused at save | **Still true.** |
+| Shell created at claim, not dispatch | **Still true.** |
+| Intake/freestyle mode split | **Still true as code, hidden in the UI.** Tools are off unless the turn is posted as freestyle. |
+| `lib/freestyle-drafts.ts` header still names `attorney_workspace_drafts` and `ATTORNEY_FREESTYLE_HEAD` | **Stale comment on a live module.** The parsers are used by client chat drafts. The rooms they name are gone. Do not resurrect the rooms to make the comment true. |
+
+### Leftover list — the only cleanup still in front of product work
+
+Do these serially. Do not open a parallel agent on more than one.
+
+1. **Collapse `ChatMode`.** One assistant personality. Stop gating tools on `"freestyle"`. Stop persisting `case_files.chat_mode`. Leave the column if renaming it is a data change; stop writing it. Fix the stale `freestyle-drafts.ts` header in the same pass.
+2. **Job visibility without a second generator.** Create the workspace-draft shell at `dispatchDocumentPlan`, not at claim. A failed generate must not look like a ready empty document. Still no deterministic fake legal text — keep fail-and-retry — but the card should exist the moment drafting is promised.
+3. **Cheap Living File writer guard.** Scan `app/` and `lib/` for semantic `case_files` writers; declare administrative writes (title, legal hold, archive) exempt. Same shape as `document-persistence.test.ts`. Do not event-source.
+4. **Then, and only then, the #142 product decision:** keep apply-on-arrival, or restore preview-then-confirm. Until that is named, do not implement the workbench plan.
+
+Still deferred, unchanged: physical merge of `client_workspace_drafts` into `documents`; the case-event/projection rewrite; volunteer-text cross-matter contamination (routing no longer silently picks the wrong file; extraction of a volunteered new matter into the current file is still possible).
+
+Specialist calculator pages (`/family/*`, `/bankruptcy/*`, `/personal-injury/*`, …) and `/free-chat` still exist. They are not secretly a second drafting engine. Do not delete them as "ghosts" without a named owner.
+
 ## The problem, stated once
 
-The product kernel is sound. Document text has one persistence boundary, drafts
-still complete when facts are missing, the Living File sync is durable, attorney
-edits are proposed before they are accepted, and high-risk instruments refuse to
-invent a jurisdiction. None of that is up for negotiation — see
-**Guardrails** below.
+That paragraph below is the August 12 picture, kept so the chunks read as a
+sequence rather than as unexplained history. Chunks 0–7 removed it. What is
+still true is the leftover list in Phase 1.
 
-The excess sits around that kernel: two client drafting experiences, two draft
-records, four modules computing "what next," five attorney AI rooms, and a
+The product kernel is sound. Document text has one persistence boundary, drafts
+still complete when facts are missing, the Living File sync is durable, the
+attorney's working copy autosaves through one write path (undo is revision
+history — chunk 6; this is no longer propose-then-click-each), and high-risk
+instruments refuse to invent a jurisdiction. None of that is up for
+negotiation — see **Guardrails** below.
+
+The excess that *sat* around that kernel: two client drafting experiences, two
+draft records, four modules computing "what next," five attorney AI rooms, and a
 roadmap subsystem that is a second case spine. Each was built by an agent that
 could not see the others. Each passed its own tests.
 
