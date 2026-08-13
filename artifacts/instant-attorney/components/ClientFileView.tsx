@@ -25,6 +25,7 @@ import CollapsibleText from "@/components/CollapsibleText";
 import LegalStrategyCard from "@/components/LegalStrategyCard";
 import { buildMatterTasks } from "@/lib/matter-tasks";
 import { buildFileDeck } from "@/lib/file-deck";
+import { COVER_CHAT_ASK, askHref } from "@/lib/cover-sheet";
 import type { CaseFile, FactItem, Document, Profile, ConsultRequest, ConsultWrapUp, RequestedAttachment, GovFormInstrument, Attachment, ClientWorkspaceDraft } from "@/lib/types";
 import { docTypeLabel, personDisplayName, coerceInstrumentType } from "@/lib/types";
 import { FIRM_CONTACT_EMAIL } from "@/lib/firm";
@@ -37,7 +38,7 @@ import type { ClientDestination } from "@/lib/client-destinations";
 //   – ClientCaseMemo — caption, next step, goal, posture, one catch
 //   – draft shortcuts — current documents, one tap away
 //   – FileTiles — nine destinations, Living File first
-//   – AskAssistantBar — sticky way back into chat on phones
+//   – AskAssistantBar — sticky way into chat, same words as the cover button
 //
 // Clicking a tile opens that section as its own routed view. The Living File
 // tile is the full stored record the assistant uses. Attorney branch is unchanged.
@@ -514,7 +515,7 @@ export default function ClientFileView({
             )}
             {clientDestination === "help" && helpPanel}
           </div>
-          <AskAssistantBar href={chatHref} />
+          <AskAssistantBar href={askHref(chatHref, deck.nextStep?.ask ?? COVER_CHAT_ASK)} />
         </div>
       );
     }
@@ -563,7 +564,7 @@ export default function ClientFileView({
 
         <FileTiles tiles={deck.tiles} />
 
-        <AskAssistantBar href={chatHref} />
+        <AskAssistantBar href={askHref(chatHref, deck.nextStep?.ask ?? COVER_CHAT_ASK)} />
       </div>
     );
   }

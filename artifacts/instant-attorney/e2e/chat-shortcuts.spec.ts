@@ -12,7 +12,7 @@ import {
  *
  * The two entry points on the cover-sheet landing:
  *   1. The memo's primary next-step button (`.lf-client-memo-primary`)
- *   2. The sticky "Continue legal chat" button in AskAssistantBar
+ *   2. The sticky "Talk with your assistant" button in AskAssistantBar
  *
  * A wrong or absent caseFileId would silently drop the client into a blank
  * or wrong conversation.  These tests pin that the assembled href is correct

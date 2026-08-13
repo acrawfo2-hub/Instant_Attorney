@@ -11247,11 +11247,11 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
     padding: 0.65rem 2rem calc(0.65rem + env(safe-area-inset-bottom));
   }
   .lf-askbar-btn {
-    max-width: 300px;
+    max-width: 28rem;
     margin: 0 auto;
-    padding: 11px 18px;
-    font-size: 14px;
-    border-radius: 8px;
+    padding: 13px 20px;
+    font-size: 15px;
+    border-radius: 10px;
   }
 }
 
@@ -11600,20 +11600,21 @@ a.ms-item-title:hover { color: var(--brand-navy); text-decoration: underline; }
 }
 /* One-page cover sheet (never more than two). Full records live behind tiles. */
 .lf-client-memo { grid-column: 1 / -1; border: 1px solid var(--brand-border); border-radius: var(--brand-r-lg); background: var(--brand-surface); overflow: hidden; max-width: 52rem; }
-.lf-client-memo-head { padding: 1rem 1.25rem 0.85rem; border-bottom: 1px solid var(--brand-border); }
+.lf-client-memo-head { padding: 1rem 1.25rem 1rem; border-bottom: 1px solid var(--brand-border); }
 .lf-client-memo-kicker { margin: 0 0 .2rem; color: var(--brand-gold-dk); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-.lf-client-memo-head h2 { margin: 0; color: var(--brand-navy); font-family: var(--font-cormorant, Georgia, serif); font-size: 1.45rem; }
+.lf-client-memo-head h2 { margin: 0 0 .85rem; color: var(--brand-navy); font-family: var(--font-cormorant, Georgia, serif); font-size: 1.45rem; }
 .lf-client-memo-body { display: flex; flex-direction: column; }
 .lf-client-memo-section { min-width: 0; padding: 0.75rem 1.25rem; border-bottom: 1px solid var(--brand-border); }
 .lf-client-memo-section:last-child { border-bottom: 0; }
 .lf-client-memo-section h3 { margin: 0 0 .35rem; color: var(--brand-navy); font-size: .78rem; letter-spacing: .04em; text-transform: uppercase; }
 .lf-client-memo-section p { margin: 0; color: var(--brand-text); font-size: .9rem; line-height: 1.5; }
-.lf-client-memo-actions { order: -1; }
 .lf-client-memo-link { display: inline-block; margin-top: .8rem; color: var(--brand-gold-dk); font-size: .8rem; font-weight: 650; }
 .lf-client-memo-file { display: block; padding: 0.7rem 1.25rem; border-top: 1px solid var(--brand-border); color: var(--brand-gold-dk); font-size: .82rem; font-weight: 650; }
-.lf-client-memo-primary { display: flex; flex-direction: column; gap: .2rem; padding: .75rem 1rem; border-radius: 8px; background: var(--brand-navy); color: white; font-size: .88rem; font-weight: 650; }
-.lf-client-memo-primary small { color: rgba(255,255,255,.72); font-weight: 400; line-height: 1.4; }
-.lf-client-memo-secondary { display: flex; flex-wrap: wrap; gap: .45rem 1rem; margin-top: .55rem; }
+.lf-client-memo-primary { display: flex; flex-direction: column; gap: .3rem; padding: 1rem 1.1rem; border-radius: 10px; background: var(--brand-navy); color: white; font-size: 1.05rem; font-weight: 700; text-decoration: none; }
+.lf-client-memo-primary-label { display: inline-flex; align-items: center; gap: .5rem; }
+.lf-client-memo-primary small { color: rgba(255,255,255,.78); font-weight: 400; font-size: .86rem; line-height: 1.4; }
+.lf-client-memo-primary:hover { background: var(--brand-navy-md, #1a3354); }
+.lf-client-memo-secondary { display: flex; flex-wrap: wrap; gap: .45rem 1rem; margin-top: .7rem; }
 .lf-client-memo-secondary a { color: var(--brand-gold-dk); font-size: .82rem; font-weight: 600; }
 .lf-living-file { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--lf-gap); }
 .lf-living-file-head { grid-column: 1 / -1; padding-bottom: 0.25rem; }

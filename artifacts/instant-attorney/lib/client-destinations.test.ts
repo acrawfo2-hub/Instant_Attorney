@@ -62,3 +62,14 @@ test("client file landing actually renders the cover sheet and tile map", () => 
   assert.match(view, /clientDestination === "documents"/);
   assert.match(view, /clientDestination === "living-file"/);
 });
+
+test("the cover and the chat route treat chat as the door from the one-page", () => {
+  const memo = readFileSync(join(ROOT, "components/ClientCaseMemo.tsx"), "utf8");
+  const bar = readFileSync(join(ROOT, "components/AskAssistantBar.tsx"), "utf8");
+  const route = readFileSync(join(ROOT, "app/api/chat-acp/route.ts"), "utf8");
+  const header = readFileSync(join(ROOT, "app/dashboard/[id]/page.tsx"), "utf8");
+  assert.match(memo, /Talk with your assistant/);
+  assert.match(bar, /Talk with your assistant/);
+  assert.match(header, /Talk with your assistant/);
+  assert.match(route, /formatCoverBriefing/);
+});

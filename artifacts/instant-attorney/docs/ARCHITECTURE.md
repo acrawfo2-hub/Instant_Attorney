@@ -248,6 +248,9 @@ the full stored record (`?view=living-file`; old `?view=case-details`
 bookmarks alias). The cover sheet is attorney judgment — caption, next step,
 one goal, posture from `case_files.summary` only, one catch — never more than
 two pages, ideally one. It is not a dump of whatever the model wrote first.
+Chat is the door: every cover action opens the conversation, and the
+orchestrator is given the same one-page (`formatCoverBriefing`) so it can
+help the client from there.
 
 `lib/living-file-writers.test.ts` names every production file that mutates
 `case_files`. Administrative writes (title, archive, legal hold, opening a

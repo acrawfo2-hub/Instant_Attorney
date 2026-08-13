@@ -3,8 +3,14 @@ import type { DeckAction } from "./file-deck.ts";
 // Editorial rules for the client cover sheet. Kept out of the React component
 // so the field-picking can be tested without a DOM: an expert attorney's one
 // page, not a dump of whatever the model wrote first.
+//
+// Chat is the door. A draft or an upload may be the work, but the assistant
+// is how the client gets there — the cover never sends them somewhere else.
 
 const UNCONFIRMED = /unconfirmed|^$/i;
+
+/** Seeded into the composer when the cover has no more specific next-step ask. */
+export const COVER_CHAT_ASK = "Help me from my cover sheet — what should I do next?";
 
 export function coverForum(jurisdiction: string | null | undefined): string {
   const raw = jurisdiction?.trim() ?? "";
@@ -63,24 +69,16 @@ export function askHref(chatHref: string, ask: string): string {
 }
 
 /**
- * Open the paper or the upload when that is the job. Chat is the fallback,
- * not the default for a draft sitting on the desk.
+ * Every cover action opens chat. The ask is the next-step sentence when we
+ * have one; otherwise the default cover ask. Chat is the door — not a fallback.
  */
 export function coverActionHref(
   chatHref: string,
-  caseFileId: string,
-  action: Pick<DeckAction, "kind" | "draftId" | "ask"> | null,
+  action: Pick<DeckAction, "ask"> | null,
   fallbackAsk?: string | null,
 ): string {
-  if (action?.kind === "draft" && action.draftId) {
-    return `/chat?caseFileId=${caseFileId}&draft=${action.draftId}`;
-  }
-  if (action?.kind === "upload") {
-    return `/dashboard/${caseFileId}?view=documents#uploads`;
-  }
-  const ask = action?.ask ?? fallbackAsk;
-  if (ask) return askHref(chatHref, ask);
-  return chatHref;
+  const ask = action?.ask ?? fallbackAsk ?? COVER_CHAT_ASK;
+  return askHref(chatHref, ask);
 }
 
 export function matchingAction(
@@ -90,4 +88,34 @@ export function matchingAction(
   if (!title) return null;
   const key = title.trim().toLowerCase();
   return actions.find((a) => a.label.toLowerCase() === key) ?? null;
+}
+
+export interface CoverBriefingInput {
+  matterSubtype?: string | null;
+  jurisdiction?: string | null;
+  goals?: string[] | null;
+  summary?: string | null;
+  blockingGap?: string | null;
+  strategyRisk?: string | null;
+  nextStep?: string | null;
+}
+
+/**
+ * The same one-page the client just read, for the orchestrator. Not a second
+ * summary engine — the same field-picking as ClientCaseMemo.
+ */
+export function formatCoverBriefing(input: CoverBriefingInput): string {
+  const catchLine = coverCatch(input.blockingGap ?? null, input.strategyRisk ?? null);
+  const standing = coverStanding(input.summary);
+  return [
+    "=== CLIENT COVER SHEET ===",
+    "The client just read this one-page. Meet them there. Help them do the next step and close the catch. Do not re-read the cover back to them unless they ask.",
+    `Caption: ${coverCaption(input.matterSubtype, input.jurisdiction)}`,
+    `What they do now: ${input.nextStep?.trim() || "Not yet pinned — help them find the next step."}`,
+    `What they want: ${coverGoal(input.goals)}`,
+    `Where things stand: ${standing || "Not yet written."}`,
+    `The catch: ${catchLine.text}`,
+    "=== END COVER SHEET ===",
+    "",
+  ].join("\n");
 }
