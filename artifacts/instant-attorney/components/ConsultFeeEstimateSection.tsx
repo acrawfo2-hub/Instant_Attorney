@@ -29,9 +29,11 @@ function billingLabel(model: PackageOption["billingModel"]): string {
 export default function ConsultFeeEstimateSection({
   consultId,
   consultStatus,
+  refreshNonce,
 }: {
   consultId: string;
   consultStatus: ConsultRequestStatus;
+  refreshNonce?: number;
 }) {
   const [data, setData] = useState<MergedFeeEstimate | null>(null);
   const [loading, setLoading] = useState(true);
@@ -60,7 +62,7 @@ export default function ConsultFeeEstimateSection({
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, refreshNonce]);
 
   const persistDraft = useCallback(async (patch: Partial<ConsultFeeEstimateDraft>) => {
     if (isReadOnly || !data) return;

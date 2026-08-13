@@ -80,9 +80,13 @@ function ActionList({
 export default function ConsultWrapUpSection({
   consultId,
   consultStatus,
+  appliedWrapUp,
+  appliedSeq,
 }: {
   consultId: string;
   consultStatus: ConsultRequestStatus;
+  appliedWrapUp?: ConsultWrapUp | null;
+  appliedSeq?: number;
 }) {
   const router = useRouter();
   const [loaded, setLoaded] = useState(false);
@@ -141,6 +145,13 @@ export default function ConsultWrapUpSection({
       setSaving(false);
     }
   }, [consultId, isReadOnly]);
+
+  useEffect(() => {
+    if (!appliedWrapUp || !appliedSeq || isReadOnly) return;
+    const next = normalizeWrapUp(appliedWrapUp);
+    setWrapUp(next);
+    void persistDraft(attorneyNotes, next);
+  }, [appliedSeq, appliedWrapUp, attorneyNotes, isReadOnly, persistDraft]);
 
   function scheduleSave(notes: string, draft: ConsultWrapUp) {
     if (isReadOnly) return;

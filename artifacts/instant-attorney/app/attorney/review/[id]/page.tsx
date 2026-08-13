@@ -14,7 +14,7 @@ import type { ReviewChange, RevisionSaveState } from "@/components/attorney-revi
 import AttorneyContextHeader from "@/components/AttorneyContextHeader";
 import { parseDrafterResponse } from "@/lib/placeholder-parsing";
 import LivingFileSyncWarning from "@/components/LivingFileSyncWarning";
-import { shortcutById, type AssociateShortcutId } from "@/lib/associate-shortcuts";
+import { shortcutById } from "@/lib/associate-shortcuts";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -679,7 +679,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
     }
   }
 
-  async function sendChatEdit(opts?: { text?: string; shortcut?: AssociateShortcutId }) {
+  async function sendChatEdit(opts?: { text?: string; shortcut?: string }) {
     const shortcut = opts?.shortcut ? shortcutById(opts.shortcut) : undefined;
     const text = (opts?.text ?? shortcut?.instruction ?? chatInput).trim();
     // Never race the Opus second-draft pipeline: it deletes and re-inserts

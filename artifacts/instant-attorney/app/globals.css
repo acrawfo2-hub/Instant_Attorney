@@ -6706,6 +6706,7 @@ mark.atty-placeholder {
   font: 600 12px var(--font-dm-sans), sans-serif; text-align: left;
 }
 .review-workbench-main { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+.cb-associate-layout { margin-top: 12px; }
 .review-workbench-pane { background: var(--brand-white); border: 1px solid var(--brand-border); border-radius: 12px; min-width: 0; overflow: hidden; }
 .review-pane-heading { display: flex; justify-content: space-between; gap: 12px; align-items: start; padding: 14px 16px; border-bottom: 1px solid var(--brand-border); }
 .review-pane-heading h2 { margin: 0; font-size: 15px; }

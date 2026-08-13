@@ -1,9 +1,14 @@
 "use client";
 
 import type { FormEvent } from "react";
-import { ASSOCIATE_SHORTCUTS, type AssociateShortcutId } from "@/lib/associate-shortcuts";
+import { ASSOCIATE_SHORTCUTS } from "@/lib/associate-shortcuts";
 
 export interface PartnerMessage { role: "user" | "assistant"; content: string }
+
+export interface PartnerShortcut {
+  id: string;
+  label: string;
+}
 
 interface Props {
   messages: PartnerMessage[];
@@ -11,24 +16,30 @@ interface Props {
   sending: boolean;
   disabled?: boolean;
   error?: string;
+  shortcuts?: readonly PartnerShortcut[];
+  subtitle?: string;
+  emptyHint?: string;
   onInput: (text: string) => void;
   onSend: () => void;
-  onShortcut?: (id: AssociateShortcutId) => void;
+  onShortcut?: (id: string) => void;
 }
 
 export default function ReviewPartnerChat({
   messages, input, sending, disabled, error, onInput, onSend, onShortcut,
+  shortcuts = ASSOCIATE_SHORTCUTS,
+  subtitle = "Edits land in the working copy as you talk. The client sees nothing until you approve.",
+  emptyHint = "Ask a question, talk through a weakness, or send a specialist. Fixes apply as you go.",
 }: Props) {
   const submit = (event: FormEvent) => { event.preventDefault(); onSend(); };
   return <aside className="review-workbench-pane review-partner-pane" aria-label="Junior associate">
     <div className="review-pane-heading">
       <div>
         <h2>Junior associate</h2>
-        <p>Edits land in the working copy as you talk. The client sees nothing until you approve.</p>
+        <p>{subtitle}</p>
       </div>
     </div>
     <div className="review-associate-shortcuts" role="toolbar" aria-label="Specialists">
-      {ASSOCIATE_SHORTCUTS.map((item) => (
+      {shortcuts.map((item) => (
         <button
           key={item.id}
           type="button"
@@ -41,7 +52,7 @@ export default function ReviewPartnerChat({
       ))}
     </div>
     <div className="review-partner-messages">
-      {messages.length === 0 && <p className="atty-comment-empty">Ask a question, talk through a weakness, or send a specialist. Fixes apply as you go.</p>}
+      {messages.length === 0 && <p className="atty-comment-empty">{emptyHint}</p>}
       {messages.map((message, index) => <div key={index} className={`review-partner-message review-partner-${message.role}`}><strong>{message.role === "user" ? "You" : "Associate"}</strong><p>{message.content}</p></div>)}
     </div>
     <form onSubmit={submit} className="review-partner-compose">

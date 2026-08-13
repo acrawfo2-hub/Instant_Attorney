@@ -16,9 +16,10 @@ list. Do not re-open its P0 findings.
 
 ## Parked attorney-feature PRs
 
-None. #142 and #143 were closed without merging (see below). Consult stays a
-one-shot generator until a future named product chunk writes a new decision.
-Do not revive those plans as written.
+None. #142 and #143 were closed without merging (see below). Consult is a
+named product chunk: the same associate workbench as document review, existing
+generators as tools, apply-on-arrival, attorney owns send/close. Do not revive
+#143 as written.
 
 ## Closed without merging
 
@@ -29,7 +30,7 @@ was deleted. GitHub keeps the closed PR.
 |---|---|---|
 | [#100](https://github.com/acrawfo2-hub/Instant_Attorney/pull/100) | Revisioned, dependency-aware workspace-draft generation | Closed 2026-08-12 during the merge wave. Superseded by the revisions model (`schema-stage46` / `schema-stage48`) and `draftInstrument`. |
 | [#142](https://github.com/acrawfo2-hub/Instant_Attorney/pull/142) | Junior associate workbench build plan | Closed 2026-08-13. Leftover 4 (#147) named and implemented apply-on-arrival, aggressive teammate, and informed override. Do not restore preview-then-confirm. |
-| [#143](https://github.com/acrawfo2-hub/Instant_Attorney/pull/143) | Consult workflow build plan | Closed 2026-08-13. Chunk 6 kept consult pages as one-shot generators on purpose. Not leftover cleanup; not the next named chunk. |
+| [#143](https://github.com/acrawfo2-hub/Instant_Attorney/pull/143) | Consult workflow build plan | Closed 2026-08-13. Chunk 6 kept consult pages as one-shot generators. Named product chunk: same associate workbench as document review. Do not merge this plan as written. |
 
 Merged-PR leftover branches (the parallel-agent wave) were deleted in the same
 pass. Open PR branches are left alone.
@@ -561,6 +562,11 @@ each. The review page now applies the change set on arrival and autosaves throug
 revision per save. Changes whose passage moved fall back to the accept buttons
 instead of being dropped. `chat-edit` still does not write — a second writer
 would race the editor's autosave on the same text.
+
+Consult uses that same teammate. The session page and the consult workspace
+share one thread. Brief, fee, closeout, and pre-consult memo stay the existing
+services, invoked from chat or shortcut buttons. Wrap-up patches apply on
+arrival; the attorney still sends and still ends the session.
 
 **A confidentiality leak, found while designing that.** The attorney's working
 copy is a `second_draft` child carrying the client's `user_id`, and the download

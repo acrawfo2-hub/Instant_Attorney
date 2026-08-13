@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   CONSULT_DISPOSITION_LABELS,
   emptyWrapUp,
@@ -16,6 +16,8 @@ interface Props {
   /** True once the report has already been sent — the form goes read-only. */
   alreadySent: boolean;
   submittedAt: string | null;
+  appliedWrapUp?: ConsultWrapUp | null;
+  appliedSeq?: number;
 }
 
 function ActionListEditor({
@@ -106,7 +108,9 @@ function ActionListEditor({
   );
 }
 
-export default function ConsultCloseoutEditor({ consultId, initialWrapUp, alreadySent, submittedAt }: Props) {
+export default function ConsultCloseoutEditor({
+  consultId, initialWrapUp, alreadySent, submittedAt, appliedWrapUp, appliedSeq,
+}: Props) {
   const [wrapUp, setWrapUp] = useState<ConsultWrapUp>(initialWrapUp ? normalizeWrapUp(initialWrapUp) : emptyWrapUp());
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -117,6 +121,24 @@ export default function ConsultCloseoutEditor({ consultId, initialWrapUp, alread
   const [notice, setNotice] = useState<string | null>(null);
 
   const readOnly = sent;
+
+  useEffect(() => {
+    if (!appliedWrapUp || !appliedSeq || readOnly) return;
+    setWrapUp(normalizeWrapUp(appliedWrapUp));
+    void (async () => {
+      try {
+        const res = await fetch(`/api/attorney/consult/${consultId}/wrap-up`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ wrapUp: appliedWrapUp }),
+        });
+        if (!res.ok) return;
+        setNotice("Associate draft applied — review before sending.");
+      } catch {
+        /* save is best-effort; the editor still shows the applied text */
+      }
+    })();
+  }, [appliedSeq, appliedWrapUp, consultId, readOnly]);
 
   function update<K extends keyof ConsultWrapUp>(key: K, value: ConsultWrapUp[K]) {
     setWrapUp((prev) => ({ ...prev, [key]: value }));

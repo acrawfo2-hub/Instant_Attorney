@@ -5,7 +5,9 @@ import Link from "next/link";
 import { parsePreConsultMemo, type ConsultBriefSnapshot } from "@/lib/consult-brief";
 import ConsultWrapUpSection from "@/components/ConsultWrapUpSection";
 import ConsultFeeEstimateSection from "@/components/ConsultFeeEstimateSection";
-import type { ConsultRequestStatus } from "@/lib/types";
+import ConsultAssociateChat from "@/components/ConsultAssociateChat";
+import { normalizeWrapUp } from "@/lib/consult-wrap-up";
+import type { ConsultRequestStatus, ConsultWrapUp } from "@/lib/types";
 
 function engagementClass(level: ConsultBriefSnapshot["engagement"]["level"]) {
   if (level === "high") return "cb-engagement-high";
@@ -43,6 +45,9 @@ export default function ConsultBriefPanel({
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
   const [truncated, setTruncated] = useState(false);
+  const [appliedWrapUp, setAppliedWrapUp] = useState<ConsultWrapUp | null>(null);
+  const [appliedSeq, setAppliedSeq] = useState(0);
+  const [feeNonce, setFeeNonce] = useState(0);
 
   const loadSnapshot = useCallback(async () => {
     setLoading(true);
@@ -139,6 +144,7 @@ export default function ConsultBriefPanel({
       </div>
 
       {expanded && (
+        <div className="review-workbench-main cb-associate-layout">
         <div className="cb-body">
           <div className="atty-panel-tabs">
             <button
@@ -167,9 +173,14 @@ export default function ConsultBriefPanel({
           </div>
 
           {tab === "wrap-up" && showWrapUp ? (
-            <ConsultWrapUpSection consultId={consultId} consultStatus={consultStatus} />
+            <ConsultWrapUpSection
+              consultId={consultId}
+              consultStatus={consultStatus}
+              appliedWrapUp={appliedWrapUp}
+              appliedSeq={appliedSeq}
+            />
           ) : tab === "fee-guidance" ? (
-            <ConsultFeeEstimateSection consultId={consultId} consultStatus={consultStatus} />
+            <ConsultFeeEstimateSection consultId={consultId} consultStatus={consultStatus} refreshNonce={feeNonce} />
           ) : (
             <>
               {loading && !snapshot && <div className="atty-ai-running">Loading case snapshot…</div>}
@@ -277,6 +288,29 @@ export default function ConsultBriefPanel({
               </div>
             </>
           )}
+        </div>
+        <ConsultAssociateChat
+          consultId={consultId}
+          currentWrapUp={appliedWrapUp}
+          lockArtifacts={consultStatus === "completed"}
+          onWrapUp={(wrapUp) => {
+            setAppliedWrapUp(normalizeWrapUp(wrapUp));
+            setAppliedSeq((n) => n + 1);
+            if (showWrapUp) setTab("wrap-up");
+          }}
+          onFeeDraft={(draft) => {
+            void fetch(`/api/attorney/consult/${consultId}/fee-estimate`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(draft),
+            }).then(() => setFeeNonce((n) => n + 1));
+            setTab("fee-guidance");
+          }}
+          onRefresh={() => {
+            void loadSnapshot();
+            setFeeNonce((n) => n + 1);
+          }}
+        />
         </div>
       )}
     </div>
