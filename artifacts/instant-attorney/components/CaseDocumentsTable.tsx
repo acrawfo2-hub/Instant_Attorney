@@ -10,6 +10,11 @@ import { docTypeLabel, isDocumentOutOfDate } from "@/lib/types";
 // autosaves into it mid-edit. /api/documents/[id]/download enforces the same
 // rule; these links are hidden so a client is never offered a 409.
 import { isAttorneyApproved } from "@/lib/doc-generator";
+import { ATTORNEY_ORIGINATED } from "@/lib/types";
+
+/** A document the attorney started from the file, not one the client submitted. */
+const isAttorneyOriginated = (doc: Document) =>
+  (doc.content_json as Record<string, unknown> | null)?.source === ATTORNEY_ORIGINATED;
 import { findBlanks } from "@/lib/freestyle-drafts";
 import DocumentInfoNeeded from "@/components/DocumentInfoNeeded";
 import WorkspaceDraftInfoNeeded from "@/components/WorkspaceDraftInfoNeeded";
@@ -756,8 +761,8 @@ export default function CaseDocumentsTable({
                     )}
 
                     <div className="cdt-detail-links">
-                      {doc.draft_text && (
-                        <a href={`/api/documents/${doc.id}/download`}>Download submitted draft (.docx)</a>
+                      {doc.draft_text && (isAttorney || !isAttorneyOriginated(doc) || isAttorneyApproved(doc.status)) && (
+                        <a href={`/api/documents/${doc.id}/download`}>Download {isAttorneyOriginated(doc) ? "draft" : "submitted draft"} (.docx)</a>
                       )}
                       {secondDraft?.draft_text && (isAttorney || isAttorneyApproved(secondDraft.status)) && (
                         <a href={`/api/documents/${secondDraft.id}/download`}>Download revised draft (.docx)</a>

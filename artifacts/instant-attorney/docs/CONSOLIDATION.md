@@ -397,5 +397,11 @@ but truncated facts at eight with "+N more in the Living File" — sending the
 attorney to another page mid-revision to read one fact. The overflow now opens in
 place.
 
-Still open, and deliberately not built: attorney-originated drafts. Every
-`documents` row still starts from a client submission.
+**Attorney-originated drafts, built.** `POST /api/attorney/case-files/[id]/draft`
+takes a document name and free-text instruction, runs `draftInstrument` and saves
+through `saveDocumentRevision` — a way in, not a second engine — then drops the
+attorney into the workbench where the associate, the file and the revision
+history already are. It stays `status: "draft"` with `submitted_at` null, because
+the attorney is the author and stamping it `pending_review` would put their own
+draft in their own queue on a 48-hour clock. It is invisible to the client until
+approved, on the same rule as the working copy.

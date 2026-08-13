@@ -67,6 +67,7 @@ one place. Two callers, and neither owns the drafting:
 |---|---|---|
 | `lib/document-job-worker.ts` | the orchestrator's workspace draft | **fails the job** — nothing is watching, and a half-written draft looks finished |
 | `app/api/documents/[id]/regenerate/route.ts` | a new revision of an existing document | keeps the existing draft and reports failure |
+| `app/api/attorney/case-files/[id]/draft/route.ts` | a document the attorney started from the file | reports failure; nothing is created |
 
 There were three implementations before this. The wizard route had the real
 pipeline; the worker had a twelve-line Anthropic call with none of it; and
@@ -111,11 +112,12 @@ Two rules learned the hard way:
 text.** Every save goes through `saveDocumentRevision`, which stamps a revision
 id and drives the durable Living File sync.
 
-There are eight writers and no others:
+There are nine writers and no others:
 
 | Writer | Save |
 |---|---|
 | `app/api/documents/[id]/regenerate/route.ts` | regeneration in place |
+| `app/api/attorney/case-files/[id]/draft/route.ts` | the attorney starts a document from the file |
 | `app/api/documents/[id]/fill-info/route.ts` | client fills placeholders |
 | `app/api/workspace/drafts/[id]/route.ts` | client edits a promoted draft |
 | `app/api/workspace/drafts/[id]/promote/route.ts` | promotion and resubmission |
@@ -169,10 +171,20 @@ with a junior. They now apply directly. Changes whose passage moved under them
 fall back to the accept buttons rather than being dropped. The attorney's undo is
 the revision history.
 
-**The client never sees the working copy until it is approved.** It carries the
+**Documents have two origins.** A client submits one for review, or the
+attorney starts one from the file — reading a matter is where you realise what
+the client actually needs. An attorney-originated document is marked
+`content_json.source = "attorney_originated"`, stays `status: "draft"` with
+`submitted_at` null so it never enters the attorney's own review queue, and is
+generated and saved through the same engine and boundary as everything else.
+
+**The client never sees the working copy — or an attorney-originated draft —
+until it is approved.** It carries the
 client's `user_id`, so ownership alone let them download it mid-edit;
-`/api/documents/[id]/download` now refuses an unapproved `second_draft` to a
-non-attorney, and the links are hidden. Approval is the one explicit act, and
+`/api/documents/[id]/download` refuses an unapproved `second_draft` to a
+non-attorney, and refuses an unapproved attorney-originated draft the same way —
+that row is owned by the client, so ownership alone would have exposed a draft
+they never asked for. The links are hidden to match. Approval is the one explicit act, and
 delivery is separate from it again — `/approve` sets the status, the delivery
 composer sends. See `work-product.test.ts`.
 

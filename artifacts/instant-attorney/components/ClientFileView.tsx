@@ -21,6 +21,7 @@ import ClientCaseMemo from "@/components/ClientCaseMemo";
 import KeyDeadlines from "@/components/KeyDeadlines";
 import StrengthCheckCard from "@/components/StrengthCheckCard";
 import CaseDocumentsTable from "@/components/CaseDocumentsTable";
+import AttorneyStartDraft from "@/components/AttorneyStartDraft";
 import { buildMatterTasks } from "@/lib/matter-tasks";
 import { buildFileDeck } from "@/lib/file-deck";
 import type { CaseFile, FactItem, Document, Profile, ConsultRequest, ConsultWrapUp, RequestedAttachment, GovFormInstrument, Attachment, ClientWorkspaceDraft } from "@/lib/types";
@@ -563,6 +564,15 @@ export default function ClientFileView({
           Top placement: a live or passed deadline is the one thing the file must
           never let the attorney scroll past. */}
       <KeyDeadlines facts={facts} jurisdiction={caseFile.jurisdiction} />
+
+      {/* Reading the file is where an attorney realises what the client actually
+          needs. Acting on it used to require the client to ask first, because
+          every document began with a client submission. */}
+      {mode === "attorney" && (
+        <div className="lf-card lf-card-full">
+          <AttorneyStartDraft caseFileId={caseFile.id} />
+        </div>
+      )}
 
       {/* Strength Check — the adversarial stress test. The attorney sees the same
           stored result the client was shown. */}

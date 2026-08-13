@@ -758,6 +758,17 @@ export function isValidWizardType(type: string): type is WizardType {
   return type in WIZARD_LABELS;
 }
 
+/**
+ * `content_json.source` for a document the ATTORNEY started from the client's
+ * file, rather than one the client submitted for review.
+ *
+ * Origin governs visibility. The row is owned by the client — it is their matter
+ * — so ownership alone would expose a draft the attorney is still thinking
+ * about. `/api/documents/[id]/download` refuses it to a non-attorney until it is
+ * approved, the same rule the attorney's working copy follows.
+ */
+export const ATTORNEY_ORIGINATED = "attorney_originated";
+
 export function coerceWizardType(raw: string | null | undefined): WizardType | null {
   if (!raw) return null;
   const token = raw.trim().split(/[^a-zA-Z_]/)[0]?.toLowerCase();

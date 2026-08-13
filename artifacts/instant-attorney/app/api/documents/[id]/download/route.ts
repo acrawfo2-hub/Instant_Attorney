@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { generateDocxFromText, docxContentDisposition, isAttorneyApproved, profileForDocumentType } from "@/lib/doc-generator";
 import { recordDocumentDelivery } from "@/lib/document-delivery";
-import { BYPASS_USER_ID } from "@/lib/types";
+import { ATTORNEY_ORIGINATED, BYPASS_USER_ID } from "@/lib/types";
 import type { CaseFile } from "@/lib/types";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
@@ -61,6 +61,21 @@ export async function GET(
   ) {
     return NextResponse.json(
       { error: "This revision is still with the attorney and has not been approved yet." },
+      { status: 409 }
+    );
+  }
+
+  // Same rule, other origin: a document the ATTORNEY started from the client's
+  // file. The row is owned by the client, so the ownership check above passes —
+  // but the client never asked for it and has not been shown it. It is the
+  // attorney's work until they approve it.
+  if (
+    (doc.content_json as Record<string, unknown> | null)?.source === ATTORNEY_ORIGINATED &&
+    !profile?.is_attorney &&
+    !isAttorneyApproved(doc.status)
+  ) {
+    return NextResponse.json(
+      { error: "This draft is still with the attorney and has not been approved yet." },
       { status: 409 }
     );
   }

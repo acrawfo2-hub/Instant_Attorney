@@ -8,6 +8,11 @@ const revisionWriters = [
   // wizard journey. A document's first revision is now written by promote, when
   // a workspace draft the orchestrator produced becomes a reviewable document.
   "app/api/documents/[id]/regenerate/route.ts",
+  // The attorney starting a document from the client's file — the one origin
+  // that is not a client submission. It generates through draftInstrument and
+  // saves through the boundary like every other writer; what differs is who
+  // asked for it, not how it is written.
+  "app/api/attorney/case-files/[id]/draft/route.ts",
   "app/api/documents/[id]/fill-info/route.ts",
   "app/api/workspace/drafts/[id]/promote/route.ts",
   "app/api/workspace/drafts/[id]/route.ts",
