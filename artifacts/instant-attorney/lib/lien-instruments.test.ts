@@ -10,11 +10,11 @@ import {
   looksLikeLienMatter,
 } from "./lien-instruments.ts";
 import { isKnownLienStatuteKey } from "./lien-statutes.ts";
-import { WIZARD_LABELS } from "./types.ts";
+import { INSTRUMENT_LABELS } from "./types.ts";
 
-test("every instrument references valid statute keys and wizard types", () => {
+test("every instrument references valid statute keys and instrument types", () => {
   for (const inst of LIEN_INSTRUMENTS) {
-    assert.ok(WIZARD_LABELS[inst.wizard_type], `${inst.key} wizard_type`);
+    assert.ok(INSTRUMENT_LABELS[inst.engine], `${inst.key} engine`);
     for (const sk of inst.relevant_statutes) {
       assert.ok(isKnownLienStatuteKey(sk), `${inst.key} → ${sk}`);
     }

@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Ensure the attorney account has an active (bypass) subscription so it passes
-  // the client-side subscription/billing gates (chat, wizard, drafting, file
+  // the client-side subscription/billing gates (chat, drafting, file
   // view). ignoreDuplicates so an existing subscription is never overwritten.
   await createServiceClient()
     .from("subscriptions")

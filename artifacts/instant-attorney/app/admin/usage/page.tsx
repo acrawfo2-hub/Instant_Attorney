@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 
 /** Human labels for the usage_events.feature values that carry token telemetry. */
 const FEATURE_LABELS: Record<string, string> = {
-  wizard: "Client draft (wizard)",
+  wizard: "Client draft",
   auto_critical_review: "Auto critical review",
   attorney_review: "Attorney review",
   attorney_second_draft_fitness: "Second draft — fitness check",

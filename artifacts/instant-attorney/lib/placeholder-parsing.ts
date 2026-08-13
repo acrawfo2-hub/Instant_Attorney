@@ -1,5 +1,9 @@
-// Pure parsing + checklist logic for the document Q&A wizard.
-// Extracted from the wizard page so the flow can be unit-tested in isolation
+// The [[PLACEHOLDER]] convention: parsing it out of a draft, deciding which
+// blanks are blocking, and turning them into questions for the client.
+//
+// Named for the wizard page it was extracted from until that page was retired;
+// the convention outlived the journey. FORUM_PLACEHOLDER rides on it, and the
+// client's "information needed" panes are built from placeholderFields().
 // (the page imports these back, so tests guard the real runtime behavior).
 
 export interface ParsedDrafter {
@@ -144,7 +148,7 @@ export function isAnsweredByFacts(item: NeededItem, confirmedFacts: string[]): b
 // Blocking items always come first.
 //
 // `confirmedFacts` are the file's confirmed fact descriptions ("<label>: <value>").
-// Any item already answered by one of them is dropped so the wizard never asks
+// Any item already answered by one of them is dropped so we never ask
 // for information the Living File already holds — including info captured while
 // drafting an earlier document in the same file.
 export function buildNeededItems(
@@ -263,14 +267,14 @@ export function applyPlaceholderAnswers(
 // Produces a built-in template seeded with [[placeholders]] for the info the
 // user must still provide. The attorney's review pass will improve it regardless
 // of starting quality.
-export function buildFallbackTemplate(label: string, wizardType: string): string {
+export function buildFallbackTemplate(label: string, instrumentType: string): string {
   const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   const party = "[[FULL LEGAL NAME — Party A]]";
   const oParty = "[[FULL LEGAL NAME — Party B / Opposing Party]]";
   const jurisdiction = "[[JURISDICTION — State]]";
   const addr = "[[ADDRESS]]";
 
-  if (wizardType === "demand_letter") {
+  if (instrumentType === "demand_letter") {
     return `${today}
 
 VIA CERTIFIED MAIL — RETURN RECEIPT REQUESTED
@@ -305,7 +309,7 @@ ${addr}
 Texas Bar No. 24148908`;
   }
 
-  if (wizardType === "draft_contract") {
+  if (instrumentType === "draft_contract") {
     return `AGREEMENT
 
 This Agreement ("Agreement") is entered into as of ${today}, by and between:
@@ -346,7 +350,7 @@ Party B: _______________________________    Date: ____________
 ${oParty}`;
   }
 
-  if (wizardType === "draft_waiver") {
+  if (instrumentType === "draft_waiver") {
     return `RELEASE AND WAIVER OF CLAIMS
 
 This Release and Waiver of Claims ("Release") is entered into as of ${today}, by and between:
@@ -441,7 +445,7 @@ ATTORNEY REVIEW NOTE: This draft was generated from the client's Living File. At
 
 // Turn the [[placeholders]] inside a fallback template into the same kind of
 // blocking missing-facts + follow-up questions the AI would normally produce,
-// so the wizard always tells the user exactly what info it still needs.
+// so we always tell the user exactly what info is still needed.
 export function deriveQuestionsFromTemplate(template: string): {
   blocking: string[];
   questions: string[];
@@ -495,7 +499,7 @@ export function ensureChecklistNeeds(p: ParsedDrafter): ParsedDrafter {
 // the exact "legal-ready" facts the attorney needs — and they require NO AI call,
 // so they appear instantly. Their answers are saved as facts immediately and
 // folded into the draft once it lands.
-export const WIZARD_STARTER_FIELDS: Record<string, { label: string; hint: string }[]> = {
+export const INSTRUMENT_STARTER_FIELDS: Record<string, { label: string; hint: string }[]> = {
   demand_letter: [
     { label: "Your full legal name", hint: "The sender — exactly as it should appear." },
     { label: "Your mailing address", hint: "Where the recipient should respond." },
@@ -552,8 +556,8 @@ function slugify(s: string): string {
 
 // Build the document-type-aware starter checklist (no AI call). Falls back to the
 // general_document set for any unrecognized type so the pane is never empty.
-export function buildStarterItems(wizardType: string): NeededItem[] {
-  const fields = WIZARD_STARTER_FIELDS[wizardType] ?? WIZARD_STARTER_FIELDS.general_document;
+export function buildStarterItems(instrumentType: string): NeededItem[] {
+  const fields = INSTRUMENT_STARTER_FIELDS[instrumentType] ?? INSTRUMENT_STARTER_FIELDS.general_document;
   return fields.slice(0, 6).map((f, i) => ({
     id: `starter-${slugify(f.label)}-${i}`,
     label: f.label,

@@ -15,7 +15,7 @@ const STATUS_LABEL: Record<PlanStatus, string> = {
 // Attorney control over the file's document plan. The AI ranks the documents
 // (priority order); this lets the attorney override which one is the client's
 // lead (most-important) document, or revert to the AI's pick. Plan-based files
-// override by stable key; legacy files override by wizard type.
+// override by stable key; legacy files override by instrument type.
 export default function DocumentPlanEditor({
   caseFileId,
   items,
@@ -39,7 +39,7 @@ export default function DocumentPlanEditor({
     try {
       const payload = usesPlan
         ? { leadKey: item?.key ?? null }
-        : { lead: item?.wizard ?? null };
+        : { lead: item?.engine ?? null };
       const res = await fetch(`/api/attorney/case-files/${caseFileId}/document-plan`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

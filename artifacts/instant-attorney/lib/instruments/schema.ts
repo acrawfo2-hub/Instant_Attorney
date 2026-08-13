@@ -1,4 +1,4 @@
-import type { WizardType } from "../types.ts";
+import type { InstrumentType } from "../types.ts";
 
 export type InstrumentRiskLevel = "low" | "moderate" | "high";
 
@@ -11,7 +11,7 @@ export interface ConditionalQuestion {
 export interface InstrumentProfile {
   instrument_key: string;
   title: string;
-  engine: WizardType;
+  engine: InstrumentType;
   required_facts: readonly string[];
   conditional_questions: readonly ConditionalQuestion[];
   required_sections: readonly string[];

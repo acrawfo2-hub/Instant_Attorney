@@ -10,6 +10,10 @@ export { computeAiCostUsd } from "@/lib/ai/pricing";
 export type UsageFeature =
   | "free_chat"
   | "chat_acp"
+  // Client-initiated document drafting. The value is written to the indexed
+  // `usage_events.feature` column, so it keeps the name it was logged under
+  // for the life of that history — renaming it would split every cost query
+  // across two labels for no gain.
   | "wizard"
   | "what_if"
   | "title_generator"

@@ -2,7 +2,7 @@ export type SubscriptionStatus = "active" | "canceled" | "past_due" | "trialing"
 export type SubscriptionPlan = "phase2" | "consult" | "attorney_pro";
 /**
  * A profile's persona. `client` is the ordinary lay user. `attorney_user` is
- * an external/small-firm attorney using the drafting wizards as a
+ * an external/small-firm attorney using the drafting engines as a
  * professional tool for their OWN clients' matters — separate from
  * `Profile.is_attorney`, which means "Andrew Crawford, the firm's own
  * reviewing attorney" and must never be conflated with this.
@@ -134,8 +134,12 @@ export interface ConsultRecording {
   transcribed_at: string | null;
 }
 
-// All supported wizard types — add new ones here as wizards are built
-export type WizardType =
+// The instrument taxonomy: which drafting engine produces a document.
+// Selects the generation spec, the instrument profile and the risk
+// classification. Add a member only when a document genuinely needs a
+// different engine — not for every new instrument, which is what
+// instrument_key is for.
+export type InstrumentType =
   | "demand_letter"
   | "complaint_letter"
   | "draft_contract"
@@ -145,10 +149,10 @@ export type WizardType =
   | "general_document"
   | "improve_draft";
 
-/** Child documents created during attorney review (not wizard-generated). */
+/** Child documents created during attorney review (not drafted from an instrument). */
 export type DerivedDocType = "critical_review" | "second_draft";
 
-export type DocType = WizardType | DerivedDocType;
+export type DocType = InstrumentType | DerivedDocType;
 
 export type DocumentStatus =
   | "draft"
@@ -202,8 +206,8 @@ export interface PlanEntry {
   key: string;
   /** Human-readable document name shown to the user (e.g. "LLC Operating Agreement"). */
   title: string;
-  /** Which wizard engine drafts/formats this document. */
-  engine: WizardType;
+  /** Which drafting engine produces/formats this document. */
+  engine: InstrumentType;
   /** Stable legal-instrument profile; independent of the rendering engine and display title. */
   instrument_key: string;
   /** One-line reason this document matters / why its priority. */
@@ -218,18 +222,24 @@ export interface LegalStrategy {
   /**
    * @deprecated Superseded by `document_plan`. Still derived (unique engines, in
    * order) for back-compat readers; new code should read `document_plan`.
+   *
+   * The name is wire format, not vocabulary: this is a key inside the
+   * `case_files.legal_strategy` JSONB that live rows already carry, and the
+   * orchestrator emits a matching `RECOMMENDED WIZARDS:` block that
+   * `lib/file-parser.ts` parses. Renaming it needs a migration and a backfill,
+   * so it did not move when `WizardType` became `InstrumentType`.
    */
-  recommended_wizards: WizardType[];
+  recommended_wizards: InstrumentType[];
   recommend_consult?: boolean;
   /** Ordered list of the file's planned documents — the source of truth for tracking. */
   document_plan?: PlanEntry[];
   /** Attorney's override of the lead document, by PlanEntry.key. null = AI's pick. */
   lead_key_override?: string | null;
   /**
-   * @deprecated Legacy lead override by wizard type, used only on the pre-
+   * @deprecated Legacy lead override by instrument type, used only on the pre-
    * `document_plan` path. `lead_key_override` supersedes it.
    */
-  lead_override?: WizardType | null;
+  lead_override?: InstrumentType | null;
   /** One-line rationale for why the lead document is the priority. */
   lead_rationale?: string;
   /** Client-facing adversarial stress test (lib/strength-check.ts). Stored here
@@ -419,7 +429,7 @@ export interface FactItem {
 // ── Government form instruments ──────────────────────────────────────────────
 // A government form detected in chat that the client needs to complete. These are
 // surfaced as "legal instruments to complete" and guided by the gov-form tool
-// (distinct from the document-generation wizard). See lib/government-forms.ts.
+// (distinct from the document-generation engines). See lib/government-forms.ts.
 export type GovFormStatus = "needed" | "in_progress" | "completed" | "dismissed";
 
 /** How an instrument's form definition is sourced. "registry" forms are curated
@@ -662,8 +672,8 @@ export function isDocumentOutOfDate(
   return latest !== null && latest > synced;
 }
 
-// Human-readable labels for wizard types
-export const WIZARD_LABELS: Record<WizardType, string> = {
+// Human-readable labels for instrument types
+export const INSTRUMENT_LABELS: Record<InstrumentType, string> = {
   demand_letter: "Demand Letter",
   complaint_letter: "Complaint Letter",
   draft_contract: "Draft Contract",
@@ -680,7 +690,7 @@ export const DERIVED_DOC_LABELS: Record<DerivedDocType, string> = {
 };
 
 export function docTypeLabel(docType: string): string {
-  if (docType in WIZARD_LABELS) return WIZARD_LABELS[docType as WizardType];
+  if (docType in INSTRUMENT_LABELS) return INSTRUMENT_LABELS[docType as InstrumentType];
   if (docType in DERIVED_DOC_LABELS) return DERIVED_DOC_LABELS[docType as DerivedDocType];
   return docType.replace(/_/g, " ");
 }
@@ -703,13 +713,13 @@ export function personDisplayName(
 }
 
 /**
- * Normalize a possibly-annotated recommendation to a clean WizardType.
+ * Normalize a possibly-annotated recommendation to a clean InstrumentType.
  * The model sometimes emits bullets like `draft_contract — ready to proceed`
  * or `RECOMMEND_CONSULT: true`; we take the leading identifier token and
- * keep it only if it maps to a real wizard type. Returns null otherwise.
+ * keep it only if it maps to a real instrument type. Returns null otherwise.
  */
-export function isValidWizardType(type: string): type is WizardType {
-  return type in WIZARD_LABELS;
+export function isValidInstrumentType(type: string): type is InstrumentType {
+  return type in INSTRUMENT_LABELS;
 }
 
 /**
@@ -723,10 +733,10 @@ export function isValidWizardType(type: string): type is WizardType {
  */
 export const ATTORNEY_ORIGINATED = "attorney_originated";
 
-export function coerceWizardType(raw: string | null | undefined): WizardType | null {
+export function coerceInstrumentType(raw: string | null | undefined): InstrumentType | null {
   if (!raw) return null;
   const token = raw.trim().split(/[^a-zA-Z_]/)[0]?.toLowerCase();
-  return token && token in WIZARD_LABELS ? (token as WizardType) : null;
+  return token && token in INSTRUMENT_LABELS ? (token as InstrumentType) : null;
 }
 
 export function isPrimaryDraft(doc: Pick<Document, "parent_document_id">): boolean {

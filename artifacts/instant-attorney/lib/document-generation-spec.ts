@@ -1,4 +1,4 @@
-import type { WizardType } from "./types.ts";
+import type { InstrumentType } from "./types.ts";
 
 export type DraftSectionKind = "identity" | "facts" | "analysis" | "remedy" | "terms" | "execution" | "review";
 
@@ -10,7 +10,7 @@ export interface SectionSpec {
 }
 
 export interface DocumentGenerationSpec {
-  documentType: WizardType;
+  documentType: InstrumentType;
   requiredFactKeys: string[];
   optionalFactKeys: string[];
   sections: SectionSpec[];
@@ -20,7 +20,7 @@ export interface DocumentGenerationSpec {
 const commonIdentity = ["client.name", "client.address", "counterparty.name", "jurisdiction"];
 
 function spec(
-  documentType: WizardType,
+  documentType: InstrumentType,
   requiredFactKeys: string[],
   optionalFactKeys: string[],
   draftingInstructions: string,
@@ -29,7 +29,7 @@ function spec(
   return { documentType, requiredFactKeys, optionalFactKeys, draftingInstructions, sections };
 }
 
-export const DOCUMENT_GENERATION_SPECS: Record<WizardType, DocumentGenerationSpec> = {
+export const DOCUMENT_GENERATION_SPECS: Record<InstrumentType, DocumentGenerationSpec> = {
   demand_letter: spec("demand_letter", [...commonIdentity, "dispute.events", "remedy.requested"], ["deadline.response", "damages.amount", "authority.citations"], "State only supported facts, make the requested cure and response deadline explicit, and preserve all claims and defenses.", [
     { id: "heading", kind: "identity", factKeys: commonIdentity, draftingInstructions: "Address and identify the parties." },
     { id: "background", kind: "facts", factKeys: ["dispute.events"], draftingInstructions: "Give a chronological, supportable account." },
@@ -76,11 +76,11 @@ export const DOCUMENT_GENERATION_SPECS: Record<WizardType, DocumentGenerationSpe
   ]),
 };
 
-export function getDocumentGenerationSpec(type: WizardType): DocumentGenerationSpec {
+export function getDocumentGenerationSpec(type: InstrumentType): DocumentGenerationSpec {
   return DOCUMENT_GENERATION_SPECS[type];
 }
 
-export function specForPrompt(type: WizardType): string {
+export function specForPrompt(type: InstrumentType): string {
   const value = getDocumentGenerationSpec(type);
   return `DOCUMENT GENERATION SPEC (binding):\n${JSON.stringify(value, null, 2)}\nReturn the rendered draft as usual, then append a machine-readable section envelope between ---STRUCTURED SECTIONS--- and ---END STRUCTURED SECTIONS---. The envelope must be a JSON array of {"id": string, "text": string, "factKeys": string[]} using exactly the section identifiers above. factKeys must list every source fact consumed by that section.`;
 }

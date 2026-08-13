@@ -2,7 +2,7 @@
 //
 // The documents an estate-planning matter needs — a will, the incapacity
 // documents, a transfer-on-death deed, and (when warranted) a trust — defined as
-// PRESETS over existing wizard types so they plug into the published document
+// PRESETS over existing instrument types so they plug into the published document
 // pipeline with no new DocType / DB enum value. Each preset carries recipient/
 // recording guidance, required fields, the Texas authorities it leans on, and a
 // high-stakes flag, so the drafter produces an estate-shaped document instead of
@@ -22,7 +22,7 @@
 // for almost anyone but a personal call — so trust drafting is HIGH-STAKES and
 // routes to attorney review/consult, never auto-recommended over a will.
 
-import type { WizardType } from "./types.ts";
+import type { InstrumentType } from "./types.ts";
 import { matchEstateStatutesByText, type EstateStatuteKey } from "./estate-statutes.ts";
 
 export interface EstateDocInstrument {
@@ -32,8 +32,8 @@ export interface EstateDocInstrument {
   label: string;
   /** What this instrument accomplishes for the client. */
   purpose: string;
-  /** Which existing wizard type drafts it. */
-  wizard_type: WizardType;
+  /** Which drafting engine produces it. */
+  engine: InstrumentType;
   /** Who the document is addressed to / how it must be executed or recorded. */
   recipient_guidance: string;
   /** Fields the drafter should gather / confirm for this instrument. */
@@ -52,7 +52,7 @@ export const ESTATE_DOC_INSTRUMENTS: EstateDocInstrument[] = [
     label: "Last Will and Testament",
     purpose:
       "The backbone document: names beneficiaries and an independent executor, requests independent administration (to keep probate low-cost), makes specific and residuary gifts, and — for a parent — nominates a guardian for minor children. Note clearly that a will is probated; it organizes and cheapens probate, it does not avoid it.",
-    wizard_type: "wills_trusts",
+    engine: "wills_trusts",
     recipient_guidance:
       "Signed by the testator and two credible witnesses (a self-proving affidavit before a notary is strongly recommended). The original is kept safe and findable; it is filed with the probate court only after death.",
     required_fields: [
@@ -71,7 +71,7 @@ export const ESTATE_DOC_INSTRUMENTS: EstateDocInstrument[] = [
     label: "Codicil (amendment to a will)",
     purpose:
       "A short amendment to an existing will — change an executor, a guardian, or a bequest — executed with the same formalities as a will. For extensive changes a new will is usually cleaner.",
-    wizard_type: "wills_trusts",
+    engine: "wills_trusts",
     recipient_guidance:
       "Executed with the same formalities as a will (testator plus two witnesses; self-proving affidavit recommended) and kept with the original will.",
     required_fields: [
@@ -88,7 +88,7 @@ export const ESTATE_DOC_INSTRUMENTS: EstateDocInstrument[] = [
     label: "Statutory Durable Power of Attorney",
     purpose:
       "Appoints an agent to manage the principal's finances and property, effective even after incapacity ('durable') — the document that helps a family avoid a costly guardianship. Texas provides a statutory form.",
-    wizard_type: "wills_trusts",
+    engine: "wills_trusts",
     recipient_guidance:
       "Signed by the principal and notarized while the principal has capacity. Give the original/copies to the agent; financial institutions may ask for their own acknowledgment.",
     required_fields: [
@@ -106,7 +106,7 @@ export const ESTATE_DOC_INSTRUMENTS: EstateDocInstrument[] = [
     label: "Medical Power of Attorney",
     purpose:
       "Appoints an agent to make health-care decisions if a physician certifies the principal cannot. Pairs with a directive to physicians.",
-    wizard_type: "wills_trusts",
+    engine: "wills_trusts",
     recipient_guidance:
       "Signed with two witnesses or notarized per the Texas form; give copies to the agent and your doctors and keep it accessible.",
     required_fields: [
@@ -123,7 +123,7 @@ export const ESTATE_DOC_INSTRUMENTS: EstateDocInstrument[] = [
     label: "Directive to Physicians (living will)",
     purpose:
       "Records the principal's wishes about life-sustaining treatment in a terminal or irreversible condition, so the family isn't left guessing.",
-    wizard_type: "wills_trusts",
+    engine: "wills_trusts",
     recipient_guidance:
       "Executed per the Texas Advance Directives Act (two witnesses or notarization); give copies to the medical agent and physicians.",
     required_fields: [
@@ -140,7 +140,7 @@ export const ESTATE_DOC_INSTRUMENTS: EstateDocInstrument[] = [
     label: "Declaration of Guardian",
     purpose:
       "Names, in advance, who should serve as guardian of the person/estate if one is ever needed, and lets a parent designate a guardian for minor children — reducing the chance a court picks someone you wouldn't.",
-    wizard_type: "wills_trusts",
+    engine: "wills_trusts",
     recipient_guidance:
       "Executed with the statutory formalities (witnesses or notarization); a guardian for minor children is typically also named in the will.",
     required_fields: [
@@ -157,7 +157,7 @@ export const ESTATE_DOC_INSTRUMENTS: EstateDocInstrument[] = [
     label: "Transfer on Death Deed",
     purpose:
       "Passes the owner's Texas real estate to a named beneficiary at death, outside probate, while the owner keeps full control and the right to revoke — the cheapest, highest-impact probate-avoidance tool for a homeowner.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "CRITICAL: must be signed, notarized, AND recorded in the deed records of the county where the property sits BEFORE death — an unrecorded deed does nothing. Provide the legal description from the current deed, not just the street address.",
     required_fields: [
@@ -175,7 +175,7 @@ export const ESTATE_DOC_INSTRUMENTS: EstateDocInstrument[] = [
     label: "Revocable Living Trust",
     purpose:
       "A trust the settlor controls during life that owns retitled assets so they avoid probate, stay private, and are managed by a successor trustee on incapacity. Drafting it is only half the job — it must be FUNDED by retitling assets into it. A legitimate option for almost anyone, but a personal call and more involved than a will, so it routes to attorney review.",
-    wizard_type: "wills_trusts",
+    engine: "wills_trusts",
     recipient_guidance:
       "Signed by the settlor/trustee per the Texas Trust Code, then FUNDED — deeds, account retitling, and beneficiary updates into the trust. Pair it with a pour-over will. Funding is the step people skip.",
     required_fields: [
@@ -194,7 +194,7 @@ export const ESTATE_DOC_INSTRUMENTS: EstateDocInstrument[] = [
     label: "Pour-Over Will",
     purpose:
       "The companion will used WITH a living trust: it 'pours' any assets left outside the trust at death into it. Note honestly that assets caught by a pour-over will still pass through probate — it's a backstop, which is why funding the trust during life matters.",
-    wizard_type: "wills_trusts",
+    engine: "wills_trusts",
     recipient_guidance:
       "Executed with full will formalities (testator plus two witnesses; self-proving affidavit recommended) and kept with the trust documents.",
     required_fields: [
@@ -212,7 +212,7 @@ export const ESTATE_DOC_INSTRUMENTS: EstateDocInstrument[] = [
     label: "Special (Supplemental) Needs Trust",
     purpose:
       "Holds an inheritance for a beneficiary with a disability so it supplements rather than disqualifies means-tested benefits (SSI/Medicaid). Must be drafted precisely — high-stakes and not a DIY document.",
-    wizard_type: "wills_trusts",
+    engine: "wills_trusts",
     recipient_guidance:
       "Drafted to satisfy the SSI/Medicaid rules and signed per the Texas Trust Code. Never name the disabled beneficiary directly on a will or beneficiary form instead.",
     required_fields: [
@@ -243,11 +243,11 @@ export function isKnownEstateDocInstrumentKey(key: string): boolean {
 export function estateInstrumentsForPrompt(): string {
   return ESTATE_DOC_INSTRUMENTS.map(
     (i) =>
-      `• ${i.key} (drafts via ${i.wizard_type})${i.high_stakes ? " [HIGH-STAKES — recommend consult]" : ""} — ${i.label}: ${i.purpose}`
+      `• ${i.key} (drafts via ${i.engine})${i.high_stakes ? " [HIGH-STAKES — recommend consult]" : ""} — ${i.label}: ${i.purpose}`
   ).join("\n");
 }
 
-/** Field-hint text for the drafter, shaped like WIZARD_FIELD_HINTS entries. */
+/** Field-hint text for the drafter, shaped like INSTRUMENT_FIELD_HINTS entries. */
 export function estateInstrumentFieldHint(key: string): string | null {
   const inst = BY_KEY.get(key);
   if (!inst) return null;

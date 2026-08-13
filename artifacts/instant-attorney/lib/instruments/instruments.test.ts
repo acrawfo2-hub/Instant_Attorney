@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { INSTRUMENT_PROFILES, resolveInstrumentProfile } from "./index.ts";
-import { wizardFieldGuidance } from "../prompts.ts";
+import { instrumentFieldGuidance } from "../prompts.ts";
 
 test("the six stable profiles satisfy the composable instrument schema", () => {
   assert.deepEqual(INSTRUMENT_PROFILES.map((p) => p.instrument_key), [
@@ -19,8 +19,8 @@ test("the six stable profiles satisfy the composable instrument schema", () => {
 });
 
 test("guidance composes the engine and instrument profile", () => {
-  const foia = wizardFieldGuidance("general_document", "federal_foia_request");
-  const texas = wizardFieldGuidance("general_document", "texas_public_information_request");
+  const foia = instrumentFieldGuidance("general_document", "federal_foia_request");
+  const texas = instrumentFieldGuidance("general_document", "texas_public_information_request");
   assert.match(foia, /Required fields vary by instrument/);
   assert.match(foia, /5 U\.S\.C\. § 552/);
   assert.match(texas, /Texas Government Code Chapter 552/);

@@ -13,7 +13,7 @@ import type { CaseFile, FactItem } from "@/lib/types";
 //
 // Standalone tool: works WITH a case file (reads the Living File for context)
 // or WITHOUT one (the user just describes a scenario). It only READS the file;
-// it never writes legal_strategy and never touches the wizards. The user's
+// it never writes legal_strategy and never touches the recommended instruments. The user's
 // answers are persisted later by /api/what-if/apply.
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 const MODEL = "claude-sonnet-4-6";

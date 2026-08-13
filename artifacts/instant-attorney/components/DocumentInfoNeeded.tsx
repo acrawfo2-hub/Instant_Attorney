@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { placeholderFields } from "@/lib/wizard-parsing";
+import { placeholderFields } from "@/lib/placeholder-parsing";
 
 // Client-facing "Information needed" panel. Lists the [[blanks]] still open in a
 // document as labeled inputs; saving fills them directly into the document text

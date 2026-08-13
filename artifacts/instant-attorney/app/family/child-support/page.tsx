@@ -11,7 +11,7 @@ import { useSearchParams } from "next/navigation";
 // shows a guideline estimate. When opened from a file (?caseFileId=), the
 // estimate is saved into the Living File as a confirmed fact, so a Child Support
 // Order or decree drafted later seeds from the number. It never changes which
-// wizards are recommended — same "add value, don't disturb the pipeline" rule
+// instruments are recommended — same "add value, don't disturb the pipeline" rule
 // the What-If Game follows.
 // ─────────────────────────────────────────────────────────────────────────────
 

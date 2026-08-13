@@ -3,20 +3,20 @@
 // Both halves of the practice: documents a worker is HANDED and needs reviewed
 // (non-compete, severance/release, employer NDA) and documents they need to SEND
 // or FILE (an EEOC/TWC charge, a demand, an accommodation request, a wage claim).
-// Presets over existing wizard types (no new DocType / DB enum). Mirrors
+// Presets over existing instrument types (no new DocType / DB enum). Mirrors
 // lib/debt-instruments.ts.
 //
 // `relevant_statutes` reference keys in lib/employment-statutes.ts; a cross-check
 // test asserts every referenced key resolves.
 
-import type { WizardType } from "./types.ts";
+import type { InstrumentType } from "./types.ts";
 import { matchEmploymentStatutesByText, type EmploymentStatuteKey } from "./employment-statutes.ts";
 
 export interface EmploymentInstrument {
   key: string;
   label: string;
   purpose: string;
-  wizard_type: WizardType;
+  engine: InstrumentType;
   recipient_guidance: string;
   required_fields: string[];
   relevant_statutes: EmploymentStatuteKey[];
@@ -32,7 +32,7 @@ export const EMPLOYMENT_INSTRUMENTS: EmploymentInstrument[] = [
     label: "EEOC / TWC Charge of Discrimination",
     purpose:
       "Prepare a charge of discrimination or retaliation to file with the EEOC (and/or the Texas Workforce Commission) — the required first step before a discrimination lawsuit.",
-    wizard_type: "complaint_letter",
+    engine: "complaint_letter",
     recipient_guidance:
       "Filed with the EEOC (and dual-filed with the TWC Civil Rights Division). TIME-CRITICAL — the EEOC deadline in Texas is 300 days, the TWC deadline 180 days, from the discriminatory act.",
     required_fields: [
@@ -52,7 +52,7 @@ export const EMPLOYMENT_INSTRUMENTS: EmploymentInstrument[] = [
     label: "Demand Letter to Employer",
     purpose:
       "A pre-suit demand to the employer asserting the claim (discrimination, retaliation, unpaid wages) and seeking a remedy, often to open settlement before filing.",
-    wizard_type: "demand_letter",
+    engine: "demand_letter",
     recipient_guidance:
       "Address to the employer (and its HR/legal). Keep it factual; assess deadlines first, since a demand does not stop the EEOC/agency clock.",
     required_fields: [
@@ -71,7 +71,7 @@ export const EMPLOYMENT_INSTRUMENTS: EmploymentInstrument[] = [
     label: "Severance / Release Agreement Review",
     purpose:
       "Review a severance or separation agreement BEFORE signing — what you're giving up, the consideration, OWBPA timing for age claims, non-disparagement, references, and what's negotiable.",
-    wizard_type: "doc_review",
+    engine: "doc_review",
     recipient_guidance:
       "For your eyes before you sign. If you're 40+, you generally have at least 21 days to consider and 7 days to revoke — do not sign on the spot.",
     required_fields: [
@@ -90,7 +90,7 @@ export const EMPLOYMENT_INSTRUMENTS: EmploymentInstrument[] = [
     label: "Severance Counter-Offer / Negotiation Letter",
     purpose:
       "Propose improved severance terms — more pay, benefits continuation, a neutral reference, removal or narrowing of restrictive covenants, or a non-disparagement clause that runs both ways.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Address to the employer/HR who made the offer, within the consideration window. Anchor asks to leverage (potential claims, value you provided).",
     required_fields: [
@@ -109,7 +109,7 @@ export const EMPLOYMENT_INSTRUMENTS: EmploymentInstrument[] = [
     label: "Non-Compete / Restrictive-Covenant Review",
     purpose:
       "Review a non-compete, non-solicitation, or confidentiality covenant for Texas enforceability — whether it's ancillary to an enforceable agreement and reasonable in time, area, and scope.",
-    wizard_type: "doc_review",
+    engine: "doc_review",
     recipient_guidance:
       "For your assessment before signing or before changing jobs. Texas courts reform overbroad covenants rather than void them, so the practical question is how much is enforceable.",
     required_fields: [
@@ -128,7 +128,7 @@ export const EMPLOYMENT_INSTRUMENTS: EmploymentInstrument[] = [
     label: "Response to a Non-Compete Enforcement Threat",
     purpose:
       "Respond to a former employer's cease-and-desist or threat to enforce a non-compete — contesting its enforceability (overbreadth, lack of consideration, no protectable interest) without overreaching.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Address to the former employer or its counsel. Measured and factual; preserve your position while leaving room to resolve.",
     required_fields: [
@@ -147,7 +147,7 @@ export const EMPLOYMENT_INSTRUMENTS: EmploymentInstrument[] = [
     label: "Employer NDA / Confidentiality Agreement Review",
     purpose:
       "Review an employer-presented NDA or confidentiality/IP-assignment agreement — what it covers, how long it lasts, IP assignment scope, and whether it improperly restricts lawful activity (e.g., whistleblowing, discussing wages).",
-    wizard_type: "doc_review",
+    engine: "doc_review",
     recipient_guidance:
       "For your review before signing. Watch for overbroad IP assignment and clauses that purport to bar protected activity like reporting unlawful conduct or discussing pay.",
     required_fields: [
@@ -166,7 +166,7 @@ export const EMPLOYMENT_INSTRUMENTS: EmploymentInstrument[] = [
     label: "Reasonable Accommodation Request (ADA)",
     purpose:
       "Request a reasonable accommodation for a disability (or a religious accommodation) and trigger the employer's duty to engage in the interactive process.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Address to HR/your manager in writing; describe the limitation and the accommodation sought without over-disclosing medical detail. Keep a copy — it's evidence of notice.",
     required_fields: [
@@ -185,7 +185,7 @@ export const EMPLOYMENT_INSTRUMENTS: EmploymentInstrument[] = [
     label: "Wage Claim (Texas Payday Law / FLSA)",
     purpose:
       "Prepare a claim for unpaid wages, final pay, commissions, or overtime — via the free TWC Payday Law process or as the basis for an FLSA action.",
-    wizard_type: "complaint_letter",
+    engine: "complaint_letter",
     recipient_guidance:
       "Filed with the Texas Workforce Commission (Payday Law) for owed wages, or used to support an FLSA overtime claim. The TWC deadline is 180 days from when wages were due.",
     required_fields: [
@@ -217,11 +217,11 @@ export function isKnownEmploymentInstrumentKey(key: string): boolean {
 export function employmentInstrumentsForPrompt(): string {
   return EMPLOYMENT_INSTRUMENTS.map(
     (i) =>
-      `• ${i.key} (drafts via ${i.wizard_type})${i.high_stakes ? " [HIGH-STAKES — deadline-critical, recommend consult]" : ""} — ${i.label}: ${i.purpose}`
+      `• ${i.key} (drafts via ${i.engine})${i.high_stakes ? " [HIGH-STAKES — deadline-critical, recommend consult]" : ""} — ${i.label}: ${i.purpose}`
   ).join("\n");
 }
 
-/** Field-hint text for the drafter, shaped like WIZARD_FIELD_HINTS entries. */
+/** Field-hint text for the drafter, shaped like INSTRUMENT_FIELD_HINTS entries. */
 export function employmentInstrumentFieldHint(key: string): string | null {
   const inst = BY_KEY.get(key);
   if (!inst) return null;

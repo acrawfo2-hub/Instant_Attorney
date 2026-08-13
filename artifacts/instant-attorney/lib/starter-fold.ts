@@ -1,4 +1,4 @@
-import type { LabeledAnswer } from "./wizard-parsing.ts";
+import type { LabeledAnswer } from "./placeholder-parsing.ts";
 
 // Answers the client saved during the wizard's starter-questions phase, staged to
 // be folded into the draft once it lands. `filled` are label/value answers; `note`

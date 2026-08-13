@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 import { draftInstrument, FORUM_PLACEHOLDER } from "./document-drafting.ts";
-import { placeholderFields } from "./wizard-parsing.ts";
+import { placeholderFields } from "./placeholder-parsing.ts";
 import type { CaseFile, FactItem } from "./types.ts";
 
 // ── The guard ──────────────────────────────────────────────────────────────
@@ -143,7 +143,7 @@ test("an unknown forum still produces a draft, and forbids the model from guessi
   const { client, seen } = stubClient("---DRAFT READY---\ntext\n---END DRAFT---");
 
   const result = await draftInstrument(client, {
-    wizardType: "complaint_letter",
+    instrumentType: "complaint_letter",
     instrumentLabel: "Original Petition",
     caseFile: caseFile(null),
     facts: [],
@@ -176,7 +176,7 @@ test("a known forum adds no directive and reports no deficiency", async () => {
   const { client, seen } = stubClient("---DRAFT READY---\ntext\n---END DRAFT---");
 
   const result = await draftInstrument(client, {
-    wizardType: "complaint_letter",
+    instrumentType: "complaint_letter",
     instrumentLabel: "Original Petition",
     caseFile: caseFile("Texas — Travis County District Court"),
     facts: [],
@@ -194,7 +194,7 @@ test("a markerless response is recovery material, never a draft", async () => {
   const { client } = stubClient("Here is your letter, all done.");
 
   const result = await draftInstrument(client, {
-    wizardType: "general_document",
+    instrumentType: "general_document",
     caseFile: caseFile("Texas"),
     facts: [fact("The lease ended 2026-01-01")],
     messages: [{ role: "user", content: "Draft it." }],
@@ -211,7 +211,7 @@ test("a draft block that never closed is not renderable", async () => {
   const { client } = stubClient("---DRAFT READY---\nDear Sir,", "max_tokens");
 
   const result = await draftInstrument(client, {
-    wizardType: "general_document",
+    instrumentType: "general_document",
     caseFile: caseFile("Texas"),
     facts: [],
     messages: [{ role: "user", content: "Draft it." }],
@@ -233,7 +233,7 @@ test("a complete block is extracted and the instrument label reaches the prompt"
   const { client, seen } = stubClient("---DRAFT READY---\nDear Sir,\n---END DRAFT---");
 
   const result = await draftInstrument(client, {
-    wizardType: "demand_letter",
+    instrumentType: "demand_letter",
     instrumentLabel: "Demand Letter",
     caseFile: caseFile("Texas"),
     facts: [fact("Unpaid invoice of $4,200")],
@@ -260,7 +260,7 @@ test("a model failure is returned, not thrown", async () => {
   } as any;
 
   const result = await draftInstrument(client, {
-    wizardType: "general_document",
+    instrumentType: "general_document",
     caseFile: caseFile("Texas"),
     facts: [],
     messages: [{ role: "user", content: "Draft it." }],

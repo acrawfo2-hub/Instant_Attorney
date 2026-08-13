@@ -3,7 +3,7 @@ import { notifyAttorneyDocumentReady } from "./notify.ts";
 import { saveDocumentRevision } from "./document-persistence.ts";
 import type { Document, CaseFile, Profile } from "./types";
 
-export { isValidWizardType } from "./types.ts";
+export { isValidInstrumentType } from "./types.ts";
 
 /**
  * Best-effort: record that document `docId` was just generated/regenerated
@@ -41,7 +41,7 @@ export async function stampFactsSynced(
 export async function findReusableDocument(
   db: SupabaseClient,
   caseFileId: string,
-  wizardType: string,
+  instrumentType: string,
   userId?: string,
   planKey?: string,
   instrumentKey?: string
@@ -60,7 +60,7 @@ export async function findReusableDocument(
   } else if (planKey) {
     query = query.eq("content_json->>plan_key", planKey);
   } else {
-    query = query.eq("doc_type", wizardType);
+    query = query.eq("doc_type", instrumentType);
   }
 
   if (userId) {
@@ -79,7 +79,7 @@ export async function findReusableDocument(
 export async function findPrimaryDocument(
   db: SupabaseClient,
   caseFileId: string,
-  wizardType: string,
+  instrumentType: string,
   userId?: string,
   planKey?: string,
   instrumentKey?: string
@@ -97,7 +97,7 @@ export async function findPrimaryDocument(
   } else if (planKey) {
     query = query.eq("content_json->>plan_key", planKey);
   } else {
-    query = query.eq("doc_type", wizardType);
+    query = query.eq("doc_type", instrumentType);
   }
 
   if (userId) {
@@ -243,7 +243,7 @@ export async function finalizeDocumentSubmission(
 ): Promise<Document | null> {
   // Attorney-user documents never enter Andrew Crawford's review queue — an
   // attorney-user is the reviewing attorney for their own client's matter, so
-  // there is no one to submit to. Belt-and-suspenders: the wizard UI never
+  // there is no one to submit to. Belt-and-suspenders: the client UI never
   // calls this for attorney-user accounts, but reject here too in case
   // something calls this path directly.
   const { data: profile } = await db

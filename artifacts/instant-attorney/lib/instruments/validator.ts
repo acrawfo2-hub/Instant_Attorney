@@ -49,9 +49,9 @@ const PROFILES: Record<string, InstrumentProfile> = {
   generic: { key: "generic", requiredSections: [["purpose", "agreement", "request"]], authorityRequired: false, signatureRoles: ["signature"] },
 };
 
-export function resolveInstrumentProfile(input: { wizardType?: string; instrument?: string; planKey?: string }): InstrumentProfile {
+export function resolveInstrumentProfile(input: { instrumentType?: string; instrument?: string; planKey?: string }): InstrumentProfile {
   const namedInstrument = `${input.planKey ?? ""} ${input.instrument ?? ""}`.toLowerCase();
-  const value = `${namedInstrument} ${input.wizardType ?? ""}`.toLowerCase();
+  const value = `${namedInstrument} ${input.instrumentType ?? ""}`.toLowerCase();
   if (/foia|open[ -]?records|public information/.test(value)) return PROFILES.open_records_request;
   if (/complaint|petition|charge/.test(value)) return PROFILES.complaint;
   if (/trust/.test(namedInstrument)) return PROFILES.trust;

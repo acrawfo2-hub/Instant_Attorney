@@ -12,7 +12,7 @@ import type { DocumentStatus } from "./types";
 // Explicit extension: this is a value import, so it is resolved at runtime by
 // node --test, which does not infer ".ts". The type-only import above is erased
 // before resolution and so never hit this.
-import { placeholderFields } from "./wizard-parsing.ts";
+import { placeholderFields } from "./placeholder-parsing.ts";
 import { isFullDepthState, jurisdictionFromCaseFileText, prepModeWatermarkDetail } from "./jurisdiction.ts";
 import { DOCUMENT_PROFILES, draftTextToDocumentModel, renderDocumentModel } from "./doc-layout.ts";
 import type { DocumentProfileName } from "./doc-layout.ts";

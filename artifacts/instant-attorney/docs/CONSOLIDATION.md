@@ -264,23 +264,6 @@ slice 6, and it already says to decide this last. Expose both through one servic
 and one UI model in chunks 4–5 first. If a stable artifact ID has removed the
 complexity, do not migrate for tidiness.
 
-**Renaming the wizard vocabulary.** `WizardType`, `WIZARD_LABELS`,
-`lib/wizard-parsing.ts` and friends are the instrument taxonomy and the
-placeholder parser — the drafting engine's vocabulary, not the retired journey.
-The concept is right; the name is now actively misleading, and it gave the dead
-`generateDocument` renderer enough cover to survive a cleanup that claimed to
-have finished. `WizardType` → `InstrumentType`, `wizard-parsing.ts` →
-`placeholder-parsing.ts`, `WIZARD_LABELS` → `INSTRUMENT_LABELS`: about 500
-references, mechanical, and worth its own commit so the diff stays reviewable.
-
-Two things do **not** move with it, because they are persisted data rather than
-code: the `documents.wizard_type` column and the `legal_strategy.recommended_wizards`
-JSON key. Renaming those is a migration plus a backfill plus a compatibility
-window, which is a different change with a different risk profile. The
-orchestrator's `RECOMMENDED WIZARDS:` output block is the same story — it is a
-parsing contract with `lib/file-parser.ts`, and both sides have to move together
-or the strategy silently stops being read.
-
 ## Where this plan departs from the audit
 
 - **`artifacts/api-server` was not dead.** The audit listed it as unused with no
@@ -375,9 +358,12 @@ workspace draft it came from, via `promoted_document_id`, and opens that in the
 panel the client already edits in. No copy, no second artifact, and it works
 without the physical table merge this plan still defers.
 
-**Kept:** `WizardType` and `lib/wizard-parsing.ts`. The names are unfortunate but
-they are the instrument taxonomy and the placeholder parser — the engine's
-vocabulary, not the journey's.
+**Kept:** the instrument taxonomy and the placeholder parser — the engine's
+vocabulary, not the journey's. They kept the wizard's names for one more commit,
+which turned out to matter: the name gave a dead `generateDocument` renderer
+enough cover to survive a cleanup that claimed to have finished. Both have since
+been renamed (`InstrumentType`, `lib/placeholder-parsing.ts`); see
+`ARCHITECTURE.md` for the three names that deliberately did not move.
 
 
 ### Chunk 6, as built

@@ -4,7 +4,7 @@ import { requireViewer } from "@/lib/auth/require-attorney";
 import { draftInstrument } from "@/lib/document-drafting";
 import { saveDocumentRevision } from "@/lib/document-persistence";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
-import { coerceWizardType, ATTORNEY_ORIGINATED } from "@/lib/types";
+import { coerceInstrumentType, ATTORNEY_ORIGINATED } from "@/lib/types";
 import type { CaseFile, FactItem, Attachment, RequestedAttachment } from "@/lib/types";
 
 export const maxDuration = 300;
@@ -61,10 +61,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // The title names the instrument, so a "Demand Letter" resolves the demand
   // profile even when the attorney never picks a type. Anything unrecognised is
   // a general document, which has a real spec rather than an invented one.
-  const wizardType = coerceWizardType(title) ?? "general_document";
+  const instrumentType = coerceInstrumentType(title) ?? "general_document";
 
   const drafted = await draftInstrument(new Anthropic({ apiKey: process.env.Claude_Instant_Attorney, maxRetries: 4 }), {
-    wizardType,
+    instrumentType,
     instrumentLabel: title,
     persona: "attorney",
     caseFile,
@@ -97,7 +97,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     actorId: userId,
     caseFileId,
     feature: "wizard",
-    metadata: { wizard_type: wizardType, attorney_originated: true },
+    metadata: { engine: instrumentType, attorney_originated: true },
   }).catch((e) => console.error("[attorney/draft] usage record error:", e));
 
   const draftText = drafted.draftText;
@@ -112,7 +112,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         // Owned by the client — it is their matter and their document. Origin is
         // what governs visibility, not ownership.
         user_id: caseFile.user_id,
-        doc_type: wizardType,
+        doc_type: instrumentType,
         title,
         status: "draft",
         draft_text: draftText,

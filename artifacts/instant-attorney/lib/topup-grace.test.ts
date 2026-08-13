@@ -8,7 +8,7 @@ import { pathToFileURL } from "node:url";
 // topup.ts transitively imports @/lib/supabase/server (→ next/headers) and
 // @/lib/stripe, neither of which resolves under plain `node --test`. We only
 // need the pure, IO-free evaluateGrace export, so we stub those modules to no-op
-// shells before dynamically importing topup — mirroring lib/wizard-route.test.ts.
+// shells before dynamically importing topup.
 
 const ROOT = process.cwd();
 const libUrl = (name: string) => pathToFileURL(path.join(ROOT, "lib", name)).href;

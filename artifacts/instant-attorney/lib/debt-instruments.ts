@@ -3,20 +3,20 @@
 // The documents a debt matter actually needs — validation requests, cease-contact
 // letters, credit disputes, an answer to a collection lawsuit — don't map cleanly
 // onto a generic letter. This catalog defines them as PRESETS over the existing
-// wizard types (no new DocType / DB enum), so it never disturbs the published
+// instrument types (no new DocType / DB enum), so it never disturbs the published
 // document pipeline. Mirrors lib/family-instruments.ts.
 //
 // `relevant_statutes` reference keys in lib/debt-statutes.ts; a cross-check test
 // asserts every referenced key resolves.
 
-import type { WizardType } from "./types.ts";
+import type { InstrumentType } from "./types.ts";
 import { matchDebtStatutesByText, type DebtStatuteKey } from "./debt-statutes.ts";
 
 export interface DebtInstrument {
   key: string;
   label: string;
   purpose: string;
-  wizard_type: WizardType;
+  engine: InstrumentType;
   recipient_guidance: string;
   required_fields: string[];
   relevant_statutes: DebtStatuteKey[];
@@ -32,7 +32,7 @@ export const DEBT_INSTRUMENTS: DebtInstrument[] = [
     label: "Debt Validation Request",
     purpose:
       "Demand that a collector verify a debt (amount, original creditor, your liability) and pause collection, using the FDCPA 30-day dispute right.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Send to the collection agency at the address on their notice, by mail with proof of mailing (certified mail recommended). Send within 30 days of their first written notice.",
     required_fields: [
@@ -51,7 +51,7 @@ export const DEBT_INSTRUMENTS: DebtInstrument[] = [
     label: "Cease-Communication Letter",
     purpose:
       "Tell a collector in writing to stop contacting you, as the FDCPA allows (they may then contact you only to confirm they'll stop or to say they're suing).",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Send to the collector by mail with proof of mailing. Note that stopping contact does not erase the debt and may make a lawsuit more likely, so weigh it.",
     required_fields: [
@@ -69,7 +69,7 @@ export const DEBT_INSTRUMENTS: DebtInstrument[] = [
     label: "Demand to Stop Harassment (FDCPA / Texas DCA)",
     purpose:
       "Demand a collector stop harassing, abusive, or deceptive conduct, document the violations, and reserve your right to sue or complain.",
-    wizard_type: "demand_letter",
+    engine: "demand_letter",
     recipient_guidance:
       "Send to the collector; keep a dated log of every call/contact (time, number, what was said) as evidence.",
     required_fields: [
@@ -88,7 +88,7 @@ export const DEBT_INSTRUMENTS: DebtInstrument[] = [
     label: "Credit-Report Dispute Letter",
     purpose:
       "Dispute an inaccurate item with a credit bureau under the FCRA and require a reinvestigation, with documentation attached.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Send to each credit bureau reporting the error (Equifax, Experian, TransUnion) by mail with proof of mailing; attach supporting documents.",
     required_fields: [
@@ -107,7 +107,7 @@ export const DEBT_INSTRUMENTS: DebtInstrument[] = [
     label: "Answer to a Debt-Collection Lawsuit",
     purpose:
       "File a timely answer to a debt lawsuit — entering a general denial and raising defenses (limitations / standing / lack of proof) — to avoid a default judgment.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "File with the court named in the citation by the deadline stated there, and serve a copy on the plaintiff's attorney. TIME-CRITICAL — missing the deadline forfeits the case.",
     required_fields: [
@@ -126,7 +126,7 @@ export const DEBT_INSTRUMENTS: DebtInstrument[] = [
     label: "Time-Barred Debt (Statute-of-Limitations) Letter",
     purpose:
       "Notify a collector that a debt is outside the four-year limitations period and that you dispute it and will not pay, without admitting the debt or restarting the clock.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Send to the collector by mail. Carefully avoid any language acknowledging the debt or promising payment, which can restart the limitations period.",
     required_fields: [
@@ -145,7 +145,7 @@ export const DEBT_INSTRUMENTS: DebtInstrument[] = [
     label: "Debt Settlement / Payment-Plan Proposal",
     purpose:
       "Propose, in writing, a lump-sum settlement or installment plan to resolve a debt — with terms (amount, 'paid in full' / deletion language) stated before any money changes hands.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Send to the current creditor or collector. Get any agreement in writing BEFORE paying; specify how the account will be reported once paid.",
     required_fields: [
@@ -164,7 +164,7 @@ export const DEBT_INSTRUMENTS: DebtInstrument[] = [
     label: "Complaint to the CFPB / Texas Attorney General",
     purpose:
       "File a regulatory complaint against an abusive or deceptive collector with the Consumer Financial Protection Bureau and/or the Texas Attorney General.",
-    wizard_type: "complaint_letter",
+    engine: "complaint_letter",
     recipient_guidance:
       "Submit to the CFPB (consumerfinance.gov/complaint) and/or the Texas Attorney General consumer protection division; attach your call log and any letters.",
     required_fields: [
@@ -197,11 +197,11 @@ export function isKnownDebtInstrumentKey(key: string): boolean {
 export function debtInstrumentsForPrompt(): string {
   return DEBT_INSTRUMENTS.map(
     (i) =>
-      `• ${i.key} (drafts via ${i.wizard_type})${i.high_stakes ? " [HIGH-STAKES — time-critical, recommend consult]" : ""} — ${i.label}: ${i.purpose}`
+      `• ${i.key} (drafts via ${i.engine})${i.high_stakes ? " [HIGH-STAKES — time-critical, recommend consult]" : ""} — ${i.label}: ${i.purpose}`
   ).join("\n");
 }
 
-/** Field-hint text for the drafter, shaped like WIZARD_FIELD_HINTS entries. */
+/** Field-hint text for the drafter, shaped like INSTRUMENT_FIELD_HINTS entries. */
 export function debtInstrumentFieldHint(key: string): string | null {
   const inst = BY_KEY.get(key);
   if (!inst) return null;

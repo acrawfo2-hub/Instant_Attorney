@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { isValidWizardType } from "@/lib/document-utils";
+import { isValidInstrumentType } from "@/lib/document-utils";
 import { BYPASS_USER_ID } from "@/lib/types";
-import type { LegalStrategy, WizardType } from "@/lib/types";
+import type { LegalStrategy, InstrumentType } from "@/lib/types";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
@@ -22,17 +22,17 @@ export async function POST(
   }
 
   // Two modes: plan-based files send { leadKey } (a PlanEntry.key); legacy files
-  // (no document_plan) send { lead } (a wizard type). null clears the override.
+  // (no document_plan) send { lead } (an instrument type). null clears the override.
   const hasLeadKey = "leadKey" in (body as Record<string, unknown>);
   const rawLead = (body as { lead?: unknown }).lead;
   const rawLeadKey = (body as { leadKey?: unknown }).leadKey;
 
-  let lead: WizardType | null | undefined;
+  let lead: InstrumentType | null | undefined;
   if (!hasLeadKey) {
     lead =
       rawLead === null || rawLead === undefined
         ? null
-        : typeof rawLead === "string" && isValidWizardType(rawLead)
+        : typeof rawLead === "string" && isValidInstrumentType(rawLead)
           ? rawLead
           : undefined;
     if (lead === undefined) {

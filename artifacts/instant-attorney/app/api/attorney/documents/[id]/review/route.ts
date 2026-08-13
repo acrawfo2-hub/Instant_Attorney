@@ -72,7 +72,7 @@ export async function POST(
     // Stream server-side and assemble the final message. A non-streaming request
     // at our full 64k token ceiling is rejected by the SDK ("Streaming is
     // required…") before it leaves the server — the same failure that 502'd the
-    // client wizard. Consuming the stream here keeps the JSON response contract.
+    // client-facing chat. Consuming the stream here keeps the JSON response contract.
     const response = await anthropic.messages.stream({
       model: "claude-sonnet-4-6",
       max_tokens: maxOutputTokensFor("claude-sonnet-4-6"),

@@ -10,7 +10,7 @@ import { logTruncation } from "@/lib/truncation-logger";
 import { maxOutputTokensForDoc, limitSignalMetadata } from "@/lib/token-limits";
 import { saveDocumentRevision } from "@/lib/document-persistence";
 
-// Legal doc edits can be slow on a long document — same ceiling as the wizard route.
+// Legal doc edits can be slow on a long document — same ceiling as regenerate.
 export const maxDuration = 300;
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";

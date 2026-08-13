@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { buildDrafterSystemPrompt, wizardFieldGuidance, buildFileContext } from "./prompts.ts";
+import { buildDrafterSystemPrompt, instrumentFieldGuidance, buildFileContext } from "./prompts.ts";
 import { extractDraftText } from "./file-parser.ts";
 import { maxOutputTokensFor } from "./token-limits.ts";
 import { buildJurisdictionBlock, classifyInstrumentRisk, hasRequiredForum } from "./document-risk.ts";
@@ -10,8 +10,8 @@ import { formatInstrumentAuthorityBlock, resolveInstrumentAuthority } from "./in
 import { getDocumentGenerationSpec, specForPrompt } from "./document-generation-spec.ts";
 import { parseStructuredSections, stripStructuredSections } from "./document-refinement.ts";
 import type { StructuredDraftSection } from "./document-refinement.ts";
-import { WIZARD_LABELS } from "./types.ts";
-import type { WizardType, CaseFile, FactItem, Attachment, RequestedAttachment } from "./types.ts";
+import { INSTRUMENT_LABELS } from "./types.ts";
+import type { InstrumentType, CaseFile, FactItem, Attachment, RequestedAttachment } from "./types.ts";
 
 /**
  * The one implementation of "produce legal document text".
@@ -24,11 +24,11 @@ import type { WizardType, CaseFile, FactItem, Attachment, RequestedAttachment } 
  * pinned authority, no generation spec, **no risk gate**, no validator, and no
  * marker check, so a truncated response was saved as a finished draft.
  *
- * That is the wrong way round. The wizard is meant to be the engine the
- * orchestrator draws on, not a separate place the client goes — so the engine
- * lives here, and both callers use it. The wizard route keeps its conversation
- * handling, persistence and response shaping; the worker keeps its job
- * lifecycle and its shell. Neither owns the drafting.
+ * That was the wrong way round: drafting is something the orchestrator draws
+ * on, not a separate place the client goes. The journey has since been retired
+ * and the engine lives here. Each caller keeps its own concerns — the worker
+ * its job lifecycle, regenerate its revision handling, the attorney route its
+ * ownership checks. None of them owns the drafting.
  *
  * Two rules from ARCHITECTURE.md are enforced here rather than trusted to
  * callers, because both have been broken before:
@@ -46,8 +46,8 @@ import type { WizardType, CaseFile, FactItem, Attachment, RequestedAttachment } 
 
 export interface DraftingRequest {
   /** Which drafting engine — decides the spec, field hints and instrument profile. */
-  wizardType: WizardType;
-  /** Display label, e.g. "Demand Letter". Falls back to the wizard type's label. */
+  instrumentType: InstrumentType;
+  /** Display label, e.g. "Demand Letter". Falls back to the instrument type's label. */
   instrumentLabel?: string | null;
   planKey?: string | null;
   instrumentKey?: string | null;
@@ -57,11 +57,11 @@ export interface DraftingRequest {
   facts: FactItem[];
   attachments?: Attachment[];
   requestedAttachments?: RequestedAttachment[];
-  /** The drafting instruction(s). The worker sends one; the wizard sends a thread. */
+  /** The drafting instruction(s). The worker sends one; a chat caller sends a thread. */
   messages: Anthropic.MessageParam[];
   /**
-   * Appended to the file-context system block. The wizard route uses it to pin
-   * the exact current draft for an attorney's targeted edit.
+   * Appended to the file-context system block. Used to pin the exact current
+   * draft for an attorney's targeted edit.
    */
   extraContext?: string;
 }
@@ -142,7 +142,7 @@ export async function draftInstrument(
   request: DraftingRequest
 ): Promise<DraftingResult> {
   const {
-    wizardType,
+    instrumentType,
     caseFile,
     facts,
     attachments = [],
@@ -165,8 +165,8 @@ export async function draftInstrument(
   // `placeholderFields` marks it required and the existing "information needed"
   // form surfaces it to the client like any other missing fact.
   const documentLabel =
-    request.instrumentLabel?.trim() || WIZARD_LABELS[wizardType];
-  const riskProfile = classifyInstrumentRisk(wizardType, documentLabel);
+    request.instrumentLabel?.trim() || INSTRUMENT_LABELS[instrumentType];
+  const riskProfile = classifyInstrumentRisk(instrumentType, documentLabel);
   const confirmedFactText = facts
     .filter((fact) => fact.status === "confirmed")
     .map((fact) => fact.description);
@@ -200,7 +200,7 @@ export async function draftInstrument(
         { type: "text" as const, text: buildDrafterSystemPrompt(persona, instrumentAuthorityBlock) },
         {
           type: "text" as const,
-          text: `Document being drafted: ${documentLabel}\n\n${wizardFieldGuidance(wizardType, request.instrumentKey)}\n\n${specForPrompt(wizardType)}`,
+          text: `Document being drafted: ${documentLabel}\n\n${instrumentFieldGuidance(instrumentType, request.instrumentKey)}\n\n${specForPrompt(instrumentType)}`,
           cache_control: { type: "ephemeral" as const },
         },
         {
@@ -239,7 +239,7 @@ export async function draftInstrument(
   // response when the markers were missing is exactly the behaviour #111 removed.
   let structuredSections: StructuredDraftSection[] = [];
   try {
-    structuredSections = parseStructuredSections(fullResponse, getDocumentGenerationSpec(wizardType));
+    structuredSections = parseStructuredSections(fullResponse, getDocumentGenerationSpec(instrumentType));
   } catch (sectionErr) {
     console.error("[document-drafting] structured section parse error:", sectionErr);
   }
@@ -249,7 +249,7 @@ export async function draftInstrument(
   const validationReport = draftText
     ? validateInstrument({
         profile: resolveInstrumentProfile({
-          wizardType,
+          instrumentType,
           instrument: request.instrumentLabel ?? undefined,
           planKey: request.planKey ?? undefined,
         }),

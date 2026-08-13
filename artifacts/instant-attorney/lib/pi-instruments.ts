@@ -3,17 +3,17 @@
 // The documents a PI matter actually needs — insurer demand letters, evidence-
 // preservation notices, medical-records requests, recorded-statement refusals —
 // don't map cleanly onto a generic letter. This catalog defines them as PRESETS
-// over the existing wizard types (no new DocType / DB enum). Mirrors
+// over the existing instrument types (no new DocType / DB enum). Mirrors
 // lib/family-instruments.ts and lib/debt-instruments.ts.
 
-import type { WizardType } from "./types.ts";
+import type { InstrumentType } from "./types.ts";
 import { matchPiStatutesByText, type PiStatuteKey } from "./pi-statutes.ts";
 
 export interface PiInstrument {
   key: string;
   label: string;
   purpose: string;
-  wizard_type: WizardType;
+  engine: InstrumentType;
   recipient_guidance: string;
   required_fields: string[];
   relevant_statutes: PiStatuteKey[];
@@ -28,7 +28,7 @@ export const PI_INSTRUMENTS: PiInstrument[] = [
     label: "Settlement Demand to Insurer",
     purpose:
       "Present a structured demand to the at-fault party's liability insurer — summarizing fault, injuries, medical treatment, damages categories, and a specific settlement amount with a response deadline.",
-    wizard_type: "demand_letter",
+    engine: "demand_letter",
     recipient_guidance:
       "Send to the adjuster and claims office for the at-fault party's insurer (copy the insured if appropriate). Use certified mail or email with read receipt; keep proof of mailing.",
     required_fields: [
@@ -50,7 +50,7 @@ export const PI_INSTRUMENTS: PiInstrument[] = [
     label: "Evidence Preservation (Spoliation) Letter",
     purpose:
       "Put the opposing party, business, or insurer on notice to preserve all relevant evidence — surveillance video, vehicle EDR/black-box data, maintenance logs, employee statements, and communications — before it is destroyed.",
-    wizard_type: "demand_letter",
+    engine: "demand_letter",
     recipient_guidance:
       "Send immediately to the property owner, business, trucking company, or insurer involved. Certified mail recommended; send copies to known adjusters and corporate registered agents.",
     required_fields: [
@@ -70,7 +70,7 @@ export const PI_INSTRUMENTS: PiInstrument[] = [
     label: "Medical Records & Billing Request",
     purpose:
       "Request complete medical records and itemized billing from treating providers to document injuries, causation, and damages for the claim or lawsuit.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Send to each hospital, clinic, and physician. HIPAA authorizations are usually required — attach a signed authorization or use the provider's form.",
     required_fields: [
@@ -91,7 +91,7 @@ export const PI_INSTRUMENTS: PiInstrument[] = [
     label: "Refusal of Recorded Statement",
     purpose:
       "Decline the insurer's request for a recorded statement while reserving your rights — avoiding traps where offhand comments are used against you — and offer to provide information in writing instead.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Send to the adjuster who requested the recorded call. You are generally not required to give a recorded statement to the other party's insurer.",
     required_fields: [
@@ -117,7 +117,7 @@ export const PI_INSTRUMENTS: PiInstrument[] = [
     label: "Health-Insurance / Subrogation Lien Letter",
     purpose:
       "Notify your health insurer or ERISA plan of the third-party claim and negotiate reduction of any lien against your recovery so you keep more of the settlement.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Send to your health insurer's subrogation department after you know a third-party claim exists. Many liens can be negotiated down at settlement.",
     required_fields: [
@@ -137,7 +137,7 @@ export const PI_INSTRUMENTS: PiInstrument[] = [
     label: "Complaint to Texas Department of Insurance",
     purpose:
       "File a complaint with the TDI when an insurer unreasonably delays, denies, or lowballs a claim in violation of Texas insurance practices.",
-    wizard_type: "complaint_letter",
+    engine: "complaint_letter",
     recipient_guidance:
       "Submit to the Texas Department of Insurance (tdi.texas.gov) with your policy, denial letter, and chronology of communications.",
     required_fields: [
@@ -157,7 +157,7 @@ export const PI_INSTRUMENTS: PiInstrument[] = [
     label: "Letter of Representation to Insurer",
     purpose:
       "Notify the liability insurer that you are represented (or directing communications through counsel) and that all contact must go through you or your attorney — stopping direct adjuster pressure.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Send to the adjuster and claims supervisor. Once representation is clear, adjusters should not contact you directly.",
     required_fields: [
@@ -188,7 +188,7 @@ export function isKnownPiInstrumentKey(key: string): boolean {
 export function piInstrumentsForPrompt(): string {
   return PI_INSTRUMENTS.map(
     (i) =>
-      `• ${i.key} (drafts via ${i.wizard_type})${i.high_stakes ? " [HIGH-STAKES — time-critical, recommend consult]" : ""} — ${i.label}: ${i.purpose}`
+      `• ${i.key} (drafts via ${i.engine})${i.high_stakes ? " [HIGH-STAKES — time-critical, recommend consult]" : ""} — ${i.label}: ${i.purpose}`
   ).join("\n");
 }
 

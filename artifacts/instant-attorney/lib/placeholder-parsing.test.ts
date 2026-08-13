@@ -12,7 +12,7 @@ import {
   isAnsweredByFacts,
   type ParsedDrafter,
   type NeededItem,
-} from "./wizard-parsing.ts";
+} from "./placeholder-parsing.ts";
 
 // ── Regression 1: empty right pane ───────────────────────────────────────────
 // A draft full of [[placeholders]] but with NO ---MISSING FACTS--- / ---FOLLOW-UP---
@@ -176,7 +176,7 @@ test("a free-form note alone still produces a message", () => {
 // These tests mirror that absolute-fallback path in runDrafter().
 
 // Replicates the runDrafter() recovery branch so the test guards the real flow.
-function recoverFromAiResponse(fullText: string, label: string, wizardType: string): ParsedDrafter {
+function recoverFromAiResponse(fullText: string, label: string, instrumentType: string): ParsedDrafter {
   let p = parseDrafterResponse(fullText);
   // If the model returned prose with no markers, use the whole thing as the draft.
   if (!p.draftText && fullText.trim()) {
@@ -184,7 +184,7 @@ function recoverFromAiResponse(fullText: string, label: string, wizardType: stri
   }
   // Absolute fallback — empty/garbled AI text yields a template + derived needs.
   if (!p.draftText) {
-    const template = buildFallbackTemplate(label, wizardType);
+    const template = buildFallbackTemplate(label, instrumentType);
     const derived = deriveQuestionsFromTemplate(template);
     p = {
       ...p,
@@ -238,13 +238,13 @@ test("prose with no markers is preserved verbatim as the draft", () => {
   assert.equal(p.draftText, prose, "the whole prose response becomes the draft");
 });
 
-for (const wizardType of ["demand_letter", "draft_contract", "draft_waiver", "generic"]) {
-  test(`buildFallbackTemplate(${wizardType}) produces fillable [[placeholders]]`, () => {
-    const template = buildFallbackTemplate("Test Document", wizardType);
+for (const instrumentType of ["demand_letter", "draft_contract", "draft_waiver", "generic"]) {
+  test(`buildFallbackTemplate(${instrumentType}) produces fillable [[placeholders]]`, () => {
+    const template = buildFallbackTemplate("Test Document", instrumentType);
     assert.ok(template.trim().length > 0, "template must not be empty");
 
     const placeholders = template.match(/\[\[[^\]]+\]\]/g) ?? [];
-    assert.ok(placeholders.length > 0, `${wizardType} template must have [[placeholders]]`);
+    assert.ok(placeholders.length > 0, `${instrumentType} template must have [[placeholders]]`);
 
     // Every placeholder must be a real fillable gap (non-empty between brackets).
     assert.ok(
@@ -254,8 +254,8 @@ for (const wizardType of ["demand_letter", "draft_contract", "draft_waiver", "ge
 
     // Each type yields a derivable checklist from its own placeholders.
     const derived = deriveQuestionsFromTemplate(template);
-    assert.ok(derived.questions.length > 0, `${wizardType} must derive at least one question`);
-    assert.ok(derived.blocking.length > 0, `${wizardType} must derive at least one blocking need`);
+    assert.ok(derived.questions.length > 0, `${instrumentType} must derive at least one question`);
+    assert.ok(derived.blocking.length > 0, `${instrumentType} must derive at least one blocking need`);
   });
 }
 
@@ -330,7 +330,7 @@ test("mapAnswersToPlaceholders puts unmatched answers in leftover", () => {
   assert.deepEqual(leftover, [{ label: "Main purpose of the document", value: "Sell a car" }]);
 });
 
-test("each wizard type yields a distinct, type-appropriate template", () => {
+test("each instrument type yields a distinct, type-appropriate template", () => {
   const demand = buildFallbackTemplate("X", "demand_letter");
   const contract = buildFallbackTemplate("X", "draft_contract");
   const waiver = buildFallbackTemplate("X", "draft_waiver");

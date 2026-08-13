@@ -348,9 +348,24 @@ The wizard journey was retired in chunk 5: `app/wizard/[type]/page.tsx`,
 `app/api/wizard/route.ts` and `app/api/wizard/save-answers` are gone, along with
 `resolveWizardDocumentTarget` (which existed to safely target a caller-supplied
 document id — nothing supplies one now) and `DRAFTER_SYSTEM_PROMPT`. The engine
-survives as `lib/document-drafting.ts`. `WizardType` and `lib/wizard-parsing.ts`
-also stay: they are the instrument taxonomy and the placeholder parser, not the
-journey.
+survives as `lib/document-drafting.ts`. The instrument taxonomy and the
+placeholder parser stay — they are the engine's vocabulary, not the journey — and
+have since been renamed to say so: `WizardType` → `InstrumentType`,
+`WIZARD_LABELS` → `INSTRUMENT_LABELS`, `lib/wizard-parsing.ts` →
+`lib/placeholder-parsing.ts`.
+
+**Three names deliberately did not move, because they are wire format rather than
+vocabulary.** Renaming any of them is a data change, not a rename:
+
+| Name | Why it stays |
+|---|---|
+| `legal_strategy.recommended_wizards` | a key in live `case_files` JSONB |
+| the `RECOMMENDED WIZARDS:` output block | a parsing contract between the area prompts and `lib/file-parser.ts`; and `RECOMMENDED INSTRUMENTS` would collide with the existing `SUGGESTED INSTRUMENTS` block |
+| `usage_events.feature = "wizard"` | an indexed column with history; renaming splits every cost query across two labels |
+
+There is no `documents.wizard_type` column — that name was only ever a field on
+the in-memory instrument presets (now `engine`, matching `PlanEntry.engine`) and
+a write-only breadcrumb in `content_json.metadata` that nothing reads.
 
 **The renderer took longer to find.** `lib/doc-generator.ts` also held
 `generateDocument({ docType, wizardData, … })` — the wizard's second .docx path,

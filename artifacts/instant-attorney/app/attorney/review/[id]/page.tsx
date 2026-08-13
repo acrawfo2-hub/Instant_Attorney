@@ -12,7 +12,7 @@ import ReviewDocumentEditor from "@/components/attorney-review/ReviewDocumentEdi
 import ReviewPartnerChat from "@/components/attorney-review/ReviewPartnerChat";
 import type { ReviewChange, RevisionSaveState } from "@/components/attorney-review/types";
 import AttorneyContextHeader from "@/components/AttorneyContextHeader";
-import { parseDrafterResponse } from "@/lib/wizard-parsing";
+import { parseDrafterResponse } from "@/lib/placeholder-parsing";
 import LivingFileSyncWarning from "@/components/LivingFileSyncWarning";
 
 interface ChatMessage {
@@ -145,7 +145,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
   // "Junior associate" chat: targeted edits against the working (second-draft)
   // document, distinct from the one-shot critical-review/second-draft pipeline
   // above. Ephemeral — a refresh reloads the persisted draft text, not the
-  // conversation, same as the client wizard's equivalent chat.
+  // conversation, same as the client's equivalent chat.
   // #124: the partner thread is persisted server-side, so a reload restores it
   // rather than dropping the attorney's conversation.
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
