@@ -6,6 +6,10 @@ import { useRouter } from "next/navigation";
 import LivingFileSyncWarning from "@/components/LivingFileSyncWarning";
 import type { Attachment, Document, FactItem, ClientWorkspaceDraft } from "@/lib/types";
 import { docTypeLabel, isDocumentOutOfDate } from "@/lib/types";
+// The attorney working copy is work product until approved — the review editor
+// autosaves into it mid-edit. /api/documents/[id]/download enforces the same
+// rule; these links are hidden so a client is never offered a 409.
+import { isAttorneyApproved } from "@/lib/doc-generator";
 import { findBlanks } from "@/lib/freestyle-drafts";
 import DocumentInfoNeeded from "@/components/DocumentInfoNeeded";
 import WorkspaceDraftInfoNeeded from "@/components/WorkspaceDraftInfoNeeded";
@@ -755,7 +759,7 @@ export default function CaseDocumentsTable({
                       {doc.draft_text && (
                         <a href={`/api/documents/${doc.id}/download`}>Download submitted draft (.docx)</a>
                       )}
-                      {secondDraft?.draft_text && (
+                      {secondDraft?.draft_text && (isAttorney || isAttorneyApproved(secondDraft.status)) && (
                         <a href={`/api/documents/${secondDraft.id}/download`}>Download revised draft (.docx)</a>
                       )}
                     </div>
@@ -842,7 +846,7 @@ export default function CaseDocumentsTable({
                           Download {secondDraft?.draft_text ? "original draft" : "document"} (.docx)
                         </a>
                       )}
-                      {secondDraft?.draft_text && (
+                      {secondDraft?.draft_text && (isAttorney || isAttorneyApproved(secondDraft.status)) && (
                         <a href={`/api/documents/${secondDraft.id}/download`}>Download revised draft (.docx)</a>
                       )}
                     </div>

@@ -43,6 +43,27 @@ export async function GET(
   if (doc.user_id !== userId && !profile?.is_attorney) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+
+  // The attorney's working copy is a second_draft CHILD of the submitted
+  // document, and it is privileged work product until it is approved. The
+  // review editor autosaves into it on every pause and on unload, so while the
+  // attorney is still working, its text is whatever the last keystroke or model
+  // edit left behind — a half-applied instruction, a clause under
+  // consideration, a version that would have been reverted.
+  //
+  // The client owns the parent, so ownership alone let them fetch this child.
+  // Approval is what makes it theirs to read.
+  if (
+    doc.parent_document_id &&
+    doc.doc_type === "second_draft" &&
+    !profile?.is_attorney &&
+    !isAttorneyApproved(doc.status)
+  ) {
+    return NextResponse.json(
+      { error: "This revision is still with the attorney and has not been approved yet." },
+      { status: 409 }
+    );
+  }
   if ((doc.content_json as Record<string, unknown> | null)?.generation_incomplete === true) {
     return NextResponse.json(
       { error: "This generation is incomplete. Regenerate or have an attorney repair and accept it before downloading." },
