@@ -39,7 +39,7 @@ const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 const MAX_TOOL_ITERATIONS = 5;
 
 // Anthropic server-side web tools, offered alongside the custom orchestrator
-// tools in freestyle. They let the assistant actually LOOK at a client's live
+// tools. They let the assistant actually LOOK at a client's live
 // website (or an official source) instead of guessing — Anthropic executes them
 // inline within the same stream. max_uses caps the per-turn server-tool fee, and
 // max_content_tokens keeps a fetched page from blowing out the context window.
@@ -54,7 +54,7 @@ const WEB_TOOLS = [
 export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
-  const { messages, caseFileId, pendingAttachment, fileType, counselContext, mode } = await req.json() as {
+  const { messages, caseFileId, pendingAttachment, fileType, counselContext } = await req.json() as {
     messages: Array<{ role: string; content: string }>;
     caseFileId?: string;
     fileType?: "standard" | "quick_consult";
@@ -163,14 +163,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Persist the client's chosen chat mode so reopening the file resumes it.
-  // Fire-and-forget — a failed write never blocks the reply, and the mode used
-  // for THIS turn comes from the request body regardless.
-  if (mode === "freestyle" || mode === "intake") {
-    db.from("case_files").update({ chat_mode: mode }).eq("id", resolvedCaseFileId)
-      .then(undefined, (err) => console.error("[chat-acp] chat_mode persist error:", err));
-  }
-
   // Load current file state + attachments for context injection
   const [{ data: caseFileRow }, { data: factRows }, { data: attachmentRows }, { data: requestedRows }, { data: accountRow }] =
     await Promise.all([
@@ -275,22 +267,15 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const chatMode = mode === "freestyle" ? "freestyle" : "intake";
   const acpSystemPrompt = buildAcpSystemPrompt(detectedAreas, acpPersona, {
     homeState: profileHomeState,
     jurisdiction: effectiveJurisdiction,
-    mode: chatMode,
   });
 
-  // Orchestrator tools are available only in freestyle. The system blocks and the
-  // agentic loop below are shared by both modes: with no tools, the loop runs
-  // exactly once and behaves like the previous single-stream path.
-  //
-  // Phase A: Grok preference applies to text-only intake. Freestyle tools and
-  // multimodal attachments still require Anthropic capabilities, so those turns
-  // fall back to Claude automatically (see resolveModel).
-  const useTools = mode === "freestyle";
-  const requiresAnthropicCapabilities = useTools || Boolean(pendingAttachment);
+  // One assistant: calculators, record_fact, and document planning are always
+  // available. That means this route always needs a tool-capable provider
+  // (Anthropic today). A posted `mode` from older clients is ignored.
+  const requiresAnthropicCapabilities = true;
   const resolved = resolveModel({
     tier: "workhorse",
     preference: preferredAiProvider,
@@ -301,7 +286,7 @@ export async function POST(req: NextRequest) {
   const systemBlocks = [
     { type: "text" as const, text: acpSystemPrompt, cache_control: { type: "ephemeral" as const } },
     ...(fileContext ? [{ type: "text" as const, text: fileContext }] : []),
-    ...(useTools ? [{ type: "text" as const, text: ORCHESTRATOR_TOOLS_GUIDANCE }] : []),
+    { type: "text" as const, text: ORCHESTRATOR_TOOLS_GUIDANCE },
   ];
 
   const encoder = new TextEncoder();
@@ -390,7 +375,7 @@ export async function POST(req: NextRequest) {
             max_tokens: maxOutputTokensFor(resolved.modelId),
             system: systemBlocks,
             messages: loopMessages,
-            ...(useTools ? { tools: [...ORCHESTRATOR_TOOLS, ...WEB_TOOLS] } : {}),
+            ...( { tools: [...ORCHESTRATOR_TOOLS, ...WEB_TOOLS] } ),
           });
 
           for await (const event of turn) {
@@ -505,11 +490,10 @@ export async function POST(req: NextRequest) {
           }).select("id").single();
           assistantMessageId = assistantMessage?.id ?? null;
 
-          // Freestyle split-screen: land any ---DRAFT--- blocks in the drafts
-          // panel. Stable protocol ids update their draft; a title is only a
-          // fallback when it resolves unambiguously. Only in freestyle — guided intake keeps drafts
-          // inline in the transcript.
-          if (mode === "freestyle") {
+          // Land planned documents and ---DRAFT--- blocks in the drafts panel.
+          // Stable protocol ids update their draft; a title is only a fallback
+          // when it resolves unambiguously.
+          {
             const plan = parseDocumentPlan(fullResponse);
             if (plan) {
               try {

@@ -199,6 +199,9 @@ export default function CaseDocumentsTable({
     if (draftRes.ok) {
       const data = await draftRes.json();
       setWorkspaceDrafts(data.drafts ?? []);
+      if (Array.isArray(data.generationJobs)) {
+        setDraftJobs(data.generationJobs as Array<DraftGenerationJob & { label: string; active: boolean }>);
+      }
     }
   }, [caseFileId]);
 

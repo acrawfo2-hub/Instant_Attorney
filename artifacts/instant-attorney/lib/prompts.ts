@@ -1,5 +1,5 @@
 import type Anthropic from "@anthropic-ai/sdk";
-import type { CaseFile, FactItem, InstrumentType, Attachment, RequestedAttachment, Document, ConsultWrapUp, ChatMode } from "./types";
+import type { CaseFile, FactItem, InstrumentType, Attachment, RequestedAttachment, Document, ConsultWrapUp } from "./types";
 import { CONSULT_DISPOSITION_LABELS } from "./consult-wrap-up.ts";
 import { INSTRUMENT_LABELS, docTypeLabel } from "./types.ts";
 import { formatCounselContextForPrompt } from "./existing-counsel.ts";
@@ -774,12 +774,14 @@ function acpDeepDive(areas: readonly AcpArea[], stateHint?: string | null): stri
 export function buildAcpSystemPrompt(
   areas: readonly AcpArea[],
   persona: AcpPersona = "client",
-  opts?: { homeState?: string | null; jurisdiction?: string | null; mode?: ChatMode },
+  opts?: { homeState?: string | null; jurisdiction?: string | null },
 ): string {
   const stateHint = opts?.jurisdiction || opts?.homeState || null;
   const deepDive = acpDeepDive(areas, stateHint);
   const base = `${buildAcpCoreHead(persona)}\n\n${ACP_AREA_INDEX}${deepDive}\n\n${buildAcpCoreTail(persona)}`;
-  return opts?.mode === "freestyle" ? `${base}\n\n${ACP_FREESTYLE_OVERRIDE}` : base;
+  // One assistant: the orchestrator decides pacing. There is no client-visible
+  // intake/freestyle split; tools and this override are always on.
+  return `${base}\n\n${ACP_FREESTYLE_OVERRIDE}`;
 }
 
 

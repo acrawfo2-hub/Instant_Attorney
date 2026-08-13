@@ -1,9 +1,8 @@
-// Parsing helpers for the freestyle side-panel draft protocol. The associate
-// wraps standalone deliverables in ---DRAFT: <title>--- ... ---END DRAFT--- blocks
-// (see ATTORNEY_FREESTYLE_HEAD in prompts.ts). The chat route persists them to
-// attorney_workspace_drafts; the UI strips them from the message body and shows
-// a chip instead, so the document lives in the editable right-hand panel rather
-// than scrolling away in chat.
+// Parsing helpers for the chat drafts-panel protocol. The assistant wraps
+// standalone deliverables in ---DRAFT: <title>--- ... ---END DRAFT--- blocks.
+// The chat route persists them to `client_workspace_drafts`; the UI strips them
+// from the message body and shows a chip instead, so the document lives in the
+// editable right-hand panel rather than scrolling away in chat.
 
 export interface ParsedDraft {
   title: string;

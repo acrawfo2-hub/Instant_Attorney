@@ -34,15 +34,16 @@ export interface ToolContext {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Orchestrator tools (plan Phase 2). The freestyle assistant can CALL these
-// instead of the user hunting for a calculator page. Every tool is a thin wrapper
-// over a pure, unit-tested lib function: the model decides WHEN to call and with
-// WHAT params; the server runs the real deterministic function and returns the
+// Orchestrator tools. The case assistant calls these instead of sending the
+// client to a calculator page. Every tool is a thin wrapper over a pure,
+// unit-tested lib function: the model decides WHEN to call and with WHAT
+// params; the server runs the real deterministic function and returns the
 // result. The model never re-derives a calculation in prose.
 //
-// Phase 2 is READ-ONLY: tools compute and return, with no side effects. Writing
-// results into the Living File is a separate, gated tool (update_living_file,
-// Phase 4). Adding a calculator is one entry here — see the map below.
+// Calculators are read-only. Writing a result into the Living File is
+// `record_fact`, which must ask the client first — a number the model (or the
+// client) has not confirmed is not a fact. There is no `update_living_file`
+// shortcut that skips that gate.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface ToolResult {
@@ -580,8 +581,8 @@ const TOOLS: Record<string, ToolDef> = {
     },
   },
 
-  // ── Write tools (Phase 4) — these change the client's file. The prompt requires
-  // the model to CONFIRM with the user before calling them; never speculative. ──
+  // ── Write tools — these change the client's file. The prompt requires the
+  // model to CONFIRM with the user before calling them; never speculative. ──
   record_fact: {
     def: {
       name: "record_fact",

@@ -98,6 +98,9 @@ export default function ChatDraftsPanel({
       return;
     }
     const list = (data.drafts ?? []) as ClientWorkspaceDraft[];
+    if (Array.isArray(data.generationJobs)) {
+      setJobs(data.generationJobs as Array<DraftGenerationJob & { label: string; active: boolean }>);
+    }
     // Don't overwrite an unsaved local edit of the active draft (e.g. a
     // refreshKey bump from a just-produced draft while the user is typing).
     const localActive = dirtyRef.current && activeIdRef.current
@@ -346,7 +349,7 @@ export default function ChatDraftsPanel({
                   return <span key={i} style={{ whiteSpace: "pre-wrap" }}>{part}</span>;
                 })
               ) : (
-                <span className="fc-draft-preview-empty">Nothing drafted yet — ask your assistant to write a document, or switch to Edit and start typing.</span>
+                <span className="fc-draft-preview-empty">{emptyShellCopy(jobs.find((job) => job.workspace_draft_id === active.id))}</span>
               )}
               {blanks.length > 0 && (
                 <div className="fc-draft-preview-hint">
@@ -444,4 +447,14 @@ export default function ChatDraftsPanel({
       )}
     </div>
   );
+}
+
+function emptyShellCopy(job?: Pick<DraftGenerationJob, "state" | "failure_message"> & { label: string; active: boolean }): string {
+  if (job?.active) {
+    return `${job.label} — this card is the document. The text appears when drafting finishes.`;
+  }
+  if (job?.state === "failed") {
+    return job.failure_message ?? "This draft could not be generated. Ask your assistant to retry.";
+  }
+  return "Nothing drafted yet — ask your assistant to write a document, or switch to Edit and start typing.";
 }

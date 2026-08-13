@@ -38,6 +38,13 @@ a document the client cannot locate or change has failed, however well drafted.
 | Prompts | `lib/prompts.ts` |
 | Jobs | `lib/acp-jobs.ts` — durable, survives a restart |
 
+There is one assistant personality. Orchestrator tools — including the
+deterministic calculators — are always attached. A posted `mode` from older
+clients is ignored; `case_files.chat_mode` is no longer written. Calculators
+are read-only; a result becomes a file fact only when the client confirms and
+the model calls `record_fact`. Specialist calculator pages remain optional
+deep-dives, not a second engine.
+
 Generation is **not** done here. When a client asks for documents, this route
 commits a bounded plan (`lib/document-plan.ts`) and tells them drafting has
 started; the worker produces the text. Do not emit full document text into the
@@ -49,7 +56,7 @@ A pipeline, in order. Each stage has one module:
 
 | Stage | Module | Answers |
 |---|---|---|
-| Plan | `lib/document-plan.ts` | which documents, in what order |
+| Plan | `lib/document-plan.ts` | which documents, in what order; creates the visible empty shell |
 | Identity | `lib/instruments/` | what instrument this is, what it must contain |
 | Authority | `lib/instruments/authority.ts` | which pinned legal source backs it |
 | Spec | `lib/document-generation-spec.ts` | what sections it needs |
@@ -201,6 +208,13 @@ draft. Verifying an auto-rewrite certifies text nobody approved.
 
 Updated on every input, as the product promises. The client-facing surface is
 the case memo and the tile map in `components/ClientFileView.tsx`.
+
+`lib/living-file-writers.test.ts` names every production file that mutates
+`case_files`. Administrative writes (title, archive, legal hold, opening a
+matter) are listed, not forbidden. The coverage is not event-complete —
+workspace-draft generation still writes `client_workspace_drafts.content`
+without going through `saveDocumentRevision` — and that is still deferred. Do
+not event-source to close it.
 
 ## The guidance chain — "what should this client do next?"
 
@@ -368,7 +382,13 @@ before starting on any entry here.
   "The guidance chain" below. The two real problems it described are gone.
 - **Two draft records** — `client_workspace_drafts` and `documents`, bridged by
   promotion. One service and one UI model first; a physical merge only if that
-  does not already remove the complexity.
+  does not already remove the complexity. The workspace-draft **shell** is
+  created at `dispatchDocumentPlan`, not when a worker claims the job. Status
+  cards read `document_generation_jobs`. `workspace_draft_jobs` is an unread
+  leftover table; do not drop it in a cleanup pass that is not about schema.
+- ~~`ChatMode` intake/freestyle split~~ — **done as behavior.** Tools, pacing,
+  and draft persistence no longer depend on a posted mode. The `ChatMode` type
+  and `case_files.chat_mode` column stay; renaming them is a data change.
 - ~~Five attorney AI rooms~~ — **done.** The freestyle workspace and the case
   brainstorm are deleted with their routes, prompts and tables; the review
   workbench is the one place the attorney talks to the associate. The consult
@@ -394,6 +414,7 @@ vocabulary.** Renaming any of them is a data change, not a rename:
 | `legal_strategy.recommended_wizards` | a key in live `case_files` JSONB |
 | the `RECOMMENDED WIZARDS:` output block | a parsing contract between the area prompts and `lib/file-parser.ts`; and `RECOMMENDED INSTRUMENTS` would collide with the existing `SUGGESTED INSTRUMENTS` block |
 | `usage_events.feature = "wizard"` | an indexed column with history; renaming splits every cost query across two labels |
+| `ChatMode` / `case_files.chat_mode` | a column and a type; the behavior split is gone |
 
 There is no `documents.wizard_type` column — that name was only ever a field on
 the in-memory instrument presets (now `engine`, matching `PlanEntry.engine`) and
