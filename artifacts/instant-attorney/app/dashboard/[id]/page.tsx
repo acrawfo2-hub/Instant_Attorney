@@ -11,6 +11,7 @@ import MatterSwitcher from "@/components/MatterSwitcher";
 import { toMatterSwitcherItem } from "@/lib/matter-switcher";
 import { getConsultAction } from "@/lib/consult-action";
 import { parseClientDestination } from "@/lib/client-destinations";
+import { COVER_CHAT_ASK } from "@/lib/cover-sheet";
 
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
@@ -170,8 +171,8 @@ export default async function FileDetailPage({
   // before that change and nothing picked it up afterwards, so lib/case-cta.ts
   // has been deleted; computeNextStep is still live on other surfaces.
   const headerCta = {
-    href: `/chat?caseFileId=${caseFile.id}&mode=freestyle`,
-    label: "Legal chat",
+    href: `/chat?caseFileId=${caseFile.id}&ask=${encodeURIComponent(COVER_CHAT_ASK)}`,
+    label: "Talk with your assistant",
   };
   const consultAction = getConsultAction(consultRequest, hasConsultSub);
 

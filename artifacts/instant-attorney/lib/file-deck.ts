@@ -20,7 +20,7 @@ import type { MatterTasksResult, MatterTask, MatterUrgency } from "./matter-task
 //   1. Am I OK?              → `pressing` (a deadline about to bite)
 //   2. What do I do next?    → `nextStep` + `starters` (one action, one button)
 //   3. Where are my papers?  → `drafts` (finished work, one tap away)
-//   4. Where's everything?   → `tiles` (six fixed destinations, with counts)
+//   4. Where's everything?   → `tiles` (nine fixed destinations, with counts)
 //
 // Pure and deterministic: every field derives from a real row on the file. This
 // exists so the Living File can render as a small set of buttons instead of a
@@ -33,6 +33,7 @@ export type TileTone = "urgent" | "attention" | "calm" | "neutral";
 
 /** Icon keyword the renderer maps to an inline SVG. */
 export type TileIcon =
+  | "file"
   | "draft"
   | "review"
   | "upload"
@@ -254,9 +255,10 @@ function buildDrafts(
 
 // ── Tiles ────────────────────────────────────────────────────────────────────
 //
-// Eight tiles, always the same eight in the same order. Counts and status change;
+// Nine tiles, always the same nine in the same order. Counts and status change;
 // the map doesn't. A client learns where things live once and never re-learns —
 // which is exactly what a conditional, self-rearranging grid would cost her.
+// Living File is the full current record; the other eight are slices of it.
 
 function buildTiles(input: FileDeckInput, docket: DocketEntry[]): FileTile[] {
   const {
@@ -297,8 +299,17 @@ function buildTiles(input: FileDeckInput, docket: DocketEntry[]): FileTile[] {
 
   return [
     {
+      id: "living-file",
+      label: "Living File",
+      status: caseFile.summary?.trim() ? "The file the assistant is using" : "Building as you talk",
+      count: confirmed || null,
+      href: `/dashboard/${caseFile.id}?view=living-file`,
+      tone: "neutral",
+      icon: "file",
+    },
+    {
       id: "drafted",
-      label: "Drafted documents",
+      label: "Documents",
       status: drafted > 0 ? "Ready to open" : "None yet",
       count: drafted || null,
       href: `/dashboard/${caseFile.id}?view=documents#drafted-documents`,
@@ -478,7 +489,7 @@ function buildStarters(input: FileDeckInput, docket: DocketEntry[], drafts: Draf
 
 /**
  * Distill a client's whole Living File into the deck the UI renders: one
- * pressing deadline, one next step, her finished work, six destinations, and a
+ * pressing deadline, one next step, her finished work, nine destinations, and a
  * few conversation openers. Pure — safe to call on every render.
  */
 export function buildFileDeck(input: FileDeckInput): FileDeck {

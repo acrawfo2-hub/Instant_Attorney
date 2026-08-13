@@ -17,7 +17,8 @@ const LINK_SOURCES = [
 
 test("parseClientDestination accepts known views and rejects anything else", () => {
   assert.equal(parseClientDestination("facts"), "facts");
-  assert.equal(parseClientDestination("case-details"), "case-details");
+  assert.equal(parseClientDestination("living-file"), "living-file");
+  assert.equal(parseClientDestination("case-details"), "living-file", "old bookmarks alias to the Living File");
   assert.equal(parseClientDestination(undefined), null);
   assert.equal(parseClientDestination("financials"), null, "financials is its own route, not a ?view=");
   assert.equal(parseClientDestination("../admin"), null);
@@ -25,8 +26,8 @@ test("parseClientDestination accepts known views and rejects anything else", () 
 
 // The regression guard. A destination the router serves but nothing links to is
 // unreachable content: it renders, it routes, and no client can ever get there.
-// That is precisely what happened to case-details when the eight-tile map
-// replaced the six-tile one and dropped the tile that pointed at it.
+// That is precisely what happened to the Living File when the eight-tile map
+// dropped the tile that pointed at case-details.
 test("every routed destination is reachable from at least one client-facing link", () => {
   const sources = LINK_SOURCES.map((rel) => readFileSync(join(ROOT, rel), "utf8")).join("\n");
 
@@ -45,9 +46,11 @@ test("every routed destination is reachable from at least one client-facing link
 // The cover-sheet buttons must seed the composer with the param chat actually
 // reads. A prior version wrote `prompt=`, which opened a blank box.
 test("case memo seeds chat with ask=, the param the composer reads", () => {
+  const cover = readFileSync(join(ROOT, "lib/cover-sheet.ts"), "utf8");
   const memo = readFileSync(join(ROOT, "components/ClientCaseMemo.tsx"), "utf8");
   const chat = readFileSync(join(ROOT, "app/chat/page.tsx"), "utf8");
-  assert.match(memo, /ask=\$\{encodeURIComponent\(ask\)\}/);
+  assert.match(cover, /ask=\$\{encodeURIComponent\(ask\)\}/);
+  assert.doesNotMatch(cover, /prompt=\$\{/);
   assert.doesNotMatch(memo, /prompt=\$\{/);
   assert.match(chat, /searchParams\.get\("ask"\)/);
 });
@@ -57,4 +60,16 @@ test("client file landing actually renders the cover sheet and tile map", () => 
   assert.match(view, /<ClientCaseMemo/);
   assert.match(view, /<FileTiles tiles=\{deck\.tiles\}/);
   assert.match(view, /clientDestination === "documents"/);
+  assert.match(view, /clientDestination === "living-file"/);
+});
+
+test("the cover and the chat route treat chat as the door from the one-page", () => {
+  const memo = readFileSync(join(ROOT, "components/ClientCaseMemo.tsx"), "utf8");
+  const bar = readFileSync(join(ROOT, "components/AskAssistantBar.tsx"), "utf8");
+  const route = readFileSync(join(ROOT, "app/api/chat-acp/route.ts"), "utf8");
+  const header = readFileSync(join(ROOT, "app/dashboard/[id]/page.tsx"), "utf8");
+  assert.match(memo, /Talk with your assistant/);
+  assert.match(bar, /Talk with your assistant/);
+  assert.match(header, /Talk with your assistant/);
+  assert.match(route, /formatCoverBriefing/);
 });

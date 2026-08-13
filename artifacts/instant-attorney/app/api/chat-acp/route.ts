@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import { logTruncation } from "@/lib/truncation-logger";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { buildAcpSystemPrompt, buildFileContext, ORCHESTRATOR_TOOLS_GUIDANCE } from "@/lib/prompts";
+import { formatCoverBriefing } from "@/lib/cover-sheet";
 import { ORCHESTRATOR_TOOLS, dispatchTool } from "@/lib/orchestrator-tools";
 import { detectAcpAreasFromContext } from "@/lib/acp-area-router";
 import { parseAndUpdateFile, isCompleteFileUpdate } from "@/lib/file-parser";
@@ -184,7 +185,18 @@ export async function POST(req: NextRequest) {
   const requestedAttachments = (requestedRows ?? []) as RequestedAttachment[];
 
   const fileContext = caseFile
-    ? buildFileContext(caseFile, facts, attachments, requestedAttachments)
+    ? [
+        formatCoverBriefing({
+          matterSubtype: caseFile.matter_subtype,
+          jurisdiction: caseFile.jurisdiction,
+          goals: caseFile.goals,
+          summary: caseFile.summary,
+          blockingGap: facts.find((f) => f.status === "gap" && f.kind !== "hypothetical" && !/^What-if · /i.test(f.description))?.description ?? null,
+          strategyRisk: caseFile.legal_strategy?.risks?.[0] ?? null,
+          nextStep: caseFile.next_action ?? null,
+        }),
+        buildFileContext(caseFile, facts, attachments, requestedAttachments),
+      ].join("\n")
     : "";
 
   // Build Anthropic messages — replace last user message with multimodal if attachment present

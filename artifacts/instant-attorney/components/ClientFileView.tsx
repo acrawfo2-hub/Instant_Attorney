@@ -25,22 +25,23 @@ import CollapsibleText from "@/components/CollapsibleText";
 import LegalStrategyCard from "@/components/LegalStrategyCard";
 import { buildMatterTasks } from "@/lib/matter-tasks";
 import { buildFileDeck } from "@/lib/file-deck";
+import { COVER_CHAT_ASK, askHref } from "@/lib/cover-sheet";
 import type { CaseFile, FactItem, Document, Profile, ConsultRequest, ConsultWrapUp, RequestedAttachment, GovFormInstrument, Attachment, ClientWorkspaceDraft } from "@/lib/types";
 import { docTypeLabel, personDisplayName, coerceInstrumentType } from "@/lib/types";
 import { FIRM_CONTACT_EMAIL } from "@/lib/firm";
 import type { ClientDestination } from "@/lib/client-destinations";
 
-// Client case file — a cover sheet, not a wall of tabs.
+// Client case file — a one-page cover sheet and a nine-tile map.
 //
 // Client branch (if !isAttorney) renders:
 //   – optional alert strips (deadline, consult, post-consult)
-//   – ClientCaseMemo — standing, facts, risks, and the next-step buttons
-//   – draft shortcuts — every current document, one tap away
-//   – FileTiles — eight stable destinations (documents, review, uploads, …)
-//   – AskAssistantBar — sticky way back into chat on phones
+//   – ClientCaseMemo — caption, next step, goal, posture, one catch
+//   – draft shortcuts — current documents, one tap away
+//   – FileTiles — nine destinations, Living File first
+//   – AskAssistantBar — sticky way into chat, same words as the cover button
 //
-// Clicking a tile or a "see more" link opens that section as its own routed
-// view (?view=documents, facts, …). Attorney branch is unchanged.
+// Clicking a tile opens that section as its own routed view. The Living File
+// tile is the full stored record the assistant uses. Attorney branch is unchanged.
 
 // ── Matter badge ─────────────────────────────────────────────────────────────
 
@@ -288,7 +289,7 @@ export default function ClientFileView({
   );
 
   // "About this matter" — the reference read of the case. Reference, not a to-do
-  // list: it belongs behind the Case details tile, never in front of the client
+  // list: it belongs behind the Living File tile, never in front of the client
   // on arrival.
   const aboutBlocks = (
     <>
@@ -477,7 +478,33 @@ export default function ClientFileView({
             {clientDestination === "deadlines" && (
               <KeyDeadlines facts={facts} jurisdiction={caseFile.jurisdiction} />
             )}
-            {clientDestination === "case-details" && aboutBlocks}
+            {clientDestination === "living-file" && (
+              <div className="lf-living-file">
+                <div className="lf-living-file-head">
+                  <h2>Living File</h2>
+                  <p>
+                    The current record the assistant uses for this matter.
+                    {caseFile.updated_at && (
+                      <> Last updated {new Date(caseFile.updated_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}.</>
+                    )}
+                    {caseFile.last_file_synced_at
+                      ? ` Chat folded through ${new Date(caseFile.last_file_synced_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}.`
+                      : " Chat has not been folded into the file yet."}
+                  </p>
+                </div>
+                {aboutBlocks}
+                {factsBlocks}
+                <ExistingCounselCard
+                  caseFileId={caseFile.id}
+                  counselIntakeAt={caseFile.counsel_intake_at}
+                  hasExistingCounsel={caseFile.has_existing_counsel}
+                  existingCounselName={caseFile.existing_counsel_name}
+                  counselEngagementGoal={caseFile.counsel_engagement_goal}
+                  mode="client"
+                />
+                {attorneyAssessment}
+              </div>
+            )}
             {clientDestination === "facts" && factsBlocks}
             {clientDestination === "strength" && (
               <StrengthCheckCard
@@ -488,7 +515,7 @@ export default function ClientFileView({
             )}
             {clientDestination === "help" && helpPanel}
           </div>
-          <AskAssistantBar href={chatHref} />
+          <AskAssistantBar href={askHref(chatHref, deck.nextStep?.ask ?? COVER_CHAT_ASK)} />
         </div>
       );
     }
@@ -499,7 +526,7 @@ export default function ClientFileView({
 
         <ClientCaseMemo
           caseFile={caseFile}
-          confirmedFacts={confirmed}
+          blockingGap={realGaps[0]?.description ?? null}
           deck={deck}
           chatHref={chatHref}
         />
@@ -537,7 +564,7 @@ export default function ClientFileView({
 
         <FileTiles tiles={deck.tiles} />
 
-        <AskAssistantBar href={chatHref} />
+        <AskAssistantBar href={askHref(chatHref, deck.nextStep?.ask ?? COVER_CHAT_ASK)} />
       </div>
     );
   }

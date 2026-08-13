@@ -106,14 +106,17 @@ function deck(over: Partial<Parameters<typeof buildFileDeck>[0]> = {}) {
   });
 }
 
-// ── The eight stable destinations ──────────────────────────────────────────
+// ── The nine stable destinations ───────────────────────────────────────────
 
 test("tiles: always expose the same dedicated destinations in the same order", () => {
   const empty = deck();
   assert.deepEqual(
     empty.tiles.map((t) => t.id),
-    ["drafted", "attorney-review", "uploads", "facts", "other-side", "financials", "deadlines", "attorney"],
+    ["living-file", "drafted", "attorney-review", "uploads", "facts", "other-side", "financials", "deadlines", "attorney"],
   );
+  assert.equal(empty.tiles[0].label, "Living File");
+  assert.equal(empty.tiles.find((t) => t.id === "drafted")?.label, "Documents");
+  assert.equal(empty.tiles[0].href, "/dashboard/cf1?view=living-file");
   assert.ok(empty.tiles.every((t) => t.status.trim().length > 0), "no tile may render a blank status");
   assert.equal(new Set(empty.tiles.map((t) => t.href)).size, empty.tiles.length);
 

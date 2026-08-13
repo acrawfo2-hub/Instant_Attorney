@@ -6,14 +6,14 @@
 // orphaned destinations all read the same source.
 //
 // The invariant worth protecting: a destination that nothing links to is dead
-// content. It still renders, still routes, and no client can ever reach it —
-// which is exactly how the case-details view was lost when the tile map was
-// reduced. See client-destinations.test.ts.
+// content. It still renders, still routes, and no client can ever get there —
+// which is exactly how the Living File was lost when the tile map dropped
+// case-details. See client-destinations.test.ts.
 
 export const CLIENT_DESTINATIONS = [
+  "living-file",
   "documents",
   "deadlines",
-  "case-details",
   "facts",
   "strength",
   "help",
@@ -21,7 +21,14 @@ export const CLIENT_DESTINATIONS = [
 
 export type ClientDestination = (typeof CLIENT_DESTINATIONS)[number];
 
+/** Old bookmarks for the Living File, before it had its own tile. */
+const ALIASES: Record<string, ClientDestination> = {
+  "case-details": "living-file",
+};
+
 /** Narrow an untrusted ?view= value to a destination we actually render. */
 export function parseClientDestination(view: string | undefined): ClientDestination | null {
+  if (!view) return null;
+  if (view in ALIASES) return ALIASES[view];
   return CLIENT_DESTINATIONS.find((d) => d === view) ?? null;
 }

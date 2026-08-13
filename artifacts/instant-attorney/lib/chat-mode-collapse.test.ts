@@ -10,6 +10,7 @@ function stripComments(src: string): string {
 test("the case assistant always includes orchestrator pacing, not only in freestyle", () => {
   const prompt = buildAcpSystemPrompt(["family"], "client", { homeState: "TX" });
   assert.match(prompt, /CONVERSATION PACING/);
+  assert.match(prompt, /CLIENT COVER SHEET/);
 });
 
 test("chat-acp does not gate tools or draft persistence on ChatMode", async () => {
