@@ -9,6 +9,12 @@
 //   1. POST /api/admin/archives/run         — cold-archive matters past archive_at
 //   2. POST /api/admin/archives/destroy-run — notice + destroy at end of retention
 //
+// This script is compliance / record-storage only. It does NOT generate
+// documents. Drafting is kicked from chat-acp when a plan is dispatched
+// (`kickDocumentGenerationJobs`). Do not add `/api/document-jobs/process` here
+// — a daily retention sweep must never become the thing that fills a client's
+// draft.
+//
 // Required env:
 //   APP_URL       base URL of the deployed app (e.g. https://instant-attorney.com)
 //   CRON_SECRET   must match the server's CRON_SECRET (sent as x-cron-secret)

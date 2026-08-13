@@ -51,9 +51,13 @@ the model calls `record_fact`. Specialist calculator pages remain optional
 deep-dives, not a second engine.
 
 Generation is **not** done here. When a client asks for documents, this route
-commits a bounded plan (`lib/document-plan.ts`) and tells them drafting has
-started; the worker produces the text. Do not emit full document text into the
-conversation — that rule is load-bearing and has been reverted once already.
+commits a bounded plan (`lib/document-plan.ts`), creates the visible empty
+shell, and **kicks the worker immediately** (`kickDocumentGenerationJobs`) so
+drafting starts in a separate invocation — not on the archival cron. The
+retention script (`scripts/archival-cron.mjs`) archives and destroys records;
+it must never call `/api/document-jobs/process`. Do not emit full document text
+into the conversation — that rule is load-bearing and has been reverted once
+already.
 
 ### 2. Generation
 
@@ -80,6 +84,11 @@ one place. Two callers, and neither owns the drafting:
 | `lib/document-job-worker.ts` | the orchestrator's workspace draft | **fails the job** — nothing is watching, and a half-written draft looks finished |
 | `app/api/documents/[id]/regenerate/route.ts` | a new revision of an existing document | keeps the existing draft and reports failure |
 | `app/api/attorney/case-files/[id]/draft/route.ts` | a document the attorney started from the file | reports failure; nothing is created |
+
+The worker is kicked from `chat-acp` (and the drafts-panel status poll as a
+backup) via `kickDocumentGenerationJobs`. `/api/document-jobs/process` is that
+kick's landing zone and a drain for stranded `queued` rows — not a daily cron
+the client waits on. `scripts/archival-cron.mjs` is retention only.
 
 There were three implementations before this. The wizard route had the real
 pipeline; the worker had a twelve-line Anthropic call with none of it; and

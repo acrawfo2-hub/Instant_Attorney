@@ -327,7 +327,7 @@ function AcpChatInner() {
       if (text) {
         const newDrafts = parseDrafts(raw);
         const openedUpload = /\x02TOOL:open_uploaded_document:done\x02/.test(raw);
-        if (newDrafts.length > 0 || openedUpload) {
+        if (newDrafts.length > 0 || openedUpload || /---DOCUMENT PLAN---/.test(raw)) {
           setDraftsPanelOpen(true);
           setDraftsRefresh((n) => n + 1);
         }
@@ -901,7 +901,7 @@ function AcpChatInner() {
           }
         }
       }
-      if (mode === "freestyle" && (confirmedDraftCount > 0 || openedUpload)) {
+      if (mode === "freestyle" && (confirmedDraftCount > 0 || openedUpload || /---DOCUMENT PLAN---/.test(full))) {
         setDraftsPanelOpen(true);
         setDraftsRefresh((n) => n + 1);
       }
