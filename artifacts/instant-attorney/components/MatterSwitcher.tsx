@@ -10,7 +10,8 @@ import {
 
 /**
  * Header control to jump between open Living Files without returning to the
- * dashboard index. Only renders as a switcher when the client has 2+ open matters.
+ * dashboard index. It remains a menu with one matter so starting a second case
+ * is discoverable without interrupting the one-case cover-sheet experience.
  */
 export default function MatterSwitcher({
   currentId,
@@ -26,7 +27,6 @@ export default function MatterSwitcher({
 
   const current = matters.find((m) => m.id === currentId) ?? matters[0];
   const others = matters.filter((m) => m.id !== currentId);
-  const canSwitch = others.length > 0;
 
   useEffect(() => {
     try {
@@ -54,10 +54,6 @@ export default function MatterSwitcher({
 
   if (!current) return null;
 
-  if (!canSwitch) {
-    return <span className="lf-header-title">{current.title}</span>;
-  }
-
   function go(id: string) {
     setOpen(false);
     if (id === currentId) return;
@@ -74,7 +70,7 @@ export default function MatterSwitcher({
         aria-controls={listId}
         onClick={() => setOpen((v) => !v)}
       >
-        <span className="matter-switcher-label">Matter</span>
+        <span className="matter-switcher-label">Case</span>
         <span className="matter-switcher-title">{current.title}</span>
         <svg
           className={`matter-switcher-caret${open ? " matter-switcher-caret--open" : ""}`}
@@ -94,7 +90,7 @@ export default function MatterSwitcher({
 
       {open && (
         <div className="matter-switcher-menu" role="listbox" id={listId} aria-label="Open matters">
-          <div className="matter-switcher-menu-head">Switch Living File</div>
+          <div className="matter-switcher-menu-head">Your cases</div>
           <button
             type="button"
             role="option"
@@ -127,12 +123,15 @@ export default function MatterSwitcher({
               )}
             </button>
           ))}
+          <Link href="/dashboard/new" className="matter-switcher-all" onClick={() => setOpen(false)}>
+            ＋ Start a new case
+          </Link>
           <Link
             href="/dashboard"
             className="matter-switcher-all"
             onClick={() => setOpen(false)}
           >
-            All matters →
+            View all cases →
           </Link>
         </div>
       )}
