@@ -34,6 +34,7 @@ import { getAnthropicClient, isXaiConfigured } from "@/lib/ai/clients";
 import { resolveModel } from "@/lib/ai/models";
 import { parseAiProvider } from "@/lib/ai/providers";
 import { joinSystemBlocks, streamXaiChat } from "@/lib/ai/xai-chat";
+import { formatReusableClientContext, isReusableClientFact } from "@/lib/shared-client-context";
 
 const anthropic = getAnthropicClient();
 const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
@@ -166,13 +167,14 @@ export async function POST(req: NextRequest) {
   }
 
   // Load current file state + attachments for context injection
-  const [{ data: caseFileRow }, { data: factRows }, { data: attachmentRows }, { data: requestedRows }, { data: accountRow }] =
+  const [{ data: caseFileRow }, { data: factRows }, { data: attachmentRows }, { data: requestedRows }, { data: accountRow }, { data: siblingFiles }] =
     await Promise.all([
       db.from("case_files").select("*").eq("id", resolvedCaseFileId).single(),
       db.from("fact_items").select("*").eq("case_file_id", resolvedCaseFileId),
       db.from("attachments").select("*").eq("case_file_id", resolvedCaseFileId).eq("status", "ready"),
       db.from("requested_attachments").select("*").eq("case_file_id", resolvedCaseFileId),
       db.from("profiles").select("account_type").eq("id", userId).maybeSingle(),
+      db.from("case_files").select("id, title, matter_subtype").eq("user_id", userId).neq("id", resolvedCaseFileId),
     ]);
 
   // Attorney-users get a reframed intake persona (no privilege/representation
@@ -183,6 +185,25 @@ export async function POST(req: NextRequest) {
   const facts = (factRows ?? []) as FactItem[];
   const attachments = (attachmentRows ?? []) as Attachment[];
   const requestedAttachments = (requestedRows ?? []) as RequestedAttachment[];
+
+  const siblingTitleById = new Map((siblingFiles ?? []).map((file: { id: string; title: string | null; matter_subtype: string | null }) => [
+    file.id,
+    file.title || file.matter_subtype?.replace(/_/g, " ") || "another case",
+  ]));
+  const siblingIds = [...siblingTitleById.keys()];
+  const { data: siblingFactRows } = siblingIds.length
+    ? await db.from("fact_items").select("case_file_id, description, status, kind").in("case_file_id", siblingIds).eq("status", "confirmed")
+    : { data: [] };
+  const reusableClientContext = formatReusableClientContext(
+    (siblingFactRows ?? [])
+      .filter(isReusableClientFact)
+      .slice(0, 12)
+      .map((fact: { case_file_id: string; description: string }) => ({
+        sourceCaseId: fact.case_file_id,
+        sourceCaseTitle: siblingTitleById.get(fact.case_file_id) ?? "another case",
+        description: fact.description,
+      })),
+  );
 
   const fileContext = caseFile
     ? [
@@ -299,6 +320,7 @@ export async function POST(req: NextRequest) {
   const systemBlocks = [
     { type: "text" as const, text: acpSystemPrompt, cache_control: { type: "ephemeral" as const } },
     ...(fileContext ? [{ type: "text" as const, text: fileContext }] : []),
+    ...(reusableClientContext ? [{ type: "text" as const, text: reusableClientContext }] : []),
     { type: "text" as const, text: ORCHESTRATOR_TOOLS_GUIDANCE },
   ];
 

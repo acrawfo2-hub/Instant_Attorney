@@ -4,6 +4,7 @@ import { requireViewer } from "@/lib/auth/require-attorney";
 import ClientFileView from "@/components/ClientFileView";
 import AccountMenu from "@/components/AccountMenu";
 import AttorneyContextHeader from "@/components/AttorneyContextHeader";
+import AttorneyMatterSwitcher from "@/components/AttorneyMatterSwitcher";
 import type {
   CaseFile,
   FactItem,
@@ -44,7 +45,7 @@ export default async function AttorneyFilePage({
   if (!caseFileRow) notFound();
   const caseFile = caseFileRow as CaseFile;
 
-  const [{ data: clientProfile }, { data: facts }, { data: documents }, { data: requestedRows }, { data: formRows }, { data: consultRow }] =
+  const [{ data: clientProfile }, { data: facts }, { data: documents }, { data: requestedRows }, { data: formRows }, { data: consultRow }, { data: siblingRows }] =
     await Promise.all([
       db.from("profiles").select("*").eq("id", caseFile.user_id).single(),
       db
@@ -76,6 +77,11 @@ export default async function AttorneyFilePage({
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
+      db.from("case_files")
+        .select("id, title, matter_subtype, next_action")
+        .eq("user_id", caseFile.user_id)
+        .neq("status", "archived")
+        .order("updated_at", { ascending: false }),
     ]);
 
   const consult = (consultRow as ConsultRequest | null) ?? null;
@@ -92,6 +98,12 @@ export default async function AttorneyFilePage({
     caseFile.title ||
     (caseFile.matter_subtype ? caseFile.matter_subtype.replace(/_/g, " ") : null) ||
     "Client File";
+  const clientName = client ? personDisplayName(client, "Client") : "Client";
+  const clientMatters = ((siblingRows ?? []) as Array<{ id: string; title: string | null; matter_subtype: string | null; next_action: string | null }>).map((matter) => ({
+    id: matter.id,
+    title: matter.title || matter.matter_subtype?.replace(/_/g, " ") || "Untitled matter",
+    nextAction: matter.next_action,
+  }));
 
   return (
     <div className="lf-shell">
@@ -113,7 +125,7 @@ export default async function AttorneyFilePage({
         </Link>
 
         <div className="lf-header-center">
-          <span className="lf-header-title">{title}</span>
+          <AttorneyMatterSwitcher clientId={caseFile.user_id} clientName={clientName} currentId={caseFileId} matters={clientMatters} />
           {caseFile.matter_type && (
             <span className="lf-badge">
               {caseFile.matter_type === "reactive" ? "Reactive Matter" : "Preventive Matter"}

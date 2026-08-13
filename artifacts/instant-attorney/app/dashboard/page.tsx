@@ -192,10 +192,10 @@ export default async function DashboardPage() {
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
                   </svg>
-                  Open your {isAttorneyUser ? "matter" : "case"}
+                  Continue {sortedActive[0].title || (isAttorneyUser ? "matter" : "case")}
                 </Link>
               ) : (
-                <Link href="/chat" className="dash-btn dash-btn-primary dash-btn-lg">
+                <Link href="/dashboard/new" className="dash-btn dash-btn-primary dash-btn-lg">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
                   </svg>
@@ -203,7 +203,7 @@ export default async function DashboardPage() {
                 </Link>
               )}
               {!atLimit && hasFiles && (
-                <Link href="/chat" className="dash-btn dash-btn-secondary">
+                <Link href="/dashboard/new" className="dash-btn dash-btn-secondary">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
                   </svg>
@@ -465,7 +465,7 @@ export default async function DashboardPage() {
                 ? "Start a conversation to build a matter file for your client, or use One-off question for a quick drafting prompt."
                 : "Start a conversation to build your case file, or use One-off question for any privileged quick question."}
             </p>
-            <Link href="/chat" className="dash-btn dash-btn-primary dash-btn-lg">
+            <Link href="/dashboard/new" className="dash-btn dash-btn-primary dash-btn-lg">
               {isAttorneyUser ? "Start a matter" : "Start a new case"}
             </Link>
           </div>
