@@ -1,4 +1,4 @@
-import type { WizardType } from "./types.ts";
+import type { InstrumentType } from "./types.ts";
 
 export type DocumentRisk = "low" | "high";
 export type ForumRequirement = "jurisdiction" | "court" | "agency";
@@ -27,7 +27,7 @@ const ADMIN = /\b(administrative filing|agency filing|administrative appeal|gove
 const CORRESPONDENCE = /\b(letter|correspondence|email|memo(?:randum)?)\b/i;
 
 export function classifyInstrumentRisk(
-  wizardType: WizardType,
+  instrumentType: InstrumentType,
   instrument?: string | null,
 ): InstrumentRiskProfile {
   const name = instrument?.trim() || "";
@@ -37,7 +37,7 @@ export function classifyInstrumentRisk(
   if (PLEADING.test(name)) {
     return { risk: "high", category: "pleading", permitsJurisdictionNeutralDraft: false, requiredForum: "court" };
   }
-  if (wizardType === "wills_trusts" || ESTATE.test(name)) {
+  if (instrumentType === "wills_trusts" || ESTATE.test(name)) {
     return { risk: "high", category: "estate-planning instrument", permitsJurisdictionNeutralDraft: false, requiredForum: "jurisdiction" };
   }
   if (DEED.test(name)) {
@@ -46,7 +46,7 @@ export function classifyInstrumentRisk(
   if (NOTICE.test(name)) {
     return { risk: "high", category: "statutory notice", permitsJurisdictionNeutralDraft: false, requiredForum: "jurisdiction" };
   }
-  if (wizardType === "demand_letter" || wizardType === "complaint_letter" || CORRESPONDENCE.test(name)) {
+  if (instrumentType === "demand_letter" || instrumentType === "complaint_letter" || CORRESPONDENCE.test(name)) {
     return { risk: "low", category: "correspondence", permitsJurisdictionNeutralDraft: true, requiredForum: "jurisdiction" };
   }
   return { risk: "high", category: "substantive legal instrument", permitsJurisdictionNeutralDraft: false, requiredForum: "jurisdiction" };

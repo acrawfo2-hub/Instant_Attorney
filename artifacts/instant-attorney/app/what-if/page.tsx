@@ -7,10 +7,10 @@ import { useSearchParams } from "next/navigation";
 // ─────────────────────────────────────────────────────────────────────────────
 // The What-If Game — a standalone, OPTIONAL strategy tool.
 //
-// It is intentionally NOT part of any wizard. It helps a user pressure-test
+// It is intentionally NOT part of document drafting. It helps a user pressure-test
 // their goals against scenarios the law has seen many times, then (optionally)
 // saves their answers into their Living File as facts. It never changes their
-// documents or which wizards are recommended.
+// documents or which instruments are recommended.
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface Scenario {

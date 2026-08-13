@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { placeholderFields, applyPlaceholderAnswers } from "@/lib/wizard-parsing";
+import { placeholderFields, applyPlaceholderAnswers } from "@/lib/placeholder-parsing";
 
 // Inline fill-in panel for workspace drafts (client_workspace_drafts). Applies
 // [[placeholder]] answers client-side (pure substitution, no model call) then

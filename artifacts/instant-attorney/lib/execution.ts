@@ -7,7 +7,7 @@
  *   - send_only        → client signs (or just sends) a letter; no formal ceremony
  *   - court_signature  → judge / clerk signs; parties may acknowledge form
  *
- * Instrument keys are the primary lookup. Title / wizard-type heuristics are the
+ * Instrument keys are the primary lookup. Title / engine heuristics are the
  * fallback for drafts that were never stamped with a plan_key.
  */
 
@@ -369,8 +369,10 @@ export const INSTRUMENT_EXECUTION: Record<string, InstrumentExecution> = {
   }),
 };
 
-/** Wizard-type defaults when no instrument key is known. */
-const WIZARD_EXECUTION: Partial<Record<string, InstrumentExecution>> = {
+/** Per-engine defaults, used when no instrument preset key is known. Keyed by
+ *  InstrumentType rather than by instrument key — see INSTRUMENT_EXECUTION above,
+ *  which is the more specific lookup and wins. */
+const ENGINE_EXECUTION: Partial<Record<string, InstrumentExecution>> = {
   draft_contract: {
     ...ESIGN_DEFAULT,
     signature_roles: ["Party 1", "Party 2"],
@@ -417,7 +419,7 @@ export interface ResolveExecutionInput {
   instrumentKey?: string | null;
   /** Document title for heuristic matching. */
   title?: string | null;
-  /** Wizard / doc type engine. */
+  /** Which drafting engine produced this document. */
   docType?: string | null;
 }
 
@@ -436,8 +438,8 @@ export function resolveExecution(input: ResolveExecutionInput): InstrumentExecut
   }
 
   const docType = input.docType ?? "";
-  if (docType && WIZARD_EXECUTION[docType]) {
-    return WIZARD_EXECUTION[docType]!;
+  if (docType && ENGINE_EXECUTION[docType]) {
+    return ENGINE_EXECUTION[docType]!;
   }
 
   return SEND_DEFAULT;

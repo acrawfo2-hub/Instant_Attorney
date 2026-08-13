@@ -10,7 +10,7 @@ import {
   looksLikeEstateMatter,
 } from "./estate-instruments.ts";
 import { isKnownEstateStatuteKey } from "./estate-statutes.ts";
-import { WIZARD_LABELS } from "./types.ts";
+import { INSTRUMENT_LABELS } from "./types.ts";
 
 test("every instrument has complete fields and resolvable references", () => {
   assert.ok(ESTATE_DOC_INSTRUMENTS.length >= 1);
@@ -18,8 +18,8 @@ test("every instrument has complete fields and resolvable references", () => {
     assert.ok(i.label && i.purpose && i.recipient_guidance, `${i.key} core fields`);
     assert.ok(i.required_fields.length > 0, `${i.key} required fields`);
     assert.ok(i.triggers.length > 0, `${i.key} triggers`);
-    // wizard_type must be a real drafting engine.
-    assert.ok(i.wizard_type in WIZARD_LABELS, `${i.key} bad wizard_type ${i.wizard_type}`);
+    // engine must be a real drafting engine.
+    assert.ok(i.engine in INSTRUMENT_LABELS, `${i.key} bad engine ${i.engine}`);
     for (const k of i.relevant_statutes) assert.ok(isKnownEstateStatuteKey(k), `${i.key} bad statute ${k}`);
   }
 });
@@ -43,8 +43,8 @@ test("the core estate documents are present and draft via a real engine", () => 
     assert.ok(isKnownEstateDocInstrumentKey(key), `missing ${key}`);
   }
   // A will drafts through the dedicated wills_trusts engine; a deed is a general document.
-  assert.equal(getEstateDocInstrument("last_will_testament")?.wizard_type, "wills_trusts");
-  assert.equal(getEstateDocInstrument("transfer_on_death_deed")?.wizard_type, "general_document");
+  assert.equal(getEstateDocInstrument("last_will_testament")?.engine, "wills_trusts");
+  assert.equal(getEstateDocInstrument("transfer_on_death_deed")?.engine, "general_document");
 });
 
 test("trust documents are high-stakes (route to attorney review); a basic will is not", () => {

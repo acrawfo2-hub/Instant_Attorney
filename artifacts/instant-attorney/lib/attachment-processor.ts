@@ -127,7 +127,7 @@ export async function toAnthropicBlock(
 }
 
 // Load a previously-uploaded attachment's raw bytes from storage and convert it
-// to Anthropic content blocks — used by the "Improve My Draft" wizard (and its
+// to Anthropic content blocks — used by the "Improve My Draft" engine (and its
 // regenerate path) to feed the client's own uploaded document verbatim into the
 // drafter call, instead of only the summarized analysis used elsewhere. Scoped
 // to the caller's case + user; returns null if not found/not owned so callers

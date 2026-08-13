@@ -744,7 +744,7 @@ const TOOLS: Record<string, ToolDef> = {
       }
 
       // Service client for the storage read: the download bypasses RLS the same
-      // way the "Improve My Draft" wizard does, while the query inside stays
+      // way the "Improve My Draft" engine does, while the query inside stays
       // scoped to this case + user. Avoids any SSR-client storage-auth edge.
       const loaded = await loadAttachmentText(createServiceClient(), match.id, ctx.caseFileId, ctx.userId);
       if (!loaded) {

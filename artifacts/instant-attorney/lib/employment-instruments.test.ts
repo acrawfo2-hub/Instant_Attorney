@@ -10,7 +10,7 @@ import {
   looksLikeEmploymentMatter,
 } from "./employment-instruments.ts";
 import { isKnownEmploymentStatuteKey } from "./employment-statutes.ts";
-import { WIZARD_LABELS } from "./types.ts";
+import { INSTRUMENT_LABELS } from "./types.ts";
 
 test("registry is non-empty with complete core fields", () => {
   assert.ok(EMPLOYMENT_INSTRUMENTS.length >= 1);
@@ -26,13 +26,13 @@ test("instrument keys are unique", () => {
   assert.equal(new Set(keys).size, keys.length);
 });
 
-test("every instrument routes through a real wizard type (no new DocType/enum)", () => {
-  for (const i of EMPLOYMENT_INSTRUMENTS) assert.ok(i.wizard_type in WIZARD_LABELS, `${i.key} ${i.wizard_type}`);
+test("every instrument routes through a real instrument type (no new DocType/enum)", () => {
+  for (const i of EMPLOYMENT_INSTRUMENTS) assert.ok(i.engine in INSTRUMENT_LABELS, `${i.key} ${i.engine}`);
 });
 
 test("transactional reviews use the doc_review engine", () => {
   for (const k of ["severance_review", "noncompete_review", "employer_nda_review"]) {
-    assert.equal(getEmploymentInstrument(k)?.wizard_type, "doc_review", k);
+    assert.equal(getEmploymentInstrument(k)?.engine, "doc_review", k);
   }
 });
 

@@ -9,7 +9,7 @@ import {
   matchHoaInstrumentsByText,
 } from "./hoa-instruments.ts";
 import { isKnownHoaStatuteKey } from "./hoa-statutes.ts";
-import { WIZARD_LABELS } from "./types.ts";
+import { INSTRUMENT_LABELS } from "./types.ts";
 
 test("registry is non-empty with complete core fields", () => {
   assert.ok(HOA_INSTRUMENTS.length >= 1);
@@ -25,9 +25,9 @@ test("instrument keys are unique", () => {
   assert.equal(new Set(keys).size, keys.length);
 });
 
-test("every instrument routes through a real wizard type", () => {
+test("every instrument routes through a real instrument type", () => {
   for (const i of HOA_INSTRUMENTS) {
-    assert.ok(i.wizard_type in WIZARD_LABELS, `${i.key} wizard_type ${i.wizard_type}`);
+    assert.ok(i.engine in INSTRUMENT_LABELS, `${i.key} engine ${i.engine}`);
   }
 });
 

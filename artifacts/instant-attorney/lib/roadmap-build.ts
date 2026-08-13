@@ -12,7 +12,7 @@ import { buildLienRoadmap } from "./lien-roadmap.ts";
 import { buildMatterRoadmap } from "./matter-roadmap.ts";
 import { buildGenericRoadmap } from "./generic-roadmap.ts";
 import { applyAssertionOverrides, parseRoadmapAssertions } from "./roadmap-assertions.ts";
-import { placeholderFields } from "./wizard-parsing.ts";
+import { placeholderFields } from "./placeholder-parsing.ts";
 import type { ResolvedRoadmap, RoadmapStage } from "./roadmap-types.ts";
 import { ROADMAP_BLUEPRINT_VERSION } from "./roadmap-types.ts";
 import type { CaseFile, ConsultRequest, Document, FactItem, RequestedAttachment } from "./types.ts";

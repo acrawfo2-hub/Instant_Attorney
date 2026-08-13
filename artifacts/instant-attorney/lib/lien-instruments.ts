@@ -2,20 +2,20 @@
 //
 // Documents a Texas property-lien dispute actually needs — responses to
 // mechanic's liens, foreclosure notices, payoff/release demands, title-defect
-// letters — as PRESETS over existing wizard types (no new DocType / DB enum).
+// letters — as PRESETS over existing instrument types (no new DocType / DB enum).
 // Mirrors lib/hoa-instruments.ts and lib/debt-instruments.ts.
 //
 // `relevant_statutes` reference keys in lib/lien-statutes.ts; a cross-check test
 // asserts every referenced key resolves.
 
-import type { WizardType } from "./types.ts";
+import type { InstrumentType } from "./types.ts";
 import { matchLienStatutesByText, type LienStatuteKey } from "./lien-statutes.ts";
 
 export interface LienInstrument {
   key: string;
   label: string;
   purpose: string;
-  wizard_type: WizardType;
+  engine: InstrumentType;
   recipient_guidance: string;
   required_fields: string[];
   relevant_statutes: LienStatuteKey[];
@@ -31,7 +31,7 @@ export const LIEN_INSTRUMENTS: LienInstrument[] = [
     label: "Response to Mechanic's / Materialman's Lien",
     purpose:
       "Respond to a recorded lien affidavit — dispute the amount, challenge notice/filing defects, demand itemization, and reserve rights while title is clouded.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Address to the lien claimant and their counsel; copy the county clerk's recording information and the general contractor if applicable.",
     required_fields: [
@@ -62,7 +62,7 @@ export const LIEN_INSTRUMENTS: LienInstrument[] = [
     label: "Demand to Bond Off / Discharge Mechanic's Lien",
     purpose:
       "Demand that a lien claimant accept a transfer bond (or notify of intent to post one) to remove the lien from county records while the dispute continues.",
-    wizard_type: "demand_letter",
+    engine: "demand_letter",
     recipient_guidance:
       "Address to the lien claimant and their attorney; time-sensitive if a sale or refinance is pending.",
     required_fields: [
@@ -88,7 +88,7 @@ export const LIEN_INSTRUMENTS: LienInstrument[] = [
     label: "Demand for Lien Release After Payment",
     purpose:
       "Demand that a lien claimant file a release of lien in the county records after payment, settlement, or satisfaction of the underlying debt.",
-    wizard_type: "demand_letter",
+    engine: "demand_letter",
     recipient_guidance:
       "Address to the lien claimant; attach proof of payment (canceled check, settlement agreement, or closing statement).",
     required_fields: [
@@ -113,7 +113,7 @@ export const LIEN_INSTRUMENTS: LienInstrument[] = [
     label: "Response to Mortgage Foreclosure / Notice of Sale [HIGH-STAKES]",
     purpose:
       "Respond to a deed-of-trust default or notice of sale — request reinstatement/payoff figures, assert notice defects, and reserve defenses before the trustee's sale.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Address to the loan servicer and the trustee named in the deed of trust; send certified mail before the sale date.",
     required_fields: [
@@ -146,7 +146,7 @@ export const LIEN_INSTRUMENTS: LienInstrument[] = [
     label: "Written Payoff / Reinstatement Demand",
     purpose:
       "Demand a formal written payoff or reinstatement figure from a lienholder (mortgage servicer, judgment creditor, or tax authority) with per-diem interest and recording fees.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Address to the lienholder or servicer loss-mitigation/payoff department; request the figure in writing good through a stated date.",
     required_fields: [
@@ -172,7 +172,7 @@ export const LIEN_INSTRUMENTS: LienInstrument[] = [
     label: "Demand to Clear Title Defect / Encumbrance",
     purpose:
       "Demand that a seller, prior owner, lien claimant, or title company party clear an exception on a title commitment so a sale or refinance can close.",
-    wizard_type: "demand_letter",
+    engine: "demand_letter",
     recipient_guidance:
       "Address to the party who can cure (seller, prior owner, claimant, or their counsel); copy the title company and buyer/lender as appropriate.",
     required_fields: [
@@ -199,7 +199,7 @@ export const LIEN_INSTRUMENTS: LienInstrument[] = [
     label: "Challenge to Judgment Lien on Homestead",
     purpose:
       "Assert homestead protection against a judgment lien on the owner's primary residence and demand withdrawal or subordination of the abstract of judgment as to the homestead.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Address to the judgment creditor or their attorney; cite homestead designation and the nature of the underlying debt.",
     required_fields: [
@@ -224,7 +224,7 @@ export const LIEN_INSTRUMENTS: LienInstrument[] = [
     label: "Response to Property Tax Delinquency / Tax Foreclosure Notice [HIGH-STAKES]",
     purpose:
       "Respond to a delinquent property-tax notice or tax suit — request an itemized breakdown, assert errors, and preserve rights before a tax foreclosure.",
-    wizard_type: "general_document",
+    engine: "general_document",
     recipient_guidance:
       "Address to the county tax assessor-collector or their attorney; time-sensitive if a tax suit or sale is scheduled.",
     required_fields: [
@@ -278,11 +278,11 @@ export function isKnownLienInstrumentKey(key: string): boolean {
 export function lienInstrumentsForPrompt(): string {
   return LIEN_INSTRUMENTS.map((i) => {
     const stakes = i.high_stakes ? " [HIGH-STAKES]" : "";
-    return `• ${i.key} (drafts via ${i.wizard_type})${stakes} — ${i.label}: ${i.purpose}`;
+    return `• ${i.key} (drafts via ${i.engine})${stakes} — ${i.label}: ${i.purpose}`;
   }).join("\n");
 }
 
-/** Field-hint text for the drafter, shaped like WIZARD_FIELD_HINTS entries. */
+/** Field-hint text for the drafter, shaped like INSTRUMENT_FIELD_HINTS entries. */
 export function lienInstrumentFieldHint(key: string): string | null {
   const inst = BY_KEY.get(key);
   if (!inst) return null;

@@ -75,7 +75,7 @@ test("no per-instrument document templates", async () => {
   );
 
   assert.equal(
-    /switch\s*\(\s*[\w.]*\b(docType|wizardType|instrumentKey)\b\s*\)/.test(src),
+    /switch\s*\(\s*[\w.]*\b(docType|instrumentType|instrumentKey)\b\s*\)/.test(src),
     false,
     "Branching the renderer on instrument type is how seven near-identical " +
       "template functions got here last time. Per-instrument guidance belongs " +

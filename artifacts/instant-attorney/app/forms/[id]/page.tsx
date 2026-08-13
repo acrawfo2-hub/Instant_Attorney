@@ -151,7 +151,7 @@ function VerifyForm({ instrumentId }: { instrumentId: string }) {
 }
 
 // Guided government-form completion tool. Distinct from the document-generation
-// wizard: it walks the client field by field through a real government form,
+// interview: it walks the client field by field through a real government form,
 // validating answers server-side and tracking progress, then hands off a
 // submission checklist pointing to the official source.
 export default function GovFormGuidePage({ params }: { params: Promise<{ id: string }> }) {

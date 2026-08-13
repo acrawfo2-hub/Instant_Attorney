@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 // Per-document, client-only "Regenerate" action shown when a draft is out of
 // date (the file's facts / What-If answers changed after it was written).
 // Deliberate and one-at-a-time — there is no bulk update and no auto-regenerate.
-// Mirrors the wizard route's drafting cost, so it can take a minute or two; we
+// Runs the full drafting pipeline, so it can take a minute or two; we
 // give it a generous client timeout and surface a friendly error on failure.
 const REGEN_TIMEOUT_MS = 290_000;
 

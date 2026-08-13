@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { applyPlaceholderAnswers, extractPlaceholders, placeholderFields } from "@/lib/wizard-parsing";
+import { applyPlaceholderAnswers, extractPlaceholders, placeholderFields } from "@/lib/placeholder-parsing";
 import { placeholderFillLifecycle, saveDocumentRevision } from "@/lib/document-persistence";
 import { BYPASS_USER_ID } from "@/lib/types";
 import { startDocumentReview } from "@/lib/attorney-review";

@@ -46,12 +46,12 @@ function RightsTool() {
 
   const guidance = situation ? debtRightsFor(situation) : null;
   // Hands the request to the orchestrator rather than opening a second
-  // drafting client. The wizard is the engine behind that conversation now
-  // (lib/document-drafting.ts), not a place the client clicks through to.
+  // drafting client. Drafting happens inside that conversation now
+  // (lib/document-drafting.ts), not on a page the client clicks through.
   // `ask` only seeds the composer — she still reads it and presses send.
-  const wizardHref = (wizardType: string, label?: string) =>
+  const instrumentActionHref = (instrumentType: string, label?: string) =>
     caseFileId
-      ? `/chat?caseFileId=${caseFileId}&ask=${encodeURIComponent(`Please draft the ${label ?? wizardType.replace(/_/g, " ")} for my matter.`)}`
+      ? `/chat?caseFileId=${caseFileId}&ask=${encodeURIComponent(`Please draft the ${label ?? instrumentType.replace(/_/g, " ")} for my matter.`)}`
       : `/free-chat?area=debt`;
 
   return (
@@ -150,7 +150,7 @@ function RightsTool() {
                     return (
                       <Link
                         key={key}
-                        href={wizardHref(inst.wizard_type, inst.label)}
+                        href={instrumentActionHref(inst.engine, inst.label)}
                         style={{ fontSize: 13.5, fontWeight: 500, color: navy, background: gold, padding: "9px 14px", borderRadius: 8, textDecoration: "none" }}
                       >
                         {inst.label} →

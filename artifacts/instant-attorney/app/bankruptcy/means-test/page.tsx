@@ -8,7 +8,7 @@ import { useSearchParams } from "next/navigation";
 // Chapter 7 means test (median-income screen) — a free tool. Calls
 // /api/bankruptcy/means-test (pure compute, no AI, no token spend). When opened
 // from a file (?caseFileId=), the result is saved as a confirmed fact so
-// bankruptcy guidance/documents reflect it. It never changes which wizards run.
+// bankruptcy guidance/documents reflect it. It never changes which instruments are recommended.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const navy = "var(--brand-navy)";

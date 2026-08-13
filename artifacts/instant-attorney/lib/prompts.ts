@@ -1,7 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
-import type { CaseFile, FactItem, WizardType, Attachment, RequestedAttachment, Document, ConsultWrapUp, ChatMode } from "./types";
+import type { CaseFile, FactItem, InstrumentType, Attachment, RequestedAttachment, Document, ConsultWrapUp, ChatMode } from "./types";
 import { CONSULT_DISPOSITION_LABELS } from "./consult-wrap-up.ts";
-import { WIZARD_LABELS, docTypeLabel } from "./types.ts";
+import { INSTRUMENT_LABELS, docTypeLabel } from "./types.ts";
 import { formatCounselContextForPrompt } from "./existing-counsel.ts";
 import { formCatalogForPrompt } from "./government-forms.ts";
 import { hoaStatutesForPrompt } from "./hoa-statutes.ts";
@@ -670,7 +670,7 @@ NEXT ACTION:
 // Intake mode is byte-identical to before, so its prompt cache is undisturbed.
 // The "critical eye" as drafting discipline the orchestrator carries in its own
 // head — the good parts of the firm's document drafter (buildDrafterSystemPrompt)
-// without the wizard's multi-stage review pipeline. Shared by the client and
+// without the multi-stage review pipeline. Shared by the client and
 // attorney freestyle prompts so a draft in the side panel holds the same standard.
 const DRAFTING_DISCIPLINE = `DRAFTING DISCIPLINE — the critical eye, without the paperwork. When you draft, hold to the standard the firm's document drafter would, but keep it a single working draft in the panel — no review stages unless they ask for them:
 - Draft as far as the known facts allow. Pull real values from the CONFIRMED FACTS and attached-document details in the Living File first — never invent a name, address, date, dollar amount, or identifier.
@@ -791,200 +791,9 @@ export function buildAcpSystemPrompt(
  */
 export const ACP_CHAT_SYSTEM_PROMPT = buildAcpSystemPrompt(ALL_ACP_AREAS);
 
-// ── Wizard system prompts ────────────────────────────────────────────────────
-
-function wizardBase(docName: string, docPurpose: string): string {
-  return `You are a specialized document drafting assistant at Crawford Law PLLC. You are building a ${docName} for a client in a privileged, ACP-protected session.
-
-Purpose of this wizard: ${docPurpose}
-
-Everything this wizard learns accretes to the client's Living File. You have access to the client's current file context injected above — use it. Do not re-ask facts already confirmed in the file.
-
-Conduct the wizard like a focused interview:
-- One question at a time. Never stack questions.
-- Ask only what you need for THIS document.
-- Confirm key facts even if they appear in the file — the document needs precise wording.
-- When you have everything needed, produce the completion signal.
-
-When all required information is gathered, produce EXACTLY this block:
-
----WIZARD COMPLETE---
-DOC_TYPE: [doc_type_slug]
-TITLE: [Document title]
-[KEY]: [VALUE]
-[KEY]: [VALUE]
-...
----END WIZARD---
-
-The KEY/VALUE pairs should contain all structured data needed to generate the document. Use clear, consistent keys.`;
-}
-
-export const WIZARD_PROMPTS: Record<WizardType, string> = {
-  demand_letter: `${wizardBase(
-    "Demand Letter",
-    "Draft a formal demand letter from the client to the opposing party asserting their claims and requesting specific relief."
-  )}
-
-Required fields for the Demand Letter:
-- Sender (client) full name and address
-- Recipient (opposing party) full name and address
-- Date of letter
-- Factual background (concise, chronological)
-- Legal basis for claim (general — not specific legal advice)
-- Specific demands / requested relief
-- Response deadline (typically 10–30 days)
-- Consequences if demand is not met (e.g., further legal action)
-- Tone: firm, professional, factual — not threatening or emotional
-
-Opening: Review the file, confirm parties and claims, then work through any missing details. The letter should be ready for attorney review before sending.`,
-
-  complaint_letter: `${wizardBase(
-    "Complaint Letter",
-    "Draft a formal complaint to a regulatory agency or government body (e.g., EEOC, NLRB, Texas Workforce Commission, state AG)."
-  )}
-
-Required fields for the Complaint Letter:
-- Complainant (client) full name and contact
-- Agency or body receiving the complaint
-- Respondent (employer/party) name and address
-- Nature of the complaint (discrimination, retaliation, wage theft, etc.)
-- Protected class or right at issue (if applicable)
-- Chronological factual narrative
-- Witnesses (names, roles)
-- Documents supporting the complaint
-- Relief requested
-- Verification / signature block
-
-Opening: Identify which agency and what type of complaint, then gather the required fields.`,
-
-  draft_contract: `${wizardBase(
-    "Contract Draft",
-    "Draft a new contract or agreement between the client and another party."
-  )}
-
-Required fields for the Contract:
-- Contract type (services agreement, NDA, employment offer, lease, etc.)
-- Parties (full legal names, roles — who is promising what to whom)
-- Effective date and term
-- Core obligations of each party
-- Compensation / consideration
-- Intellectual property provisions (if applicable)
-- Confidentiality provisions (if applicable)
-- Termination conditions
-- Dispute resolution (arbitration, litigation, jurisdiction)
-- Governing law (state)
-- Signatures block
-
-Opening: Identify the contract type and parties, then work through the terms methodically.`,
-
-  draft_waiver: `${wizardBase(
-    "Waiver / Release",
-    "Draft a liability release, consent form, or waiver agreement."
-  )}
-
-Required fields for the Waiver:
-- Waiver type (liability release, photo/media consent, medical consent, indemnification, etc.)
-- Releasor (who is giving up rights) — name and description
-- Releasee (who is protected) — name and description
-- Specific rights or claims being released
-- Activities or events covered
-- Duration of the waiver
-- Consideration (what the releasor receives in exchange)
-- Governing law and jurisdiction
-- Voluntary acknowledgment language
-- Signatures block
-
-Opening: Identify the waiver type and purpose, then collect the required details.`,
-
-  wills_trusts: `${wizardBase(
-    "Wills & Trusts Document",
-    "Gather information for a will, living trust, power of attorney, or related estate planning instrument."
-  )}
-
-Required fields (varies by instrument — identify instrument first):
-For a Will:
-- Testator full legal name, DOB, state of residence
-- Executor (and alternate executor) name and relationship
-- Beneficiaries — names, relationships, shares
-- Specific bequests (property, items, accounts)
-- Residuary clause
-- Guardianship nominations (if minor children)
-- Funeral/burial wishes (optional)
-
-For a Revocable Living Trust:
-- Grantor / Trustee / Successor trustee names
-- Trust assets (types — real property, accounts, investments)
-- Beneficiaries and distribution terms
-- Conditions (age, milestone, etc.)
-
-Opening: Ask which instrument(s) are needed, then work through the appropriate checklist.`,
-
-  doc_review: `${wizardBase(
-    "Document Review",
-    "Analyze a document the client has provided, understand how it fits into their matter, and provide inline edit recommendations for attorney review."
-  )}
-
-Your role in this wizard:
-- The client will paste or describe the document they need reviewed
-- Understand the document type, parties, and purpose
-- Analyze how it fits into the client's current Living File and legal strategy
-- Identify: favorable provisions, unfavorable provisions, missing protections, ambiguous language, red flags
-- Suggest specific inline edits with reasoning
-- Flag anything requiring immediate attorney attention with [URGENT:]
-
-Required outputs for ---WIZARD COMPLETE---:
-- DOCUMENT_TYPE: what kind of document it is
-- PARTIES: who the parties are
-- SUMMARY: plain-English summary of what the document does
-- FAVORABLE: provisions that help the client
-- UNFAVORABLE: provisions that hurt the client or lack protections
-- RED_FLAGS: anything critically problematic
-- RECOMMENDED_EDITS: specific language suggestions
-- FIT_TO_CASE: how this document relates to the overall matter strategy
-
-Opening: Ask the client to paste or describe the document they want reviewed.`,
-
-  general_document: `${wizardBase(
-    "Legal Document",
-    "Draft the specific legal instrument identified above in the 'Document being drafted' line. Determine the correct format, structure, and tone from the instrument name and the client's Living File — whether that is a formal letter, regulatory filing, internal policy, legal memorandum, cease and desist, arbitration demand, or any other legal instrument."
-  )}
-
-Format identification — apply the correct legal structure for the instrument:
-- Formal letters (cease & desist, strongly worded, cover, notice): attorney letterhead format, formal salutation, dated, professional close, signature block
-- Regulatory filings (EEOC charge, NLRB charge, state agency complaint, OSHA filing): follow the standard structure for that specific agency and form
-- Internal policies / procedures manuals: defined purpose, scope, numbered sections, definitions, enforcement and amendment clauses
-- Legal memoranda: TO / FROM / DATE / RE header, Issue, Brief Answer, Analysis (IRAC), Conclusion
-- Notices (default, cure, termination, breach): formal date, parties identified by defined terms, specific obligation at issue, cure period if applicable, governing law
-- Arbitration / mediation demands: parties, governing arbitration clause, claims asserted, relief requested
-- Other instruments: apply the structure a senior attorney at a BigLaw firm would use for this specific instrument type
-
-Required fields to gather (adapt to instrument):
-- The specific parties involved (full legal names, roles, addresses)
-- Key facts relevant to this instrument
-- Any deadlines, cure periods, or response windows
-- Governing jurisdiction and law
-- Who signs, who receives, and how it is to be delivered
-- Any exhibits, attachments, or enclosures referenced
-
-Opening: Read the "Document being drafted" line at the top of your context. Confirm what the instrument is and what you understand it to accomplish from the Living File. If you have enough to begin, produce the full draft immediately and then ask only for what is missing. Do not ask for information you already have from the file.`,
-
-  improve_draft: `${wizardBase(
-    "Improved Draft",
-    "The client has uploaded their own existing draft of a document. Produce a materially improved version of that same document — not a different document from scratch."
-  )}
-
-Your role in this wizard:
-- The client's uploaded draft is provided verbatim at the start of the conversation.
-- Treat it as the base document. Preserve its structure and defined terms where sound.
-- Tighten language, cut redundancy and legalese, and resolve blanks or weak spots using facts already confirmed in the Living File.
-- Never invent facts, parties, dates, or law. Use [[PLACEHOLDER]] for anything genuinely missing.
-- Produce the improved draft using the standard drafting output format (DRAFT READY / MISSING FACTS / FOLLOW-UP / FILE UPDATE).
-
-Opening: Read the uploaded draft carefully, then produce the full improved draft immediately.`,
-};
-
-// ── Wizard field hints (used by the drafter API to give document-specific guidance) ──
-export const WIZARD_FIELD_HINTS: Record<WizardType, string> = {
+// ── Per-engine field hints, merged with the resolved instrument profile and fed
+// ── to the drafter by lib/document-drafting.ts. ─────────────────────────────
+export const INSTRUMENT_FIELD_HINTS: Record<InstrumentType, string> = {
   demand_letter: `Required fields: sender (client) full name and address, recipient (opposing party) full name and address, date of letter, factual background (concise/chronological), legal basis for claim, specific demands/relief requested, response deadline (10–30 days), consequences if demand not met.`,
   complaint_letter: `Required fields: complainant name and contact, agency receiving complaint, respondent name and address, nature of complaint, protected class or right at issue, chronological factual narrative, witnesses, supporting documents, relief requested, verification/signature block.`,
   draft_contract: `Required fields: contract type, parties (full legal names and roles), effective date and term, core obligations of each party, compensation/consideration, IP provisions, confidentiality provisions, termination conditions, dispute resolution, governing law, signatures block.`,
@@ -996,8 +805,8 @@ export const WIZARD_FIELD_HINTS: Record<WizardType, string> = {
 };
 
 /** Merge generic rendering-engine guidance with the resolved legal instrument. */
-export function wizardFieldGuidance(engine: WizardType, instrumentKey?: string | null): string {
-  const engineGuidance = WIZARD_FIELD_HINTS[engine];
+export function instrumentFieldGuidance(engine: InstrumentType, instrumentKey?: string | null): string {
+  const engineGuidance = INSTRUMENT_FIELD_HINTS[engine];
   const profile = resolveInstrumentProfile(instrumentKey);
   return profile ? `${engineGuidance}\n\n${instrumentGuidance(profile)}` : engineGuidance;
 }
@@ -1010,7 +819,7 @@ export function wizardFieldGuidance(engine: WizardType, instrumentKey?: string |
  * Which follow-up behavior the drafter uses. "client" re-renders the complete
  * document on every follow-up (today's behavior, unchanged). "attorney" is
  * for a licensed attorney working the document directly (an attorney-user's
- * own wizard, or Andrew Crawford's chat-edit panel) — it makes a targeted
+ * own draft, or Andrew Crawford's chat-edit panel) — it makes a targeted
  * edit instead of a full regeneration, the way a junior associate would.
  */
 export type DrafterPersona = "client" | "attorney";
@@ -1332,7 +1141,7 @@ Respond using EXACTLY this format:
 ---DOCUMENT TYPE FITNESS---
 FIT: [yes | no]
 RATIONALE: [2-4 sentences explaining your assessment]
-RECOMMENDED_TYPE: [If FIT is no, the wizard type or instrument that would be more appropriate — e.g. demand_letter, complaint_letter, draft_contract. If FIT is yes, write "none"]
+RECOMMENDED_TYPE: [If FIT is no, the instrument type that would be more appropriate — e.g. demand_letter, complaint_letter, draft_contract. If FIT is yes, write "none"]
 ---END FITNESS---
 
 Be decisive. If the current type is reasonable even if not perfect, answer FIT: yes.`;
@@ -1384,7 +1193,7 @@ Then a short changelog for the attorney only (the client never sees it) inside t
 
 BEFORE YOU FINISH, confirm: the draft is shorter and clearer than the original; every review item is resolved; no clause survives that serves no goal; no hallucinated facts or law; every genuine gap marked with a [[placeholder]]; structure is logical and consistent; no stray Markdown symbols; the CHANGES list reflects what you actually did.`;
 
-const WIZARD_TYPE_OPTIONS = Object.keys(WIZARD_LABELS).join(", ");
+const INSTRUMENT_TYPE_OPTIONS = Object.keys(INSTRUMENT_LABELS).join(", ");
 
 export function buildDocumentTypeFitnessUserMessage(
   parentDoc: Document,
@@ -1402,7 +1211,7 @@ export function buildDocumentTypeFitnessUserMessage(
 DOCUMENT TYPE BEING DRAFTED: ${docTypeLabel(parentDoc.doc_type)}
 DOCUMENT TITLE: ${parentDoc.title}
 
-SUPPORTED WIZARD TYPES: ${WIZARD_TYPE_OPTIONS}
+SUPPORTED WIZARD TYPES: ${INSTRUMENT_TYPE_OPTIONS}
 
 INITIAL DRAFT (excerpt):
 ${draftPreview}
@@ -1628,7 +1437,7 @@ export function improvementsAsReviewText(improvements: ParsedImprovement[]): str
 // ── What-If Game (standalone strategy tool) ─────────────────────────────────
 //
 // Powers app/api/what-if/route.ts. This is a SEPARATE, optional tool — it is
-// not part of any wizard and must never drive document generation. It reads the
+// not part of document drafting and must never drive it. It reads the
 // Living File for context (when a case file is supplied) and returns a strict
 // JSON set of "what if…" scenarios that help a lay person pull better strategy
 // out of situations the law has handled many times. Output is parsed by
@@ -1649,7 +1458,7 @@ RULES:
 - This is general legal information, NOT legal advice. Do not tell the user what they should do or predict outcomes. Surface the possibility and the consideration; let them decide.
 - Texas law is the default frame (Crawford Law is licensed in Texas and Illinois). If the matter is clearly elsewhere, frame generally and say local counsel may be needed.
 - Strongest fit: wills & estate planning, contracts, and family law. For other areas, still produce useful scenarios.
-- doc_nudge is OPTIONAL and must be a plain English sentence (e.g. "You may want a document that names a backup guardian."). NEVER output a wizard/document code, slug, or system token. The What-If Game must not drive the wizards.
+- doc_nudge is OPTIONAL and must be a plain English sentence (e.g. "You may want a document that names a backup guardian."). NEVER output a document code, slug, or system token. The What-If Game must not drive drafting.
 - Never ask for sensitive identifiers (SSN, account numbers).
 - fact_label must be a short, clean noun phrase (2–5 words) describing what the user's answer will capture (e.g. "Backup guardian preference", "If buyer defaults").
 

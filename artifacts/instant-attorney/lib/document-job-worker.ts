@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { draftInstrument, type DraftingResult } from "./document-drafting.ts";
-import { coerceWizardType } from "./types.ts";
+import { coerceInstrumentType } from "./types.ts";
 import type { CaseFile, FactItem, Attachment, RequestedAttachment } from "./types.ts";
 
 type Job = { id: string; case_file_id: string; user_id: string; workspace_draft_id: string | null; document_type: string; title: string; generation_attempt: number };
@@ -39,7 +39,7 @@ export async function runDocumentGenerationJob(db: SupabaseClient, jobId: string
 }
 
 /**
- * Turn one job into document text, through the same pipeline the wizard route
+ * Turn one job into document text, through the same pipeline every other
  * uses — `lib/document-drafting.ts`.
  *
  * This used to be a direct Anthropic call with a one-sentence system prompt and
@@ -71,11 +71,11 @@ async function generateJobText(db: SupabaseClient, job: Job): Promise<string> {
   // The plan's documentType is a free-form slug the model chose, so it may not
   // name a drafting engine. `general_document` is the honest fallback — it has a
   // real spec and profile, where an invented type would have neither.
-  const wizardType = coerceWizardType(job.document_type) ?? "general_document";
+  const instrumentType = coerceInstrumentType(job.document_type) ?? "general_document";
 
   const client = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney, maxRetries: 4 });
   const result: DraftingResult = await draftInstrument(client, {
-    wizardType,
+    instrumentType,
     instrumentLabel: job.title,
     caseFile: (caseFile ?? null) as CaseFile | null,
     facts: (facts ?? []) as FactItem[],
@@ -93,7 +93,7 @@ async function generateJobText(db: SupabaseClient, job: Job): Promise<string> {
   }
   if (result.truncated) {
     // extractDraftText salvages a draft block that opened but never closed, so
-    // a truncated run can still yield text. The wizard route saves that text and
+    // a truncated run can still yield text. A markerless response is recovery
     // flags `truncated` in content_json, because a person is looking at it and
     // can retry. Nothing here is watching: client_workspace_drafts has no
     // truncation flag, so saving it would put a half-written document in the

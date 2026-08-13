@@ -23,7 +23,7 @@ export default async function AttorneySignupsAdminPage() {
       </div>
       <p style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
         Attorneys signing up to use Instant Attorney as a drafting tool for their own
-        clients&apos; matters. Nothing unlocks (no checkout, no wizards) until you approve —
+        clients&apos; matters. Nothing unlocks (no checkout, no drafting) until you approve —
         verify the bar number/firm before approving.
       </p>
       <AttorneySignupAdminTable initial={(data ?? []) as unknown as AttorneySignupRow[]} />

@@ -138,7 +138,7 @@ test("existing counsel intake incomplete surfaces mission action", () => {
   assert.ok(board.actions.some((a) => a.id === "counsel:intake"));
 });
 
-test("document review goal with existing counsel suggests doc review wizard", () => {
+test("document review goal with existing counsel suggests a doc review", () => {
   const board = computeMissionControl({
     caseFile: {
       ...baseFile,

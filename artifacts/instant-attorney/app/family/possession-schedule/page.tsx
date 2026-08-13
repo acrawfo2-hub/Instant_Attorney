@@ -10,7 +10,7 @@ import { useSearchParams } from "next/navigation";
 // Calls /api/family/possession-schedule (pure compute, no AI, no token spend).
 // When opened from a file (?caseFileId=), the schedule is saved as a confirmed
 // fact, so a parenting plan / decree seeds from it. It never changes which
-// wizards are recommended.
+// instruments are recommended.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const navy = "var(--brand-navy)";

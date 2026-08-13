@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { WizardType, LegalStrategy, PlanEntry } from "./types";
+import type { InstrumentType, LegalStrategy, PlanEntry } from "./types";
 
 // Valid drafting engines for a DOCUMENT PLAN entry. Kept inline (not imported
 // from ./types) so this module stays free of runtime imports the unit-test
@@ -13,12 +13,12 @@ const VALID_ENGINES = new Set<string>([
   "doc_review",
   "general_document",
 ]);
-import { coerceWizardType } from "./types.ts";
+import { coerceInstrumentType } from "./types.ts";
 import { inferInstrumentKey } from "./instruments/index.ts";
 import { isKnownFormKey } from "./government-forms.ts";
 import { provisionalFormDef, slugifyFormKey } from "./gov-form-lookup.ts";
 import type { DynamicCandidate } from "./gov-form-lookup.ts";
-import { placeholderFields } from "./wizard-parsing.ts";
+import { placeholderFields } from "./placeholder-parsing.ts";
 
 // Extracts the draft text from a ---DRAFT READY--- block.
 // Resilient to truncation: if the closing ---END DRAFT--- marker is missing
@@ -68,7 +68,7 @@ export function hasApplicableUpdate(text: string): boolean {
 }
 
 // Parses all structured blocks from AI output and writes updates to the DB.
-// Called at key events only: end of session, wizard completion, document upload.
+// Called at key events only: end of session, draft completion, document upload.
 export async function parseAndUpdateFile(
   db: SupabaseClient,
   caseFileId: string,
@@ -396,11 +396,11 @@ async function parseLegalStrategy(
   const parsedPlan = parseDocumentPlan(block, priorPlan);
   const documentPlan = parsedPlan.length ? parsedPlan : priorPlan;
 
-  const recommendedWizards: WizardType[] = documentPlan.length
+  const recommendedWizards: InstrumentType[] = documentPlan.length
     ? [...new Set(documentPlan.map((e) => e.engine))]
     : extractBullets(block, "RECOMMENDED WIZARDS")
-        .map(coerceWizardType)
-        .filter((w): w is WizardType => w !== null);
+        .map(coerceInstrumentType)
+        .filter((w): w is InstrumentType => w !== null);
 
   const priorKeyOverride = priorStrategy?.lead_key_override ?? null;
   const leadKeyOverride = documentPlan.some((e) => e.key === priorKeyOverride)
@@ -447,7 +447,7 @@ export function parseDocumentPlan(block: string, prior: PlanEntry[] = []): PlanE
     if (!title) continue;
 
     const engineRaw = (parts[1] ?? "").toLowerCase().replace(/[^a-z_]/g, "");
-    const engine = (VALID_ENGINES.has(engineRaw) ? engineRaw : "general_document") as WizardType;
+    const engine = (VALID_ENGINES.has(engineRaw) ? engineRaw : "general_document") as InstrumentType;
     const rationale = parts[2] || undefined;
 
     const priorEntry = priorByTitle.get(normalizeTitle(title));

@@ -3,7 +3,7 @@
 // Surfaced only when a document is "out of date" — i.e. the client changed their
 // facts or What-If / hypothetical answers AFTER the draft was generated. This is
 // a deliberate, per-document client action: there is no auto-regeneration and no
-// bulk update. It mirrors the wizard's drafting path (same model, system prompt,
+// bulk update. It runs the same pipeline as every other draft (same model,
 // file context — so hypotheticals flow in via buildFileContext) but operates on
 // one known document the caller owns, and PRESERVES that document's lifecycle
 // status (a draft already with the attorney must not be knocked back to "draft").
@@ -13,16 +13,17 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { draftInstrument } from "@/lib/document-drafting";
 import { parseAndUpdateFile, syncDraftGapsToLivingFile, isCompleteFileUpdate } from "@/lib/file-parser";
 import { saveDocumentRevision } from "@/lib/document-persistence";
-import { stampFactsSynced, isValidWizardType } from "@/lib/document-utils";
+import { stampFactsSynced, isValidInstrumentType } from "@/lib/document-utils";
 import { loadAttachmentAsContentBlocks } from "@/lib/attachment-processor";
 import { recordAiFromMessage } from "@/lib/usage-tracker";
 import { getBillingGate } from "@/lib/topup";
-import { BYPASS_USER_ID, WIZARD_LABELS } from "@/lib/types";
-import type { WizardType, CaseFile, FactItem, Attachment, RequestedAttachment, Document } from "@/lib/types";
+import { BYPASS_USER_ID, INSTRUMENT_LABELS } from "@/lib/types";
+import type { InstrumentType, CaseFile, FactItem, Attachment, RequestedAttachment, Document } from "@/lib/types";
 import { logTruncation } from "@/lib/truncation-logger";
 import { maxOutputTokensFor, limitSignalMetadata } from "@/lib/token-limits";
 
-// Legal doc generation can be slow — allow up to 5 minutes like the wizard route.
+// Legal doc generation can be slow — a long instrument can take minutes to
+// generate, refine and validate, so allow up to 5 minutes.
 export const maxDuration = 300;
 
 const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney, maxRetries: 4 });
@@ -30,7 +31,7 @@ const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 
 // Only documents the client still owns the editing of can be regenerated. A
 // finalized/delivered deliverable is the attorney's work product — regenerating
-// the client's wizard draft underneath it would be confusing and is out of scope.
+// the client's draft underneath it would be confusing and is out of scope.
 const REGENERABLE_STATUSES = new Set(["draft", "changes_requested", "pending_review"]);
 
 export async function POST(
@@ -71,13 +72,13 @@ export async function POST(
   const doc = docRow as Document;
 
   // Child documents (critical review / second draft) are attorney work product,
-  // not client wizard drafts — never regenerable here.
+  // not client drafts — never regenerable here.
   if (doc.parent_document_id) {
     return NextResponse.json({ error: "This document can't be regenerated." }, { status: 400 });
   }
 
-  const wizardType = doc.doc_type as string;
-  if (!isValidWizardType(wizardType)) {
+  const instrumentType = doc.doc_type as string;
+  if (!isValidInstrumentType(instrumentType)) {
     return NextResponse.json({ error: "This document type can't be regenerated." }, { status: 400 });
   }
 
@@ -90,7 +91,7 @@ export async function POST(
 
   const caseFileId = doc.case_file_id;
 
-  // Subscription + case-ownership guards mirror the wizard route. fact_items RLS
+  // Subscription + case-ownership guards match the orchestrator's. fact_items RLS
   // only checks user_id (NOT case ownership), so verify the caller owns the case
   // app-side before drafting against / writing to it.
   if (!BYPASS_AUTH) {
@@ -156,20 +157,20 @@ export async function POST(
   // recover it from the saved title (drafted as "<instrument> — <date>") so the
   // regenerated draft keeps targeting the same instrument.
   const instrument =
-    wizardType === "general_document"
+    instrumentType === "general_document"
       ? doc.title.replace(/\s+—\s+.*$/, "").trim() || null
       : null;
-  const documentLabel = instrument ?? WIZARD_LABELS[wizardType as WizardType];
+  const documentLabel = instrument ?? INSTRUMENT_LABELS[instrumentType as InstrumentType];
 
   const initMsg = instrument
     ? `Please draft a ${instrument} based on my Living File.`
-    : `Please draft a ${documentLabel} based on my Living File. Document type: ${wizardType}`;
+    : `Please draft a ${documentLabel} based on my Living File. Document type: ${instrumentType}`;
 
   // "Improve My Draft" documents were built from the client's own uploaded
   // file — re-include it here so a regeneration keeps improving that same
   // document instead of silently falling back to a from-scratch redraft.
   let regenerateMessage: Anthropic.MessageParam = { role: "user", content: initMsg };
-  if (wizardType === "improve_draft") {
+  if (instrumentType === "improve_draft") {
     const baseAttachmentId = (doc.content_json as Record<string, unknown> | null)?.base_attachment_id as
       | string
       | undefined;
@@ -196,7 +197,7 @@ export async function POST(
   // fallback #111 removed. This route writes through saveDocumentRevision, so
   // that raw prose became a real revision the client could submit for review.
   const drafted = await draftInstrument(anthropic, {
-    wizardType: wizardType as WizardType,
+    instrumentType: instrumentType as InstrumentType,
     instrumentLabel: documentLabel,
     instrumentKey,
     caseFile,
@@ -222,7 +223,7 @@ export async function POST(
     caseFileId,
     feature: "wizard",
     metadata: {
-      wizard_type: wizardType,
+      engine: instrumentType,
       regenerate: true,
       ...limitSignalMetadata({
         model: message.model,
@@ -236,7 +237,7 @@ export async function POST(
   if (truncated) {
     logTruncation({
       endpoint: "documents/regenerate",
-      feature: wizardType,
+      feature: instrumentType,
       caseFileId,
       userId,
       outputTokens: message.usage.output_tokens,
@@ -311,7 +312,7 @@ export async function POST(
       );
   }
 
-  // Apply the same post-generation Living File writes the wizard does, so the
+  // Apply the same post-generation Living File writes the worker does, so the
   // file's confirmed facts / outstanding gaps stay in sync with the new draft.
   if (isCompleteFileUpdate(fullResponse)) {
     try {

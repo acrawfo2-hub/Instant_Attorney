@@ -3,7 +3,7 @@ import Link from "next/link";
 import MissionControlBoard from "@/components/MissionControlBoard";
 import FactsPanel from "@/components/FactsPanel";
 import ExistingCounselCard from "@/components/ExistingCounselCard";
-import { placeholderFields } from "@/lib/wizard-parsing";
+import { placeholderFields } from "@/lib/placeholder-parsing";
 import { computeMissionControl } from "@/lib/mission-control";
 import {
   isFullDepthState,
@@ -25,7 +25,7 @@ import AttorneyStartDraft from "@/components/AttorneyStartDraft";
 import { buildMatterTasks } from "@/lib/matter-tasks";
 import { buildFileDeck } from "@/lib/file-deck";
 import type { CaseFile, FactItem, Document, Profile, ConsultRequest, ConsultWrapUp, RequestedAttachment, GovFormInstrument, Attachment, ClientWorkspaceDraft } from "@/lib/types";
-import { docTypeLabel, personDisplayName, coerceWizardType } from "@/lib/types";
+import { docTypeLabel, personDisplayName, coerceInstrumentType } from "@/lib/types";
 import { FIRM_CONTACT_EMAIL } from "@/lib/firm";
 import { getConsultAction } from "@/lib/consult-action";
 import type { ClientDestination } from "@/lib/client-destinations";
@@ -148,7 +148,7 @@ export default function ClientFileView({
   const hasUploadedDoc = attachments.some((a) => a.status !== "failed");
 
   // Until a document is uploaded, strip Document Review from the recommended
-  // wizards so it never becomes the Mission Control hero or a queued action.
+  // engines so it never becomes the Mission Control hero or a queued action.
   const gatedCaseFile: CaseFile =
     hasUploadedDoc || !caseFile.legal_strategy
       ? caseFile
@@ -157,7 +157,7 @@ export default function ClientFileView({
           legal_strategy: {
             ...caseFile.legal_strategy,
             recommended_wizards: (caseFile.legal_strategy.recommended_wizards ?? []).filter(
-              (w) => coerceWizardType(w) !== "doc_review",
+              (w) => coerceInstrumentType(w) !== "doc_review",
             ),
           },
         };

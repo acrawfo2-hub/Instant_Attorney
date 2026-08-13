@@ -33,7 +33,7 @@ export async function requireSubscription(): Promise<void> {
   const hasActiveSub = !!sub && PHASE2_ACTIVE.includes(sub.status);
 
   // When an attorney onboards a client, we grant their account a "bypass"
-  // subscription so they can drive the client workflow surfaces (chat, wizard,
+  // subscription so they can drive the client workflow surfaces (chat, drafting,
   // drafting) on files they own. An attorney WITH that active subscription is
   // therefore allowed straight through — bouncing them to /attorney here is what
   // broke "Continue chat" / "Create document" on onboarded client files.

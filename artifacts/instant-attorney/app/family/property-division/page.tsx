@@ -10,7 +10,7 @@ import { useSearchParams } from "next/navigation";
 // Calls /api/family/property-division (pure compute, no AI, no token spend).
 // When opened from a file (?caseFileId=), the estimate is saved into the Living
 // File as a confirmed fact, so a Final Decree's property section seeds from it.
-// It never changes which wizards are recommended — same "add value, don't
+// It never changes which instruments are recommended — same "add value, don't
 // disturb the pipeline" rule the other tools follow.
 // ─────────────────────────────────────────────────────────────────────────────
 

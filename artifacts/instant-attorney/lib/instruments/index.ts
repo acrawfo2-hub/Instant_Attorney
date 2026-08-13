@@ -1,4 +1,4 @@
-import type { WizardType } from "../types.ts";
+import type { InstrumentType } from "../types.ts";
 import type { InstrumentProfile } from "./schema.ts";
 import { BUSINESS_LETTER, CIVIL_COMPLAINT_PETITION, FEDERAL_FOIA_REQUEST, INDIVIDUAL_WILL, REVOCABLE_TRUST, TEXAS_PUBLIC_INFORMATION_REQUEST } from "./profiles.ts";
 
@@ -12,7 +12,7 @@ export function resolveInstrumentProfile(instrumentKey?: string | null): Instrum
   return instrumentKey ? byKey.get(instrumentKey) : undefined;
 }
 
-export function inferInstrumentKey(title: string, engine?: WizardType): string {
+export function inferInstrumentKey(title: string, engine?: InstrumentType): string {
   const normalized = title.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
   const known = INSTRUMENT_PROFILES.find((profile) => profile.instrument_key === normalized || profile.title.toLowerCase() === title.trim().toLowerCase());
   return known && (!engine || known.engine === engine) ? known.instrument_key : normalized || "custom_document";

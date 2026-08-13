@@ -32,7 +32,7 @@ export function maxOutputTokensFor(model: string): number {
  * so a single call can't run to the full 64k model ceiling on a document type
  * that is never that long. Caps sit generously above observed output lengths
  * (priorLimit telemetry) so they bound the cost tail without truncating real
- * documents. Keyed by DocType (WizardType | DerivedDocType).
+ * documents. Keyed by DocType (InstrumentType | DerivedDocType).
  */
 export const DOC_TYPE_MAX_OUTPUT_TOKENS: Record<string, number> = {
   demand_letter: 6000,
