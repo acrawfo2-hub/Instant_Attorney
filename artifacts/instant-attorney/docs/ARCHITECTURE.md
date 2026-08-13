@@ -210,6 +210,15 @@ composer sends. See `work-product.test.ts`.
 QA verifies the revision the attorney actually accepted, never a regenerated
 draft. Verifying an auto-rewrite certifies text nobody approved.
 
+**Consult uses the same associate.** `/consult/[id]/session` (attorney) and the
+consult workspace on `/attorney/consults` share one thread
+(`attorney_consult_messages`). Shortcuts call the existing brief, fee,
+closeout, and pre-consult memo services. Wrap-up patches apply on arrival
+through `PATCH /api/attorney/consult/[id]/wrap-up`. The associate must never
+start or end the session, and never submit wrap-up — send stays the attorney's
+click. `chat` still does not write `wrap_up_draft`; closeout generate that
+persists remains the existing one-shot route.
+
 ### 5. Living File
 
 | | |
@@ -403,8 +412,10 @@ before starting on any entry here.
   and `case_files.chat_mode` column stay; renaming them is a data change.
 - ~~Five attorney AI rooms~~ — **done.** The freestyle workspace and the case
   brainstorm are deleted with their routes, prompts and tables; the review
-  workbench is the one place the attorney talks to the associate. The consult
-  generators stay — they produce one-shot artifacts and were never rooms.
+  workbench is the one place the attorney talks to the associate. Consult
+  generators (brief, fee estimate, pre-consult memo, closeout) stay as
+  services the associate may call — they were never rooms. #143's separate
+  consult cockpit was closed without merging.
 - ~~`pre_warmed`~~ — **done.** The status is gone from the code and the
   `documents_status_check` constraint no longer permits it.
 

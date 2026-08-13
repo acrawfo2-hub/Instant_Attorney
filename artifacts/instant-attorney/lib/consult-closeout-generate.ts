@@ -22,8 +22,8 @@ function parseDraft(raw: string): ConsultWrapUp {
   }
 }
 
-/** Generate an AI closeout draft from the consult's notes and transcript, and persist it as wrap_up_draft. */
-export async function generateConsultCloseoutDraft(
+/** Draft the closeout report from notes and transcript. Does not persist. */
+export async function buildConsultCloseoutDraft(
   db: SupabaseClient,
   consultId: string,
   actorId: string,
@@ -83,12 +83,19 @@ export async function generateConsultCloseoutDraft(
     },
   });
 
-  const draft = parseDraft(raw);
+  return parseDraft(raw);
+}
 
+/** Generate an AI closeout draft and persist it as wrap_up_draft. */
+export async function generateConsultCloseoutDraft(
+  db: SupabaseClient,
+  consultId: string,
+  actorId: string,
+): Promise<ConsultWrapUp> {
+  const draft = await buildConsultCloseoutDraft(db, consultId, actorId);
   await db
     .from("consult_requests")
     .update({ wrap_up_draft: draft, updated_at: new Date().toISOString() })
     .eq("id", consultId);
-
   return draft;
 }

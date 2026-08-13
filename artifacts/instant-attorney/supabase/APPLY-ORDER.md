@@ -81,6 +81,9 @@ a table an earlier stage creates. Within a group, order does not matter.
    this repo had ever run. Read the note inside it: `revoke ... from anon` is a
    no-op while PUBLIC still holds the grant, which is why this had gone
    unnoticed.
+6. `schema-stage52-consult-associate-messages.sql` — attorney-only transcript
+   for the consult workbench associate. Same teammate as document review; not
+   a second consult store. Apply after `consult_requests` exists (stage 26/35).
 
 ## Safety
 

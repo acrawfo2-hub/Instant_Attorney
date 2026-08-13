@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   emptyWrapUp,
+  mergeWrapUpPatch,
   normalizeWrapUp,
   validateWrapUpForSubmit,
   clientFacingConsultSummary,
@@ -50,4 +51,17 @@ test("clientFacingConsultSummary appends referral notes", () => {
   });
   assert.match(text, /demand strategy/);
   assert.match(text, /Jane Doe/);
+});
+
+test("mergeWrapUpPatch keeps unspecified fields", () => {
+  const current = {
+    ...emptyWrapUp(),
+    consultSummary: "Original summary",
+    disposition: "limited_scope" as const,
+    clientActions: [{ id: "1", text: "Send records", kind: "document" as const }],
+  };
+  const merged = mergeWrapUpPatch(current, { consultSummary: "Updated summary" });
+  assert.equal(merged.consultSummary, "Updated summary");
+  assert.equal(merged.disposition, "limited_scope");
+  assert.equal(merged.clientActions.length, 1);
 });

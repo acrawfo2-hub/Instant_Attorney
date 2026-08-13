@@ -31,6 +31,7 @@ export type UsageFeature =
   | "attorney_review_qa"
   | "attorney_pre_consult"
   | "attorney_consult_closeout"
+  | "attorney_consult_associate"
   | "attorney_brainstorm"
   // Retired with the roadmap UI — nothing emits this any more. Kept because
   // historical usage rows still carry it and must stay readable.

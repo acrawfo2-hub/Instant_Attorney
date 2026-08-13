@@ -30,6 +30,22 @@ export function emptyWrapUp(): ConsultWrapUp {
   };
 }
 
+export function mergeWrapUpPatch(current: ConsultWrapUp, patch: unknown): ConsultWrapUp {
+  if (!patch || typeof patch !== "object") return current;
+  const incoming = patch as Record<string, unknown>;
+  return normalizeWrapUp({
+    ...current,
+    ...(typeof incoming.consultSummary === "string" ? { consultSummary: incoming.consultSummary } : {}),
+    ...(typeof incoming.strategyOverview === "string" ? { strategyOverview: incoming.strategyOverview } : {}),
+    ...(incoming.disposition !== undefined ? { disposition: incoming.disposition } : {}),
+    ...(typeof incoming.referralNotes === "string" ? { referralNotes: incoming.referralNotes } : {}),
+    ...(typeof incoming.expectedTimeline === "string" ? { expectedTimeline: incoming.expectedTimeline } : {}),
+    ...(incoming.expectedDocuments !== undefined ? { expectedDocuments: incoming.expectedDocuments } : {}),
+    ...(incoming.clientActions !== undefined ? { clientActions: incoming.clientActions } : {}),
+    ...(incoming.attorneyActions !== undefined ? { attorneyActions: incoming.attorneyActions } : {}),
+  });
+}
+
 export function normalizeWrapUp(raw: unknown): ConsultWrapUp {
   if (!raw || typeof raw !== "object") return emptyWrapUp();
   const o = raw as Record<string, unknown>;
