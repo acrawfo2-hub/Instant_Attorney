@@ -14,6 +14,15 @@ test("chat-edit never writes document text and allows an empty change set", asyn
   assert.match(src, /changes may be \[\]/);
 });
 
+test("the review workbench does not import the associate server graph", async () => {
+  const page = stripComments(await readFile(new URL("../app/attorney/review/[id]/page.tsx", import.meta.url), "utf8"));
+  const chat = stripComments(await readFile(new URL("../components/attorney-review/ReviewPartnerChat.tsx", import.meta.url), "utf8"));
+  assert.doesNotMatch(page, /from ["']@\/lib\/associate-tools["']/);
+  assert.doesNotMatch(chat, /from ["']@\/lib\/associate-tools["']/);
+  assert.match(page, /from ["']@\/lib\/associate-shortcuts["']/);
+  assert.match(chat, /from ["']@\/lib\/associate-shortcuts["']/);
+});
+
 test("approve and delivery require an informed override instead of disabling the act", async () => {
   const approve = stripComments(await readFile(new URL("../app/api/documents/[id]/approve/route.ts", import.meta.url), "utf8"));
   const delivery = stripComments(await readFile(new URL("../app/api/attorney/documents/[id]/delivery/route.ts", import.meta.url), "utf8"));

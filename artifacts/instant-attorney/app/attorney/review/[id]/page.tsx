@@ -14,7 +14,7 @@ import type { ReviewChange, RevisionSaveState } from "@/components/attorney-revi
 import AttorneyContextHeader from "@/components/AttorneyContextHeader";
 import { parseDrafterResponse } from "@/lib/placeholder-parsing";
 import LivingFileSyncWarning from "@/components/LivingFileSyncWarning";
-import { shortcutById, type AssociateShortcutId } from "@/lib/associate-tools";
+import { shortcutById, type AssociateShortcutId } from "@/lib/associate-shortcuts";
 
 interface ChatMessage {
   role: "user" | "assistant";

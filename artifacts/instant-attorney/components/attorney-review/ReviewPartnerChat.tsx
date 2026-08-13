@@ -1,7 +1,7 @@
 "use client";
 
 import type { FormEvent } from "react";
-import { ASSOCIATE_SHORTCUTS, type AssociateShortcutId } from "@/lib/associate-tools";
+import { ASSOCIATE_SHORTCUTS, type AssociateShortcutId } from "@/lib/associate-shortcuts";
 
 export interface PartnerMessage { role: "user" | "assistant"; content: string }
 
