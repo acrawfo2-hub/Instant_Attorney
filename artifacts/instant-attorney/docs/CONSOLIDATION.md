@@ -23,7 +23,7 @@ shipped.
 
 | PR | What | Why parked |
 |---|---|---|
-| [#142](https://github.com/acrawfo2-hub/Instant_Attorney/pull/142) | Junior associate workbench build plan | Chunk 6 already made associate edits apply on arrival (undo is revision history). #142 wants preview-then-confirm. That is a product decision, not an integration. |
+| [#142](https://github.com/acrawfo2-hub/Instant_Attorney/pull/142) | Junior associate workbench build plan | **Decision named (Phase 3):** keep apply-on-arrival; do not restore preview-then-confirm. Aggressive teammate + one approve with informed override. Do not merge this plan as written. |
 | [#143](https://github.com/acrawfo2-hub/Instant_Attorney/pull/143) | Consult workflow build plan | New feature. Out of scope until leftover consolidation items are the next named chunk. |
 
 ## Closed without merging
@@ -114,7 +114,7 @@ Do these serially. Do not open a parallel agent on more than one.
 1. ~~**Collapse `ChatMode`.**~~ **Done (Phase 2).** Tools, pacing, and draft persistence are always on. `case_files.chat_mode` is no longer written. The column and `ChatMode` type stay (data change). `freestyle-drafts.ts` header no longer names the deleted rooms.
 2. ~~**Job visibility without a second generator.**~~ **Done (Phase 2).** `dispatchDocumentPlan` inserts the empty `client_workspace_drafts` shell and attaches it before a worker claims the job. Status, list, and cancel read `document_generation_jobs` (the live table). Fail-and-retry is unchanged — ungated text is still not saved. An empty shell is a card in progress, not a ready document: promote still rejects empty drafts, and the panel copy says so.
 3. ~~**Cheap Living File writer guard.**~~ **Done (Phase 2).** `lib/living-file-writers.test.ts` names every `case_files` mutator. Do not event-source.
-4. **Then, and only then, the #142 product decision:** keep apply-on-arrival, or restore preview-then-confirm. Until that is named, do not implement the workbench plan.
+4. ~~**Then, and only then, the #142 product decision.**~~ **Named (Phase 3).** Keep apply-on-arrival. The associate is an aggressive teammate: discuss **and** fix in the same turn. The client still sees nothing until one attorney Approve. A dirty file (unverified citations / open blocking QA) does not disable Approve — it forces one recorded reason (informed override, not a waiver). Specialists are existing review/QA services the associate may call; shortcut buttons are the same calls. Do **not** restore preview-then-confirm. #142's remaining workstreams (formatting uncertainty labels, etc.) stay parked except as they fit this loop.
 
 ### Calculators, inline in chat
 
@@ -149,7 +149,7 @@ Specialist calculator pages (`/family/*`, `/bankruptcy/*`, `/personal-injury/*`,
 
 That paragraph below is the August 12 picture, kept so the chunks read as a
 sequence rather than as unexplained history. Chunks 0–7 removed it. Leftovers
-1–3 closed in Phase 2. What is still in front is leftover 4 (#142).
+1–3 closed in Phase 2. Leftover 4 named in Phase 3: apply-on-arrival, one approve, informed override.
 
 The product kernel is sound. Document text has one persistence boundary, drafts
 still complete when facts are missing, the Living File sync is durable, the

@@ -16,7 +16,8 @@ const revisionWriters = [
   "app/api/documents/[id]/fill-info/route.ts",
   "app/api/workspace/drafts/[id]/promote/route.ts",
   "app/api/workspace/drafts/[id]/route.ts",
-  // chat-edit is deliberately absent: under #123 it proposes changes and never
+  // chat-edit is deliberately absent: it never writes. The review page applies
+  // the change set and autosaves through the revision route.
   // writes, so there is no save there to route through the boundary. The
   // attorney's write is the revision save below.
   "app/api/attorney/documents/[id]/revision/route.ts",

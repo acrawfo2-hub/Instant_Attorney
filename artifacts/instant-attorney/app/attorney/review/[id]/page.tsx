@@ -14,6 +14,7 @@ import type { ReviewChange, RevisionSaveState } from "@/components/attorney-revi
 import AttorneyContextHeader from "@/components/AttorneyContextHeader";
 import { parseDrafterResponse } from "@/lib/placeholder-parsing";
 import LivingFileSyncWarning from "@/components/LivingFileSyncWarning";
+import { shortcutById, type AssociateShortcutId } from "@/lib/associate-tools";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -182,6 +183,9 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
   const [deliveryDraft, setDeliveryDraft] = useState<DocumentDeliveryDraft | null>(null);
   const [deliveryBusy, setDeliveryBusy] = useState<"save" | "send" | "approve-send" | null>(null);
   const [deliveryStatus, setDeliveryStatus] = useState("");
+  const [overrideOpen, setOverrideOpen] = useState(false);
+  const [overrideRationale, setOverrideRationale] = useState("");
+  const [overrideKind, setOverrideKind] = useState<"approve" | "approve-send" | null>(null);
   const [revisions, setRevisions] = useState<DocumentRevision[]>([]);
   const [selectedRevisionId, setSelectedRevisionId] = useState("");
   const [compareMode, setCompareMode] = useState<"submitted" | "previous">("previous");
@@ -321,14 +325,28 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
     setDeliveryDraft(data.draft); setDeliveryStatus("Message draft saved."); return true;
   }
 
-  async function sendDelivery(approveAndSend: boolean) {
+  async function sendDelivery(approveAndSend: boolean, overrideRationaleText?: string) {
     if (!deliveryDraft || deliveryBusy) return;
     if (!await saveDeliveryDraft()) return;
     setDeliveryBusy(approveAndSend ? "approve-send" : "send"); setDeliveryStatus("");
-    const res = await fetch(`/api/attorney/documents/${id}/delivery`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ approveAndSend }) });
+    const res = await fetch(`/api/attorney/documents/${id}/delivery`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ approveAndSend, override_rationale: overrideRationaleText }),
+    });
     const data = await res.json().catch(() => ({}));
     setDeliveryBusy(null);
-    if (res.ok) setDone(true); else setDeliveryStatus(data.error ?? "Unable to send.");
+    if (res.ok) {
+      setDone(true);
+      return;
+    }
+    if (data.requiresOverride) {
+      setOverrideKind("approve-send");
+      setOverrideOpen(true);
+      setDeliveryStatus(data.error ?? "Record why you are approving a dirty file.");
+      return;
+    }
+    setDeliveryStatus(data.error ?? "Unable to send.");
   }
 
   async function startReviewRun() {
@@ -637,7 +655,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
     setGeneratingSecondDraft(false);
   }
 
-  async function handleAction(action: "approve" | "request_changes") {
+  async function handleAction(action: "approve" | "request_changes", overrideRationaleText?: string) {
     if (submitting) return;
     setSubmitting(true);
     setError("");
@@ -645,20 +663,25 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
     const res = await fetch(`/api/documents/${id}/approve`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, attorney_notes: clientNotes }),
+      body: JSON.stringify({ action, attorney_notes: clientNotes, override_rationale: overrideRationaleText }),
     });
 
     if (res.ok) {
       setDone(true);
     } else {
       const data = await res.json().catch(() => ({}));
+      if (data.requiresOverride) {
+        setOverrideKind("approve");
+        setOverrideOpen(true);
+      }
       setError(data.error ?? "Action failed");
       setSubmitting(false);
     }
   }
 
-  async function sendChatEdit() {
-    const text = chatInput.trim();
+  async function sendChatEdit(opts?: { text?: string; shortcut?: AssociateShortcutId }) {
+    const shortcut = opts?.shortcut ? shortcutById(opts.shortcut) : undefined;
+    const text = (opts?.text ?? shortcut?.instruction ?? chatInput).trim();
     // Never race the Opus second-draft pipeline: it deletes and re-inserts
     // the same second-draft child this chat edits (see chat-edit/route.ts).
     if (!text || chatSending || generatingSecondDraft || doc?.review_status === "merging") return;
@@ -670,7 +693,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
       const res = await fetch(`/api/attorney/documents/${id}/chat-edit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: nextMessages, currentText: revisionRef.current }),
+        body: JSON.stringify({ messages: nextMessages, currentText: revisionRef.current, shortcut: shortcut?.id }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -710,6 +733,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
       const reply = data.message
         ?? (appliedCount ? `${appliedCount} change${appliedCount === 1 ? "" : "s"} applied.` : "No changes applied.");
       setChatMessages((prev) => [...prev, { role: "assistant", content: reply }]);
+      if (data.refreshWorkbench) await loadReviewRun();
       if (unapplied.length) {
         setChatError(
           `${unapplied.length} change${unapplied.length === 1 ? "" : "s"} could not be placed automatically — ` +
@@ -945,8 +969,8 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
             )}
           </section>
 
-          {/* Authorities QA gate (schema-stage45): every citation verified, or
-              approval is blocked until it's verified/removed/waived. */}
+          {/* Unverified citations stay visible. Approve is still available —
+              a dirty file requires one recorded reason, not a disabled button. */}
           {citations.length > 0 && (() => {
             const blocking = citations.filter(citationBlocksApproval);
             return (
@@ -1042,7 +1066,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
             </div>
             <div className={`review-collapsible-column review-partner-column${collapsed.partner ? " is-collapsed" : ""}`}>
               <button type="button" className="review-pane-toggle" onClick={() => setCollapsed((value) => ({ ...value, partner: !value.partner }))}>{collapsed.partner ? "Show AI partner" : "Hide AI partner"}</button>
-              {!collapsed.partner && <ReviewPartnerChat messages={chatMessages} input={chatInput} sending={chatSending} disabled={isMerging || chatHistoryLoading} error={chatError} onInput={setChatInput} onSend={sendChatEdit} />}
+              {!collapsed.partner && <ReviewPartnerChat messages={chatMessages} input={chatInput} sending={chatSending} disabled={isMerging || chatHistoryLoading} error={chatError} onInput={setChatInput} onSend={() => void sendChatEdit()} onShortcut={(id) => void sendChatEdit({ shortcut: id })} />}
             </div>
           </div>
           <div className="atty-comments-workspace">
@@ -1165,12 +1189,16 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
                   <h4>Client action items</h4><ul>{deliveryDraft.memo.clientActionItems.map((x, i) => <li key={i}>{x}</li>)}</ul>
                   <h4>Consultation offer</h4><p>{deliveryDraft.memo.consultationOffer}</p>
                 </details>
-                {citations.some(citationBlocksApproval) && <div className="arr-approve-block">Outstanding warning: unresolved authorities prevent approval and delivery.</div>}
+                {citations.some(citationBlocksApproval) && <div className="arr-approve-block">Outstanding warning: unresolved authorities. Approve still works — you will be asked to record why.</div>}
               </div>
               <div className="atty-review-actions">
                 <button className="atty-btn" onClick={saveDeliveryDraft} disabled={Boolean(deliveryBusy)}>{deliveryBusy === "save" ? "Saving…" : "Save message draft"}</button>
-                <button className="atty-btn atty-btn-primary" onClick={() => sendDelivery(false)} disabled={Boolean(deliveryBusy) || doc.status !== "approved" || citations.some(citationBlocksApproval)}>{deliveryBusy === "send" ? "Sending…" : "Send to client"}</button>
-                {doc.status !== "approved" && <button className="atty-btn atty-btn-approve" onClick={() => sendDelivery(true)} disabled={Boolean(deliveryBusy) || citations.some(citationBlocksApproval)}>{deliveryBusy === "approve-send" ? "Approving and sending…" : "Approve and send"}</button>}
+                <button className="atty-btn atty-btn-primary" onClick={() => sendDelivery(false)} disabled={Boolean(deliveryBusy) || doc.status !== "approved"}>{deliveryBusy === "send" ? "Sending…" : "Send to client"}</button>
+                {doc.status !== "approved" && <button className="atty-btn atty-btn-approve" onClick={() => {
+                  const dirty = citations.some(citationBlocksApproval) || qaFindings.some((f) => f.severity === "blocking" && f.status === "open");
+                  if (dirty) { setOverrideKind("approve-send"); setOverrideOpen(true); return; }
+                  void sendDelivery(true);
+                }} disabled={Boolean(deliveryBusy)}>{deliveryBusy === "approve-send" ? "Approving and sending…" : "Approve and send"}</button>}
               </div>
               {deliveryStatus && <p role="status">{deliveryStatus}</p>}
             </section>
@@ -1180,19 +1208,64 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
 
           {(() => {
             const blocking = citations.filter(citationBlocksApproval).length;
-            if (!blocking) return null;
+            const blockingFindings = qaFindings.filter((f) => f.severity === "blocking" && f.status === "open").length;
+            if (!blocking && !blockingFindings) return null;
             return (
               <div className="arr-approve-block" role="status">
-                ⚠ Approval is blocked — {blocking} citation{blocking === 1 ? "" : "s"} still need to be verified, removed, or waived in the Authorities check above.
+                ⚠ {blocking ? `${blocking} unverified citation${blocking === 1 ? "" : "s"}` : ""}
+                {blocking && blockingFindings ? " and " : ""}
+                {blockingFindings ? `${blockingFindings} open blocking finding${blockingFindings === 1 ? "" : "s"}` : ""}
+                {" "}remain. Approve is available — you will record why you are proceeding. The warnings stay on the file.
               </div>
             );
           })()}
 
+          {overrideOpen && (
+            <div className="arr-approve-block" role="dialog" aria-label="Informed override">
+              <p>Record why you are approving while these warnings remain. This is not a waiver — the findings stay dirty.</p>
+              <ul>
+                {citations.filter(citationBlocksApproval).map((c) => (
+                  <li key={c.id}>{c.raw} · {c.verdict}</li>
+                ))}
+                {qaFindings.filter((f) => f.severity === "blocking" && f.status === "open").map((f) => (
+                  <li key={f.id}>{f.title}</li>
+                ))}
+              </ul>
+              <textarea
+                className="arr-edit"
+                rows={3}
+                value={overrideRationale}
+                onChange={(e) => setOverrideRationale(e.target.value)}
+                placeholder="I reviewed these items against the file and am approving because…"
+              />
+              <div className="arr-actions">
+                <button
+                  type="button"
+                  className="atty-btn atty-btn-approve"
+                  disabled={submitting || Boolean(deliveryBusy) || overrideRationale.trim().length < 12}
+                  onClick={() => {
+                    const reason = overrideRationale.trim();
+                    setOverrideOpen(false);
+                    if (overrideKind === "approve-send") void sendDelivery(true, reason);
+                    else void handleAction("approve", reason);
+                  }}
+                >
+                  Confirm and {overrideKind === "approve-send" ? "send" : "approve"}
+                </button>
+                <button type="button" className="atty-btn" onClick={() => { setOverrideOpen(false); setOverrideKind(null); }}>Cancel</button>
+              </div>
+            </div>
+          )}
+
           <div className="atty-review-actions">
             <button
               className="atty-btn atty-btn-approve"
-              onClick={() => handleAction("approve")}
-              disabled={submitting || citations.some(citationBlocksApproval)}
+              onClick={() => {
+                const dirty = citations.some(citationBlocksApproval) || qaFindings.some((f) => f.severity === "blocking" && f.status === "open");
+                if (dirty) { setOverrideKind("approve"); setOverrideOpen(true); return; }
+                void handleAction("approve");
+              }}
+              disabled={submitting}
             >
               {submitting
                 ? "Submitting…"

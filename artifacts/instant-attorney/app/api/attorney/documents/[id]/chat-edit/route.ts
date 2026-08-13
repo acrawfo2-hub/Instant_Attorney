@@ -8,7 +8,12 @@ import { BYPASS_USER_ID } from "@/lib/types";
 import type { Document, CaseFile, FactItem, Attachment } from "@/lib/types";
 import { logTruncation } from "@/lib/truncation-logger";
 import { maxOutputTokensForDoc, limitSignalMetadata } from "@/lib/token-limits";
-import { saveDocumentRevision } from "@/lib/document-persistence";
+import {
+  ASSOCIATE_TOOLS,
+  dispatchAssociateTool,
+  runAssociateShortcut,
+  shortcutById,
+} from "@/lib/associate-tools";
 
 // Legal doc edits can be slow on a long document — same ceiling as regenerate.
 export const maxDuration = 300;
@@ -17,10 +22,13 @@ const BYPASS_AUTH = process.env.BYPASS_AUTH === "true";
 const anthropic = new Anthropic({ apiKey: process.env.Claude_Instant_Attorney, maxRetries: 4 });
 const MODEL = "claude-sonnet-4-6";
 
+const MAX_TOOL_ITERATIONS = 4;
+
 /**
- * Andrew's "junior associate" chat: an ongoing, targeted-edit conversation
- * against the canonical attorney revision. It only proposes before/after
- * changes; accepting and saving those proposals is a separate explicit action.
+ * Junior associate chat against the attorney working copy. The review page
+ * applies returned changes on arrival and autosaves through /revision — this
+ * route never writes document text. Empty changes are valid (nothing to fix).
+ * Specialists are existing review/QA services; the associate may call them.
  */
 type PartnerMessage = { id?: string; role: "user" | "assistant"; content: string; created_at?: string };
 
@@ -67,6 +75,7 @@ export async function POST(
   const body = await req.json().catch(() => ({})) as {
     messages?: Array<{ role: "user" | "assistant"; content: string }>;
     currentText?: string;
+    shortcut?: string;
   };
 
   if (!Array.isArray(body.messages) || body.messages.length === 0) {
@@ -129,38 +138,82 @@ export async function POST(
   const facts = (factRows ?? []) as FactItem[];
   const attachments = (attRows ?? []) as Attachment[];
   const fileContext = buildFileContext(caseFile, facts, attachments);
+  const toolCtx = { documentId: parent.id, caseFileId: parent.case_file_id };
+  const shortcut = shortcutById(body.shortcut);
+  let shortcutResult: string | null = null;
+  if (shortcut) {
+    shortcutResult = await runAssociateShortcut(shortcut.id, toolCtx, db);
+  }
 
-  let message: Anthropic.Message;
+  const associateGuidance =
+    `You are the junior associate on this working copy. Discuss AND fix in the same turn when you find a problem — do not wait for a second "please edit that" unless nothing is actually wrong. ` +
+    `The attorney sees your replacements land immediately; the client sees nothing until they approve. Undo is revision history. ` +
+    `Call specialist tools when a review, QA, placeholder, formatting, or authorities pass would help. Those write canonical findings, not document text. After a tool returns, fix the dangerous issues in this turn when you have enough to rewrite. ` +
+    `Never approve, waive, send, or invent a citation. Empty changes[] is allowed when there is genuinely nothing to rewrite.\n\n` +
+    `${fileContext}\n\n---DOCUMENT BEING EDITED---\n${baseText}\n---END DOCUMENT---\n` +
+    (shortcutResult ? `\n---SPECIALIST RESULT (already run from the attorney's shortcut)---\n${shortcutResult}\n---END SPECIALIST RESULT---\n` : "") +
+    `\nReturn ONLY valid JSON in this shape: {"message":"short explanation of what you found and what you changed","changes":[{"before":"exact text copied from the document","after":"replacement text","summary":"short label"}]}. ` +
+    `Each before string must occur verbatim in the document. Focused replacements only; do not rewrite the whole document unless explicitly asked. changes may be [].`;
+
+  let message: Anthropic.Message | null = null;
+  let fullResponse = "";
+  let usedTools = Boolean(shortcutResult);
   try {
-    const stream = anthropic.messages.stream({
-      model: MODEL,
-      max_tokens: maxOutputTokensForDoc(MODEL, parent.doc_type),
-      system: [
-        {
-          type: "text" as const,
-          text: buildDrafterSystemPrompt("attorney"),
-          cache_control: { type: "ephemeral" as const },
-        },
-        {
-          type: "text" as const,
-          text: `${fileContext}\n\n---DOCUMENT BEING EDITED---\n${baseText}\n---END DOCUMENT---\n\nReturn ONLY valid JSON in this shape: {"message":"short explanation","changes":[{"before":"exact text copied from the document","after":"replacement text","summary":"short label"}]}. Each before string must occur verbatim in the document. Propose focused replacements; do not return or rewrite the whole document unless explicitly asked.`,
-        },
-      ],
-      messages: body.messages,
-    });
-    message = await stream.finalMessage();
+    const loopMessages: Anthropic.MessageParam[] = body.messages.map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+    for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
+      const stream = anthropic.messages.stream({
+        model: MODEL,
+        max_tokens: maxOutputTokensForDoc(MODEL, parent.doc_type),
+        system: [
+          {
+            type: "text" as const,
+            text: buildDrafterSystemPrompt("attorney"),
+            cache_control: { type: "ephemeral" as const },
+          },
+          { type: "text" as const, text: associateGuidance },
+        ],
+        tools: ASSOCIATE_TOOLS,
+        messages: loopMessages,
+      });
+      message = await stream.finalMessage();
+      const toolUses = message.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
+      const text = message.content
+        .filter((b): b is Anthropic.TextBlock => b.type === "text")
+        .map((b) => b.text)
+        .join("");
+      if (!toolUses.length) {
+        fullResponse = text;
+        break;
+      }
+      const toolResults: Anthropic.ToolResultBlockParam[] = [];
+      for (const use of toolUses) {
+        const result = await dispatchAssociateTool(
+          use.name,
+          (use.input ?? {}) as Record<string, unknown>,
+          toolCtx,
+          db,
+        );
+        toolResults.push({ type: "tool_result", tool_use_id: use.id, content: result });
+        usedTools = true;
+      }
+      loopMessages.push({ role: "assistant", content: message.content });
+      loopMessages.push({ role: "user", content: toolResults });
+      fullResponse = text;
+    }
   } catch (err) {
     console.error("[attorney/chat-edit] Anthropic error:", err);
     return NextResponse.json(
-      { error: "We couldn't apply that edit just now. Please try again in a moment." },
+      { error: "We couldn't work that turn just now. Please try again in a moment." },
       { status: 502 }
     );
   }
 
-  const fullResponse = message.content
-    .filter((b): b is Anthropic.TextBlock => b.type === "text")
-    .map((b) => b.text)
-    .join("");
+  if (!message) {
+    return NextResponse.json({ error: "We couldn't work that turn just now. Please try again in a moment." }, { status: 502 });
+  }
 
   const truncated = message.stop_reason === "max_tokens";
   if (truncated) {
@@ -179,13 +232,12 @@ export async function POST(
     const json = fullResponse.replace(/^```json\s*/i, "").replace(/\s*```$/, "").trim();
     proposal = JSON.parse(json);
   } catch {
-    return NextResponse.json({ error: "The partner did not return a usable change set. Please try again." }, { status: 502 });
+    proposal = { message: fullResponse.trim() || "I looked at the draft.", changes: [] };
   }
   const changes = (proposal.changes ?? []).filter((change) =>
     typeof change.before === "string" && change.before.length > 0 &&
     typeof change.after === "string" && baseText.includes(change.before)
-  ).map((change, index) => ({ id: `${Date.now()}-${index}`, before: change.before!, after: change.after!, summary: change.summary?.trim() || "Proposed edit" }));
-  if (!changes.length) return NextResponse.json({ error: "No change could be matched to the draft. Try naming the passage more precisely." }, { status: 422 });
+  ).map((change, index) => ({ id: `${Date.now()}-${index}`, before: change.before!, after: change.after!, summary: change.summary?.trim() || "Edit" }));
 
   // This route still does not write, and that is deliberate — but the reason
   // changed, so read this before "fixing" it.
@@ -220,7 +272,8 @@ export async function POST(
   // #124's persisted transcript, restored: #118's merge of this file dropped it.
   // Failures are logged, not surfaced — the proposals are already computed, and
   // losing a transcript row should not cost the attorney the response.
-  const partnerReply = proposal.message?.trim() || `${changes.length} change${changes.length === 1 ? "" : "s"} applied.`;
+  const partnerReply = proposal.message?.trim()
+    || (changes.length ? `${changes.length} change${changes.length === 1 ? "" : "s"} applied.` : "Nothing to change in the draft.");
   const lastAttorneyTurn = [...body.messages].reverse().find((m) => m.role === "user");
   const { error: transcriptError } = await createServiceClient()
     .from("attorney_document_messages")
@@ -238,8 +291,6 @@ export async function POST(
     message: partnerReply,
     changes,
     truncated,
-    // No livingFileSyncPending here: #118 reported it from the write this route
-    // used to perform, and this route no longer writes. The sync status belongs
-    // to the accept path that actually persists the change.
+    refreshWorkbench: usedTools,
   });
 }
