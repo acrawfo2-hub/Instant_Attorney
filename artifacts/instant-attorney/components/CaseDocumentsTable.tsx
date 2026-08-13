@@ -4,8 +4,9 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import LivingFileSyncWarning from "@/components/LivingFileSyncWarning";
-import type { Attachment, Document, FactItem, ClientWorkspaceDraft } from "@/lib/types";
+import type { Attachment, Document, FactItem, ClientWorkspaceDraft, DocumentDeliverySend } from "@/lib/types";
 import { docTypeLabel, isDocumentOutOfDate } from "@/lib/types";
+import { latestDeliveryByDocument } from "@/lib/client-deliveries";
 // The attorney working copy is work product until approved — the review editor
 // autosaves into it mid-edit. /api/documents/[id]/download enforces the same
 // rule; these links are hidden so a client is never offered a 409.
@@ -147,6 +148,7 @@ export default function CaseDocumentsTable({
   facts,
   isAttorney,
   initialWorkspaceDrafts = [],
+  deliveries = [],
 }: {
   caseFileId: string;
   documents: Document[];
@@ -157,9 +159,11 @@ export default function CaseDocumentsTable({
    *  instead of flashing "nothing yet" until the client fetch lands. The
    *  fetch still runs and takes over — this is the starting value, not a cache. */
   initialWorkspaceDrafts?: ClientWorkspaceDraft[];
+  deliveries?: DocumentDeliverySend[];
 }) {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [workspaceDrafts, setWorkspaceDrafts] = useState<ClientWorkspaceDraft[]>(initialWorkspaceDrafts);
+  const deliveryByDocument = useMemo(() => latestDeliveryByDocument(deliveries), [deliveries]);
   const [forms, setForms] = useState<GovForm[]>([]);
   // Pre-expand any row that already has unfilled blanks so the client never has
   // to click to discover work waiting for them.
@@ -917,9 +921,13 @@ export default function CaseDocumentsTable({
                 const fillTarget = secondDraft?.draft_text ? secondDraft : (doc.draft_text ? doc : null);
                 const approvedDownloadId = secondDraft?.draft_text ? secondDraft.id : doc.id;
                 const blanks = fillTarget?.draft_text ? findBlanks(fillTarget.draft_text) : [];
+                const delivery = deliveryByDocument.get(doc.id);
+                const clientDownloadId = delivery?.revision_document_id ?? approvedDownloadId;
 
                 const pill =
-                  doc.status === "draft"
+                  delivery
+                    ? <Pill kind="approved" label="Delivered" />
+                  : doc.status === "draft"
                     ? <Pill kind="draft" label={blanks.length > 0 ? `Draft · ${blanks.length} blank${blanks.length === 1 ? "" : "s"}` : "Draft"} />
                   : doc.status === "pending_review" ? <Pill kind="review" label="In review" />
                   : doc.status === "approved" ? <Pill kind="approved" label="Approved" />
@@ -937,6 +945,7 @@ export default function CaseDocumentsTable({
 
                 const primary =
                   isAttorney ? <Link className="cdt-ghost" href={`/attorney/review/${doc.id}`}>Review →</Link>
+                  : delivery ? <a className="cdt-ghost" href={`/api/documents/${clientDownloadId}/download`}>Download approved</a>
                   : doc.status === "draft" ? <Link className="cdt-ghost" href={continueHref}>Continue →</Link>
                   : doc.draft_text ? <a className="cdt-ghost" href={`/api/documents/${doc.id}/download`}>Download</a>
                   : <span className="cdt-muted">—</span>;
@@ -956,6 +965,16 @@ export default function CaseDocumentsTable({
                     date={fmtDate(doc.created_at)}
                     action={primary}
                   >
+                    {delivery && (
+                      <div className="cdt-delivery-detail">
+                        <strong>Sent by your attorney</strong>
+                        <time dateTime={delivery.sent_at}>
+                          {new Date(delivery.sent_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                        </time>
+                        <p>{delivery.body}</p>
+                        {delivery.consultation_url && <a href={delivery.consultation_url}>Schedule the offered consultation →</a>}
+                      </div>
+                    )}
                     {doc.status === "pending_review" && doc.submitted_at ? (
                       <div className="cdt-detail-status"><ReviewSlaClock submittedAt={doc.submitted_at} compact /></div>
                     ) : (DOC_STATUS_HINT[doc.status] || doc.status === "draft") ? (
@@ -975,7 +994,7 @@ export default function CaseDocumentsTable({
                         </a>
                       )}
                       {secondDraft?.draft_text && (isAttorney || isAttorneyApproved(secondDraft.status)) && (
-                        <a href={`/api/documents/${secondDraft.id}/download`}>Download revised draft (.docx)</a>
+                        <a href={`/api/documents/${delivery?.revision_document_id ?? secondDraft.id}/download`}>{delivery ? "Download attorney-approved version" : "Download revised draft"} (.docx)</a>
                       )}
                     </div>
 
@@ -988,7 +1007,7 @@ export default function CaseDocumentsTable({
 
                     {/* E-sign / execution — client, approved or delivered. */}
                     {!isAttorney && (doc.status === "approved" || doc.status === "delivered") && (
-                      <DocumentExecutionPanel documentId={doc.id} documentTitle={doc.title} downloadDocumentId={approvedDownloadId} />
+                      <DocumentExecutionPanel documentId={doc.id} documentTitle={doc.title} downloadDocumentId={clientDownloadId} />
                     )}
 
                     {doc.status === "changes_requested" && <div className="cdt-detail-ctl"><CancelDocButton documentId={doc.id} /></div>}

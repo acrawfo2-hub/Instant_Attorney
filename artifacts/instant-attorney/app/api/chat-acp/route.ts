@@ -5,6 +5,7 @@ import { logTruncation } from "@/lib/truncation-logger";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { buildAcpSystemPrompt, buildFileContext, ORCHESTRATOR_TOOLS_GUIDANCE } from "@/lib/prompts";
 import { formatCoverBriefing } from "@/lib/cover-sheet";
+import { formatAttorneyWorkProduct } from "@/lib/client-deliveries";
 import { ORCHESTRATOR_TOOLS, dispatchTool } from "@/lib/orchestrator-tools";
 import { detectAcpAreasFromContext } from "@/lib/acp-area-router";
 import { parseAndUpdateFile, isCompleteFileUpdate } from "@/lib/file-parser";
@@ -22,7 +23,7 @@ import { recordAiFromMessage, recordAiUsage, recordStorageUpload } from "@/lib/u
 import { getBillingGate } from "@/lib/topup";
 import { maxOutputTokensFor, limitSignalMetadata } from "@/lib/token-limits";
 import { BYPASS_USER_ID } from "@/lib/types";
-import type { CaseFile, FactItem, Attachment, RequestedAttachment, CounselEngagementGoal } from "@/lib/types";
+import type { CaseFile, FactItem, Attachment, RequestedAttachment, CounselEngagementGoal, DocumentDeliverySend } from "@/lib/types";
 import { buildCounselContextPatch, persistCounselContext } from "@/lib/existing-counsel-persist";
 import { resolveMatter } from "@/lib/matter-routing";
 import {
@@ -167,13 +168,15 @@ export async function POST(req: NextRequest) {
   }
 
   // Load current file state + attachments for context injection
-  const [{ data: caseFileRow }, { data: factRows }, { data: attachmentRows }, { data: requestedRows }, { data: accountRow }, { data: siblingFiles }] =
+  const [{ data: caseFileRow }, { data: factRows }, { data: attachmentRows }, { data: requestedRows }, { data: accountRow }, { data: documentRows }, { data: deliveryRows }, { data: siblingFiles }] =
     await Promise.all([
       db.from("case_files").select("*").eq("id", resolvedCaseFileId).single(),
       db.from("fact_items").select("*").eq("case_file_id", resolvedCaseFileId),
       db.from("attachments").select("*").eq("case_file_id", resolvedCaseFileId).eq("status", "ready"),
       db.from("requested_attachments").select("*").eq("case_file_id", resolvedCaseFileId),
       db.from("profiles").select("account_type").eq("id", userId).maybeSingle(),
+      db.from("documents").select("id, title").eq("case_file_id", resolvedCaseFileId),
+      db.from("document_delivery_sends").select("*").eq("case_file_id", resolvedCaseFileId).eq("user_id", userId).order("sent_at", { ascending: false }),
       db.from("case_files").select("id, title, matter_subtype").eq("user_id", userId).neq("id", resolvedCaseFileId),
     ]);
 
@@ -185,6 +188,8 @@ export async function POST(req: NextRequest) {
   const facts = (factRows ?? []) as FactItem[];
   const attachments = (attachmentRows ?? []) as Attachment[];
   const requestedAttachments = (requestedRows ?? []) as RequestedAttachment[];
+  const documents = (documentRows ?? []) as Array<{ id: string; title: string }>;
+  const deliveries = (deliveryRows ?? []) as DocumentDeliverySend[];
 
   const siblingTitleById = new Map((siblingFiles ?? []).map((file: { id: string; title: string | null; matter_subtype: string | null }) => [
     file.id,
@@ -217,6 +222,7 @@ export async function POST(req: NextRequest) {
           nextStep: caseFile.next_action ?? null,
         }),
         buildFileContext(caseFile, facts, attachments, requestedAttachments),
+        formatAttorneyWorkProduct(documents, deliveries),
       ].join("\n")
     : "";
 

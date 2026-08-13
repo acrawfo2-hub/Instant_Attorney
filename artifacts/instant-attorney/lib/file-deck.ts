@@ -4,6 +4,7 @@ import type {
   ClientWorkspaceDraft,
   ConsultRequest,
   Document,
+  DocumentDeliverySend,
   FactItem,
   GovFormInstrument,
   RequestedAttachment,
@@ -143,6 +144,7 @@ export interface FileDeckInput {
   requestedAttachments?: RequestedAttachment[];
   govForms?: GovFormInstrument[];
   consultRequest?: ConsultRequest | null;
+  deliveries?: DocumentDeliverySend[];
   now?: Date;
 }
 
@@ -192,9 +194,11 @@ function buildDrafts(
   workspaceDrafts: ClientWorkspaceDraft[],
   documents: Document[],
   childDocuments: Document[],
+  deliveries: DocumentDeliverySend[],
 ): { drafts: DraftShortcut[]; more: number } {
   type Ranked = DraftShortcut & { rank: number; sortKey: string };
   const all: Ranked[] = [];
+  const deliveredIds = new Set(deliveries.map((delivery) => delivery.document_id));
 
   // Side-panel drafts written with the assistant — the ones she'd go looking for.
   for (const d of workspaceDrafts) {
@@ -229,8 +233,8 @@ function buildDrafts(
     } else if (doc.status === "pending_review") {
       meta = "With your attorney";
       rank = 2;
-    } else if (FINALIZED.has(doc.status)) {
-      meta = doc.status === "delivered" ? "Delivered" : "Approved — ready to use";
+    } else if (deliveredIds.has(doc.id) || FINALIZED.has(doc.status)) {
+      meta = deliveredIds.has(doc.id) || doc.status === "delivered" ? "Delivered by your attorney" : "Approved — ready to use";
       rank = 4;
     } else {
       meta = "Ready to read";
@@ -501,6 +505,7 @@ export function buildFileDeck(input: FileDeckInput): FileDeck {
     input.workspaceDrafts ?? [],
     input.documents,
     input.childDocuments ?? [],
+    input.deliveries ?? [],
   );
 
   const worst = docket[0] ?? null;
