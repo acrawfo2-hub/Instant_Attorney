@@ -1,66 +1,165 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import * as placeholderParsing from "./placeholder-parsing.ts";
 import {
   parseDrafterResponse,
-  buildNeededItems,
-  buildFallbackTemplate,
-  deriveQuestionsFromTemplate,
-  ensureChecklistNeeds,
-  buildBundledMessage,
-  buildStarterItems,
-  mapAnswersToPlaceholders,
-  isAnsweredByFacts,
-  type ParsedDrafter,
-  type NeededItem,
+  extractPlaceholders,
+  placeholderFields,
+  applyPlaceholderAnswers,
+  humanizeLabel,
 } from "./placeholder-parsing.ts";
 
-// ── Regression 1: empty right pane ───────────────────────────────────────────
-// A draft full of [[placeholders]] but with NO ---MISSING FACTS--- / ---FOLLOW-UP---
-// blocks must still yield a non-empty checklist so the right pane is never blank.
+/**
+ * These tests cover the [[placeholder]] convention, which is how the product
+ * keeps its second promise: every drafting request produces a complete, visible,
+ * editable artifact, and unknown facts become unmistakable blanks rather than an
+ * abandoned draft.
+ *
+ * The previous version of this file had it backwards. Twenty-one tests covered a
+ * guided-checklist flow that belonged to the retired wizard page and had no
+ * caller left — buildNeededItems, buildFallbackTemplate, buildStarterItems,
+ * mapAnswersToPlaceholders — while the four functions the live UI actually calls
+ * had almost no coverage at all. A suite can be large, green, and pointed at the
+ * wrong half of the module.
+ */
 
-test("draft with [[placeholders]] but no follow-up/missing blocks still builds a checklist", () => {
-  const raw = [
-    "---DRAFT READY---",
-    "This Agreement is between [[FULL LEGAL NAME — Party A]] and",
-    "[[FULL LEGAL NAME — Party B]] for the sum of $[[AMOUNT]].",
-    "---END DRAFT---",
-  ].join("\n");
+// ── The export surface ───────────────────────────────────────────────────────
+// Pinned for the same reason lib/doc-generator.test.ts pins its own: this module
+// grew a whole second flow once already, and it grew by addition, not by anyone
+// deciding to add it.
 
-  let parsed = parseDrafterResponse(raw);
-  // No missing-facts / follow-up blocks were present in the model output.
-  assert.equal(parsed.missingFacts.blocking.length, 0);
-  assert.equal(parsed.missingFacts.nonBlocking.length, 0);
-  assert.equal(parsed.questions.length, 0);
-  assert.ok(parsed.draftText, "draft text should be extracted");
+const EXPECTED_EXPORTS = [
+  "parseDrafterResponse", // ---DRAFT READY--- envelope → draft text + stated needs
+  "extractPlaceholders", //  raw [[...]] occurrences, deduped, in document order
+  "placeholderFields", //    those as labeled fields carrying `required`
+  "applyPlaceholderAnswers", // fill blanks by key, touch nothing else
+  "humanizeLabel", //        "FULL LEGAL NAME" → "Full Legal Name"
+];
 
-  // The page derives needs from the bracketed gaps so the pane is not empty.
-  parsed = ensureChecklistNeeds(parsed);
-  const items = buildNeededItems(parsed);
-  assert.ok(items.length >= 3, `expected a checklist for each unique placeholder, got ${items.length}`);
-
-  const labels = items.map((i) => i.label.toLowerCase());
-  assert.ok(labels.some((l) => l.includes("party a")));
-  assert.ok(labels.some((l) => l.includes("party b")));
-  assert.ok(labels.some((l) => l.includes("amount")));
+test("placeholder-parsing exposes only the convention", () => {
+  assert.deepEqual(
+    Object.keys(placeholderParsing).sort(),
+    [...EXPECTED_EXPORTS].sort(),
+    "This module is the [[placeholder]] convention and nothing else. A checklist " +
+      "builder, a fallback template, or a starter-question set living here is how " +
+      "it absorbed the wizard page's flow last time. If an export genuinely " +
+      "belongs, add it to EXPECTED_EXPORTS with a line saying what it is.",
+  );
 });
 
-test("buildNeededItems alone produces items from placeholders with an empty parsed shape", () => {
-  const parsed: ParsedDrafter = {
-    draftText: "Notice to [[TENANT NAME]] regarding [[PROPERTY ADDRESS]].",
-    missingFacts: { blocking: [], nonBlocking: [] },
-    questions: [],
-    readyForReview: false,
-  };
-  const items = buildNeededItems(parsed);
-  assert.equal(items.length, 2);
-  // Without any blocking signal, placeholders are surfaced as "helpful", not required.
-  assert.ok(items.every((i) => i.severity === "helpful"));
+// ── required: the flag the forum gate depends on ─────────────────────────────
+
+test("a plain placeholder is required", () => {
+  const [field] = placeholderFields("Payment of [[AMOUNT OWED — the principal sum]] is due.");
+  assert.equal(field.required, true);
+  assert.equal(field.label, "Amount Owed");
+  assert.equal(field.hint, "the principal sum");
 });
 
-// ── Regression 2: truncated draft ────────────────────────────────────────────
-// When the model hits its token limit mid-draft, the closing ---END DRAFT---
-// marker is missing. The draft must still be extracted (so it can be saved and
-// the Send-to-Attorney CTA — gated on a non-null draft — stays visible).
+test("NON-BLOCKING in the descriptor makes a placeholder optional", () => {
+  const [field] = placeholderFields(
+    "Reference [[MATTER NUMBER — NON-BLOCKING: your internal file reference]].",
+  );
+  assert.equal(field.required, false);
+  assert.equal(
+    /BLOCKING/i.test(field.hint),
+    false,
+    "internal BLOCKING bookkeeping must not reach the client-facing hint",
+  );
+});
+
+test("a BLOCKING forum placeholder is surfaced as required", () => {
+  // The shape lib/document-drafting.ts writes when no governing forum is known.
+  // If this ever came back optional, an unestablished jurisdiction would stop
+  // being asked about, which is the failure the risk gate exists to prevent.
+  const forum =
+    "[[GOVERNING COURT OR JURISDICTION — BLOCKING: which state's law governs this, " +
+    "and which court or agency it is for]]";
+  const [field] = placeholderFields(`This agreement is governed by ${forum}.`);
+  assert.equal(field.required, true);
+  assert.equal(field.label, "Governing Court Or Jurisdiction");
+});
+
+// ── Identity-bearing placeholders must not collapse ──────────────────────────
+
+test("placeholders sharing a head descriptor stay distinct", () => {
+  const draft = "Between [[FULL LEGAL NAME — Party A]] and [[FULL LEGAL NAME — Party B]].";
+  const fields = placeholderFields(draft);
+  assert.equal(fields.length, 2, "Party A and Party B are different blanks");
+  assert.notEqual(fields[0].key, fields[1].key);
+});
+
+test("the same placeholder repeated is asked for once", () => {
+  const draft = "[[CLIENT NAME]] agrees. [[CLIENT NAME]] further agrees.";
+  assert.equal(extractPlaceholders(draft).length, 1);
+});
+
+test("extraction preserves document order", () => {
+  const draft = "[[THIRD]] no — [[ALPHA]] then [[BETA]]".replace("[[THIRD]] no — ", "");
+  assert.deepEqual(
+    extractPlaceholders(draft).map((p) => p.raw),
+    ["ALPHA", "BETA"],
+  );
+});
+
+// ── Filling: it may only touch the blanks ────────────────────────────────────
+
+test("filling replaces every occurrence of a matched blank and nothing else", () => {
+  const draft = "Dear [[NAME]], this concerns [[NAME]] and the sum of [[AMOUNT]].";
+  const { text, filled } = applyPlaceholderAnswers(draft, { name: "Jane Roe" });
+
+  assert.equal(filled, 2, "both occurrences count as filled");
+  assert.equal(text, "Dear Jane Roe, this concerns Jane Roe and the sum of [[AMOUNT]].");
+});
+
+test("an unanswered blank is left in place, not blanked out", () => {
+  const draft = "Due within [[NUMBER OF DAYS]] days.";
+  const { text, filled } = applyPlaceholderAnswers(draft, {});
+  assert.equal(filled, 0);
+  assert.equal(text, draft, "an unfilled gap stays visible rather than vanishing");
+});
+
+test("an empty or whitespace answer does not fill a blank", () => {
+  const draft = "Signed by [[SIGNER]].";
+  const { text, filled } = applyPlaceholderAnswers(draft, { signer: "   " });
+  assert.equal(filled, 0);
+  assert.equal(text, draft);
+});
+
+test("filling never rewrites surrounding approved language", () => {
+  // The attorney's words are outside the brackets. This is why the fill is a
+  // regex over [[...]] rather than a model pass.
+  const draft =
+    "RELEASE. The undersigned releases [[RELEASEE]] from all claims, known and unknown, " +
+    "arising from the incident described above.";
+  const { text } = applyPlaceholderAnswers(draft, { releasee: "Acme Corp." });
+  assert.ok(text.includes("from all claims, known and unknown,"));
+  assert.ok(text.includes("Acme Corp."));
+  assert.equal(text.includes("[["), false);
+});
+
+test("field keys match what applyPlaceholderAnswers expects", () => {
+  // The UI reads placeholderFields() and posts answers back keyed by field.key.
+  // If these two ever disagreed, every fill would silently no-op.
+  const draft = "Paid to [[PAYEE NAME — who receives it]] on [[PAYMENT DATE]].";
+  const answers = Object.fromEntries(
+    placeholderFields(draft).map((f, i) => [f.key, `value-${i}`]),
+  );
+  const { filled } = applyPlaceholderAnswers(draft, answers);
+  assert.equal(filled, 2);
+});
+
+// ── Labels ───────────────────────────────────────────────────────────────────
+
+test("all-caps descriptors are title-cased without losing punctuation", () => {
+  assert.equal(humanizeLabel("FULL LEGAL NAME — Party A"), "Full Legal Name — Party A");
+  assert.equal(humanizeLabel("ADDRESS,"), "Address,");
+});
+
+// ── parseDrafterResponse: truncation ─────────────────────────────────────────
+// Kept from the previous suite. A run that dies mid-sentence must still yield the
+// text it managed to produce — the caller decides whether that is a draft or
+// recovery material, but it must not be thrown away here.
 
 test("truncated draft (no ---END DRAFT--- marker) is still extracted", () => {
   const raw = [
@@ -75,17 +174,12 @@ test("truncated draft (no ---END DRAFT--- marker) is still extracted", () => {
 
   const parsed = parseDrafterResponse(raw);
   assert.ok(parsed.draftText, "truncated draft should still produce draftText");
-  assert.ok(
-    parsed.draftText!.includes("DEMAND LETTER"),
-    "extracted draft should contain the opening content"
+  assert.ok(parsed.draftText!.includes("DEMAND LETTER"));
+  assert.equal(
+    parsed.draftText!.includes("---DRAFT READY---"),
+    false,
+    "the opening marker should be stripped from the draft body",
   );
-  assert.ok(
-    !parsed.draftText!.includes("---DRAFT READY---"),
-    "the opening marker should be stripped from the draft body"
-  );
-  // CTA visibility in the page is gated on a non-null current draft.
-  const ctaVisible = parsed.draftText !== null;
-  assert.equal(ctaVisible, true);
 });
 
 test("truncated draft stops at the next block marker if one started", () => {
@@ -98,305 +192,41 @@ test("truncated draft stops at the next block marker if one started", () => {
   ].join("\n");
 
   const parsed = parseDrafterResponse(raw);
-  assert.ok(parsed.draftText);
   assert.ok(parsed.draftText!.includes("Body of the draft here."));
-  assert.ok(
-    !parsed.draftText!.includes("What is the deadline?"),
-    "follow-up content must not leak into the draft body"
+  assert.equal(
+    parsed.draftText!.includes("What is the deadline?"),
+    false,
+    "follow-up content must not leak into the draft body",
   );
 });
 
-// ── Regression 3: bundled update message ─────────────────────────────────────
-// Filling checklist fields and clicking Update must send a SINGLE bundled
-// message containing every filled answer (plus the optional free-form note).
-
-test("filling checklist fields bundles all answers into one message", () => {
-  const parsed: ParsedDrafter = {
-    draftText: "Agreement between [[FULL LEGAL NAME — Party A]] and [[FULL LEGAL NAME — Party B]] for $[[AMOUNT]].",
-    missingFacts: { blocking: [], nonBlocking: [] },
-    questions: [],
-    readyForReview: false,
-  };
-  const items = buildNeededItems(parsed);
-  assert.equal(items.length, 3);
-
-  const answers: Record<string, string> = {
-    [items[0].id]: "Jane Doe",
-    [items[1].id]: "Acme Corp",
-    [items[2].id]: "5,000",
-  };
-
-  const msg = buildBundledMessage(items, answers, "Please keep the tone firm.");
-  assert.ok(msg, "a bundled message should be produced when fields are filled");
-
-  // One message — every answer present in a single string.
-  assert.ok(msg!.includes("Jane Doe"));
-  assert.ok(msg!.includes("Acme Corp"));
-  assert.ok(msg!.includes("5,000"));
-  assert.ok(msg!.includes("Additional details: Please keep the tone firm."));
-
-  // It is one bundled instruction (single re-render request), not one-per-field.
-  const renderRequests = msg!.match(/re-render the COMPLETE updated draft/g) ?? [];
-  assert.equal(renderRequests.length, 1);
-
-  // One bullet line per filled answer, plus the note line.
-  const bulletLines = msg!.split("\n").filter((l) => l.startsWith("- "));
-  assert.equal(bulletLines.length, 4);
+test("a response with no markers at all yields no draft", () => {
+  const parsed = parseDrafterResponse("lorem ipsum, no markers here at all, just prose.");
+  assert.equal(parsed.draftText, null, "markerless prose is recovery material, not a draft");
 });
 
-test("buildBundledMessage returns null when nothing is filled in", () => {
-  const parsed: ParsedDrafter = {
-    draftText: "Agreement with [[AMOUNT]].",
-    missingFacts: { blocking: [], nonBlocking: [] },
-    questions: [],
-    readyForReview: false,
-  };
-  const items = buildNeededItems(parsed);
-  assert.equal(buildBundledMessage(items, {}, ""), null);
-  // Whitespace-only answers and note also count as empty.
-  assert.equal(buildBundledMessage(items, { [items[0].id]: "   " }, "   "), null);
-});
-
-test("a free-form note alone still produces a message", () => {
-  const items = buildNeededItems({
-    draftText: "No placeholders here.",
-    missingFacts: { blocking: [], nonBlocking: [] },
-    questions: [],
-    readyForReview: false,
-  });
-  const msg = buildBundledMessage(items, {}, "Add an arbitration clause.");
-  assert.ok(msg);
-  assert.ok(msg!.includes("Additional details: Add an arbitration clause."));
-});
-
-// ── Regression 4: auto-recovery from a broken/empty AI draft ─────────────────
-// The wizard must never strand the user on a blank screen. When the AI call
-// fails or returns garbage with no recognizable markers, the page builds a
-// fallback template AND derives the checklist of info the user still needs.
-// These tests mirror that absolute-fallback path in runDrafter().
-
-// Replicates the runDrafter() recovery branch so the test guards the real flow.
-function recoverFromAiResponse(fullText: string, label: string, instrumentType: string): ParsedDrafter {
-  let p = parseDrafterResponse(fullText);
-  // If the model returned prose with no markers, use the whole thing as the draft.
-  if (!p.draftText && fullText.trim()) {
-    p = { ...p, draftText: fullText.trim() };
-  }
-  // Absolute fallback — empty/garbled AI text yields a template + derived needs.
-  if (!p.draftText) {
-    const template = buildFallbackTemplate(label, instrumentType);
-    const derived = deriveQuestionsFromTemplate(template);
-    p = {
-      ...p,
-      draftText: template,
-      missingFacts: {
-        blocking: p.missingFacts.blocking.length ? p.missingFacts.blocking : derived.blocking,
-        nonBlocking: p.missingFacts.nonBlocking,
-      },
-      questions: p.questions.length ? p.questions : derived.questions,
-    };
-  }
-  return ensureChecklistNeeds(p);
-}
-
-test("empty AI response falls back to a template and a derived checklist of needs", () => {
-  // The AI returned nothing usable (failed call / empty body).
-  const p = recoverFromAiResponse("", "Settlement Agreement", "draft_contract");
-
-  // A usable draft is guaranteed, not a blank screen.
-  assert.ok(p.draftText, "a fallback draft must be produced");
-  assert.ok(/AGREEMENT/.test(p.draftText!), "the contract template should be used");
-  assert.ok(/\[\[[^\]]+\]\]/.test(p.draftText!), "the template carries fillable placeholders");
-
-  // A checklist of needed items is derived directly from the template gaps.
-  assert.ok(p.questions.length > 0, "questions must be derived so the user knows what's needed");
-  assert.ok(p.missingFacts.blocking.length > 0, "blocking missing-facts must be derived");
-
-  const items = buildNeededItems(p);
-  assert.ok(items.length > 0, "the right pane checklist must not be empty");
-});
-
-test("garbled AI text with no markers becomes the draft (whole response used)", () => {
-  const garbled = "lorem ipsum dolor sit amet, no markers here at all, just prose.";
-  const p = recoverFromAiResponse(garbled, "Demand Letter", "demand_letter");
-
-  // No ---DRAFT READY--- markers, so the entire response is treated as the draft.
-  assert.equal(p.draftText, garbled);
-  // It has no bracketed gaps, so no derived needs are invented.
-  assert.equal(p.missingFacts.blocking.length, 0);
-  assert.equal(p.questions.length, 0);
-});
-
-test("prose with no markers is preserved verbatim as the draft", () => {
-  const prose = [
-    "Dear Mr. Smith,",
-    "",
-    "This letter concerns the outstanding balance on your account.",
-    "Please remit payment at your earliest convenience.",
-  ].join("\n");
-  const p = recoverFromAiResponse(prose, "Demand Letter", "demand_letter");
-  assert.equal(p.draftText, prose, "the whole prose response becomes the draft");
-});
-
-for (const instrumentType of ["demand_letter", "draft_contract", "draft_waiver", "generic"]) {
-  test(`buildFallbackTemplate(${instrumentType}) produces fillable [[placeholders]]`, () => {
-    const template = buildFallbackTemplate("Test Document", instrumentType);
-    assert.ok(template.trim().length > 0, "template must not be empty");
-
-    const placeholders = template.match(/\[\[[^\]]+\]\]/g) ?? [];
-    assert.ok(placeholders.length > 0, `${instrumentType} template must have [[placeholders]]`);
-
-    // Every placeholder must be a real fillable gap (non-empty between brackets).
-    assert.ok(
-      placeholders.every((ph) => ph.replace(/^\[\[|\]\]$/g, "").trim().length > 0),
-      "placeholders must not be empty brackets"
-    );
-
-    // Each type yields a derivable checklist from its own placeholders.
-    const derived = deriveQuestionsFromTemplate(template);
-    assert.ok(derived.questions.length > 0, `${instrumentType} must derive at least one question`);
-    assert.ok(derived.blocking.length > 0, `${instrumentType} must derive at least one blocking need`);
-  });
-}
-
-// ── Starter questions (parallel "punch 1") ───────────────────────────────────
-// While the real draft composes, the wizard shows document-type-aware starter
-// questions instantly (no AI). They must be relevant per type and have stable ids.
-
-test("buildStarterItems returns document-type-aware questions with stable ids", () => {
-  const demand = buildStarterItems("demand_letter");
-  assert.ok(demand.length >= 3 && demand.length <= 6);
-  // All ids unique and stable (slugged from the label).
-  const ids = demand.map((i) => i.id);
-  assert.equal(new Set(ids).size, ids.length);
-  assert.ok(ids.every((id) => id.startsWith("starter-")));
-  // Demand-letter specific: asks about a response deadline.
-  assert.ok(demand.some((i) => /deadline/i.test(i.label)));
-
-  const contract = buildStarterItems("draft_contract");
-  assert.ok(contract.some((i) => /party/i.test(i.label)));
-  // Different types ask different things.
-  assert.notDeepEqual(demand.map((i) => i.label), contract.map((i) => i.label));
-});
-
-test("buildStarterItems falls back to the general set for an unknown type", () => {
-  const items = buildStarterItems("totally_made_up_type");
-  assert.ok(items.length > 0, "must never be empty so the pane always has questions");
-  assert.deepEqual(items.map((i) => i.label), buildStarterItems("general_document").map((i) => i.label));
-});
-
-// ── Deterministic fold mapping (B2) ──────────────────────────────────────────
-// An answer is filled deterministically ONLY when it maps to exactly one specific
-// placeholder. Ambiguous / generic / unmatched answers are left for the AI pass.
-
-test("mapAnswersToPlaceholders fills a unique, specific placeholder deterministically", () => {
-  const draft = "Governed by the laws of [[GOVERNING STATE]]. Respond within [[RESPONSE DEADLINE — days]].";
-  const { byKey, leftover } = mapAnswersToPlaceholders(draft, [
-    { label: "Governing state", value: "Texas" },
-    { label: "Response deadline", value: "14 days" },
-  ]);
-  assert.equal(byKey["governing state"], "Texas");
-  assert.equal(byKey["response deadline — days"], "14 days");
-  assert.equal(leftover.length, 0);
-});
-
-test("mapAnswersToPlaceholders leaves an ambiguous match for the AI pass", () => {
-  // Two address placeholders — a generic "address" answer must NOT be guessed into one.
-  const draft = "Sender: [[ADDRESS — Party A]]. Recipient: [[ADDRESS — Party B]].";
-  const { byKey, leftover } = mapAnswersToPlaceholders(draft, [
-    { label: "Your mailing address", value: "1 Main St" },
-  ]);
-  assert.deepEqual(byKey, {}, "ambiguous answers are never placed deterministically");
-  assert.equal(leftover.length, 1);
-  assert.equal(leftover[0].value, "1 Main St");
-});
-
-test("mapAnswersToPlaceholders defers a generic single-word placeholder", () => {
-  // A lone generic "[[AMOUNT]]" is not specific enough to match loosely.
-  const draft = "Pay $[[AMOUNT]] to the claimant.";
-  const { byKey, leftover } = mapAnswersToPlaceholders(draft, [
-    { label: "Amount or specific action demanded", value: "$5,000" },
-  ]);
-  assert.deepEqual(byKey, {});
-  assert.equal(leftover.length, 1);
-});
-
-test("mapAnswersToPlaceholders puts unmatched answers in leftover", () => {
-  const draft = "Agreement governed by [[GOVERNING STATE]].";
-  const { byKey, leftover } = mapAnswersToPlaceholders(draft, [
-    { label: "Main purpose of the document", value: "Sell a car" },
-  ]);
-  assert.deepEqual(byKey, {});
-  assert.deepEqual(leftover, [{ label: "Main purpose of the document", value: "Sell a car" }]);
-});
-
-test("each instrument type yields a distinct, type-appropriate template", () => {
-  const demand = buildFallbackTemplate("X", "demand_letter");
-  const contract = buildFallbackTemplate("X", "draft_contract");
-  const waiver = buildFallbackTemplate("X", "draft_waiver");
-  const generic = buildFallbackTemplate("X", "general_document");
-
-  assert.ok(/DEMAND/.test(demand));
-  assert.ok(/AGREEMENT/.test(contract));
-  assert.ok(/RELEASE AND WAIVER/.test(waiver));
-  // The generic branch handles any unknown type without throwing.
-  assert.ok(generic.includes("PRELIMINARY NOTE"));
-
-  const all = [demand, contract, waiver, generic];
-  assert.equal(new Set(all).size, all.length, "templates should differ by type");
-});
-
-// ── Never ask twice: checklist dedup against confirmed Living File facts ──────
-// Cross-document reuse: a fact captured while drafting document 1 (stored by
-// save-answers as "<label>: <value>") must suppress the matching question when
-// drafting a later document in the same file.
-
-test("buildNeededItems drops items already answered by a confirmed fact", () => {
+test("blocking and non-blocking needs are read separately", () => {
   const raw = [
     "---DRAFT READY---",
-    "Agreement between [[FULL LEGAL NAME — Party A]] for $[[AMOUNT]].",
+    "Body.",
     "---END DRAFT---",
+    "---MISSING FACTS---",
+    "BLOCKING:",
+    "- The governing jurisdiction",
+    "NON-BLOCKING:",
+    "- Your internal matter number",
+    "---END MISSING---",
   ].join("\n");
 
-  const parsed = ensureChecklistNeeds(parseDrafterResponse(raw));
-
-  // No facts yet → both fields are asked.
-  assert.equal(buildNeededItems(parsed).length, 2);
-
-  // The file already captured Party A's name on an earlier document.
-  const facts = ["Full legal name — Party A: Jane Q. Public"];
-  const items = buildNeededItems(parsed, facts);
-  const labels = items.map((i) => i.label.toLowerCase());
-  assert.ok(!labels.some((l) => l.includes("party a")), "answered Party A must not be re-asked");
-  assert.ok(labels.some((l) => l.includes("amount")), "unanswered amount is still asked");
+  const parsed = parseDrafterResponse(raw);
+  assert.deepEqual(parsed.missingFacts.blocking, ["The governing jurisdiction"]);
+  assert.deepEqual(parsed.missingFacts.nonBlocking, ["Your internal matter number"]);
 });
 
-test("identity-bearing labels stay distinct — answering Party A does not drop Party B", () => {
-  const raw = [
-    "---DRAFT READY---",
-    "Between [[FULL LEGAL NAME — Party A]] and [[FULL LEGAL NAME — Party B]].",
-    "---END DRAFT---",
-  ].join("\n");
-  const parsed = ensureChecklistNeeds(parseDrafterResponse(raw));
-
-  const facts = ["Full legal name — Party A: Jane Q. Public"];
-  const items = buildNeededItems(parsed, facts);
-  const labels = items.map((i) => i.label.toLowerCase());
-  assert.ok(!labels.some((l) => l.includes("party a")), "Party A is known");
-  assert.ok(labels.some((l) => l.includes("party b")), "Party B is still needed");
-});
-
-test("isAnsweredByFacts matches on field key, ignores too-generic items", () => {
-  const item = (label: string): NeededItem => ({ id: "x", label, hint: "", severity: "helpful" });
-  assert.ok(isAnsweredByFacts(item("Response deadline"), ["Response deadline: 30 days"]));
-  assert.ok(isAnsweredByFacts(item("Amount"), ["Amount owed: $5,000"]));
-  assert.ok(!isAnsweredByFacts(item("Governing law"), ["Response deadline: 30 days"]));
-  // Too-short keys never match (avoids false positives).
-  assert.ok(!isAnsweredByFacts(item("ID"), ["Identification number: 12"]));
-});
-
-test("an empty confirmedFacts list leaves the checklist unchanged", () => {
-  const raw = "---DRAFT READY---\n[[FULL LEGAL NAME — Party A]]\n---END DRAFT---";
-  const parsed = ensureChecklistNeeds(parseDrafterResponse(raw));
-  assert.equal(buildNeededItems(parsed).length, buildNeededItems(parsed, []).length);
+test("readiness for review is only true when the file update says so", () => {
+  const withFlag = parseDrafterResponse(
+    "---FILE UPDATE---\nSTATUS: READY FOR ATTORNEY REVIEW\n---END FILE UPDATE---",
+  );
+  assert.equal(withFlag.readyForReview, true);
+  assert.equal(parseDrafterResponse("---DRAFT READY---\nBody.\n---END DRAFT---").readyForReview, false);
 });

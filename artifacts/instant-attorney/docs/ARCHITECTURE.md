@@ -312,6 +312,38 @@ argument — are skipped rather than guessed at.
 
 Migrations are not applied automatically. See `supabase/APPLY-ORDER.md`.
 
+## Dead code, and the two guards that find it
+
+This repository's characteristic failure is not a bug. It is a second
+implementation that survives the thing it belonged to, keeps compiling, keeps
+passing its own tests, and reads to the next agent as a feature to preserve.
+Three were found in one session, all downstream of the same retirement:
+
+| What | How it hid |
+|---|---|
+| `generateDocument` + 7 templates, ~700 lines | a dead export inside a *live* module |
+| `lib/starter-fold.ts` | a whole module with nine passing tests and no importer |
+| `lib/workspace-auth.ts` | orphaned when its `/api/attorney/workspace/*` routes were deleted |
+
+Two different failures, so two different guards:
+
+- **`lib/component-reachability.test.ts`** walks the import graph from `app/`,
+  `components/`, `scripts/` and `middleware.ts`, and fails on any component or
+  `lib/` module nothing reaches. That is the whole-module case.
+- **Pinned export lists** in `lib/doc-generator.test.ts` and
+  `lib/placeholder-parsing.test.ts` fail when the module's public surface
+  changes. That is the dead-export-in-a-live-module case, which reachability
+  cannot see.
+
+Neither is a style rule. Adding an export is allowed; adding one by accident is
+what these stop.
+
+**Counting callers is the check — reading the code is not.** Dead code and live
+code are indistinguishable by inspection. Both of the modules above carried
+careful header comments explaining what they were for, and one of those comments
+("Guarantee a usable first draft even when the AI call fails") described a safety
+net that had never been wired to anything.
+
 ## Before you open a pull request
 
 CI runs typecheck, unit tests, lint, build, and the schema guard. All must pass.

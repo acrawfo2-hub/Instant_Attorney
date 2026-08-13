@@ -365,6 +365,27 @@ enough cover to survive a cleanup that claimed to have finished. Both have since
 been renamed (`InstrumentType`, `lib/placeholder-parsing.ts`); see
 `ARCHITECTURE.md` for the three names that deliberately did not move.
 
+**What "retired" turned out to leave behind.** Chunk 5 deleted the wizard's
+routes and page and called it done. It was not. Over three follow-up commits the
+same retirement kept yielding survivors, each invisible to typecheck, lint and
+every test:
+
+| Found | Size | Why it survived |
+|---|---|---|
+| `generateDocument` + 7 per-instrument templates | ~700 lines | a dead export in a live module |
+| `WIZARD_PROMPTS` + `wizardBase` | ~190 lines | interview script emitting a `---WIZARD COMPLETE---` marker no parser reads |
+| the guided-checklist half of `placeholder-parsing.ts` | ~490 lines | 21 passing tests, all of them pointed at it |
+| `lib/starter-fold.ts` | 55 lines + 9 tests | whole module, no importer |
+| `lib/workspace-auth.ts` | 27 lines | orphaned by chunk 6's route deletions |
+
+Roughly 1,500 lines, none of it reachable, all of it added by nobody — it was
+simply never removed. **A test suite is not evidence that code is live.** The
+placeholder module is the clearest case: 21 tests covered the dead half while the
+four functions the live UI actually calls had almost none, so the suite was
+large, green, and aimed at the wrong half of the file.
+
+Both guards described in `ARCHITECTURE.md` exist because of this list.
+
 
 ### Chunk 6, as built
 
