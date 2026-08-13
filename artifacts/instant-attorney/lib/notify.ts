@@ -24,7 +24,7 @@ export async function notifyClientDocumentDelivery(to: string, opts: { subject: 
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://instant-attorney.com";
   await getResend().emails.send({
     from: FROM_EMAIL, to, subject: opts.subject,
-    html: `<div style="font-family:sans-serif;max-width:600px;margin:auto;padding:24px"><div style="white-space:pre-wrap">${escapeHtml(opts.body)}</div><p><a href="${base}/api/documents/${opts.revisionDocumentId}/download">Download ${escapeHtml(opts.fileName)}</a></p>${opts.consultationUrl ? `<p><a href="${escapeHtml(opts.consultationUrl)}" style="display:inline-block;background:#1a1a2e;color:white;padding:12px 18px;text-decoration:none;border-radius:6px">Schedule a consultation</a></p>` : ""}</div>`,
+    html: `<div style="font-family:sans-serif;max-width:600px;margin:auto;padding:24px"><div style="white-space:pre-wrap">${escapeHtml(opts.body)}</div><p><a href="${base}/api/documents/${opts.revisionDocumentId}/download">Download ${escapeHtml(opts.fileName)}</a></p><p><a href="${base}/dashboard">View the document and delivery note in your matter</a></p>${opts.consultationUrl ? `<p><a href="${escapeHtml(opts.consultationUrl)}" style="display:inline-block;background:#1a1a2e;color:white;padding:12px 18px;text-decoration:none;border-radius:6px">Schedule a consultation</a></p>` : ""}</div>`,
   });
 }
 

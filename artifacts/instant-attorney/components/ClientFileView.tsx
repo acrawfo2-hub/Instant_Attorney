@@ -26,7 +26,8 @@ import LegalStrategyCard from "@/components/LegalStrategyCard";
 import { buildMatterTasks } from "@/lib/matter-tasks";
 import { buildFileDeck } from "@/lib/file-deck";
 import { COVER_CHAT_ASK, askHref } from "@/lib/cover-sheet";
-import type { CaseFile, FactItem, Document, Profile, ConsultRequest, ConsultWrapUp, RequestedAttachment, GovFormInstrument, Attachment, ClientWorkspaceDraft } from "@/lib/types";
+import { latestMatterDelivery } from "@/lib/client-deliveries";
+import type { CaseFile, FactItem, Document, Profile, ConsultRequest, ConsultWrapUp, RequestedAttachment, GovFormInstrument, Attachment, ClientWorkspaceDraft, DocumentDeliverySend } from "@/lib/types";
 import { docTypeLabel, personDisplayName, coerceInstrumentType } from "@/lib/types";
 import { FIRM_CONTACT_EMAIL } from "@/lib/firm";
 import type { ClientDestination } from "@/lib/client-destinations";
@@ -62,6 +63,7 @@ interface ClientFileViewProps {
   attachments?: Attachment[];
   govForms?: GovFormInstrument[];
   workspaceDrafts?: ClientWorkspaceDraft[];
+  deliveries?: DocumentDeliverySend[];
   mode: "client" | "attorney";
   isAttorneyUser?: boolean;
   clientProfile?: Profile;
@@ -81,6 +83,7 @@ export default function ClientFileView({
   attachments = [],
   govForms = [],
   workspaceDrafts = [],
+  deliveries = [],
   mode,
   isAttorneyUser = false,
   clientProfile,
@@ -186,6 +189,7 @@ export default function ClientFileView({
         requestedAttachments,
         govForms,
         consultRequest,
+        deliveries,
       })
     : null;
 
@@ -285,6 +289,7 @@ export default function ClientFileView({
       facts={facts}
       isAttorney={isAttorney}
       initialWorkspaceDrafts={workspaceDrafts}
+      deliveries={deliveries}
     />
   );
 
@@ -419,6 +424,10 @@ export default function ClientFileView({
   // ── Client layout — cover sheet + destinations ────────────────────────────
 
   if (!isAttorney && matterTasks && deck) {
+    const latestDelivery = latestMatterDelivery(deliveries);
+    const deliveredDocument = latestDelivery
+      ? documents.find((document) => document.id === latestDelivery.document_id)
+      : null;
     const helpPanel = (
       <>
         <ExistingCounselCard
@@ -523,6 +532,27 @@ export default function ClientFileView({
     return (
       <div className="lf-grid">
         {statusStrips}
+
+        {latestDelivery && (
+          <section className="lf-delivery-banner" aria-label="Document delivered by your attorney">
+            <div className="lf-delivery-banner-body">
+              <span className="lf-delivery-banner-kicker">From your attorney</span>
+              <h2>{deliveredDocument?.title || latestDelivery.attachment_file_name}</h2>
+              <p>{latestDelivery.body}</p>
+              <time dateTime={latestDelivery.sent_at}>
+                Sent {new Date(latestDelivery.sent_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+              </time>
+            </div>
+            <div className="lf-delivery-banner-actions">
+              <a className="lf-delivery-banner-primary" href={`/api/documents/${latestDelivery.revision_document_id}/download`}>
+                Download approved document
+              </a>
+              <Link href={`/dashboard/${caseFile.id}?view=documents#doc-${latestDelivery.document_id}`}>
+                Read delivery details →
+              </Link>
+            </div>
+          </section>
+        )}
 
         <ClientCaseMemo
           caseFile={caseFile}

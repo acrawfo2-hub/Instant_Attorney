@@ -6,6 +6,7 @@ import type {
   CaseFile,
   ClientWorkspaceDraft,
   ConsultRequest,
+  DocumentDeliverySend,
   Document,
   FactItem,
   GovFormInstrument,
@@ -148,6 +149,13 @@ test("tiles: document work, review, and uploads have separate counts", () => {
   assert.equal(d.tiles.find((t) => t.id === "attorney-review")?.count, 1);
   assert.equal(d.tiles.find((t) => t.id === "uploads")?.count, 2);
   assert.match(d.tiles.find((t) => t.id === "uploads")!.status, /1 still needed/);
+});
+
+test("draft shortcuts distinguish an immutable attorney delivery from approval", () => {
+  const delivered = doc({ id: "d-delivered", status: "approved", title: "Reviewed agreement" });
+  const sends = [{ document_id: delivered.id }] as DocumentDeliverySend[];
+  const d = deck({ documents: [delivered], deliveries: sends });
+  assert.equal(d.drafts[0]?.meta, "Delivered by your attorney");
 });
 
 test("tiles: a live deadline drives the Key dates tile's status and tone", () => {

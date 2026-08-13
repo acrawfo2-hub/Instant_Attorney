@@ -912,6 +912,22 @@ export interface DocumentDeliveryDraft {
   updated_at: string;
 }
 
+/** Immutable record of the exact attorney-approved revision sent to a client. */
+export interface DocumentDeliverySend {
+  id: string;
+  document_id: string;
+  revision_document_id: string;
+  case_file_id: string;
+  user_id: string;
+  sent_by: string | null;
+  recipient: string;
+  subject: string;
+  body: string;
+  consultation_url: string | null;
+  attachment_file_name: string;
+  sent_at: string;
+}
+
 /** A citation blocks approval when it is not verified and not waived. */
 export function citationBlocksApproval(c: Pick<DocumentQaCitation, "verdict" | "waived">): boolean {
   return !c.waived && c.verdict !== "verified";
