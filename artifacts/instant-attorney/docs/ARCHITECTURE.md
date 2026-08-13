@@ -337,11 +337,12 @@ before starting on any entry here.
 - **Two draft records** — `client_workspace_drafts` and `documents`, bridged by
   promotion. One service and one UI model first; a physical merge only if that
   does not already remove the complexity.
-- **Five attorney AI rooms** — general chat, freestyle workspace, document
-  partner chat, brainstorm, consult tools. Fragmented context defeats the
-  junior-associate goal. Combining into one case workbench.
-- **`pre_warmed`** — a retired document status that ~15 call sites must remember
-  to filter out. Every query that forgets shows a document that does not exist.
+- ~~Five attorney AI rooms~~ — **done.** The freestyle workspace and the case
+  brainstorm are deleted with their routes, prompts and tables; the review
+  workbench is the one place the attorney talks to the associate. The consult
+  generators stay — they produce one-shot artifacts and were never rooms.
+- ~~`pre_warmed`~~ — **done.** The status is gone from the code and the
+  `documents_status_check` constraint no longer permits it.
 
 The wizard journey was retired in chunk 5: `app/wizard/[type]/page.tsx`,
 `app/api/wizard/route.ts` and `app/api/wizard/save-answers` are gone, along with

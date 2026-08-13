@@ -12,7 +12,6 @@ import type {
   RequestedAttachment,
   GovFormInstrument,
   ConsultRequest,
-  CaseBrainstormMessage,
 } from "@/lib/types";
 import { personDisplayName } from "@/lib/types";
 

@@ -1,4 +1,4 @@
-# Applying stages 44–48
+# Applying stages 44–50
 
 As of 2026-08-12 the deployed database is missing **eight tables that merged
 code already writes to**. The migrations exist in this directory and were
@@ -45,6 +45,15 @@ target a table an earlier stage creates. Within a group, order does not matter.
    expects it, but no migration ever created it, so it was added by hand. The
    file exists to make the migrations the source of truth again — see the note
    inside it.
+7. `schema-stage49-drop-prewarm-status.sql` — narrows `documents_status_check`
+   to the five live states, now that the retired `pre_warmed` status is gone from
+   the code. Re-runnable; fails loudly if a row is still in that state, which
+   would mean stage 13 never ran here.
+8. `schema-stage50-drop-retired-attorney-rooms.sql` — **optional and
+   destructive.** Drops the three tables behind the two retired attorney AI
+   rooms. Nothing queries them, but they hold attorney work product; read the
+   note inside the file and count the rows before deciding. Nothing depends on
+   this having run.
 
 ## Before you start
 
@@ -64,9 +73,15 @@ binding that is dropped and recreated.
 
 ## Safety
 
-Audited across stages 44–48: no `drop table`, no `truncate`, no `delete from`.
-Every `drop` is an idempotency guard — `drop policy if exists`, `drop
+Audited across stages 44–49: no `drop table`, no `truncate`, no `delete from`.
+Every `drop` there is an idempotency guard — `drop policy if exists`, `drop
 constraint if exists`, `drop trigger if exists`.
+
+**Stage 50 is the one exception, and it is deliberate.**
+`schema-stage50-drop-retired-attorney-rooms.sql` drops three tables and two
+columns. It is optional, nothing depends on it, and it holds attorney work
+product — read it and count the rows before running it. If you are applying this
+list mechanically, stop at stage 49.
 
 Four migrations write data, all of them backfills guarded by `where not
 exists` or equivalent, so re-running is safe:

@@ -7,12 +7,14 @@ privileged, attorney-supervised channel: it gives real legal advice, keeps a
 calculators as tools, drafts documents into an editable side panel, and hands
 anything the client will file or sign to Andrew for a 48-hour attorney review.
 
-> **Currently in flight:** the product moved from guided drafting *wizards* to
-> the orchestrator model, and wizard-era code and prompt guardrails are still
-> present. Before changing prompts, chat flow, or anything under
-> `app/wizard/` — read **[`docs/orchestrator-migration-plan.md`](docs/orchestrator-migration-plan.md)**.
-> It lists what is intentionally still there, what is dead, and the order to
-> remove it in.
+> **The wizard is gone.** The move from guided drafting *wizards* to the
+> orchestrator is complete: `app/wizard/` and `app/api/wizard/` were deleted, and
+> the generation pipeline they contained lives in `lib/document-drafting.ts`,
+> behind the orchestrator. `WizardType` and `lib/wizard-parsing.ts` survive as the
+> instrument taxonomy and the placeholder parser — the engine's vocabulary, not
+> the journey's. Before changing prompts, chat flow, or drafting, read
+> **[`artifacts/instant-attorney/docs/ARCHITECTURE.md`](artifacts/instant-attorney/docs/ARCHITECTURE.md)**
+> and **[`docs/CONSOLIDATION.md`](artifacts/instant-attorney/docs/CONSOLIDATION.md)**.
 
 ## Run & Operate
 

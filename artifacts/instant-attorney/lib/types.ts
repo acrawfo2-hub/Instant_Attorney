@@ -159,18 +159,6 @@ export type DocumentStatus =
 
 export type BrainstormMessageRole = "user" | "assistant";
 
-/** Attorney-only sounding-board chat scoped to a case file. Never client-visible. */
-export interface CaseBrainstormMessage {
-  id: string;
-  case_file_id: string;
-  author_id: string | null;
-  role: BrainstormMessageRole;
-  content: string;
-  /** Set once the attorney has applied this message's proposed Living File/strategy update, if any. */
-  applied_at: string | null;
-  created_at: string;
-}
-
 export interface Profile {
   id: string;
   email: string;
@@ -289,8 +277,6 @@ export interface CaseFile {
   jurisdiction: string | null;
   /** Organized digest of the attorney's last freestyle session (Stage 39).
    *  Attorney-facing working notes; written when they leave freestyle mode. */
-  attorney_workspace_summary?: string | null;
-  attorney_workspace_summarized_at?: string | null;
   /** Plain-language recap of the client's last freestyle session (Stage 43),
    *  distilled when they leave the mode and shown on their Living File. */
   chat_session_summary?: string | null;
@@ -551,38 +537,6 @@ export interface WorkspaceAttachmentRef {
   fileName: string;
   storagePath: string;
   mimeType: string;
-}
-
-/**
- * An attorney's freestyle work-product message, scoped to a client's case file
- * for context but kept OUT of the client's privileged intake_messages record.
- * Only the authoring attorney can read these rows.
- */
-export interface AttorneyWorkspaceMessage {
-  id: string;
-  case_file_id: string;
-  attorney_id: string;
-  role: MessageRole;
-  content: string;
-  /** Files the attorney attached inline to this turn (work-product). */
-  attachments?: WorkspaceAttachmentRef[];
-  created_at: string;
-}
-
-/**
- * A freestyle side-panel draft — a working document the associate produced or the
- * attorney started by hand during a freestyle session. Attorney work-product,
- * editable and downloadable in place. NOT the client's `documents` record.
- */
-export interface AttorneyWorkspaceDraft {
-  id: string;
-  case_file_id: string;
-  attorney_id: string;
-  title: string;
-  content: string;
-  source: "assistant" | "attorney";
-  created_at: string;
-  updated_at: string;
 }
 
 /**
