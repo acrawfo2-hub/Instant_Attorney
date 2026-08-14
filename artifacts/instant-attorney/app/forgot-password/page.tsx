@@ -86,6 +86,10 @@ export default function ForgotPasswordPage() {
             Sign in
           </button>
         </p>
+        <p className="auth-footer-link" style={{ marginTop: "0.5rem" }}>
+          Reset link not working?{" "}
+          <button className="auth-text-link" onClick={() => router.push("/support")}>Open a support request →</button>
+        </p>
       </div>
     </div>
   );
