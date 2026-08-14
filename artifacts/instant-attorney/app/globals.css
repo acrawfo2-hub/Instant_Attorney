@@ -3921,8 +3921,10 @@ mark.wiz-placeholder {
 }
 .admin-card-warn { border-color: #f59e0b; background: #fffbeb; }
 .admin-card-danger { border-color: #ef4444; background: #fef2f2; }
+.admin-card-accent { border-color: #93c5fd; background: linear-gradient(145deg, #eff6ff, #fff); }
 .admin-card-num { font-size: 30px; font-weight: 700; line-height: 1; }
 .admin-card-label { font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.03em; }
+.admin-card-detail { font-size: 12px; color: #94a3b8; margin-top: 5px; }
 .admin-section { margin-bottom: 32px; }
 .admin-section-title {
   font-size: 15px; font-weight: 600; margin: 0 0 12px;
@@ -3970,6 +3972,20 @@ mark.wiz-placeholder {
 .admin-nav-tab:hover { color: #1e293b; }
 .admin-nav-tab-active { color: #1d4ed8; border-bottom-color: #1d4ed8; font-weight: 600; }
 .admin-page-title { font-size: 22px; margin: 0 0 6px; }
+.admin-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+.admin-report-actions { display: flex; align-items: center; justify-content: flex-end; gap: 7px; flex-wrap: wrap; }
+.admin-report-actions a { text-decoration: none; }
+.admin-alert-inline { margin: 0 0 24px; max-width: none; }
+.admin-metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(185px, 1fr)); gap: 12px; margin-bottom: 28px; }
+.admin-metric-grid .admin-card { min-width: 0; }
+.admin-panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 18px; }
+.admin-panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.admin-split-panels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.admin-chart { height: 220px; display: flex; align-items: flex-end; gap: 4px; padding: 24px 2px 22px; border-bottom: 1px solid #e2e8f0; overflow-x: auto; }
+.admin-chart-column { flex: 1; min-width: 17px; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; position: relative; }
+.admin-chart-bar { width: min(22px, 78%); min-height: 3px; background: linear-gradient(#2563eb, #60a5fa); border-radius: 4px 4px 1px 1px; }
+.admin-chart-value { font-size: 10px; color: #64748b; height: 15px; }
+.admin-chart-label { position: absolute; top: calc(100% + 5px); font-size: 9px; color: #94a3b8; white-space: nowrap; }
 .admin-note { font-size: 13px; color: #64748b; line-height: 1.6; margin: 0 0 12px; max-width: 760px; }
 
 .admin-alert {
@@ -4089,6 +4105,9 @@ mark.wiz-placeholder {
   .admin-verdict { flex-direction: column; align-items: flex-start; }
   .admin-repair-head { flex-direction: column; }
   .admin-main { padding: 16px; }
+  .admin-title-row { flex-direction: column; }
+  .admin-report-actions { justify-content: flex-start; }
+  .admin-split-panels { grid-template-columns: 1fr; }
 }
 
 .atty-review-draft {
