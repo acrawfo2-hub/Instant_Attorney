@@ -16,6 +16,22 @@ function escapeHtml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+/** Alert the help desk without copying the request description into email. */
+export async function notifyAdminSupportTicket(ticket: { ticketNumber: number; email: string; subject: string; priority: string }): Promise<void> {
+  if (process.env.BYPASS_AUTH === "true" || !process.env.RESEND_API_KEY) {
+    console.log(`[notify] skipping support-ticket email for IA-${ticket.ticketNumber}`);
+    return;
+  }
+  const adminEmail = (process.env.ADMIN_EMAILS ?? "").split(",").map((email) => email.trim()).find(Boolean) ?? ATTORNEY_EMAIL;
+  const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://instant-attorney.com";
+  await getResend().emails.send({
+    from: FROM_EMAIL,
+    to: adminEmail,
+    subject: `[Instant Attorney] ${ticket.priority.toUpperCase()} support ticket IA-${ticket.ticketNumber}`,
+    html: `<div style="font-family:sans-serif;max-width:600px;margin:auto;padding:24px"><h2>New support request IA-${ticket.ticketNumber}</h2><p><strong>Account:</strong> ${escapeHtml(ticket.email)}</p><p><strong>Subject:</strong> ${escapeHtml(ticket.subject)}</p><p>The request description remains inside the audited admin console.</p><p><a href="${base}/admin/support" style="display:inline-block;background:#1a1a2e;color:white;padding:12px 18px;text-decoration:none;border-radius:6px">Open Support Desk</a></p></div>`,
+  });
+}
+
 export async function notifyClientDocumentDelivery(to: string, opts: { subject: string; body: string; consultationUrl: string | null; revisionDocumentId: string; fileName: string }): Promise<void> {
   if (process.env.BYPASS_AUTH === "true" || !process.env.RESEND_API_KEY) {
     console.log(`[notify] skipping document delivery email to ${to}`);

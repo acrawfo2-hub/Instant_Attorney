@@ -10,6 +10,9 @@ The admin console is intentionally split into three planes:
 3. **Growth** is the management desk. It combines first-party traffic with
    accounts, matters, documents, consults, and subscriptions and produces a CSV
    report from the same canonical snapshot as the screen.
+4. **Support** is the service desk. It is deliberately reachable before login,
+   prioritizes access failures, links matched accounts to People for diagnosis,
+   and requires a resolution summary before a ticket can be closed.
 
 `ADMIN_EMAILS=acrawfo2@gmail.com` should be set in the deployed server
 environment. It is a break-glass root credential, not a browser-visible
@@ -24,12 +27,12 @@ Supabase service-role key and not drive the browser. The gateway should reuse
 the existing diagnosis and repair functions, require a scoped machine identity,
 record every attempt in `admin_audit_log`, and apply these autonomy levels:
 
-| Level | Agent may do | Approval |
-| --- | --- | --- |
-| Observe | Search accounts, diagnose access, run health checks, draft a report | None |
-| Safe action | Send a reset link, resend confirmation, clear an expired lockout | Policy-controlled |
-| Sensitive action | Set a temporary password, change entitlement, create profile data | Human confirmation |
-| Database change | Apply migrations, edit RLS, run arbitrary SQL, delete/restore data | Never from the admin agent |
+| Level            | Agent may do                                                        | Approval                   |
+| ---------------- | ------------------------------------------------------------------- | -------------------------- |
+| Observe          | Search accounts, diagnose access, run health checks, draft a report | None                       |
+| Safe action      | Send a reset link, resend confirmation, clear an expired lockout    | Policy-controlled          |
+| Sensitive action | Set a temporary password, change entitlement, create profile data   | Human confirmation         |
+| Database change  | Apply migrations, edit RLS, run arbitrary SQL, delete/restore data  | Never from the admin agent |
 
 The last boundary is deliberate. The admin site can safely expose **specific,
 idempotent, tested runbooks** for known database faults. It should not expose a
@@ -37,10 +40,21 @@ general SQL console or the service-role secret to Grok, Hermes, OpenClaw, or any
 other agent. Schema and RLS repairs belong in reviewed migrations with backups,
 advisors, staging verification, and a human-controlled deployment.
 
+## Why support is not only an orchestrator tool
+
+The normal legal orchestrator is useful after authentication: it can recognize
+frustration, offer self-service steps, and—with explicit consent—open a ticket
+using the same support API. It cannot be the only entrance because the users who
+most need login support cannot reach it. Account recovery therefore stays a
+deterministic public flow: reset first, then a structured ticket, then the admin
+diagnosis and audited repair tools. The legal assistant must never receive a
+password, diagnose auth state from conversational guesses, or perform a
+service-role repair itself.
+
 ## Next phases
 
-- Add support cases with status, severity, client-visible messages, internal
-  notes, diagnostic snapshots, agent actions, and resolution summaries.
+- Add outbound support email and a signed, expiring requester link for secure
+  client-visible replies; do not expose tickets by guessable ticket number.
 - Add a machine-identity table with hashed credentials, scopes, expiry,
   revocation, per-agent rate limits, and mandatory audit correlation IDs.
 - Add saved report definitions and scheduled email delivery after retention and

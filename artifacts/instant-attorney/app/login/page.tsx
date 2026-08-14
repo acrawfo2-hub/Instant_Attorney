@@ -159,6 +159,13 @@ function LoginForm() {
         </p>
 
         <p className="auth-footer-link" style={{ marginTop: "0.5rem" }}>
+          Still locked out?{" "}
+          <button className="auth-text-link" onClick={() => router.push("/support")}>
+            Contact support →
+          </button>
+        </p>
+
+        <p className="auth-footer-link" style={{ marginTop: "0.5rem" }}>
           Don&apos;t have an account?{" "}
           <button className="auth-text-link" onClick={() => router.push(isAttorneyLogin ? "/register?as=attorney" : "/register")}>
             Create one &rarr;

@@ -283,6 +283,60 @@ body {
   }
 }
 
+/* ── Public support desk ────────────────────────────────────────────────── */
+.support-shell { min-height: 100vh; background: #f4f7fb; color: #172033; padding: 56px 24px 80px; }
+.support-hero, .support-options, .support-ticket-card { max-width: 900px; margin-left: auto; margin-right: auto; }
+.support-back { color: #48607c; text-decoration: none; font-size: 13px; }
+.support-eyebrow { display: block; color: #1d4ed8; font-size: 11px; font-weight: 700; letter-spacing: .12em; margin: 30px 0 10px; }
+.support-hero h1 { font-family: var(--font-playfair), Georgia, serif; font-size: clamp(36px, 6vw, 58px); font-weight: 500; line-height: 1.05; margin: 0 0 18px; max-width: 680px; }
+.support-hero > p { color: #526278; font-size: 17px; line-height: 1.7; max-width: 720px; }
+.support-options { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-top: 34px; }
+.support-option { display: flex; gap: 16px; background: #fff; border: 1px solid #dce3ec; border-radius: 14px; padding: 22px; box-shadow: 0 12px 30px rgba(30, 55, 90, .05); }
+.support-step { width: 29px; height: 29px; flex: 0 0 29px; display: grid; place-items: center; border-radius: 50%; background: #e8f0ff; color: #1d4ed8; font-weight: 700; }
+.support-option h2, .support-ticket-card h2 { margin: 0 0 7px; font-size: 18px; }
+.support-option p { color: #64748b; font-size: 13px; line-height: 1.6; min-height: 62px; }
+.support-option a { display: inline-block; text-decoration: none; }
+.support-ticket-card { margin-top: 22px; background: #fff; border: 1px solid #dce3ec; border-radius: 14px; padding: 28px; box-shadow: 0 18px 45px rgba(30, 55, 90, .07); }
+.support-ticket-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.support-ticket-head .support-eyebrow { margin-top: 0; }
+.support-form { display: flex; flex-direction: column; gap: 15px; margin-top: 22px; }
+.support-form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.support-form label { display: flex; flex-direction: column; gap: 6px; }
+.support-textarea { min-height: 130px; resize: vertical; font-family: inherit; line-height: 1.5; }
+.support-safety { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; color: #78350f; padding: 10px 12px; font-size: 12px; line-height: 1.55; margin: 0; }
+.support-success { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; color: #14532d; padding: 11px 13px; font-size: 13px; }
+.support-honeypot { position: absolute !important; left: -10000px !important; width: 1px; height: 1px; }
+
+/* ── Admin support queue ────────────────────────────────────────────────── */
+.admin-support-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 10px 0 18px; }
+.admin-support-summary { color: #64748b; font-size: 14px; }
+.admin-support-summary strong { color: #172033; font-size: 18px; }
+.admin-support-summary span { margin: 0 8px; color: #cbd5e1; }
+.admin-ticket { background: #fff; border: 1px solid #e2e8f0; border-left: 4px solid #94a3b8; border-radius: 10px; margin-bottom: 10px; overflow: hidden; }
+.admin-ticket-urgent { border-left-color: #dc2626; }
+.admin-ticket-high { border-left-color: #f59e0b; }
+.admin-ticket-header { width: 100%; display: flex; align-items: flex-start; justify-content: space-between; text-align: left; border: 0; background: transparent; padding: 15px 17px; cursor: pointer; color: inherit; }
+.admin-ticket-header h2 { display: inline; font-size: 15px; margin: 0 8px; }
+.admin-ticket-header p { color: #64748b; font-size: 12px; margin: 7px 0 0; }
+.admin-ticket-number { font: 600 12px ui-monospace, monospace; margin-right: 7px; color: #334155; }
+.admin-ticket-priority-urgent { background: #fee2e2; color: #991b1b; }
+.admin-ticket-priority-high { background: #fef3c7; color: #92400e; }
+.admin-ticket-body { border-top: 1px solid #eef2f7; padding: 17px; display: flex; flex-direction: column; gap: 13px; }
+.admin-ticket-description { white-space: pre-wrap; background: #f8fafc; border-radius: 8px; padding: 13px; font-size: 13px; line-height: 1.6; }
+.admin-ticket-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.admin-ticket-actions a { text-decoration: none; }
+.admin-ticket-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 220px)); gap: 12px; }
+.admin-ticket-body .admin-field { max-width: 100%; }
+.admin-ticket-body textarea { min-height: 72px; resize: vertical; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 7px; font: inherit; }
+
+@media (max-width: 640px) {
+  .support-shell { padding: 30px 16px 55px; }
+  .support-options, .support-form-grid { grid-template-columns: 1fr; }
+  .support-ticket-card { padding: 20px; }
+  .support-ticket-head, .admin-support-toolbar { align-items: flex-start; flex-direction: column; }
+  .admin-ticket-fields { grid-template-columns: 1fr; }
+}
+
 /* ── PHASES SECTION ── */
 .lp-section-white {
   background: var(--brand-cream);
