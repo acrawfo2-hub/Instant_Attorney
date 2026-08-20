@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 // Attorney-only: create a new ACP-protected file for a client onboarded from the
 // attorney's own practice, then drop into the (freestyle) intake chat for it.
-export default function AttorneyOnboardClient() {
+export default function AttorneyOnboardClient({ compact = false }: { compact?: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
@@ -40,13 +40,13 @@ export default function AttorneyOnboardClient() {
   if (!open) {
     return (
       <button className="atty-upgrade-btn" onClick={() => setOpen(true)} style={btnStyle}>
-        + Onboard a client
+        + {compact ? "New client or matter" : "Onboard a client"}
       </button>
     );
   }
 
   return (
-    <form onSubmit={submit} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+    <form className={compact ? "atty-onboard-form atty-onboard-form--compact" : "atty-onboard-form"} onSubmit={submit} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
       <input
         autoFocus
         value={name}
