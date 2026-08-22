@@ -10,6 +10,11 @@ destinations always describe exactly one file.
 - A client with one open case still lands directly on its cover sheet.
 - The case-title menu is always interactive, even with one case, so **Start a
   new case** and **View all cases** remain discoverable.
+- Chat repeats that same case boundary in a compact composer picker. Choosing a
+  case continues its conversation; **Open 9-part case overview** returns to the
+  Living File cover sheet and its nine destinations. Starting a case from chat
+  goes through `/dashboard/new` rather than bypassing the explanation of file
+  isolation.
 - `/dashboard/new` explains the file boundary before handing a broad practice
   area to bare `/chat`. Bare chat remains the canonical new-matter route;
   `?caseFileId=` remains the canonical resume route.

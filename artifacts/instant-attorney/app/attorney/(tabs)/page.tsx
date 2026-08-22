@@ -5,6 +5,7 @@ import type { Document, CaseFile, Profile, LegalStrategy } from "@/lib/types";
 import ConsultRequestQueue, { type ConsultRequestRow } from "@/components/ConsultRequestQueue";
 import ContinueWorking from "@/components/ContinueWorking";
 import type { AttorneyWorkState } from "@/components/AttorneyContextHeader";
+import AttorneyWorkLauncher from "@/components/AttorneyWorkLauncher";
 
 export const dynamic = "force-dynamic";
 
@@ -64,7 +65,7 @@ function triageScore(doc: DocumentWithRelations): number {
 export default async function AttorneyDashboardPage() {
   const db = createServiceClient();
 
-  const [{ data: documents }, { data: consultRequests }, { data: qaRows }] = await Promise.all([
+  const [{ data: documents }, { data: consultRequests }, { data: qaRows }, { data: matterRows }] = await Promise.all([
     db
       .from("documents")
       .select("*, case_files(*), profiles!documents_user_id_fkey(*)")
@@ -78,6 +79,7 @@ export default async function AttorneyDashboardPage() {
       .in("status", ["pending", "attorney_proposed", "confirmed"])
       .order("created_at", { ascending: false }),
     db.from("document_qa_citations").select("document_id").eq("waived", false).neq("verdict", "verified"),
+    db.from("case_files").select("id, title, matter_type, matter_subtype, next_action, client_display_name, profiles!case_files_user_id_fkey(*)").neq("status", "archived").order("updated_at", { ascending: false }).limit(300),
   ]);
 
   const pending = ([...(documents ?? [])] as DocumentWithRelations[]).sort(
@@ -101,6 +103,12 @@ export default async function AttorneyDashboardPage() {
 
   return (
     <>
+      <AttorneyWorkLauncher matters={(matterRows ?? []).map((row) => ({
+        id: row.id,
+        clientName: row.client_display_name || personDisplayName(row.profiles as Profile | null, "Client"),
+        matterName: row.title || row.matter_subtype?.replace(/_/g, " ") || row.matter_type || "Untitled matter",
+        nextAction: row.next_action,
+      }))} />
       <section className="atty-section">
         <h1 className="atty-page-title">Review Queue</h1>
         <p className="atty-page-intro">Prioritized attorney work, with one-click access to either the focused review or the client&apos;s full matter workbench.</p>

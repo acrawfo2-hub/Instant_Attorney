@@ -17,6 +17,7 @@ import { stripToolMarkers, activeToolNames } from "@/lib/tool-markers";
 import { placeholderFields } from "@/lib/placeholder-parsing";
 import { computeDocket, describePressingDeadline } from "@/lib/docket";
 import ToolRunChips from "@/components/ToolRunChips";
+import ChatMatterPicker from "@/components/ChatMatterPicker";
 import type { CounselEngagementGoal } from "@/lib/types";
 
 type Msg = Pick<IntakeMessage, "role" | "content"> & {
@@ -1347,6 +1348,7 @@ function AcpChatInner() {
           }}
         />
         <form className="fc-input-form" onSubmit={sendMessage}>
+          <ChatMatterPicker currentId={caseFileId} hasMessages={hasUserMessages} />
           <button
             type="button"
             className="fc-attach-btn"
